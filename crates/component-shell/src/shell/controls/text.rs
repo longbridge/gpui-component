@@ -143,6 +143,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         ComponentDescriptor::new("Label", Arc::new(LabelMaterializer))
             .with_constructors(vec![string_constructor("Label", "text")])
             .with_methods(vec![
+                super::super::support::on_click_method("Label"),
+                super::super::support::disabled_method("Label"),
                 label_string_method(
                     "secondary",
                     "Adds muted secondary text.",
@@ -171,7 +173,10 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     )?;
     registry.register(ComponentDescriptor::new("Link", Arc::new(LinkMaterializer))
 .with_constructors(vec![string_constructor("Link", "id")])
-.with_methods(vec![MethodDescriptor::new(
+.with_methods(vec![
+            super::super::support::on_click_method("Link"),
+            super::super::support::disabled_method("Link"),
+            MethodDescriptor::new(
             "href",
             vec![ArgumentDescriptor::new("href", ArgumentSchema::String)],
             |arguments| match arguments {

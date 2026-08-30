@@ -59,6 +59,63 @@ pub(super) fn string_method<T: Any + Send + Sync>(
     .with_documentation(documentation)
 }
 
+/// The marker a common-behavior method records.
+///
+/// The value itself is read by the shell, not by the adapter: declaring the
+/// method is what makes the engine accept the call and resolve it into the
+/// `MaterializeRequest`. Without the declaration the engine refuses the call
+/// outright, so a materializer that reads `request.on_click()` gets `None`
+/// forever and the component simply cannot be clicked.
+#[derive(Clone, Copy)]
+pub(super) struct CommonBehavior;
+
+/// `on_click(callback)`, for a component whose materializer honours
+/// `MaterializeRequest::on_click`.
+pub(super) fn on_click_method(component: &'static str) -> MethodDescriptor {
+    MethodDescriptor::new(
+        "on_click",
+        vec![ArgumentDescriptor::new(
+            "callback",
+            ArgumentSchema::Callback("(event: ClickEvent, cx: Context) => void"),
+        )],
+        move |arguments| match arguments {
+            [ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(CommonBehavior)),
+            _ => Err(format!(
+                "{component}.on_click(callback) expects one callback"
+            )),
+        },
+    )
+    .with_documentation("Invokes the callback when this component is activated.")
+}
+
+/// `disabled(value)`, for a component whose materializer honours
+/// `MaterializeRequest::disabled`.
+pub(super) fn disabled_method(component: &'static str) -> MethodDescriptor {
+    MethodDescriptor::new(
+        "disabled",
+        vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+        move |arguments| match arguments {
+            [ComponentArgument::Boolean(_)] => Ok(ComponentPayload::new(CommonBehavior)),
+            _ => Err(format!("{component}.disabled(value) expects one boolean")),
+        },
+    )
+    .with_documentation("Controls whether this component accepts interaction.")
+}
+
+/// `selected(value)`, for a component whose materializer honours
+/// `MaterializeRequest::selected`.
+pub(super) fn selected_method(component: &'static str) -> MethodDescriptor {
+    MethodDescriptor::new(
+        "selected",
+        vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+        move |arguments| match arguments {
+            [ComponentArgument::Boolean(_)] => Ok(ComponentPayload::new(CommonBehavior)),
+            _ => Err(format!("{component}.selected(value) expects one boolean")),
+        },
+    )
+    .with_documentation("Marks this component as the selected one among its siblings.")
+}
+
 /// Refuses style on a component that has nowhere to put it.
 ///
 /// A data-carrying component such as `MenuItem` or `TableCell` renders no box

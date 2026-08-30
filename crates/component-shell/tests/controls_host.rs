@@ -110,3 +110,37 @@ export default class App extends View {
         "every control must report its click: {clicked}"
     );
 }
+
+/// A `Button` whose materializer honours `MaterializeRequest::on_click` still
+/// cannot be clicked unless its descriptor declares the method: the engine
+/// refuses a common behavior a registered component has not declared, so the
+/// wiring on both ends is live and the call never arrives.
+#[gpui::test]
+fn clicking_a_button_reaches_the_script(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div } from "gpui";
+import { Button } from "gpui-component";
+export default class App extends View {
+  init(_props, _cx) { this.hits = 0; }
+  render() {
+    return div().size_full()
+      .child(new Button("press").primary().label("Press me").absolute().left(0).top(0).w(200).h(32)
+        .on_click((_event, cx) => { this.hits++; cx.notify(); }))
+      .child(`hits: ${this.hits}`);
+  }
+}
+"#;
+    let (mut context, view, _app) = mount(cx, source);
+    draw(&mut context);
+    let before = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
+    assert!(before.contains("hits: 0"), "{before}");
+
+    context.simulate_click(point(px(10.), px(16.)), Modifiers::default());
+    draw(&mut context);
+
+    let after = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
+    assert!(
+        after.contains("hits: 1"),
+        "the click must reach the script: {after}"
+    );
+}

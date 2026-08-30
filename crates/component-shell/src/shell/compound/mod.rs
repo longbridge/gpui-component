@@ -63,17 +63,24 @@ mod tests {
             .find(|descriptor| descriptor.name() == "Pagination")
             .unwrap();
 
-        assert_eq!(
-            pagination.methods()[0].arguments()[0].schema(),
-            &ArgumentSchema::Number
-        );
+        // By name, not by position: what this asserts is that the page number
+        // is a number, and a method added anywhere in the list should not be
+        // able to fail it.
+        let schema_of = |descriptor: &gpui_shell::ComponentDescriptor, method: &str| {
+            descriptor
+                .methods()
+                .iter()
+                .find(|candidate| candidate.name() == method)
+                .unwrap_or_else(|| panic!("`{method}` is registered"))
+                .arguments()[0]
+                .schema()
+                .clone()
+        };
+        assert_eq!(schema_of(pagination, "currentPage"), ArgumentSchema::Number);
         let radio = frozen
             .descriptors()
             .find(|descriptor| descriptor.name() == "Radio")
             .unwrap();
-        assert_eq!(
-            radio.methods()[2].arguments()[0].schema(),
-            &ArgumentSchema::Boolean
-        );
+        assert_eq!(schema_of(radio, "checked"), ArgumentSchema::Boolean);
     }
 }

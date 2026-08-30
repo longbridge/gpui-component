@@ -112,6 +112,7 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                 },
             )])
             .with_methods(vec![
+                crate::shell::support::disabled_method("Pagination"),
                 numeric(
                     "currentPage",
                     "Sets the current 1-based page.",

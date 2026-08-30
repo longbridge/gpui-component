@@ -308,6 +308,7 @@ fn state_methods(component: &'static str) -> Vec<MethodDescriptor> {
         ),
         support::size_method(),
         support::change_method(component),
+        support::disabled_method(component),
     ]
 }
 
@@ -315,6 +316,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     registry.register(ComponentDescriptor::new("Button", Arc::new(ButtonMaterializer))
 .with_constructors(vec![id_constructor("Button")])
 .with_methods(vec![
+            support::on_click_method("Button"),
+            support::disabled_method("Button"),
             button_string("label", "Sets the visible button label.", ButtonOp::Label),
             button_string("tooltip", "Sets concise hover help.", ButtonOp::Tooltip),
             button_loading(),

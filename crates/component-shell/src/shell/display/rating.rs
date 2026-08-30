@@ -131,6 +131,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 },
             )])
             .with_methods(vec![
+                crate::shell::support::disabled_method("Rating"),
                 count_method(
                     "value",
                     "Sets the current number of active stars.",

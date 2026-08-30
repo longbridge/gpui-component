@@ -1,4 +1,6 @@
-pub(super) use super::super::support::{bool_method, string_method};
+pub(super) use super::super::support::{
+    bool_method, disabled_method, on_click_method, string_method,
+};
 
 use gpui_component::Size;
 use gpui_shell::{
