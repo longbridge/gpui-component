@@ -10,6 +10,7 @@ import {
   AlertDialog,
   ErrorAlert,
   Avatar,
+  AreaChart,
   BarChart,
   Badge,
   Breadcrumb,
@@ -48,6 +49,7 @@ import {
   InputState,
   Kbd,
   Label,
+  LineChart,
   Link,
   List,
   Menu,
@@ -62,8 +64,10 @@ import {
   OtpInput,
   OtpState,
   Pagination,
+  PieChart,
   Popover,
   Progress,
+  RadarChart,
   Radio,
   RadioGroup,
   Rating,
@@ -361,23 +365,31 @@ export function registeredExamples(surface) {
     case "Collapsible":
       return [
         {
-          label: "Open, and collapsed",
+          // `Collapsible` has no callback on purpose: it renders the panel, and
+          // the trigger is the application's own control. So the case has to
+          // supply one, which is the whole shape a reader needs to copy.
+          label: "The application owns the trigger",
           element: v_flex()
             .gap(12)
             .child(
-              asElement(
-                new Collapsible()
-                  .open(true)
-                  .motionId("story-collapsible-open")
-                  .child(asElement(new Text("Visible while the section is open."))),
-              ),
+              div()
+                .id("collapsible-trigger")
+                .px(10)
+                .py(6)
+                .rounded(6)
+                .border(1)
+                .text_size(12)
+                .on_click((_event, cx) =>
+                  setState("collapsible", !state("collapsible", true), cx),
+                )
+                .child(state("collapsible", true) ? "Hide details" : "Show details"),
             )
             .child(
               asElement(
                 new Collapsible()
-                  .open(false)
-                  .motionId("story-collapsible-closed")
-                  .child(asElement(new Text("Hidden while the section is closed."))),
+                  .open(/** @type {boolean} */ (state("collapsible", true)))
+                  .motionId("story-collapsible")
+                  .child(asElement(new Text("Shipped 2 days ago · tracking 1Z999AA1."))),
               ),
             ),
         },
@@ -849,13 +861,21 @@ export function registeredExamples(surface) {
         {
           label: "Page 2 of 5",
           element: asElement(
-            new Pagination("pages").currentPage(2).totalPages(5).visiblePages(5),
+            new Pagination("pages")
+              .currentPage(/** @type {number} */ (state("pages", 2)))
+              .onChange((page, cx) => setState("pages", page, cx))
+              .totalPages(5)
+              .visiblePages(5),
           ),
         },
         {
           label: "Compact, for a narrow toolbar",
           element: asElement(
-            new Pagination("pages-compact").currentPage(4).totalPages(20).compact(),
+            new Pagination("pages-compact")
+              .currentPage(/** @type {number} */ (state("pages-compact", 4)))
+              .onChange((page, cx) => setState("pages-compact", page, cx))
+              .totalPages(20)
+              .compact(),
           ),
         },
       ];
@@ -865,7 +885,8 @@ export function registeredExamples(surface) {
           label: "Horizontal, on the second step",
           element: asElement(
             new Stepper("onboarding")
-              .selectedIndex(1)
+              .selectedIndex(/** @type {number} */ (state("stepper-h", 1)))
+              .onChange((index, cx) => setState("stepper-h", index, cx))
               .textCenter(true)
               .child(new StepperItem().child("Account"))
               .child(new StepperItem().child("Profile"))
@@ -876,10 +897,13 @@ export function registeredExamples(surface) {
           label: "Vertical",
           element: asElement(
             new Stepper("onboarding-vertical")
-              .selectedIndex(0)
+              .selectedIndex(/** @type {number} */ (state("stepper-v", 0)))
+              .onChange((index, cx) => setState("stepper-v", index, cx))
               .vertical(true)
               .child(new StepperItem().child("Account"))
-              .child(new StepperItem().child("Profile")),
+              .child(new StepperItem().child("Profile"))
+              .child(new StepperItem().child("Review"))
+              .child(new StepperItem().child("Finish")),
           ),
         },
       ];
@@ -902,7 +926,8 @@ export function registeredExamples(surface) {
           element: asElement(
             new TabBar("profile-tabs")
               .variant("underline")
-              .selectedIndex(0)
+              .selectedIndex(/** @type {number} */ (state("tabs-underline", 0)))
+              .onChange((index, cx) => setState("tabs-underline", index, cx))
               .child(new Tab().label("Profile"))
               .child(new Tab().label("Security"))
               .child(new Tab().label("Billing")),
@@ -913,7 +938,8 @@ export function registeredExamples(surface) {
           element: asElement(
             new TabBar("view-tabs")
               .variant("segmented")
-              .selectedIndex(1)
+              .selectedIndex(/** @type {number} */ (state("tabs-segmented", 1)))
+              .onChange((index, cx) => setState("tabs-segmented", index, cx))
               .child(new Tab().label("List"))
               .child(new Tab().label("Board")),
           ),
@@ -1070,7 +1096,7 @@ export function registeredExamples(surface) {
             new HoverCard("hover-account")
               .triggerElement(asElement(new Button("hover-trigger").label("Account help")))
               .openDelay(250)
-              .child(asElement(new Text("Your account name is visible to collaborators."))),
+              .content(asElement(new Text("Your account name is visible to collaborators."))),
           ),
         },
         {
@@ -1088,7 +1114,7 @@ export function registeredExamples(surface) {
                   .closeDelay(600)
                   .appearance(true)
                   .onOpenChange((open, cx) => setState("hover-open", open, cx))
-                  .child(asElement(new Text("42 GB of 100 GB used."))),
+                  .content(asElement(new Text("42 GB of 100 GB used."))),
               ),
             )
             .child(
@@ -1597,14 +1623,52 @@ export function registeredExamples(surface) {
           ),
         },
         {
-          label: "Bars only",
-          element: asElement(
-            new BarChart(() => [
-              { label: "Mon", value: 42 },
-              { label: "Tue", value: 68 },
-              { label: "Wed", value: 31 },
-            ]).h(140),
-          ),
+          label: "The other four kinds the catalog registers",
+          element: v_flex()
+            .w_full()
+            .gap(16)
+            .child(
+              asElement(
+                new LineChart(() => [
+                  { label: "Mon", value: 42 },
+                  { label: "Tue", value: 68 },
+                  { label: "Wed", value: 31 },
+                  { label: "Thu", value: 75 },
+                ])
+                  .grid(true)
+                  .h(140),
+              ),
+            )
+            .child(
+              asElement(
+                new AreaChart(() => [
+                  { label: "Mon", value: 42 },
+                  { label: "Tue", value: 68 },
+                  { label: "Wed", value: 31 },
+                  { label: "Thu", value: 75 },
+                ])
+                  .grid(true)
+                  .h(140),
+              ),
+            )
+            .child(
+              asElement(
+                new PieChart(() => [
+                  { label: "Rust", value: 62 },
+                  { label: "JavaScript", value: 28 },
+                  { label: "Other", value: 10 },
+                ]).h(160),
+              ),
+            )
+            .child(
+              asElement(
+                new RadarChart(() => [
+                  { label: "Speed", value: 80 },
+                  { label: "Memory", value: 55 },
+                  { label: "Startup", value: 70 },
+                ]).h(160),
+              ),
+            ),
         },
       ];
 
