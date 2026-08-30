@@ -6,9 +6,10 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, HighlightStyle, Hsla,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement, ScrollHandle,
-    SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, WhiteSpace,
-    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
+    Image, ImageFormat, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow,
+    ParentElement, ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled,
+    StyledImage as _, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative,
+    rems,
 };
 use markdown::mdast;
 
@@ -30,6 +31,9 @@ use super::{
     SelectionFormat, TextViewStyle,
     utils::{image_source, list_item_prefix},
 };
+
+const CHECK_SVG_LIGHT: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"><path d="m3.25 8.25 3 3 6.5-7" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
+const CHECK_SVG_DARK: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"><path d="m3.25 8.25 3 3 6.5-7" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
 
 /// The block-level nodes.
 #[derive(Debug, Clone, PartialEq)]
@@ -1772,7 +1776,6 @@ impl BlockNode {
         options: NodeRenderOptions,
         checked: Option<bool>,
         style: &TextViewStyle,
-        cx: &mut App,
     ) -> Div {
         h_flex()
             .w_full()
@@ -1786,6 +1789,11 @@ impl BlockNode {
             })
             .when_some(checked, |this, checked| {
                 // Todo list checkbox
+                let check_svg = if style.is_dark {
+                    CHECK_SVG_DARK
+                } else {
+                    CHECK_SVG_LIGHT
+                };
                 this.child(
                     div()
                         .flex()
@@ -1794,11 +1802,17 @@ impl BlockNode {
                         .size(rems(0.875))
                         .items_center()
                         .justify_center()
-                        .rounded(cx.theme().tokens.radius.sm)
                         .border_1()
-                        .border_color(style.link)
-                        .text_color(style.code_background)
-                        .when(checked, |this| this.bg(style.link).child("✓")),
+                        .border_color(style.foreground)
+                        .when(checked, |this| {
+                            this.bg(style.foreground).child(
+                                img(Arc::new(Image::from_bytes(
+                                    ImageFormat::Svg,
+                                    check_svg.to_vec(),
+                                )))
+                                .size(rems(0.625)),
+                            )
+                        }),
                 )
             })
             .child(div().flex_1().min_w_0().overflow_hidden().child(content))
@@ -1868,7 +1882,6 @@ impl BlockNode {
                                     options,
                                     *checked,
                                     &node_cx.style,
-                                    cx,
                                 ));
                             }
                             BlockNode::List { .. } => {
@@ -1910,7 +1923,6 @@ impl BlockNode {
                                         options,
                                         *checked,
                                         &node_cx.style,
-                                        cx,
                                     ));
                                 } else {
                                     // Indent continuation blocks to align with a
