@@ -49,6 +49,7 @@ mod radio_group;
 mod resizable;
 mod scrollbar;
 mod select;
+mod selectable_text;
 mod sheet;
 pub mod slider;
 mod state_style;
@@ -141,6 +142,7 @@ pub use scrollbar::{
     ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,
 };
 pub use select::Select;
+pub use selectable_text::SelectableText;
 pub use sheet::Sheet;
 pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
