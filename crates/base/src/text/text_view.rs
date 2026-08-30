@@ -552,7 +552,6 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
-            state.content_style = StyleRefinement::default();
             state.max_lines = max_lines;
             if state.text_view_style != text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
@@ -575,17 +574,6 @@ impl Element for TextView {
             text_style.line_height_in_pixels(window.rem_size()) * max_lines as f32
         });
 
-        let mut root_style = self.style.clone();
-        if self.scrollable {
-            // Padding belongs to the document, not the scroll viewport. Keeping
-            // it off the root lets overlay scrollbars stay on the viewport edge
-            // while List itself includes the inset in item origins and widths.
-            state.update(cx, |state, _| {
-                state.content_style.padding = root_style.padding.clone();
-            });
-            root_style.padding = gpui::EdgesRefinement::default();
-        }
-
         let mut el = div()
             .id(("text-view-scroll", state.entity_id()))
             .key_context("TextView")
@@ -607,9 +595,15 @@ impl Element for TextView {
             // Overlay controls must paint after the document, otherwise rich
             // content and selection backgrounds cover the thumb and hitbox.
             .when(self.scrollable, |this| {
-                this.child(crate::Scrollbar::vertical(&list_state))
+                this.child(
+                    div().absolute().inset_0().child(
+                        crate::Scrollbar::vertical(&list_state)
+                            .id(("text-view-scrollbar", state.entity_id()))
+                            .viewport_from_layout(),
+                    ),
+                )
             })
-            .refine_style(&root_style)
+            .refine_style(&self.style)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, TextViewLayoutState { state, element: el })

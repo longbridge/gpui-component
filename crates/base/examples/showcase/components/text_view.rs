@@ -90,8 +90,8 @@ mod tests {
 
         assert_eq!(markdown.left(), example.left());
         assert_eq!(markdown.right(), example.right());
-        assert_eq!(document.left(), example.left());
-        assert_eq!(document.right(), example.right());
+        assert_eq!(document.left() - example.left(), px(16.));
+        assert_eq!(example.right() - document.right(), px(16.));
     }
 
     #[gpui::test]

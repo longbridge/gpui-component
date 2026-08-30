@@ -1,11 +1,10 @@
 use gpui::{
     App, InteractiveElement as _, IntoElement, ListState, ParentElement as _, SharedString,
-    StyleRefinement, Styled as _, Window, div,
+    Styled as _, Window, div,
 };
 
 use std::{ops::RangeInclusive, sync::Arc};
 
-use crate::StyledExt as _;
 use crate::text::{
     SelectionFormat,
     node::{BlockNode, NodeContext},
@@ -179,7 +178,6 @@ impl ParsedDocument {
     pub(super) fn render_root(
         &self,
         list_state: Option<ListState>,
-        content_style: &StyleRefinement,
         node_cx: &NodeContext,
         window: &mut Window,
         cx: &mut App,
@@ -209,7 +207,6 @@ impl ParsedDocument {
         };
 
         let blocks = &self.blocks;
-
         if list_state.item_count() != blocks.len() {
             list_state.reset(blocks.len());
         }
@@ -234,8 +231,7 @@ impl ParsedDocument {
                         .into_any_element()
                 }
             })
-            .size_full()
-            .refine_style(content_style),
+            .size_full(),
         )
     }
 }
