@@ -57,6 +57,7 @@ mod styled;
 mod switch;
 mod table;
 mod tabs;
+pub mod text;
 mod text_boundary;
 mod text_selection;
 mod theme;
@@ -154,6 +155,10 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+pub use text::{
+    MarkdownExtensions, MarkdownNode, MarkdownPlugin, SelectionFormat, TableData, Text, TextView,
+    TextViewPlugin, TextViewState, TextViewStyle, html, markdown,
+};
 pub use text_selection::{
     TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
     TextSelectionEvent, TextSelectionHandle, TextSelectionLayer, TextSelectionProjection,
@@ -195,4 +200,5 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
     input::init(cx);
     tree::init(cx);
+    text::init(cx);
 }

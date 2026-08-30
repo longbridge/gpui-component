@@ -105,8 +105,7 @@ fn attr_value(attrs: &RefCell<Vec<html5ever::Attribute>>, name: LocalName) -> Op
 /// Get the highlight background color for a `<mark>` element.
 ///
 /// Reads the `color` attribute first, then the `background-color` declaration
-/// from the `style` attribute. Color values are parsed by [`crate::try_parse_color`],
-/// supporting hex (`#3366ff`) and Tailwind expressions (`blue`, `blue-200`, `blue/30`).
+/// from the `style` attribute. Base accepts CSS hex plus common named colors.
 fn mark_color(attrs: &RefCell<Vec<html5ever::Attribute>>) -> Option<Hsla> {
     let color_attr = attrs.borrow().iter().find_map(|attr| {
         if &*attr.name.local == "color" {
@@ -117,14 +116,27 @@ fn mark_color(attrs: &RefCell<Vec<html5ever::Attribute>>) -> Option<Hsla> {
     });
 
     if let Some(value) = color_attr
-        && let Ok(color) = crate::try_parse_color(value.trim())
+        && let Some(color) = parse_mark_color(value.trim())
     {
         return Some(color);
     }
 
     style_attrs(attrs)
         .get("background-color")
-        .and_then(|v| crate::try_parse_color(v.trim()).ok())
+        .and_then(|v| parse_mark_color(v.trim()))
+}
+
+fn parse_mark_color(value: &str) -> Option<Hsla> {
+    if value.starts_with('#') {
+        return gpui::Rgba::try_from(value).ok().map(Into::into);
+    }
+    match value.to_ascii_lowercase().as_str() {
+        "black" => Some(gpui::rgb(0x000000).into()),
+        "white" => Some(gpui::rgb(0xffffff).into()),
+        "blue" => Some(gpui::rgb(0x3b82f6).into()),
+        "yellow" => Some(gpui::rgb(0xfacc15).into()),
+        _ => None,
+    }
 }
 
 /// Get style properties to HashMap
@@ -349,7 +361,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &Rc<Node>) {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().code()));
             }
             local_name!("mark") => {
-                let color = mark_color(&attrs).unwrap_or_else(|| crate::yellow(200));
+                let color = mark_color(&attrs).unwrap_or_else(|| gpui::rgb(0xfef08a).into());
                 merge_children_with_mark(
                     node,
                     paragraph,

@@ -128,13 +128,6 @@ futures = "0.3"
 num-traits = "0.2"
 rust_decimal = { version = "1.37.0", optional = true }
 
-# Markdown Parser
-markdown = { version = "1.0.0", features = ["serde"] }
-
-# HTML Parser
-html5ever = "0.27"
-markup5ever_rcdom = "0.3.0"
-
 # Calendar
 chrono = "0.4.38"
 

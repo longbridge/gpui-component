@@ -2,6 +2,10 @@
 mod tests {
     use crate::global_state::GlobalState;
     use crate::{
+        ElementExt as _, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+        TextSelectionScopeId,
+    };
+    use crate::{
         Placement, Root,
         text::{TextView, TextViewState},
     };
@@ -11,10 +15,6 @@ mod tests {
         LayoutId, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels,
         Render, SharedString, Styled as _, StyledText, TestAppContext, VisualTestContext, Window,
         div, point, px,
-    };
-    use gpui_base::{
-        ElementExt as _, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
-        TextSelectionScopeId,
     };
     use std::cell::Cell;
     use std::rc::Rc;
@@ -233,7 +233,7 @@ mod tests {
         });
         let (bounds, list_state) = content.read_with(cx, |content, cx| {
             let state = content.text_view.read(cx);
-            (state.bounds(), state.list_state.clone())
+            (state.bounds(), state.list_state().clone())
         });
         let top_plain = point(px(1.), bounds.origin.y - px(20.));
         let bottom_plain = point(px(1.), bounds.bottom() + px(20.));
@@ -470,7 +470,7 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let selected = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+        let selected = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
         assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
     }
 
@@ -519,7 +519,7 @@ mod tests {
         );
 
         cx.update(|window, cx| {
-            gpui_base::TextSelection::clear(window, cx);
+            crate::TextSelection::clear(window, cx);
             let _ = window.draw(cx);
         });
 
@@ -549,7 +549,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            crate::TextSelection::clear(window, cx);
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
     }
@@ -602,18 +602,18 @@ mod tests {
 
             assert_eq!(
                 crate::WindowExt::selected_text(window, cx),
-                gpui_base::TextSelection::selected_text(window, cx)
+                crate::TextSelection::selected_text(window, cx)
             );
             assert_eq!(
                 crate::WindowExt::has_text_selection(window, cx),
-                gpui_base::TextSelection::has_selection(window, cx)
+                crate::TextSelection::has_selection(window, cx)
             );
 
             crate::WindowExt::clear_text_selection(window, cx);
-            assert!(!gpui_base::TextSelection::has_selection(window, cx));
+            assert!(!crate::TextSelection::has_selection(window, cx));
 
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            crate::TextSelection::clear(window, cx);
             assert!(!crate::WindowExt::has_text_selection(window, cx));
         });
     }
@@ -676,15 +676,15 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            crate::TextSelection::clear(window, cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
         });
         cx.run_until_parked();
 
         let (has_selection, selected) = cx.update(|window, cx| {
             (
-                gpui_base::TextSelection::has_selection(window, cx),
-                gpui_base::TextSelection::selected_text(window, cx),
+                crate::TextSelection::has_selection(window, cx),
+                crate::TextSelection::selected_text(window, cx),
             )
         });
         assert!(has_selection);
@@ -782,7 +782,7 @@ mod tests {
             MouseButton::Left,
             Modifiers::default(),
         );
-        let list_state = text_view.read_with(cx, |state, _| state.list_state.clone());
+        let list_state = text_view.read_with(cx, |state, _| state.list_state().clone());
         list_state.scroll_to(ListOffset {
             item_ix: BLOCKS - 1,
             offset_in_item: px(0.),
@@ -1012,7 +1012,8 @@ mod tests {
             MouseButton::Left,
             Modifiers::default(),
         );
-        let list_state = view.read_with(cx, |view, cx| view.text_view.read(cx).list_state.clone());
+        let list_state =
+            view.read_with(cx, |view, cx| view.text_view.read(cx).list_state().clone());
         list_state.scroll_to(ListOffset {
             item_ix: BLOCKS - 1,
             offset_in_item: px(0.),
@@ -1194,7 +1195,7 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx))
+        cx.update(|window, cx| crate::TextSelection::selected_text(window, cx))
     }
 
     fn click(
@@ -1309,8 +1310,8 @@ mod tests {
         let (first_selecting, second_selecting) = cx.update(|_, cx| {
             let chat = chat.read(cx);
             (
-                chat.first.read(cx).is_selecting,
-                chat.second.read(cx).is_selecting,
+                chat.first.read(cx).is_selecting(),
+                chat.second.read(cx).is_selecting(),
             )
         });
         assert!(!first_selecting);
@@ -1328,7 +1329,7 @@ mod tests {
             chat.read(cx)
                 .second
                 .read(cx)
-                .focus_handle
+                .focus_handle()
                 .is_focused(window)
         });
         assert!(

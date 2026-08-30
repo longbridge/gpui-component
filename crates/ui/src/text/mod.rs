@@ -1,104 +1,46 @@
-mod document;
-mod format;
-mod inline;
-mod inline_flow;
-mod markdown_ext;
-mod node;
-pub(crate) mod selection;
-mod selection_adapter;
-mod state;
-mod style;
-mod text_view;
-mod utils;
+//! Compatibility facade for rich text now owned by `gpui-base`.
+
+pub use gpui_base::text::*;
+
 #[cfg(test)]
 mod window_selection;
 
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
-pub use markdown_ext::*;
-pub use node::TableData;
-pub use state::*;
-pub use style::*;
-pub use text_view::*;
-
-pub(crate) fn init(cx: &mut App) {
-    state::init(cx);
+/// Derives a rich-text style from the active component theme.
+///
+/// Syntax highlighting remains opt-in through
+/// [`TextView::code_block_highlighter`].
+pub fn text_view_style(theme: &crate::Theme) -> TextViewStyle {
+    let mut style = TextViewStyle::default()
+        .foreground(theme.foreground)
+        .muted_foreground(theme.muted_foreground)
+        .link(theme.link)
+        .selection(theme.selection);
+    style.code_background = theme.muted;
+    style.border = theme.border;
+    style
 }
 
-/// Create a new markdown text view with code location as id.
-#[track_caller]
-pub fn markdown(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
-    TextView::markdown(id, source)
-}
+#[cfg(test)]
+mod tests {
+    use crate::Theme;
 
-/// Create a new html text view with code location as id.
-#[track_caller]
-pub fn html(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
-    TextView::html(id, source)
-}
+    #[test]
+    fn component_theme_adapter_maps_text_colors_without_highlighting() {
+        let theme = Theme::default();
+        let style = super::text_view_style(&theme);
 
-#[derive(IntoElement, Clone)]
-pub enum Text {
-    String(SharedString),
-    TextView(Box<TextView>),
-}
-
-impl From<SharedString> for Text {
-    fn from(s: SharedString) -> Self {
-        Self::String(s)
-    }
-}
-
-impl From<&str> for Text {
-    fn from(s: &str) -> Self {
-        Self::String(SharedString::from(s.to_string()))
-    }
-}
-
-impl From<String> for Text {
-    fn from(s: String) -> Self {
-        Self::String(s.into())
-    }
-}
-
-impl From<TextView> for Text {
-    fn from(e: TextView) -> Self {
-        Self::TextView(Box::new(e))
-    }
-}
-
-impl Text {
-    /// Set the style for [`TextView`].
-    ///
-    /// Do nothing if this is `String`.
-    pub fn style(self, style: TextViewStyle) -> Self {
-        match self {
-            Self::String(s) => Self::String(s),
-            Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
-        }
+        assert_eq!(style.foreground, theme.foreground);
+        assert_eq!(style.muted_foreground, theme.muted_foreground);
+        assert_eq!(style.link, theme.link);
+        assert_eq!(style.selection, theme.selection);
     }
 
-    /// Get the text content.
-    pub(crate) fn get_text(&self, cx: &App) -> SharedString {
-        match self {
-            Self::String(s) => s.clone(),
-            Self::TextView(view) => {
-                if let Some(state) = &view.state {
-                    state.read(cx).source()
-                } else {
-                    SharedString::default()
-                }
-            }
-        }
-    }
-}
-
-impl RenderOnce for Text {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        match self {
-            Self::String(s) => s.into_any_element(),
-            Self::TextView(e) => e.into_any_element(),
-        }
+    #[test]
+    fn legacy_text_paths_reexport_base_implementation() {
+        let _: gpui_base::TextView = super::markdown("# compatible")
+            .style(super::TextViewStyle::default())
+            .selectable(true)
+            .scrollable(true)
+            .code_block_highlighter(|_| Vec::new());
     }
 }

@@ -12,6 +12,10 @@ use crate::{TextSelection, TextSelectionHandle, TextSelectionRegistration, TextS
 ///
 /// Use [`Self::new`] for an independent run, or [`Self::with_handle`] when
 /// several elements form one selectable document.
+///
+/// Applications must render one [`crate::TextSelectionLayer`] above their
+/// content and call [`crate::init`] during startup. Selection and copy then
+/// work without depending on `gpui-component`.
 pub struct SelectableText {
     id: ElementId,
     handle: Option<TextSelectionHandle>,

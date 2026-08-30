@@ -1,24 +1,26 @@
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, GlobalElementId,
     Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement, Styled,
-    Window, div, point, px,
+    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window, div, point, px,
 };
 
 use crate::StyledExt;
-use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::{CodeBlock, TableData};
 use crate::text::state::{LineSpan, SelectionFormat, TextViewState};
-use crate::{global_state::UiGlobalState, text::TextViewStyle};
+use crate::{GlobalState, TextSelection, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+pub(crate) type CodeBlockHighlighterFn =
+    dyn Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync;
 
 /// Type for the table actions generator function.
 pub(crate) type TableActionsFn =
@@ -76,6 +78,7 @@ pub struct TextView {
     scrollable: bool,
     max_lines: Option<usize>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    code_block_highlighter: Option<Arc<CodeBlockHighlighterFn>>,
     table_actions: Option<Arc<TableActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
@@ -119,6 +122,7 @@ impl TextView {
             scrollable: false,
             max_lines: None,
             code_block_actions: None,
+            code_block_highlighter: None,
             table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
@@ -139,6 +143,7 @@ impl TextView {
             scrollable: false,
             max_lines: None,
             code_block_actions: None,
+            code_block_highlighter: None,
             table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
@@ -159,6 +164,7 @@ impl TextView {
             scrollable: false,
             max_lines: None,
             code_block_actions: None,
+            code_block_highlighter: None,
             table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
@@ -238,6 +244,18 @@ impl TextView {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Adds opt-in syntax highlighting for fenced code blocks.
+    ///
+    /// Returned byte ranges are relative to [`CodeBlock::code`]. Invalid
+    /// ranges are discarded. Without this callback, code is unhighlighted.
+    pub fn code_block_highlighter<F>(mut self, highlighter: F) -> Self
+    where
+        F: Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync + 'static,
+    {
+        self.code_block_highlighter = Some(Arc::new(highlighter));
         self
     }
 
@@ -475,6 +493,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.code_block_highlighter = self.code_block_highlighter.clone();
             state.table_actions = self.table_actions.clone();
             state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
@@ -493,8 +512,6 @@ impl Element for TextView {
         });
 
         let focus_handle = state.read(cx).focus_handle.clone();
-        let list_state = state.read(cx).list_state.clone();
-
         // Cap the box at `n` body-text lines (the effective text style may be
         // refined by this view's own style, e.g. `.text_sm()`); hidden
         // overflow also clips descendant hitboxes to the box during prepaint.
@@ -505,17 +522,15 @@ impl Element for TextView {
         });
 
         let mut el = div()
+            .id(("text-view-scroll", state.entity_id()))
             .key_context("TextView")
             .track_focus(&focus_handle)
-            .when(self.scrollable, |this| {
-                this.size_full().vertical_scrollbar(&list_state)
-            })
+            .when(self.scrollable, |this| this.size_full().overflow_y_scroll())
             .when_some(max_lines_cap, |this, cap| this.max_h(cap).overflow_hidden())
             .relative()
+            .text_color(self.text_view_style.foreground)
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                let text = gpui_base::TextSelection::selected_text(window, cx)
-                    .trim()
-                    .to_string();
+                let text = TextSelection::selected_text(window, cx).trim().to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;
@@ -547,13 +562,13 @@ impl Element for TextView {
             }
             // Descendant `Inline`s report their line spans through the state
             // stack during prepaint (in addition to the paint-time push below).
-            UiGlobalState::global_mut(cx)
+            GlobalState::global_mut(cx)
                 .text_view_state_stack
                 .push(state.clone());
         }
         request_layout.element.prepaint(window, cx);
         if max_lines_active {
-            UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+            GlobalState::global_mut(cx).text_view_state_stack.pop();
         }
 
         let mut clip_bottom = None;
@@ -607,7 +622,7 @@ impl Element for TextView {
             state.update(cx, |state, _| state.selection_adapter.begin_frame());
         }
 
-        UiGlobalState::global_mut(cx)
+        GlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
         if let Some(clip_bottom) = prepaint.clip_bottom {
@@ -622,7 +637,7 @@ impl Element for TextView {
         } else {
             request_layout.element.paint(window, cx);
         }
-        UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+        GlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
             let (adapter, scroll_offset, content_bounds) = {
@@ -633,7 +648,7 @@ impl Element for TextView {
                     state.bounds(),
                 )
             };
-            let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
+            let document_order = GlobalState::global_mut(cx).next_selection_document_order();
             adapter.register(
                 prepaint.hitbox.clone(),
                 content_bounds,
@@ -653,8 +668,8 @@ mod tests {
     use gpui::{
         AppContext as _, Bounds, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
         Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Overflow, ParentElement as _, Pixels,
-        Render, SharedString, StyleRefinement, Styled as _, TestAppContext, VisualTestContext,
-        Window, div, point, px,
+        Render, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _,
+        TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -719,16 +734,7 @@ mod tests {
     #[gpui::test]
     fn inline_image_keeps_surrounding_text_on_same_line(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (root, cx) = cx.add_window_view(|window, cx| {
-            let content = cx.new(|cx| InlineImageTextViewTestRoot::new(cx));
-            crate::Root::new(content, window, cx)
-        });
-        let content = root.read_with(cx, |root, _| {
-            root.view()
-                .clone()
-                .downcast::<InlineImageTextViewTestRoot>()
-                .unwrap()
-        });
+        let (content, cx) = cx.add_window_view(|_, cx| InlineImageTextViewTestRoot::new(cx));
         let cx: &mut VisualTestContext = cx;
 
         cx.run_until_parked();
@@ -922,6 +928,23 @@ mod tests {
         assert!(view.selectable);
     }
 
+    #[test]
+    fn syntax_highlighting_is_opt_in() {
+        let default_view = TextView::markdown("default-code", "```rust\nfn main() {}\n```");
+        assert!(default_view.code_block_highlighter.is_none());
+
+        let view = default_view.code_block_highlighter(|block| {
+            vec![(
+                0..block.code().len(),
+                gpui::HighlightStyle {
+                    color: Some(gpui::rgb(0x3366ff).into()),
+                    ..Default::default()
+                },
+            )]
+        });
+        assert!(view.code_block_highlighter.is_some());
+    }
+
     #[gpui::test]
     fn clipped_markdown_link_does_not_open(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1063,7 +1086,6 @@ mod tests {
 
     impl Render for ClampedPageRoot {
         fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-            use crate::scroll::ScrollableElement as _;
             use crate::{h_flex, v_flex};
 
             v_flex()
@@ -1076,6 +1098,7 @@ mod tests {
                         .flex_1()
                         .min_h_0()
                         .gap_4()
+                        .id("clamped-page-scroll")
                         .child(
                             v_flex()
                                 .max_w(px(480.))
@@ -1083,7 +1106,7 @@ mod tests {
                                 .gap_2()
                                 .child(TextView::new(&self.text_view).max_lines(self.max_lines)),
                         )
-                        .overflow_y_scrollbar(),
+                        .overflow_y_scroll(),
                 )
         }
     }
@@ -1281,8 +1304,7 @@ mod tests {
         cx.update(crate::init);
         let clicks = Arc::new(Mutex::new(Vec::new()));
         let captured = clicks.clone();
-        let (root, cx) = cx.add_window_view(move |window, cx| {
-            let content = cx.new(|cx| LinkedImageRoot {
+        let (content, cx) = cx.add_window_view(move |_, cx| LinkedImageRoot {
                 text_view: cx.new(|cx| {
                     TextViewState::markdown(
                         r#"Before [<img src="https://example.com/image.svg" width="32" height="32">](https://example.com/image-link) after."#,
@@ -1290,12 +1312,8 @@ mod tests {
                     )
                 }),
                 clicks,
-            });
-            crate::Root::new(content, window, cx)
-        });
-        let content = root.read_with(cx, |root, _| {
-            root.view().clone().downcast::<LinkedImageRoot>().unwrap()
-        });
+            }
+        );
         let cx: &mut VisualTestContext = cx;
         cx.run_until_parked();
         cx.update(|window, cx| {
@@ -1387,6 +1405,7 @@ mod tests {
         fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
             div()
                 .w(px(200.))
+                .child(crate::TextSelectionLayer)
                 .child(
                     div()
                         .h(px(40.))
@@ -1410,16 +1429,7 @@ mod tests {
     #[gpui::test]
     fn selection_band_beyond_clip_copies_offscreen_text(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (view, cx) = cx.add_window_view(|window, cx| {
-            let content = cx.new(ClippedTallTextViewTestRoot::new);
-            crate::Root::new(content, window, cx)
-        });
-        let content = view.read_with(cx, |root, _| {
-            root.view()
-                .clone()
-                .downcast::<ClippedTallTextViewTestRoot>()
-                .unwrap()
-        });
+        let (content, cx) = cx.add_window_view(|_, cx| ClippedTallTextViewTestRoot::new(cx));
         let cx: &mut VisualTestContext = cx;
 
         cx.run_until_parked();
