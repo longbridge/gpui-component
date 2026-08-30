@@ -165,9 +165,7 @@ export default class App extends View {
     assert!(live.contains("State: b|1:0|2"), "{live}");
 }
 
-#[gpui::test]
-fn native_menu_trigger_runs_event_effect_and_dispatches_shell_action(cx: &mut TestAppContext) {
-    let source = r#"
+const NATIVE_MENU_SOURCE: &str = r#"
 import { View, div } from "gpui";
 import { NativeMenuTrigger, NativeMenuItem, NativeMenuSeparator } from "gpui-component";
 export default class App extends View { init(_props,cx){this.hits=0;this.errors=0;this.focus=cx.focus_handle();this.focus.focus();} render(){return div().size_full().track_focus(this.focus).on_action("open",(_event,cx)=>{this.hits++;cx.notify();})
@@ -175,9 +173,18 @@ export default class App extends View { init(_props,cx){this.hits=0;this.errors=
   .child(new NativeMenuItem("Open","open")).child(new NativeMenuSeparator()).child(new NativeMenuItem("Disabled","disabled").disabled(true)))
  .child(`Menu: ${this.hits}|${this.errors}`);}}
 "#;
-    let (mut context, view, _app) = mount(cx, source);
+
+/// What the trigger owes on every platform: one click, one keyed show effect,
+/// and a generation that survives a refresh.
+///
+/// What the menu does once it is open is platform business — see the test
+/// below.
+#[gpui::test]
+fn native_menu_trigger_runs_one_keyed_show_effect_per_click(cx: &mut TestAppContext) {
+    let (mut context, view, _app) = mount(cx, NATIVE_MENU_SOURCE);
     draw(&mut context);
     command::test_probe::take_shown();
+
     context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
     draw(&mut context);
     assert_eq!(
@@ -185,10 +192,39 @@ export default class App extends View { init(_props,cx){this.hits=0;this.errors=
         1,
         "one click must execute one keyed native-menu show effect"
     );
+
+    let tree = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
+    assert!(
+        tree.contains("NativeMenuItem :disabled[Bool(true)]"),
+        "{tree}"
+    );
+    assert!(
+        tree.contains("Menu: 0|0"),
+        "no effect error may be reported: {tree}"
+    );
+}
+
+/// Selecting an item dispatches its `ShellAction`, and a disabled item does not.
+///
+/// Only where the menu is drawn in the window. On macOS and Windows
+/// `NativeMenu::show` hands the items to the platform and runs off GPUI's call
+/// stack, so there is nothing in the test window for `simulate_keystrokes` to
+/// reach — the assertions below would be measuring the harness, not the
+/// binding. Selection on those platforms is the OS's to deliver.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[gpui::test]
+fn native_menu_selection_dispatches_a_shell_action(cx: &mut TestAppContext) {
+    let (mut context, view, _app) = mount(cx, NATIVE_MENU_SOURCE);
+    draw(&mut context);
+    command::test_probe::take_shown();
+
+    context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
+    draw(&mut context);
     context.simulate_keystrokes("down enter");
     draw(&mut context);
     let tree = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
     assert!(tree.contains("Menu: 1|0"), "{tree}");
+
     context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
     draw(&mut context);
     context.simulate_click(point(px(40.), px(77.)), Modifiers::default());
@@ -198,6 +234,11 @@ export default class App extends View { init(_props,cx){this.hits=0;this.errors=
         disabled.contains("Menu: 1|0"),
         "disabled native item dispatched: {disabled}"
     );
+
+    // A refresh rebuilds the callbacks and the effect generation. Dismissing
+    // first is what makes the next click reach the trigger again, and only the
+    // in-window menu can be dismissed from inside the test window — which is
+    // the other reason this assertion lives here rather than above.
     context.simulate_keystrokes("escape");
     draw(&mut context);
     context.update(|_, cx| view.update(cx, |view, cx| view.refresh(cx)));
