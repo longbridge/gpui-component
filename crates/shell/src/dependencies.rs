@@ -102,10 +102,17 @@ impl GitDependencyStore {
             );
         }
 
-        let reference = match (dependency.branch(), dependency.tag()) {
-            (Some(branch), None) => format!("refs/heads/{branch}"),
-            (None, Some(tag)) => format!("refs/tags/{tag}"),
-            _ => unreachable!("manifest validation requires exactly one Git ref"),
+        let reference = match (
+            dependency.uses_package_entry(),
+            dependency.reference(),
+            dependency.branch(),
+            dependency.tag(),
+        ) {
+            (true, Some(reference), None, None) => reference.to_owned(),
+            (true, None, None, None) => "HEAD".to_owned(),
+            (false, None, Some(branch), None) => format!("refs/heads/{branch}"),
+            (false, None, None, Some(tag)) => format!("refs/tags/{tag}"),
+            _ => unreachable!("manifest validation requires one supported Git selector"),
         };
         let mut fetch = git_command();
         fetch.args(["fetch", "--force", "--depth", "1", "origin", &reference]);
@@ -156,24 +163,79 @@ impl GitDependencyStore {
         let root = checkout
             .canonicalize()
             .with_context(|| format!("resolving dependency checkout {}", checkout.display()))?;
+        let entry_name = dependency_entry_name(name, dependency, &root)?;
         let entry = root
-            .join(dependency.entry())
+            .join(&entry_name)
             .canonicalize()
-            .with_context(|| {
-                format!(
-                    "Git dependency `{name}` has no entry `{}`",
-                    dependency.entry()
-                )
-            })?;
+            .with_context(|| format!("Git dependency `{name}` has no entry `{}`", entry_name))?;
         if !entry.starts_with(&root) || !entry.is_file() {
             bail!(
                 "Git dependency `{name}` entry `{}` is not a file inside its checkout",
-                dependency.entry()
+                entry_name
             );
         }
 
         Ok(MaterializedDependency { root, entry })
     }
+}
+
+fn dependency_entry_name(name: &str, dependency: &GitDependency, root: &Path) -> Result<String> {
+    if !dependency.uses_package_entry() {
+        return Ok(dependency.entry().to_owned());
+    }
+
+    let manifest = root.join("package.json");
+    let manifest = match manifest.symlink_metadata() {
+        Ok(_) => {
+            let manifest = manifest
+                .canonicalize()
+                .with_context(|| format!("resolving package.json for Git dependency `{name}`"))?;
+            if !manifest.starts_with(root) || !manifest.is_file() {
+                bail!("Git dependency `{name}` package.json is not a file inside its checkout");
+            }
+            Some(manifest)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("inspecting package.json for Git dependency `{name}`"));
+        }
+    };
+    let Some(manifest) = manifest else {
+        return Ok(default_package_entry());
+    };
+    let source = std::fs::read_to_string(&manifest)
+        .with_context(|| format!("reading package.json for Git dependency `{name}`"))?;
+    let value: serde_json::Value = serde_json::from_str(&source).map_err(|error| {
+        anyhow::anyhow!("Git dependency `{name}` package.json must contain valid JSON: {error}")
+    })?;
+    let object = value.as_object().ok_or_else(|| {
+        anyhow::anyhow!("Git dependency `{name}` package.json must contain a JSON object")
+    })?;
+    let entry = match object.get("main") {
+        None => default_package_entry(),
+        Some(serde_json::Value::String(entry)) => entry.clone(),
+        Some(_) => {
+            bail!("Git dependency `{name}` package.json `main` must be a string");
+        }
+    };
+    let path = Path::new(&entry);
+    if entry.is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+        || entry.contains(['\\', ':'])
+    {
+        bail!(
+            "Git dependency `{name}` package.json `main` `{entry}` must be a path inside its checkout"
+        );
+    }
+    Ok(entry)
+}
+
+fn default_package_entry() -> String {
+    "index.js".to_owned()
 }
 
 fn dependency_cache_root(home: &Path) -> PathBuf {
@@ -464,6 +526,44 @@ mod tests {
                 .dependencies()["omarchy-ui"]
                 .clone()
         }
+
+        fn package_dependency(&self, reference: Option<&str>) -> crate::plugin::GitDependency {
+            let remote = format!("file://{}", self.remote.display());
+            let source = match reference {
+                Some(reference) => format!("{remote}#{reference}"),
+                None => remote,
+            };
+            let manifest = format!(
+                r#"{{
+                    "id": "com.example.fixture",
+                    "name": "Fixture",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(&source).expect("dependency as JSON")
+            );
+            PluginManifest::parse(&manifest)
+                .expect("fixture package dependency")
+                .dependencies()["omarchy-ui"]
+                .clone()
+        }
+
+        fn write(&self, path: &str, source: &str) {
+            let path = self.remote.join(path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("dependency source parent");
+            }
+            std::fs::write(path, source).expect("dependency source");
+        }
+
+        fn commit_all(&self, message: &str) {
+            git(&self.remote, &["add", "."]);
+            git(&self.remote, &["commit", "-m", message]);
+        }
+
+        fn head(&self) -> String {
+            git_output(&self.remote, &["rev-parse", "HEAD"])
+        }
     }
 
     impl Drop for GitFixture {
@@ -484,6 +584,113 @@ mod tests {
             arguments.join(" "),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    fn git_output(directory: &Path, arguments: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(arguments)
+            .current_dir(directory)
+            .output()
+            .expect("git must be installed for the test");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("git fixture output should be UTF-8")
+            .trim()
+            .to_owned()
+    }
+
+    #[test]
+    fn package_dependencies_resolve_branch_tag_commit_ish_and_remote_head() {
+        let fixture = GitFixture::new();
+        fixture.commit("export const version = 1;", "tagged");
+        let tagged_commit = fixture.head();
+        git(&fixture.remote, &["tag", "v1"]);
+        fixture.commit("export const version = 2;", "current");
+        let store = GitDependencyStore::new(fixture.cache.clone());
+
+        for (reference, expected) in [
+            (Some("main"), "export const version = 2;"),
+            (Some("v1"), "export const version = 1;"),
+            (Some(tagged_commit.as_str()), "export const version = 1;"),
+            (None, "export const version = 2;"),
+        ] {
+            let dependency = fixture.package_dependency(reference);
+            let package = store
+                .materialize("omarchy-ui", &dependency)
+                .expect("the Git reference should resolve");
+            assert_eq!(std::fs::read_to_string(package.entry).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn package_dependencies_read_package_main_or_default_to_index_js() {
+        let custom = GitFixture::new();
+        custom.write("dist/public.js", "export const entry = 'package main';");
+        custom.write("package.json", r#"{ "main": "dist/public.js" }"#);
+        custom.commit_all("custom package entry");
+        let package = GitDependencyStore::new(custom.cache.clone())
+            .materialize("omarchy-ui", &custom.package_dependency(Some("main")))
+            .expect("package.json main should select the entry");
+        assert_eq!(
+            std::fs::read_to_string(package.entry).unwrap(),
+            "export const entry = 'package main';"
+        );
+
+        let defaulted = GitFixture::new();
+        defaulted.commit(
+            "export const entry = 'index default';",
+            "default package entry",
+        );
+        let package = GitDependencyStore::new(defaulted.cache.clone())
+            .materialize("omarchy-ui", &defaulted.package_dependency(Some("main")))
+            .expect("a missing package.json should default to index.js");
+        assert_eq!(
+            std::fs::read_to_string(package.entry).unwrap(),
+            "export const entry = 'index default';"
+        );
+    }
+
+    #[test]
+    fn malformed_or_non_string_package_main_is_rejected() {
+        for (package_json, expected) in [
+            ("{ not JSON", "valid JSON"),
+            (r#"{ "main": 42 }"#, "string"),
+            (r#"{ "main": null }"#, "string"),
+        ] {
+            let fixture = GitFixture::new();
+            fixture.write("index.js", "export const executed = true;");
+            fixture.write("package.json", package_json);
+            fixture.commit_all("invalid package manifest");
+
+            let error = GitDependencyStore::new(fixture.cache.clone())
+                .materialize("omarchy-ui", &fixture.package_dependency(Some("main")))
+                .expect_err("an invalid package manifest must fail before execution");
+            assert!(error.to_string().contains("package.json"), "{error:#}");
+            assert!(error.to_string().contains(expected), "{error:#}");
+        }
+    }
+
+    #[test]
+    fn package_main_must_name_a_file_confined_to_the_checkout() {
+        for (main, expected) in [("../private.js", "inside"), ("dist", "file")] {
+            let fixture = GitFixture::new();
+            fixture.write("dist/nested.js", "export const nested = true;");
+            fixture.write(
+                "package.json",
+                &serde_json::json!({ "main": main }).to_string(),
+            );
+            fixture.commit_all("unsafe package entry");
+
+            let error = GitDependencyStore::new(fixture.cache.clone())
+                .materialize("omarchy-ui", &fixture.package_dependency(Some("main")))
+                .expect_err("package main must resolve to an in-checkout file");
+            assert!(error.to_string().contains(expected), "{error:#}");
+        }
     }
 
     #[test]

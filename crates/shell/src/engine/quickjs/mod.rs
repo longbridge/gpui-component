@@ -7386,12 +7386,18 @@ mod module_lifecycle_tests {
         git(&["init", "--initial-branch=main"]);
         git(&["config", "user.name", "gpui-shell test"]);
         git(&["config", "user.email", "gpui-shell@example.invalid"]);
+        std::fs::create_dir_all(remote.join("dist")).expect("dependency dist directory");
         std::fs::write(
-            remote.join("index.js"),
-            "export const label = 'downloaded';",
+            remote.join("dist/public.js"),
+            "export const label = 'downloaded from package main';",
         )
         .expect("dependency source");
-        git(&["add", "index.js"]);
+        std::fs::write(
+            remote.join("package.json"),
+            r#"{ "main": "dist/public.js" }"#,
+        )
+        .expect("dependency package manifest");
+        git(&["add", "."]);
         git(&["commit", "-m", "dependency"]);
 
         std::fs::write(
@@ -7401,11 +7407,10 @@ mod module_lifecycle_tests {
                     "id": "com.example.fetch",
                     "name": "Fetch",
                     "entry": "main.js",
-                    "dependencies": {{
-                        "omarchy-ui": {{ "git": {}, "branch": "main" }}
-                    }}
+                    "dependencies": {{ "omarchy-ui": {} }}
                 }}"#,
-                serde_json::to_string(&remote).expect("remote path")
+                serde_json::to_string(&format!("file://{}#main", remote.display()))
+                    .expect("remote URL")
             ),
         )
         .expect("application manifest");
@@ -7428,7 +7433,7 @@ mod module_lifecycle_tests {
                 label.call::<_, String>(())
             })
             .expect("dependency export");
-        assert_eq!(label, "downloaded");
+        assert_eq!(label, "downloaded from package main");
         let _ = std::fs::remove_dir_all(root);
     }
 }

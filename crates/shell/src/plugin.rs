@@ -89,8 +89,27 @@ pub struct PluginManifest {
 
 /// One JavaScript package fetched from Git before an application starts.
 #[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "GitDependencyFile")]
+#[schemars(with = "GitDependencyFile")]
 pub struct GitDependency {
+    git: String,
+    branch: Option<String>,
+    tag: Option<String>,
+    entry: String,
+    reference: Option<String>,
+    package_entry: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(untagged)]
+enum GitDependencyFile {
+    Shorthand(String),
+    Object(GitDependencyObject),
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GitDependencyObject {
     git: String,
     #[serde(default)]
     branch: Option<String>,
@@ -102,6 +121,100 @@ pub struct GitDependency {
 
 fn default_dependency_entry() -> String {
     "index.js".to_owned()
+}
+
+impl TryFrom<GitDependencyFile> for GitDependency {
+    type Error = String;
+
+    fn try_from(value: GitDependencyFile) -> Result<Self, Self::Error> {
+        match value {
+            GitDependencyFile::Object(object) => Ok(Self {
+                git: object.git,
+                branch: object.branch,
+                tag: object.tag,
+                entry: object.entry,
+                reference: None,
+                package_entry: false,
+            }),
+            GitDependencyFile::Shorthand(source) => {
+                let (git, reference) = parse_git_dependency_string(&source)?;
+                Ok(Self {
+                    git,
+                    branch: None,
+                    tag: None,
+                    entry: default_dependency_entry(),
+                    reference,
+                    package_entry: true,
+                })
+            }
+        }
+    }
+}
+
+fn parse_git_dependency_string(source: &str) -> Result<(String, Option<String>), String> {
+    if source.trim() != source || source.is_empty() || source.matches('#').count() > 1 {
+        return Err(
+            "a string dependency must be a Git URL or GitHub owner/repository with one optional #Git ref"
+                .to_owned(),
+        );
+    }
+    let (remote, fragment) = match source.split_once('#') {
+        Some((_remote, "")) => {
+            return Err("a string dependency #Git ref must not be empty".to_owned());
+        }
+        Some((remote, reference)) => (remote, Some(reference)),
+        None => (source, None),
+    };
+    if let Some(reference) = fragment
+        && !valid_git_ref_name(reference)
+    {
+        return Err(format!(
+            "string dependency selector `{reference}` is not a valid Git ref"
+        ));
+    }
+
+    if remote.contains("://") || looks_like_scp_git_url(remote) {
+        if remote.chars().any(char::is_whitespace)
+            || remote.ends_with("://")
+            || remote.starts_with("://")
+        {
+            return Err("a string dependency must contain a valid Git URL".to_owned());
+        }
+        return Ok((remote.to_owned(), fragment.map(str::to_owned)));
+    }
+
+    let mut components = remote.split('/');
+    let owner = components.next().unwrap_or_default();
+    let repository = components.next().unwrap_or_default();
+    if components.next().is_some()
+        || !valid_github_component(owner)
+        || !valid_github_component(repository)
+    {
+        return Err(
+            "GitHub shorthand must contain exactly owner/repository plus an optional #Git ref"
+                .to_owned(),
+        );
+    }
+    Ok((
+        format!("https://github.com/{owner}/{repository}"),
+        Some(fragment.unwrap_or("main").to_owned()),
+    ))
+}
+
+fn looks_like_scp_git_url(remote: &str) -> bool {
+    let Some((authority, path)) = remote.split_once(':') else {
+        return false;
+    };
+    authority.contains('@') && !authority.contains('/') && path.contains('/') && !path.is_empty()
+}
+
+fn valid_github_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && component
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
 }
 
 impl GitDependency {
@@ -119,6 +232,14 @@ impl GitDependency {
 
     pub fn entry(&self) -> &str {
         &self.entry
+    }
+
+    pub(crate) fn reference(&self) -> Option<&str> {
+        self.reference.as_deref()
+    }
+
+    pub(crate) fn uses_package_entry(&self) -> bool {
+        self.package_entry
     }
 }
 
@@ -306,6 +427,16 @@ fn validate_dependencies(
             return Err(ManifestProblem::Dependencies(format!(
                 "`{name}.git` must not be empty"
             )));
+        }
+        if dependency.uses_package_entry() {
+            if let Some(reference) = dependency.reference()
+                && !valid_git_ref_name(reference)
+            {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` selector `{reference}` is not a valid Git ref"
+                )));
+            }
+            continue;
         }
         let reference = match (&dependency.branch, &dependency.tag) {
             (Some(branch), None) if !branch.trim().is_empty() => branch,
@@ -992,7 +1123,7 @@ impl std::fmt::Display for ManifestProblem {
             ),
             ManifestProblem::Dependencies(error) => write!(
                 f,
-                "invalid `dependencies`: {error}. Each package needs a Git URL, exactly one non-empty `branch` or `tag`, and an optional repository-relative `entry`"
+                "invalid `dependencies`: {error}. Use a GitHub owner/repository shorthand or full Git URL with an optional #ref, or an object with a Git URL, exactly one non-empty `branch` or `tag`, and an optional repository-relative `entry`"
             ),
         }
     }
@@ -2049,6 +2180,128 @@ mod tests {
         assert_eq!(dependency.branch(), Some("main"));
         assert_eq!(dependency.tag(), None);
         assert_eq!(dependency.entry(), "index.js");
+    }
+
+    #[test]
+    fn a_manifest_accepts_git_dependency_strings() {
+        for (source, expected_git, expected_reference) in [
+            (
+                "https://github.com/huacnlee/omarchy-ui#main",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("main"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#v1.2.0",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("v1.2.0"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("0123456789abcdef0123456789abcdef01234567"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui",
+                "https://github.com/huacnlee/omarchy-ui",
+                None,
+            ),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("a Git dependency string should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), expected_git);
+            assert_eq!(dependency.reference(), expected_reference);
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn github_shorthand_expands_to_an_https_remote_and_defaults_to_main() {
+        for (source, expected_reference) in [
+            ("huacnlee/omarchy-ui", "main"),
+            ("huacnlee/omarchy-ui#stable", "stable"),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("strict GitHub shorthand should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
+            assert_eq!(dependency.reference(), Some(expected_reference));
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn malformed_or_ambiguous_git_dependency_strings_are_rejected() {
+        for source in [
+            "huacnlee",
+            "/omarchy-ui",
+            "huacnlee/",
+            "huacnlee/omarchy-ui/extra",
+            "huacnlee//omarchy-ui",
+            "huacnlee/omarchy-ui#",
+            "https://github.com/huacnlee/omarchy-ui#",
+            "not a git dependency",
+        ] {
+            let error = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect_err("malformed string syntax must not select an unintended repository");
+
+            assert!(
+                error.to_string().contains("Git URL")
+                    || error.to_string().contains("owner/repository")
+                    || error.to_string().contains("Git ref"),
+                "`{source}` produced an unclear error: {error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn object_git_dependencies_keep_their_explicit_selector_and_entry_contract() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/huacnlee/omarchy-ui",
+                    "tag": "v1.2.0",
+                    "entry": "src/public.js"
+                }
+            }
+        }"#;
+
+        let manifest = PluginManifest::parse(source).expect("the legacy object form should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+
+        assert_eq!(dependency.branch(), None);
+        assert_eq!(dependency.tag(), Some("v1.2.0"));
+        assert_eq!(dependency.entry(), "src/public.js");
+        assert!(!dependency.uses_package_entry());
     }
 
     #[test]
