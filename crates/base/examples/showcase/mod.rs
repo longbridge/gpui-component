@@ -489,6 +489,7 @@ impl Render for BaseShowcase {
         let show_back = self.navigation_enabled && self.component != "overview";
         // Surfaces rather than parts: these take the whole viewport.
         let fills_viewport = matches!(self.component.as_str(), "dock");
+        let is_text_view = self.component == "text-view";
         let entity = cx.entity().downgrade();
         div()
             .size_full()
@@ -549,9 +550,10 @@ impl Render for BaseShowcase {
                             .p_4()
                             .child(
                                 div()
-                                    .map(|this| match fills_viewport {
-                                        true => this.flex_1().size_full().min_h(px(420.)),
-                                        false => this.flex_none(),
+                                    .map(|this| match (fills_viewport, is_text_view) {
+                                        (true, _) => this.flex_1().size_full().min_h(px(420.)),
+                                        (false, true) => this.flex_1().w_full().max_w(px(720.)),
+                                        (false, false) => this.flex_none(),
                                     })
                                     .child(content),
                             ),
