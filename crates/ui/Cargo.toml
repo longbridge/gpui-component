@@ -114,6 +114,7 @@ smallvec.workspace = true
 sum-tree.workspace = true
 tracing.workspace = true
 log.workspace = true
+markdown = { version = "1.0.0", features = ["serde"] }
 
 enum-iterator = "2.1.0"
 itertools = "0.13.0"

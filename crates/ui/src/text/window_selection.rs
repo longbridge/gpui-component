@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::ElementExt as _;
     use crate::global_state::GlobalState;
-    use crate::{
-        ElementExt as _, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
-        TextSelectionScopeId,
-    };
     use crate::{
         Placement, Root,
         text::{TextView, TextViewState},
@@ -15,6 +12,10 @@ mod tests {
         LayoutId, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels,
         Render, SharedString, Styled as _, StyledText, TestAppContext, VisualTestContext, Window,
         div, point, px,
+    };
+    use gpui_base::{
+        TextSelection, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+        TextSelectionScopeId,
     };
     use std::cell::Cell;
     use std::rc::Rc;
@@ -470,7 +471,7 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let selected = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
         assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
     }
 
@@ -519,7 +520,7 @@ mod tests {
         );
 
         cx.update(|window, cx| {
-            crate::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             let _ = window.draw(cx);
         });
 
@@ -549,7 +550,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            crate::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
     }
@@ -602,18 +603,18 @@ mod tests {
 
             assert_eq!(
                 crate::WindowExt::selected_text(window, cx),
-                crate::TextSelection::selected_text(window, cx)
+                TextSelection::selected_text(window, cx)
             );
             assert_eq!(
                 crate::WindowExt::has_text_selection(window, cx),
-                crate::TextSelection::has_selection(window, cx)
+                TextSelection::has_selection(window, cx)
             );
 
             crate::WindowExt::clear_text_selection(window, cx);
-            assert!(!crate::TextSelection::has_selection(window, cx));
+            assert!(!TextSelection::has_selection(window, cx));
 
             text_view.update(cx, |state, cx| state.select_all(cx));
-            crate::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             assert!(!crate::WindowExt::has_text_selection(window, cx));
         });
     }
@@ -676,15 +677,15 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            crate::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
         });
         cx.run_until_parked();
 
         let (has_selection, selected) = cx.update(|window, cx| {
             (
-                crate::TextSelection::has_selection(window, cx),
-                crate::TextSelection::selected_text(window, cx),
+                TextSelection::has_selection(window, cx),
+                TextSelection::selected_text(window, cx),
             )
         });
         assert!(has_selection);
@@ -1195,7 +1196,7 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        cx.update(|window, cx| crate::TextSelection::selected_text(window, cx))
+        cx.update(|window, cx| TextSelection::selected_text(window, cx))
     }
 
     fn click(

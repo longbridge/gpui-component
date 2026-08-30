@@ -99,11 +99,6 @@ pub use gpui_base::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
     resizable_panel, v_resizable,
 };
-#[doc(hidden)]
-pub use gpui_base::{
-    TextSelection, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
-    TextSelectionScopeId,
-};
 pub use gpui_component_macros::icon_named;
 pub use icon::*;
 pub use index_path::IndexPath;

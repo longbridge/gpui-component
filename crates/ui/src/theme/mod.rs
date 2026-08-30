@@ -319,8 +319,10 @@ impl Theme {
     /// onto the Base global is replaced — the same thing [`Theme::change`]
     /// does.
     pub fn sync_base(cx: &mut App) {
-        let base_theme = Theme::global(cx).base_theme();
+        let theme = Theme::global(cx).clone();
+        let base_theme = theme.base_theme();
         cx.set_global(base_theme);
+        crate::text::install_text_view_defaults(&theme, cx);
     }
 
     /// Get the input background color.

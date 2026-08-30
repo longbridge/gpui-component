@@ -7,7 +7,8 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme as _, Colorize, Icon, IconName, Sizable, Size, StyledExt, h_flex, text::Text,
+    ActiveTheme as _, Colorize, Icon, IconName, Sizable, Size, StyledExt, h_flex,
+    text::{Text, TextViewStyle},
 };
 
 /// The variant of the [`Alert`].
@@ -225,9 +226,10 @@ impl RenderOnce for Alert {
                                     )
                                 })
                             })
-                            .child(self.message.style(
-                                crate::text::text_view_style(cx.theme()).paragraph_gap(rems(0.2)),
-                            )),
+                            .child(
+                                self.message
+                                    .style(TextViewStyle::default().paragraph_gap(rems(0.2))),
+                            ),
                     ),
             )
             .when_some(self.on_close, |this, on_close| {
