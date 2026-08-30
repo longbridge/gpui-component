@@ -26,12 +26,11 @@ pub(crate) struct MaterializedDependency {
 
 impl GitDependencyStore {
     pub(crate) fn for_user() -> Self {
-        Self::new(
-            crate::runtime::data_home()
-                .join("gpui-shell")
-                .join("dependencies")
-                .join("git"),
-        )
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        Self::new(dependency_cache_root(&home))
     }
 
     pub(crate) fn new(root: PathBuf) -> Self {
@@ -163,6 +162,10 @@ impl GitDependencyStore {
     }
 }
 
+fn dependency_cache_root(home: &Path) -> PathBuf {
+    home.join(".gpui-shell").join("cache").join("dependencies")
+}
+
 const GIT_TIMEOUT: Duration = Duration::from_secs(30);
 const LOCK_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
@@ -267,7 +270,7 @@ impl Drop for CacheLock {
 
 #[cfg(test)]
 mod tests {
-    use super::GitDependencyStore;
+    use super::{GitDependencyStore, dependency_cache_root};
     use crate::plugin::PluginManifest;
     use std::{
         path::{Path, PathBuf},
@@ -279,6 +282,14 @@ mod tests {
     };
 
     static NEXT: AtomicU64 = AtomicU64::new(1);
+
+    #[test]
+    fn a_user_dependency_cache_lives_in_the_shell_cache() {
+        assert_eq!(
+            dependency_cache_root(Path::new("/home/example")),
+            PathBuf::from("/home/example/.gpui-shell/cache/dependencies")
+        );
+    }
 
     struct GitFixture {
         root: PathBuf,

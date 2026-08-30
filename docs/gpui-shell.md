@@ -2810,8 +2810,9 @@ current runtime; omitted `capabilities` grants nothing. The file is
 `dependencies` maps a bare JavaScript module name to a Git repository and
 exactly one `branch` or `tag`. The optional repository-relative `entry`
 defaults to `index.js`. Before linking the application module graph, the host
-fetches each repository into `<data home>/gpui-shell/dependencies/git/`. Git is
-non-interactive and each command has a 30-second timeout. A per-remote lock
+fetches each repository into `~/.gpui-shell/cache/dependencies/`. No
+`node_modules` directory participates. Git is non-interactive and each command
+has a 30-second timeout. A per-remote lock
 serializes mirror updates; the fetched commit is then atomically published as
 an immutable, commit-addressed checkout and registered with the same module
 generation as the application. A branch refreshes on every load; a tag resolves

@@ -94,9 +94,10 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 ```
 
 每个 Git 依赖必须且只能选择一个非空的 `branch` 或 `tag`，`entry` 默认是
-`index.js`。gpui-shell 会在执行应用代码之前，把依赖拉取到用户数据目录下的本地缓存；
-branch 每次加载都会刷新，tag 则解析到对应的标记 commit。Git 以非交互方式运行，每条
-命令限时 30 秒；加锁的本地 mirror 会发布不可变的 commit checkout，避免并发启动或旧
+`index.js`。gpui-shell 会在执行应用代码之前，把依赖拉取到
+`~/.gpui-shell/cache/dependencies/`；不使用任何 `node_modules` 目录。branch
+每次加载都会刷新，tag 则解析到对应的标记 commit。Git 以非交互方式运行，每条命令
+限时 30 秒；加锁的本地 mirror 会发布不可变的 commit checkout，避免并发启动或旧
 module generation 被后续刷新改写。JavaScript 以 map key 作为裸模块名导入，例如
 `import { label, style } from "omarchy-ui"`。依赖内部的相对
 import 和包 subpath import 都不能逃出该 checkout。下载使用 Host 上的 `git`，不属于

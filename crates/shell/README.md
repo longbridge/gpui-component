@@ -327,8 +327,9 @@ grant the CLI installs in `gpui-shell.json`:
 }
 ```
 
-Git dependencies are fetched before the entry module is evaluated and cached
-under the user's gpui-shell data directory. Import the map key as a bare module:
+Git dependencies are fetched before the entry module is evaluated and cached in
+`~/.gpui-shell/cache/dependencies/`. No `node_modules` directory participates.
+Import the map key as a bare module:
 
 ```js
 import { label, style } from "omarchy-ui";

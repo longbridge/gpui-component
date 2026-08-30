@@ -95,10 +95,11 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â
 ```
 
 Every Git dependency chooses exactly one non-empty `branch` or `tag`; its
-`entry` defaults to `index.js`. gpui-shell fetches dependencies into its local
-user-data cache before evaluating application code. Branches refresh on every
-load, while tags resolve to their tagged commits. Git runs non-interactively
-with a 30-second command timeout. A locked mirror publishes immutable,
+`entry` defaults to `index.js`. gpui-shell fetches dependencies into
+`~/.gpui-shell/cache/dependencies/` before evaluating application code; no
+`node_modules` directory participates. Branches refresh on every load, while
+tags resolve to their tagged commits. Git runs non-interactively with a
+30-second command timeout. A locked mirror publishes immutable,
 commit-addressed checkouts, preserving concurrent launches and older module
 generations. The dependency map key is the
 bare JavaScript module name, for example
