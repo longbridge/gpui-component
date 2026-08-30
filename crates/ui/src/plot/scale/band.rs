@@ -15,7 +15,19 @@ pub struct ScaleBand<T> {
 }
 
 impl<T> ScaleBand<T> {
-    pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self {
+    pub fn new(domain: Vec<T>, range: Vec<f32>) -> Self
+    where
+        T: PartialEq,
+    {
+        // Keep the first occurrence of each value, matching D3's scaleBand.
+        let mut unique = Vec::with_capacity(domain.len());
+        for value in domain {
+            if !unique.contains(&value) {
+                unique.push(value);
+            }
+        }
+        let domain = unique;
+
         let len = domain.len() as f32;
         let range_diff = range
             .iter()
@@ -107,6 +119,17 @@ mod tests {
     #[test]
     fn test_scale_band() {
         let scale = ScaleBand::new(vec![1, 2, 3], vec![0., 90.]);
+        assert_eq!(scale.tick(&1), Some(0.));
+        assert_eq!(scale.tick(&2), Some(30.));
+        assert_eq!(scale.tick(&3), Some(60.));
+        assert_eq!(scale.band_width(), 30.);
+    }
+
+    #[test]
+    fn test_scale_band_dedup() {
+        // Simulates grouped bar chart: 2 series × 3 categories = 6 entries, 3 unique.
+        let scale = ScaleBand::new(vec![1, 2, 3, 1, 2, 3], vec![0., 90.]);
+        assert_eq!(scale.domain.len(), 3);
         assert_eq!(scale.tick(&1), Some(0.));
         assert_eq!(scale.tick(&2), Some(30.));
         assert_eq!(scale.tick(&3), Some(60.));
