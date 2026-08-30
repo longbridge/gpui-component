@@ -1,8 +1,8 @@
 use gpui_component::{Disableable as _, Sizable as _, Size, pagination::Pagination};
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
-    ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
 };
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use super::common::{nonempty_id, nonnegative_usize};
 struct PaginationPayload(String);
 #[derive(Clone)]
 enum PaginationOp {
+    OnChange(ComponentArgument),
     Current(usize),
     Total(usize),
     Visible(usize),
@@ -30,6 +31,14 @@ impl ComponentMaterializer for PaginationMaterializer {
             .downcast_ref::<PaginationPayload>()
             .ok_or_else(|| anyhow::anyhow!("Pagination received an incompatible payload"))?
             .0;
+        let change = request
+            .methods()
+            .filter_map(|m| m.payload().downcast_ref::<PaginationOp>())
+            .filter_map(|op| match op {
+                PaginationOp::OnChange(argument) => Some(argument.clone()),
+                _ => None,
+            })
+            .last();
         let mut p = Pagination::new(id.clone()).disabled(request.disabled());
         for op in request
             .methods()
@@ -41,7 +50,19 @@ impl ComponentMaterializer for PaginationMaterializer {
                 PaginationOp::Visible(value) => p.visible_pages(*value),
                 PaginationOp::Compact => p.compact(),
                 PaginationOp::Size(value) => p.with_size(*value),
+                PaginationOp::OnChange(_) => p,
             }
+        }
+        if let Some(argument) = change {
+            let callback = request.resolve_callback(&argument)?;
+            p = p.on_click(move |page, window, cx| {
+                callback.invoke_and_report_with(
+                    "Pagination.onChange callback failed",
+                    &[ComponentCallbackArgument::Number(*page as f64)],
+                    window,
+                    cx,
+                );
+            });
         }
         let mut wrapper = gpui::div().child(p);
         wrapper.style().refine(&request.take_style());
@@ -105,6 +126,23 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     "visiblePages",
                     "Sets the maximum visible page buttons.",
                     PaginationOp::Visible,
+                ),
+                MethodDescriptor::new(
+                    "onChange",
+                    vec![ArgumentDescriptor::new(
+                        "onChange",
+                        ArgumentSchema::Callback("(page: number, cx: Context) => void"),
+                    )],
+                    |arguments| match arguments {
+                        [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
+                            PaginationOp::OnChange(argument.clone()),
+                        )),
+                        _ => Err("Pagination.onChange expects one callback".into()),
+                    },
+                )
+                .with_documentation(
+                    "Reports the page the reader asked for, so the script can drive \
+                     `currentPage`.",
                 ),
                 MethodDescriptor::new("compact", vec![], |_| {
                     Ok(ComponentPayload::new(PaginationOp::Compact))

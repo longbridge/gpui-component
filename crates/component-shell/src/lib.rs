@@ -74,9 +74,36 @@ fn open_window_with_root(
 
     let handle = cx.open_window(options, |window, cx| {
         let inner = build(window, cx);
-        cx.new(|cx| gpui_component::Root::new(inner, window, cx))
+        let host = cx.new(|_| CatalogHost(inner));
+        cx.new(|cx| gpui_component::Root::new(host, window, cx))
     })?;
     Ok(handle.into())
+}
+
+/// Renders the runtime's view together with the overlay layers `Root` expects
+/// its child to place.
+///
+/// `Root` itself draws only the child, the tooltip overlay and the native menu;
+/// the sheet, dialog and notification layers are the application root's to
+/// render. Without them a dialog opens into a window that never draws it, which
+/// looks exactly like a dialog that does not open.
+struct CatalogHost(gpui_shell::gpui::AnyView);
+
+impl gpui_shell::gpui::Render for CatalogHost {
+    fn render(
+        &mut self,
+        window: &mut gpui_shell::gpui::Window,
+        cx: &mut gpui_shell::gpui::Context<Self>,
+    ) -> impl gpui_shell::gpui::IntoElement {
+        use gpui_shell::gpui::{ParentElement as _, Styled as _};
+
+        gpui_shell::gpui::div()
+            .size_full()
+            .child(self.0.clone())
+            .children(gpui_component::Root::render_sheet_layer(window, cx))
+            .children(gpui_component::Root::render_dialog_layer(window, cx))
+            .children(gpui_component::Root::render_notification_layer(window, cx))
+    }
 }
 
 /// Registers the `gpui-component` JavaScript bindings provided by this crate.
@@ -144,6 +171,52 @@ mod tests {
         assert!(
             found,
             "the window is not rooted at gpui_component::Root, so every overlay would panic"
+        );
+    }
+
+    /// Opening a dialog is the whole point of the window root, and the panic it
+    /// used to raise was only half the problem: with `Root` in place but its
+    /// dialog layer unrendered, the dialog opens into a window that never draws
+    /// it — indistinguishable, from the outside, from one that does not open.
+    #[gpui::test]
+    fn a_dialog_opened_through_the_catalog_window_is_drawn(cx: &mut gpui::TestAppContext) {
+        use gpui::AppContext as _;
+        use gpui_component::WindowExt as _;
+
+        let components = crate::components().unwrap();
+        let open = components.window_opener().unwrap();
+
+        cx.update(crate::init);
+        let handle = cx
+            .update(|cx| {
+                let options = gpui::WindowOptions {
+                    show: false,
+                    ..Default::default()
+                };
+                open(cx, options, &mut |_window, cx| cx.new(|_| Blank).into())
+            })
+            .unwrap();
+
+        handle
+            .update(cx, |_, window, cx| {
+                assert!(!window.has_active_dialog(cx), "nothing is open yet");
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Project details"));
+                assert!(
+                    window.has_active_dialog(cx),
+                    "the dialog must reach a host that can hold it"
+                );
+            })
+            .unwrap();
+
+        // Drawn, not merely opened. `Root` renders the child, the tooltip and
+        // the native menu; the dialog layer is the application root's to place,
+        // so a dialog can be "open" and never reach the screen.
+        let mut visual = gpui::VisualTestContext::from_window(handle, cx);
+        visual.run_until_parked();
+        visual.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            visual.debug_bounds("dialog-layer").is_some(),
+            "the window root must render the dialog layer, or the dialog never appears"
         );
     }
 

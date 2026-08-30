@@ -1,8 +1,8 @@
 use gpui_component::{Sizable as _, Size, radio::Radio};
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
-    ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
 };
 use std::sync::Arc;
 
@@ -11,6 +11,7 @@ use super::common::nonempty_id;
 struct RadioPayload(String);
 #[derive(Clone)]
 enum RadioOp {
+    OnChange(ComponentArgument),
     Label(String),
     A11y(String),
     Checked(bool),
@@ -25,6 +26,17 @@ impl ComponentMaterializer for RadioMaterializer {
             .downcast_ref::<RadioPayload>()
             .ok_or_else(|| anyhow::anyhow!("Radio received an incompatible payload"))?
             .0;
+        // A `Radio` inside a `RadioGroup` is driven by the group, which reports
+        // the selected index itself. One standing on its own has nothing above
+        // it, so it reports its own click.
+        let change = request
+            .methods()
+            .filter_map(|m| m.payload().downcast_ref::<RadioOp>())
+            .filter_map(|op| match op {
+                RadioOp::OnChange(argument) => Some(argument.clone()),
+                _ => None,
+            })
+            .last();
         let mut radio = Radio::new(id.clone())
             .disabled(request.disabled())
             .checked(request.selected());
@@ -38,7 +50,19 @@ impl ComponentMaterializer for RadioMaterializer {
                 RadioOp::Checked(value) => radio.checked(*value),
                 RadioOp::TabStop(value) => radio.tab_stop(*value),
                 RadioOp::Size(value) => radio.with_size(*value),
+                RadioOp::OnChange(_) => radio,
             }
+        }
+        if let Some(argument) = change {
+            let callback = request.resolve_callback(&argument)?;
+            radio = radio.on_click(move |checked, window, cx| {
+                callback.invoke_and_report_with(
+                    "Radio.onChange callback failed",
+                    &[ComponentCallbackArgument::Boolean(*checked)],
+                    window,
+                    cx,
+                );
+            });
         }
         crate::shell::typed_compound::finish_part(&mut request, radio)
     }
@@ -123,6 +147,23 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                         },
                         _ => Err("Radio.size(size) expects a size literal".into()),
                     },
+                ),
+                MethodDescriptor::new(
+                    "onChange",
+                    vec![ArgumentDescriptor::new(
+                        "onChange",
+                        ArgumentSchema::Callback("(checked: boolean, cx: Context) => void"),
+                    )],
+                    |arguments| match arguments {
+                        [argument @ ComponentArgument::Callback(_)] => {
+                            Ok(ComponentPayload::new(RadioOp::OnChange(argument.clone())))
+                        }
+                        _ => Err("Radio.onChange expects one callback".into()),
+                    },
+                )
+                .with_documentation(
+                    "Reports a click on a radio used on its own. Inside a `RadioGroup` the \
+                     group reports the selected index instead.",
                 ),
             ])
             .with_documentation(
