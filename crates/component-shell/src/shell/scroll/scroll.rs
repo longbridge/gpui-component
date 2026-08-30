@@ -45,7 +45,11 @@ fn resolve_ops<'a>(
 
 fn axis_method() -> MethodDescriptor {
     MethodDescriptor::new(
-        "axis",
+        // Not `axis`: the runtime's element prototype checks that name against
+        // `horizontal | vertical` before the call can reach a registered
+        // component, so `both` — which this surface does support — would be
+        // refused there and never arrive.
+        "scrollAxis",
         vec![ArgumentDescriptor::new(
             "axis",
             ArgumentSchema::Enum(&["vertical", "horizontal", "both"]),

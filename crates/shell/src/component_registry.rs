@@ -1644,6 +1644,11 @@ pub enum RegistryError {
         component: &'static str,
         method: &'static str,
     },
+    UnreachableMethodVocabulary {
+        component: &'static str,
+        method: &'static str,
+        literal: &'static str,
+    },
     InvalidDeprecationReplacement {
         component: &'static str,
         export: &'static str,
@@ -1658,6 +1663,27 @@ pub enum RegistryError {
 /// Module names the runtime answers to itself. A component catalog may not
 /// claim one: the runtime's resolvers run first.
 const RUNTIME_MODULE_SPECIFIERS: &[&str] = &["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
+
+/// Element methods whose argument the runtime's own prototype checks against a
+/// fixed vocabulary, before the call can reach a registered component.
+///
+/// The prototype entry wins over the generic descriptor dispatch, so a
+/// descriptor that declares one of these names inherits that check. If the two
+/// vocabularies disagree the method becomes unreachable by *any* value — the
+/// prototype rejects the descriptor's spelling and the descriptor rejects the
+/// prototype's — and nothing says why. `Popover.anchor` was exactly that.
+///
+/// A name is not forbidden: `Scroll.axis` and `Scrollbar.mode` share a name and
+/// a vocabulary and work correctly. Only disagreement is refused.
+///
+/// The engine asserts this against its own prelude, so a check added there and
+/// not here is a failing test rather than a silently dead binding.
+const PRELUDE_CHECKED_VOCABULARIES: &[(&str, &[&str])] = &[
+    ("anchor", &crate::materialize::ANCHOR_NAMES),
+    ("axis", &["horizontal", "vertical"]),
+    ("mode", &["scrolling", "hover", "always"]),
+    ("mouse_button", &["left", "right", "middle"]),
+];
 
 impl fmt::Display for RegistryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1724,6 +1750,17 @@ impl fmt::Display for RegistryError {
                 formatter,
                 "component `{component}` method `{method}` has no documentation; \
                  call MethodDescriptor::with_documentation"
+            ),
+            Self::UnreachableMethodVocabulary {
+                component,
+                method,
+                literal,
+            } => write!(
+                formatter,
+                "component `{component}` method `{method}` declares `{literal}`, which the \
+                 runtime's own `{method}` check rejects before the call can reach the \
+                 component; the method would be unreachable by any value, so either match \
+                 that vocabulary or choose another method name"
             ),
             Self::DuplicateMethod { component, method } => {
                 write!(
@@ -1849,6 +1886,19 @@ impl ComponentRegistry {
                     method: method.name,
                 });
             }
+            if let Some((_, accepted)) = PRELUDE_CHECKED_VOCABULARIES
+                .iter()
+                .find(|(name, _)| *name == method.name)
+                && let Some(literal) = declared_enum_literals(&method.arguments)
+                    .into_iter()
+                    .find(|literal| !accepted.contains(literal))
+            {
+                return Err(RegistryError::UnreachableMethodVocabulary {
+                    component: descriptor.name,
+                    method: method.name,
+                    literal,
+                });
+            }
             // Every method becomes a line of `gpui.d.ts` that a script author
             // reads in an editor. Filling a default sentence in here would make
             // the published surface look documented without anyone having
@@ -1926,6 +1976,28 @@ impl ComponentRegistry {
             states: self.states.into(),
         })
     }
+}
+
+#[cfg(test)]
+pub(crate) fn prelude_checked_vocabularies_for_test()
+-> &'static [(&'static str, &'static [&'static str])] {
+    PRELUDE_CHECKED_VOCABULARIES
+}
+
+/// The enum literals an argument list declares, at any nesting depth.
+fn declared_enum_literals(arguments: &[ArgumentDescriptor]) -> Vec<&'static str> {
+    fn walk(schema: &ArgumentSchema, out: &mut Vec<&'static str>) {
+        match schema {
+            ArgumentSchema::Enum(values) => out.extend_from_slice(values),
+            ArgumentSchema::Array(item) | ArgumentSchema::Optional(item) => walk(item, out),
+            _ => {}
+        }
+    }
+    let mut literals = Vec::new();
+    for argument in arguments {
+        walk(&argument.schema, &mut literals);
+    }
+    literals
 }
 
 fn validate_arguments(

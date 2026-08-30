@@ -112,9 +112,9 @@ import { ScrollbarHandle, Scroll, Scrollbar } from "gpui-component";
 export default class App extends View {
   init() { this.scroll = ScrollbarHandle(); }
   render() { return div().relative().w(160).h(100)
-    .child(new Scroll(this.scroll).axis("vertical").size_full()
+    .child(new Scroll(this.scroll).scrollAxis("vertical").size_full()
       .child(div().h(400).flex_shrink(0).child("Tall shared content")))
-    .child(new Scrollbar("main-scrollbar", this.scroll).axis("vertical").mode("always").viewportFromLayout(true)); }
+    .child(new Scrollbar("main-scrollbar", this.scroll).scrollAxis("vertical").mode("always").viewportFromLayout(true)); }
 }
 "#;
     let (mut context, view, _app) = mount(cx, source);

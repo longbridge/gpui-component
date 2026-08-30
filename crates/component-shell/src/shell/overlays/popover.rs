@@ -93,7 +93,7 @@ fn boolean_op(
 
 fn anchor_op(arguments: &[ComponentArgument]) -> Result<ComponentPayload, String> {
     let [ComponentArgument::Enum(anchor)] = arguments else {
-        return Err("Popover.anchor(anchor) expects an anchor literal".into());
+        return Err("Popover.cardAnchor(anchor) expects an anchor literal".into());
     };
     let anchor = match anchor.as_str() {
         "topLeft" => Anchor::TopLeft,
@@ -142,8 +142,12 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 },
             )])
             .with_methods(vec![
+                // Not `anchor`: the runtime's element prototype defines that
+                // name itself and would shadow this method, which is what left
+                // it unreachable by any value. `HoverCard` already carries the
+                // same method under this name.
                 MethodDescriptor::new(
-                    "anchor",
+                    "cardAnchor",
                     vec![ArgumentDescriptor::new(
                         "anchor",
                         ArgumentSchema::Enum(&[

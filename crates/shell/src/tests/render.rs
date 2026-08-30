@@ -476,7 +476,12 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
     let components = registry.freeze().unwrap();
     let declarations = crate::typings::declarations_with_components(&components);
     assert!(declarations.contains("declare module \"gpui-component\""));
-    assert!(declarations.contains("export type TestBoxElement = Omit<Element, \"tone\"> & {"));
+    // `disabled`, `selected` and `on_click` join the omission because this
+    // descriptor declares none of them, and the runtime refuses them for a
+    // registered component that does not.
+    assert!(declarations.contains(
+        "export type TestBoxElement = Omit<Element, \"tone\" | \"disabled\" | \"selected\" | \"on_click\"> & {"
+    ));
     assert!(declarations.contains("import { ClickEvent, Context, Element } from \"gpui\";"));
     assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
     assert!(declarations.contains("tone(value: string): TestBoxElement;"));

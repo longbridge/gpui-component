@@ -159,16 +159,37 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
         out.push_str("  export type ");
         out.push_str(descriptor.name());
         out.push_str("Element = ");
-        if descriptor.methods().is_empty() {
+        // Two reasons a name leaves `Element`. A method the descriptor declares
+        // is re-declared below with the descriptor's own signature. And a common
+        // behavior the descriptor does *not* declare is refused at run time for
+        // a registered component — see the `registered_common_behavior` check in
+        // the engine — so leaving it inherited would have `gpui.d.ts` promise a
+        // call that always throws.
+        let declared = descriptor
+            .methods()
+            .iter()
+            .map(|method| method.name())
+            .collect::<Vec<_>>();
+        let withheld = REGISTERED_COMMON_BEHAVIORS
+            .iter()
+            .copied()
+            .filter(|behavior| !declared.contains(behavior))
+            .collect::<Vec<_>>();
+        let removed = declared
+            .iter()
+            .copied()
+            .chain(withheld.iter().copied())
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
             out.push_str("Element & {\n");
         } else {
             out.push_str("Omit<Element, ");
-            for (index, method) in descriptor.methods().iter().enumerate() {
+            for (index, name) in removed.iter().enumerate() {
                 if index != 0 {
                     out.push_str(" | ");
                 }
                 out.push('"');
-                out.push_str(method.name());
+                out.push_str(name);
                 out.push('"');
             }
             out.push_str("> & {\n");
@@ -182,6 +203,19 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
             out.push_str("): ");
             out.push_str(descriptor.name());
             out.push_str("Element;\n");
+        }
+        // Re-declared rather than simply removed. Dropping the member outright
+        // would also drop this type's assignability to `Element`, so a typed
+        // part could no longer be passed to a slot that takes one. A `never`
+        // parameter keeps the shape and still refuses every call.
+        for behavior in &withheld {
+            out.push_str("    /**\n     * Not available on this component: `");
+            out.push_str(descriptor.name());
+            out.push_str("` does not declare `");
+            out.push_str(behavior);
+            out.push_str("`, and the runtime refuses it.\n     */\n    ");
+            out.push_str(behavior);
+            out.push_str("(unavailable: never): never;\n");
         }
         out.push_str("  }\n");
         for constructor in descriptor.constructors() {
@@ -216,6 +250,11 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str(WINDOW_GLOBAL);
     out
 }
+
+/// The behaviors a registered component answers only when its descriptor
+/// declares them. Mirrors the engine's `registered_common_behavior` list; a
+/// test asserts the two agree.
+pub(crate) const REGISTERED_COMMON_BEHAVIORS: [&str; 3] = ["disabled", "selected", "on_click"];
 
 fn push_arguments(out: &mut String, arguments: &[crate::ArgumentDescriptor]) {
     for (index, argument) in arguments.iter().enumerate() {
@@ -3668,6 +3707,64 @@ mod tests {
     ];
 
     /// Every method name declared in the `Element` interface, in order.
+    /// A registered component answers `disabled`, `selected` and `on_click`
+    /// only when its descriptor declares them. The declarations have to say so,
+    /// or an editor green-lights a call that always throws — which is how
+    /// `Button.disabled(true)` reached a running application.
+    #[gpui::test]
+    fn withheld_common_behaviors_are_declared_uncallable_rather_than_removed() {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+            ConstructorDescriptor, MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Plain", Arc::new(Empty))
+                    .with_constructors(vec![ConstructorDescriptor::new(
+                        "Plain",
+                        Vec::new(),
+                        |_| Ok(ComponentPayload::new(())),
+                    )])
+                    .with_documentation("A component declaring no common behavior."),
+            )
+            .unwrap();
+        let _ = &registry as &ComponentRegistry;
+        let declarations = super::declarations_with_components(&registry.freeze().unwrap());
+
+        for behavior in super::REGISTERED_COMMON_BEHAVIORS {
+            assert!(
+                declarations.contains(&format!("{behavior}(unavailable: never): never;")),
+                "`{behavior}` must be declared uncallable on a component that does not declare it"
+            );
+        }
+        // Re-declared, not dropped: removing the member would cost the type its
+        // assignability to `Element`, so a typed part could no longer be passed
+        // to a slot that takes one.
+        assert!(
+            declarations.contains(
+                "export type PlainElement = Omit<Element, \"disabled\" | \"selected\" | \"on_click\">"
+            ),
+            "{declarations}"
+        );
+    }
+
     fn element_methods(declarations: &str) -> Vec<String> {
         declarations
             .lines()

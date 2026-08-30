@@ -1147,7 +1147,7 @@ export function registeredExamples(surface) {
           label: "A vertical scroll region",
           element: asElement(
             new Scroll(ScrollbarHandle())
-              .axis("vertical")
+              .scrollAxis("vertical")
               .h(140)
               .child(
                 v_flex()
@@ -1185,7 +1185,7 @@ export function registeredExamples(surface) {
               )
               .child(
                 asElement(
-                  new Scrollbar("story-scrollbar", handle).axis("vertical").mode("always"),
+                  new Scrollbar("story-scrollbar", handle).scrollAxis("vertical").mode("always"),
                 ),
               ),
           ),

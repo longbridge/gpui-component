@@ -7240,7 +7240,10 @@ impl ShellRuntime {
         }
 
         let registered_method = self.registered_method_descriptor(id, method);
-        let registered_common_behavior = matches!(method, "disabled" | "selected" | "on_click");
+        // The declarations withhold these from a registered component that does
+        // not declare them, so the two lists must agree — see the test below.
+        let registered_common_behavior =
+            crate::typings::REGISTERED_COMMON_BEHAVIORS.contains(&method);
         let registered_common_slot = matches!(
             method,
             "content"
@@ -9252,6 +9255,80 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
     })
 }
 
+/// The element methods the prelude checks against a fixed vocabulary, read out
+/// of the prelude source itself.
+///
+/// Two lists of the same names would drift, and the drift is invisible: a
+/// descriptor method that disagrees simply stops working, for every value. So
+/// the list lives in `component_registry`, where registration can refuse the
+/// disagreement, and this reads the truth back out of the prelude to check it.
+#[cfg(test)]
+fn prelude_checked_vocabularies() -> Vec<(String, Vec<String>)> {
+    let mut found = Vec::new();
+    for (index, _) in PRELUDE.match_indices("\n  methods.") {
+        let rest = &PRELUDE[index + "\n  methods.".len()..];
+        let Some(end) = rest.find(" = function") else {
+            continue;
+        };
+        let name = rest[..end].to_owned();
+        // Only this method's own body: a fixed window spills into the next
+        // method's comment and reads its check as this one's.
+        let body = match rest.find("\n  };") {
+            Some(close) => &rest[..close],
+            None => rest,
+        };
+        if body.contains("__anchorNames.includes") {
+            found.push((
+                name,
+                crate::materialize::ANCHOR_NAMES
+                    .iter()
+                    .map(|value| (*value).to_owned())
+                    .collect(),
+            ));
+            continue;
+        }
+        let Some(open) = body.find('[') else { continue };
+        let Some(close) = body[open..].find("].includes(value)") else {
+            continue;
+        };
+        let literals = body[open + 1..open + close]
+            .split(',')
+            .filter_map(|part| {
+                let part = part.trim().trim_matches('"');
+                (!part.is_empty()).then(|| part.to_owned())
+            })
+            .collect::<Vec<_>>();
+        if !literals.is_empty() {
+            found.push((name, literals));
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+#[cfg(test)]
+fn prelude_owned_element_methods() -> Vec<&'static str> {
+    let generic_dispatch = PRELUDE
+        .find("for (const name of __behaviorNames) define(name);")
+        .expect("the prelude installs descriptor methods generically");
+    let mut names = Vec::new();
+    let mut rest = &PRELUDE[generic_dispatch..];
+    while let Some(at) = rest.find("\n  methods.") {
+        rest = &rest[at + "\n  methods.".len()..];
+        let Some(end) = rest.find(" = function") else {
+            continue;
+        };
+        let name = &rest[..end];
+        if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            names.push(name);
+        }
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
+}
+
 fn unknown_method(name: &str) -> String {
     match style::suggest(name) {
         Some(candidate) => format!("unknown element method `{name}` (did you mean `{candidate}`?)"),
@@ -10525,5 +10602,59 @@ export default class BrokenChild extends View {
         assert_eq!(runtime.entities().len(), records_before);
 
         assert!(runtime.entities().release(application_focus));
+    }
+}
+
+#[cfg(test)]
+mod reserved_element_method_tests {
+    /// `typings.rs` withholds these from a registered component that does not
+    /// declare them. If the engine started accepting a fourth, the declarations
+    /// would keep offering it on every component and the call would throw.
+    #[test]
+    fn the_declarations_withhold_exactly_the_behaviors_the_engine_gates() {
+        assert_eq!(
+            crate::typings::REGISTERED_COMMON_BEHAVIORS,
+            ["disabled", "selected", "on_click"]
+        );
+    }
+
+    /// A descriptor method whose name the prelude also defines is unreachable:
+    /// the prototype entry wins and validates against a different vocabulary.
+    /// `RESERVED_ELEMENT_METHODS` is what stops one being registered, so it has
+    /// to say exactly what the prelude actually defines.
+    #[test]
+    fn the_checked_vocabularies_match_what_the_prelude_enforces() {
+        let found = super::prelude_checked_vocabularies();
+        let declared = crate::component_registry::prelude_checked_vocabularies_for_test();
+        assert_eq!(
+            found
+                .iter()
+                .map(|(name, values)| (name.as_str(), values.len()))
+                .collect::<Vec<_>>(),
+            declared
+                .iter()
+                .map(|(name, values)| (*name, values.len()))
+                .collect::<Vec<_>>(),
+            "the prelude and PRELUDE_CHECKED_VOCABULARIES have drifted; a check \
+             added to the prelude must be recorded there, or a registered \
+             component can declare a vocabulary that never runs"
+        );
+        for ((found_name, found_values), (name, values)) in found.iter().zip(declared) {
+            assert_eq!(found_name, name);
+            assert_eq!(found_values, values, "vocabulary for `{name}`");
+        }
+    }
+
+    /// The prelude has to keep defining these by hand for the built-in
+    /// components, which is what makes the vocabulary check necessary at all.
+    #[test]
+    fn the_prelude_still_owns_the_names_the_check_covers() {
+        let owned = super::prelude_owned_element_methods();
+        for (name, _) in crate::component_registry::prelude_checked_vocabularies_for_test() {
+            assert!(
+                owned.contains(&name),
+                "the prelude no longer defines `{name}`"
+            );
+        }
     }
 }
