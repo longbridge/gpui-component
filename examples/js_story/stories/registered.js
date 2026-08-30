@@ -8,6 +8,7 @@ import {
   AccordionItem,
   Alert,
   AlertDialog,
+  ErrorAlert,
   Avatar,
   BarChart,
   Badge,
@@ -42,6 +43,7 @@ import {
   HoverCard,
   Icon,
   Image,
+  InfoAlert,
   Input,
   InputState,
   Kbd,
@@ -104,9 +106,11 @@ import {
   TextareaState,
   Stepper,
   StepperItem,
+  SuccessAlert,
   Toggle,
   Tooltip,
   Tree,
+  WarningAlert,
   TreeItem,
 } from "gpui-component";
 
@@ -140,6 +144,17 @@ const setState = (key, value, cx) => {
   demo.set(key, value);
   cx.notify();
 };
+
+/**
+ * Whether an accordion section is open.
+ *
+ * `Accordion.onToggle` reports the whole open set, and each `AccordionItem`
+ * asks about itself.
+ *
+ * @param {string} key @param {number[]} fallback @param {number} index
+ */
+const accordionOpen = (key, fallback, index) =>
+  /** @type {number[]} */ (state(key, fallback)).includes(index);
 
 
 /**
@@ -266,20 +281,22 @@ export function registeredExamples(surface) {
     case "Accordion":
       return [
         {
-          label: "One section open at a time",
+          label: "Click a header — one section open at a time",
           element: asElement(
             new Accordion("acc-single")
               .bordered(true)
               .multiple(false)
+              .onToggle((indices, cx) => setState("acc-single", indices, cx))
               .child(
                 new AccordionItem()
                   .title(new Label("Appearance"))
-                  .open(true)
+                  .open(accordionOpen("acc-single", [0], 0))
                   .child("Theme, density and font size."),
               )
               .child(
                 new AccordionItem()
                   .title(new Label("Notifications"))
+                  .open(accordionOpen("acc-single", [0], 1))
                   .child("Email and desktop notification preferences."),
               ),
           ),
@@ -289,11 +306,18 @@ export function registeredExamples(surface) {
           element: asElement(
             new Accordion("acc-multiple")
               .multiple(true)
+              .onToggle((indices, cx) => setState("acc-multiple", indices, cx))
               .child(
-                new AccordionItem().title(new Label("Shipping")).open(true).child("Ships in 2 days."),
+                new AccordionItem()
+                  .title(new Label("Shipping"))
+                  .open(accordionOpen("acc-multiple", [0, 1], 0))
+                  .child("Ships in 2 days."),
               )
               .child(
-                new AccordionItem().title(new Label("Returns")).open(true).child("Free within 30 days."),
+                new AccordionItem()
+                  .title(new Label("Returns"))
+                  .open(accordionOpen("acc-multiple", [0, 1], 1))
+                  .child("Free within 30 days."),
               ),
           ),
         },
@@ -420,10 +444,11 @@ export function registeredExamples(surface) {
     case "Radio":
       return [
         {
-          label: "A single-choice group",
+          label: "Pick one — the group reports the new index",
           element: asElement(
             new RadioGroup("layout-density")
-              .selectedIndex(1)
+              .selectedIndex(/** @type {number} */ (state("radio-group", 1)))
+              .onChange((index, cx) => setState("radio-group", index, cx))
               .child(asElement(new Radio("comfortable").label("Comfortable")))
               .child(asElement(new Radio("compact").label("Compact")))
               .child(asElement(new Radio("dense").label("Dense"))),
@@ -621,18 +646,28 @@ export function registeredExamples(surface) {
     case "Alert":
       return [
         {
-          label: "Titled",
-          element: asElement(
-            new Alert("alert-saved", "Your changes have been saved.").title("Saved"),
-          ),
+          label: "Severities",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(asElement(new InfoAlert("alert-info", "A new version is available.").title("Update")))
+            .child(asElement(new SuccessAlert("alert-success", "Your changes have been saved.").title("Saved")))
+            .child(asElement(new WarningAlert("alert-warning", "Your trial ends in three days.").title("Expiring")))
+            .child(asElement(new ErrorAlert("alert-error", "The connection was reset.").title("Upload failed"))),
         },
         {
-          label: "As a full-width banner",
-          element: asElement(
-            new Alert("alert-banner", "Scheduled maintenance begins at 02:00 UTC.")
-              .title("Maintenance")
-              .banner(),
-          ),
+          label: "Untitled, and as a full-width banner",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(asElement(new Alert("alert-plain", "A neutral message with no title.")))
+            .child(
+              asElement(
+                new WarningAlert("alert-banner", "Scheduled maintenance begins at 02:00 UTC.")
+                  .title("Maintenance")
+                  .banner(),
+              ),
+            ),
         },
       ];
     case "Progress":
@@ -656,11 +691,26 @@ export function registeredExamples(surface) {
     case "Rating":
       return [
         {
-          label: "Four of five, and a ten-point scale",
+          label: "Click a star",
           element: v_flex()
             .gap(12)
-            .child(asElement(new Rating("rating-5").value(4).max(5).color("amber-500")))
-            .child(asElement(new Rating("rating-10").value(7).max(10))),
+            .child(
+              asElement(
+                new Rating("rating-5")
+                  .value(/** @type {number} */ (state("rating-5", 4)))
+                  .max(5)
+                  .color("amber-500")
+                  .onChange((value, cx) => setState("rating-5", value, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Rating("rating-10")
+                  .value(/** @type {number} */ (state("rating-10", 7)))
+                  .max(10)
+                  .onChange((value, cx) => setState("rating-10", value, cx)),
+              ),
+            ),
         },
       ];
     case "Clipboard":

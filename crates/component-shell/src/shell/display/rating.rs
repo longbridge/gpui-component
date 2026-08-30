@@ -1,9 +1,9 @@
 use super::common::{ensure_no_children, non_empty_id, size_operation};
 use gpui_component::{Size, rating::Rating, try_parse_color};
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
-    ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
 };
 use std::sync::Arc;
@@ -17,6 +17,7 @@ enum RatingOp {
     Max(usize),
     Color(gpui::Hsla),
     Size(Size),
+    OnChange(ComponentArgument),
 }
 struct RatingMaterializer;
 impl RatingMaterializer {
@@ -36,7 +37,7 @@ impl RatingMaterializer {
                 .max(max)
                 .value(value),
             |component, operation| match operation {
-                RatingOp::Value(_) | RatingOp::Max(_) => component,
+                RatingOp::Value(_) | RatingOp::Max(_) | RatingOp::OnChange(_) => component,
                 RatingOp::Color(color) => component.color(*color),
                 RatingOp::Size(size) => component.with_size(*size),
             },
@@ -53,7 +54,7 @@ fn rating_settings(operations: &[&RatingOp]) -> (usize, usize) {
                 max = *next;
                 value = value.min(max);
             }
-            RatingOp::Color(_) | RatingOp::Size(_) => {}
+            RatingOp::Color(_) | RatingOp::Size(_) | RatingOp::OnChange(_) => {}
         }
     }
     (value, max)
@@ -61,10 +62,29 @@ fn rating_settings(operations: &[&RatingOp]) -> (usize, usize) {
 impl ComponentMaterializer for RatingMaterializer {
     fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
         ensure_no_children("Rating", &request)?;
+        let change = request
+            .methods()
+            .filter_map(|method| method.payload().downcast_ref::<RatingOp>())
+            .filter_map(|operation| match operation {
+                RatingOp::OnChange(argument) => Some(argument.clone()),
+                _ => None,
+            })
+            .last();
         let operations = request
             .methods()
             .filter_map(|method| method.payload().downcast_ref::<RatingOp>());
         let mut component = Self::component(request.payload(), operations, request.disabled())?;
+        if let Some(argument) = change {
+            let callback = request.resolve_callback(&argument)?;
+            component = component.on_click(move |value, window, cx| {
+                callback.invoke_and_report_with(
+                    "Rating.onChange callback failed",
+                    &[ComponentCallbackArgument::Number(*value as f64)],
+                    window,
+                    cx,
+                );
+            });
+        }
         component.style().refine(&request.take_style());
         Ok(component.into_any_element())
     }
@@ -117,6 +137,22 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     RatingOp::Value,
                 ),
                 count_method("max", "Sets the maximum number of stars.", RatingOp::Max),
+                MethodDescriptor::new(
+                    "onChange",
+                    vec![ArgumentDescriptor::new(
+                        "onChange",
+                        ArgumentSchema::Callback("(value: number, cx: Context) => void"),
+                    )],
+                    |arguments| match arguments {
+                        [argument @ ComponentArgument::Callback(_)] => {
+                            Ok(ComponentPayload::new(RatingOp::OnChange(argument.clone())))
+                        }
+                        _ => Err("Rating.onChange expects one callback".into()),
+                    },
+                )
+                .with_documentation(
+                    "Reports the star the reader clicked, so the script can drive `value`.",
+                ),
                 MethodDescriptor::new(
                     "color",
                     vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],

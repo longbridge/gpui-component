@@ -345,11 +345,12 @@ impl ComponentMaterializer for AccordionItemMaterializer {
 #[derive(Clone)]
 struct AccordionPayload(String);
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum AccordionOp {
     Multiple(bool),
     Bordered(bool),
     Size(Size),
+    OnToggle(ComponentArgument),
 }
 
 struct AccordionMaterializer;
@@ -364,7 +365,7 @@ impl ComponentMaterializer for AccordionMaterializer {
             .clone();
         let operations = request
             .methods()
-            .filter_map(|method| method.payload().downcast_ref::<AccordionOp>().copied())
+            .filter_map(|method| method.payload().downcast_ref::<AccordionOp>().cloned())
             .collect::<Vec<_>>();
         let mut children = request.take_typed_children()?;
         for child in &children {
@@ -376,6 +377,21 @@ impl ComponentMaterializer for AccordionMaterializer {
                 AccordionOp::Multiple(value) => accordion.multiple(value),
                 AccordionOp::Bordered(value) => accordion.bordered(value),
                 AccordionOp::Size(value) => accordion.with_size(value),
+                AccordionOp::OnToggle(argument) => {
+                    let callback = request.resolve_callback(&argument)?;
+                    accordion.on_toggle_click(move |open, window, cx| {
+                        let open = open
+                            .iter()
+                            .map(|index| ComponentCallbackArgument::Number(*index as f64))
+                            .collect();
+                        callback.invoke_and_report_with(
+                            "Accordion.onToggle callback failed",
+                            &[ComponentCallbackArgument::Array(open)],
+                            window,
+                            cx,
+                        );
+                    })
+                }
             };
         }
         for child in &mut children {
@@ -657,7 +673,10 @@ fn index_callback_method<T: Send + Sync + 'static>(
         "onChange",
         vec![ArgumentDescriptor::new(
             "callback",
-            ArgumentSchema::Callback("(index: number) => void"),
+            // The runtime appends the call context to every component
+            // callback, so the declared signature has to name it — otherwise a
+            // script that wants to `cx.notify()` has no typed way to.
+            ArgumentSchema::Callback("(index: number, cx: Context) => void"),
         )],
         move |arguments| index_callback_payload(arguments, component, &make),
     )
@@ -726,6 +745,23 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 AccordionOp::Bordered,
             ),
             size_method("Accordion", AccordionOp::Size),
+            MethodDescriptor::new(
+                "onToggle",
+                vec![ArgumentDescriptor::new(
+                    "onToggle",
+                    ArgumentSchema::Callback("(openIndices: number[], cx: Context) => void"),
+                )],
+                |arguments| match arguments {
+                    [argument @ ComponentArgument::Callback(_)] => {
+                        Ok(ComponentPayload::new(AccordionOp::OnToggle(argument.clone())))
+                    }
+                    _ => Err("Accordion.onToggle expects one callback".into()),
+                },
+            )
+            .with_documentation(
+                "Reports which sections are open after a click, so the script can \
+                 drive `AccordionItem.open`.",
+            ),
         ])
 .with_documentation(
             "A typed accordion container accepting only AccordionItem children. Toggle callbacks are not exposed: the real component requires a Send + Sync handler, while shell callbacks are runtime-local.",

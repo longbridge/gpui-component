@@ -234,6 +234,9 @@ pub enum ComponentCallbackArgument {
     String(String),
     Number(f64),
     Boolean(bool),
+    /// A list, for a component that reports a set rather than a single value —
+    /// an accordion says which sections are open, not which one was clicked.
+    Array(Vec<ComponentCallbackArgument>),
 }
 
 /// A deliberately closed value returned by a script-backed component delegate.

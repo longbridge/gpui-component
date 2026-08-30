@@ -4308,11 +4308,7 @@ impl ShellRuntime {
             let handler = entry.value.clone().restore(ctx)?;
             let mut js_arguments = JsArgs::new(ctx.clone(), arguments.len() + 1);
             for argument in arguments {
-                match argument {
-                    ComponentCallbackArgument::String(value) => js_arguments.push_arg(value)?,
-                    ComponentCallbackArgument::Number(value) => js_arguments.push_arg(*value)?,
-                    ComponentCallbackArgument::Boolean(value) => js_arguments.push_arg(*value)?,
-                }
+                js_arguments.push_arg(callback_argument_to_js(ctx, argument)?)?;
             }
             js_arguments.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
             let value: Value<'_> = handler.call_arg(js_arguments)?;
@@ -4374,7 +4370,7 @@ impl ShellRuntime {
             let result = self.with_js(|ctx| {
                 let handler = entry.value.clone().restore(ctx)?;
                 let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
-                push_component_callback_arguments(&mut args, arguments)?;
+                push_component_callback_arguments(ctx, &mut args, arguments)?;
                 args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
                 let value: Value = handler.call_arg(args)?;
                 component_data_from_js(&ctx, value, 0, &mut ComponentDataBudget::default())
@@ -4423,7 +4419,7 @@ impl ShellRuntime {
             let described = self.with_js(|ctx| {
                 let handler = entry.value.clone().restore(ctx)?;
                 let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
-                push_component_callback_arguments(&mut args, arguments)?;
+                push_component_callback_arguments(ctx, &mut args, arguments)?;
                 args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
                 let value: Value = handler.call_arg(args)?;
                 if value.is_null() || value.is_undefined() {
@@ -8403,15 +8399,12 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
 }
 
 fn push_component_callback_arguments<'js>(
+    ctx: &Ctx<'js>,
     arguments: &mut JsArgs<'js>,
     values: &[ComponentCallbackArgument],
 ) -> JsResult<()> {
     for value in values {
-        match value {
-            ComponentCallbackArgument::String(value) => arguments.push_arg(value)?,
-            ComponentCallbackArgument::Number(value) => arguments.push_arg(*value)?,
-            ComponentCallbackArgument::Boolean(value) => arguments.push_arg(*value)?,
-        }
+        arguments.push_arg(callback_argument_to_js(ctx, value)?)?;
     }
     Ok(())
 }
@@ -9167,6 +9160,27 @@ fn component_argument_from_js<'js>(
         }
     }
     Ok(Argument::Value(bridge(ctx, &value)?))
+}
+
+/// One callback argument as a JavaScript value.
+fn callback_argument_to_js<'js>(
+    ctx: &Ctx<'js>,
+    argument: &ComponentCallbackArgument,
+) -> JsResult<Value<'js>> {
+    use rquickjs::IntoJs as _;
+
+    match argument {
+        ComponentCallbackArgument::String(value) => value.clone().into_js(ctx),
+        ComponentCallbackArgument::Number(value) => (*value).into_js(ctx),
+        ComponentCallbackArgument::Boolean(value) => (*value).into_js(ctx),
+        ComponentCallbackArgument::Array(values) => {
+            let array = Array::new(ctx.clone())?;
+            for (index, value) in values.iter().enumerate() {
+                array.set(index, callback_argument_to_js(ctx, value)?)?;
+            }
+            array.into_js(ctx)
+        }
+    }
 }
 
 fn schema_name(schema: &ArgumentSchema) -> String {
