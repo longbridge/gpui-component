@@ -4,7 +4,7 @@
 import { div } from "gpui";
 import { v_flex } from "gpui-base";
 import { coveredSurfaces } from "./coverage.js";
-import { registeredExample } from "./registered.js";
+import { registeredExamples } from "./registered.js";
 import { surfaceStatus } from "./status.js";
 
 /**
@@ -70,16 +70,47 @@ function registeredPanel(story, surfaces, cx) {
         .text_size(13)
         .text_color(colors.muted_foreground)
         .child(
-          "These examples use public constructors and a descriptor method where the surface exposes one.",
+          "Each case below is built from public constructors and descriptor methods.",
         ),
     )
     .children(
-      surfaces.map(
-        (surface) =>
-          /** @type {import("gpui").Element} */ (
-            /** @type {unknown} */ (registeredExample(surface))
-          ),
+      surfaces.flatMap((surface) =>
+        registeredExamples(surface).map((example) => case_(example, cx)),
       ),
+    );
+}
+
+/**
+ * One labelled example. The caption says what the case is showing, so a reader
+ * comparing two cases can tell which knob differs without reading the source.
+ * @param {{ label: string, element: unknown }} example
+ * @param {import("gpui").Context} cx
+ */
+function case_(example, cx) {
+  const colors = cx.theme().colors;
+  return v_flex()
+    .w_full()
+    .gap(8)
+    .child(
+      div()
+        .text_size(11)
+        .font_semibold()
+        .text_color(colors.muted_foreground)
+        .child(example.label),
+    )
+    .child(
+      div()
+        .w_full()
+        .p(16)
+        .bg(colors.background)
+        .border(1)
+        .border_color(colors.border)
+        .rounded(6)
+        .child(
+          /** @type {import("gpui").Element} */ (
+            /** @type {unknown} */ (example.element)
+          ),
+        ),
     );
 }
 

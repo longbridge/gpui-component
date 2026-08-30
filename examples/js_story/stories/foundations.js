@@ -11,16 +11,6 @@ export const stories = [
     api: "Welcome",
   }),
   pendingStory({
-    id: "theme-colors",
-    title: "Theme Colors",
-    group: "Foundations",
-    rustStory: "ThemeColorsStory",
-    description: "Semantic colors and component theme tokens.",
-    states: ["light", "dark", "semantic roles"],
-    availability: "infrastructure",
-    api: "Theme",
-  }),
-  pendingStory({
     id: "icon",
     title: "Icon",
     group: "Foundations",
@@ -79,15 +69,5 @@ export const stories = [
     states: ["normal", "warning", "loading"],
     availability: "pending",
     api: "StatusBar",
-  }),
-  pendingStory({
-    id: "shell",
-    title: "Shell",
-    group: "Foundations",
-    rustStory: "ShellStory",
-    description: "Host integration features that are unavailable on wasm.",
-    states: ["desktop host", "capability denied"],
-    availability: "platform",
-    api: "Shell",
   }),
 ];

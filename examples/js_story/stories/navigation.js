@@ -39,7 +39,7 @@ export const stories = [
     description: "Controlled tab selection.",
     states: ["selected", "disabled", "overflow"],
     availability: "pending",
-    api: "Tabs",
+    api: "TabBar",
   }),
   pendingStory({
     id: "stepper",

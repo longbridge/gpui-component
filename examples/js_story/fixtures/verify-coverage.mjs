@@ -66,6 +66,24 @@ for (const item of inventory.items) {
   inventorySurfaces.set(surface, next);
 }
 const renderableRegistrations = [...inventorySurfaces.keys()].sort();
+
+// Rust Stories this gallery deliberately does not mirror, each with the reason.
+// An entry here must be `infrastructure` in the inventory, so the list can
+// excuse a Story that has no component to show and cannot quietly excuse one
+// that does.
+const NOT_MIRRORED = new Map([
+  [
+    "shell",
+    "ShellStory embeds a gpui-shell script view inside a Rust story. This " +
+      "gallery is already such a view, so a route for it would demonstrate " +
+      "the gallery to itself.",
+  ],
+  [
+    "theme",
+    "Theme is not a component. Every route already renders through the " +
+      "active theme, so a swatch board would restate what the gallery shows.",
+  ],
+]);
 const inventoryNameFor = (rustStory) => {
   const name = rustStory.replace(/Story$/, "");
   if (name === "ThemeColors") return "theme";
@@ -75,23 +93,27 @@ const inventoryNameFor = (rustStory) => {
 if (new Set(records.map((record) => record.id)).size !== records.length) {
   fail("catalog route ids are not unique");
 }
-if (records.length !== inventoryStories.length) {
+const mirrored = inventoryStories.filter((item) => !NOT_MIRRORED.has(item.name));
+for (const name of NOT_MIRRORED.keys()) {
+  const item = inventoryStories.find((entry) => entry.name === name);
+  if (!item) fail(`${name} is excluded from the gallery but is not a Story`);
+  if (item.classification !== "infrastructure") {
+    fail(`${name} is excluded from the gallery but is not infrastructure`);
+  }
+}
+if (records.length !== mirrored.length) {
   fail(
-    `catalog has ${records.length} routes; inventory has ${inventoryStories.length} Story entries`,
+    `catalog has ${records.length} routes; inventory has ${mirrored.length} mirrored Story entries`,
   );
 }
 
-for (const item of inventoryStories) {
+for (const item of mirrored) {
   const record = records.find(
     (candidate) => inventoryNameFor(candidate.rustStory) === item.name,
   );
   if (!record) fail(`inventory Story ${item.name} has no catalog route`);
   if (item.classification === "infrastructure") {
-    if (
-      record.id !== "introduction" &&
-      record.id !== "shell" &&
-      record.availability !== "infrastructure"
-    ) {
+    if (record.id !== "introduction" && record.availability !== "infrastructure") {
       fail(`${record.id} must declare infrastructure availability`);
     }
   } else {

@@ -1,6 +1,5 @@
 import { View, div } from "gpui";
 import { Input, InputState, h_flex, v_flex } from "gpui-base";
-import { Button } from "gpui-component";
 import { catalog, filterCatalog, route } from "./catalog.js";
 
 /** A sidebar gallery that stays entirely on the documented script surface. */
@@ -89,7 +88,8 @@ export default class StoryGallery extends View {
       .child(
         v_flex()
           .flex_1()
-          .min_w(0)
+          .min_w_0()
+          .min_h_0()
           .overflow_y_scrollbar()
           .p(28)
           .gap(20)
@@ -129,6 +129,10 @@ export default class StoryGallery extends View {
     return v_flex()
       .w(270)
       .flex_none()
+      // `h_flex` centres its children on the cross axis, so a column that
+      // should fill the window has to say so; without this the sidebar is
+      // sized by its content and centred, which pushes its header off the top.
+      .h_full()
       .border_r(1)
       .border_color(colors.border)
       .bg(colors.surface)
@@ -165,6 +169,9 @@ export default class StoryGallery extends View {
       .child(
         v_flex()
           .flex_1()
+          // A flex item's automatic minimum size is its content, so without
+          // this the list refuses to shrink and scrolls nothing.
+          .min_h_0()
           .overflow_y_scrollbar()
           .p(8)
           .gap(14)
@@ -225,7 +232,7 @@ export default class StoryGallery extends View {
         // repainting a highlight. Submitting a search picks its first result
         // and transfers focus here.
         .on_click((_event, context) => this.select(story.id, context))
-        .child(new Button(`route-button-${story.id}`).child(story.title))
+        .child(story.title)
     );
   }
 }

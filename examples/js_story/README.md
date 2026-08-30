@@ -19,7 +19,7 @@ node examples/js_story/fixtures/verify-coverage.mjs
 
 The gallery imports only public `gpui`, `gpui-base`, and `gpui-component`
 script modules. `catalog.js` explicitly imports each family module and every
-route records its Rust Story source. The inventory currently supplies 65 Story
+route records its Rust Story source. The inventory currently supplies 63 mirrored Story
 entries and 64 tracked catalog surfaces. The check fails if either side changes
 without matching catalog coverage and status.
 
@@ -33,9 +33,15 @@ reason from `stories/status.js`; the verifier checks that projection against the
 inventory. This keeps a missing binding visible without adding a private Rust
 host module.
 
-`Shell` is gallery infrastructure. `NativeMenuTrigger` provides the registered
-native-menu surface used by the JavaScript story
-under the inventory's `platform-integration` category.
+`NativeMenuTrigger` provides the registered native-menu surface used by the
+JavaScript story under the inventory's `platform-integration` category.
+
+Two Rust Stories are deliberately not mirrored, and `verify-coverage.mjs` holds
+the list with a reason for each: `ShellStory`, which embeds a script view inside
+a Rust story and would demonstrate this gallery to itself, and
+`ThemeColorsStory`, since every route already renders through the active theme.
+The verifier refuses an exclusion that is not `infrastructure` in the inventory,
+so the list cannot quietly hide a component that has something to show.
 
 ## Editor checking
 

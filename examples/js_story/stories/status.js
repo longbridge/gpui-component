@@ -57,7 +57,7 @@ export const REGISTERED_SURFACES = [
   "Switch",
   "Tag",
   "Tab",
-  "Tabs",
+  "TabBar",
   "Table",
   "Text",
   "Textarea",
