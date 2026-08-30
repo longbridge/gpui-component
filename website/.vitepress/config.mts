@@ -33,6 +33,10 @@ function wasmExamplesDevServer() {
           res.end("WASM example is not built. Run its Makefile build target first.");
           return;
         }
+        // The Rust example is rebuilt before the VitePress dev server starts.
+        // Never let a surviving iframe reuse an older index that points at an
+        // obsolete hashed WASM asset after that restart.
+        res.setHeader("Cache-Control", "no-store");
         res.setHeader("Content-Type", contentTypes[extname(file)] ?? "application/octet-stream");
         createReadStream(file).pipe(res);
       });
