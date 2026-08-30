@@ -1,4 +1,4 @@
-pub(super) use crate::shell::support::{bool_method, string_method};
+pub(super) use super::super::support::{bool_method, string_method};
 
 use gpui_component::Size;
 use gpui_shell::{
@@ -12,6 +12,30 @@ pub(super) enum CommonOp {
     Tooltip(String),
     Checked(bool),
     Outline,
+    Change(ComponentArgument),
+}
+
+/// A `onChange(checked, cx)` method for a two-state control.
+///
+/// Without one the control is set-only: the script owns `checked`, and a click
+/// has nowhere to report to, so the control looks interactive and never
+/// changes. Every two-state control in this family needs it, so it is written
+/// once.
+pub(super) fn change_method(component: &'static str) -> MethodDescriptor {
+    MethodDescriptor::new(
+        "onChange",
+        vec![ArgumentDescriptor::new(
+            "onChange",
+            ArgumentSchema::Callback("(checked: boolean, cx: Context) => void"),
+        )],
+        move |arguments| match arguments {
+            [argument @ ComponentArgument::Callback(_)] => {
+                Ok(ComponentPayload::new(CommonOp::Change(argument.clone())))
+            }
+            _ => Err(format!("{component}.onChange expects one callback")),
+        },
+    )
+    .with_documentation("Reports the new checked state after a click.")
 }
 
 pub(super) fn size_method() -> MethodDescriptor {

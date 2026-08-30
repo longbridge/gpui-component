@@ -120,6 +120,27 @@ import {
 const asElement = (value) =>
   /** @type {import("gpui").Element} */ (/** @type {unknown} */ (value));
 
+/**
+ * Per-case demo state.
+ *
+ * A registered control is controlled: the script owns `checked`, and the
+ * component reports a click through `onChange`. Without somewhere to put the
+ * reported value the gallery would render controls that never move, which
+ * would say something false about the components.
+ *
+ * @type {Map<string, unknown>}
+ */
+const demo = new Map();
+
+/** @param {string} key @param {unknown} fallback */
+const state = (key, fallback) => (demo.has(key) ? demo.get(key) : fallback);
+
+/** @param {string} key @param {unknown} value @param {import("gpui").Context} cx */
+const setState = (key, value, cx) => {
+  demo.set(key, value);
+  cx.notify();
+};
+
 
 /**
  * The cases shown for one registered surface.
@@ -200,12 +221,26 @@ export function registeredExamples(surface) {
     case "Toggle":
       return [
         {
-          label: "Off and on",
+          label: "Click to toggle",
           element: h_flex()
             .gap(8)
             .items_center()
-            .child(asElement(new Toggle("toggle-off").label("Favorite")))
-            .child(asElement(new Toggle("toggle-on").label("Favorite").checked(true))),
+            .child(
+              asElement(
+                new Toggle("toggle-off")
+                  .label("Favorite")
+                  .checked(/** @type {boolean} */ (state("toggle-off", false)))
+                  .onChange((checked, cx) => setState("toggle-off", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Toggle("toggle-on")
+                  .label("Pin")
+                  .checked(/** @type {boolean} */ (state("toggle-on", true)))
+                  .onChange((checked, cx) => setState("toggle-on", checked, cx)),
+              ),
+            ),
         },
         {
           label: "Outlined, and at three sizes",
@@ -329,15 +364,29 @@ export function registeredExamples(surface) {
     case "Checkbox":
       return [
         {
-          label: "Unchecked, checked, and with hover help",
+          label: "Click any of them — each reports its new state",
           element: h_flex()
             .gap(16)
             .items_center()
-            .child(asElement(new Checkbox("cb-off").label("Remember me")))
-            .child(asElement(new Checkbox("cb-on").label("Remember me").checked(true)))
             .child(
               asElement(
-                new Checkbox("cb-tip").label("Sync").tooltip("Keeps devices in step"),
+                new Checkbox("cb-off")
+                  .label("Remember me")
+                  .checked(/** @type {boolean} */ (state("cb-off", false)))
+                  .onChange((checked, cx) => setState("cb-off", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Checkbox("cb-on")
+                  .label("Sync devices")
+                  .checked(/** @type {boolean} */ (state("cb-on", true)))
+                  .onChange((checked, cx) => setState("cb-on", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Checkbox("cb-tip").label("Disabled").tooltip("Not available here"),
               ),
             ),
         },
@@ -345,12 +394,26 @@ export function registeredExamples(surface) {
     case "Switch":
       return [
         {
-          label: "Off, on, and at two sizes",
+          label: "Click to toggle",
           element: h_flex()
             .gap(16)
             .items_center()
-            .child(asElement(new Switch("sw-off").label("Notifications")))
-            .child(asElement(new Switch("sw-on").label("Notifications").checked(true)))
+            .child(
+              asElement(
+                new Switch("sw-off")
+                  .label("Notifications")
+                  .checked(/** @type {boolean} */ (state("sw-off", false)))
+                  .onChange((checked, cx) => setState("sw-off", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Switch("sw-on")
+                  .label("Auto-update")
+                  .checked(/** @type {boolean} */ (state("sw-on", true)))
+                  .onChange((checked, cx) => setState("sw-on", checked, cx)),
+              ),
+            )
             .child(asElement(new Switch("sw-small").label("Compact").size("small"))),
         },
       ];

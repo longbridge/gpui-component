@@ -7,9 +7,9 @@ use gpui_component::{
     switch::Switch,
 };
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
-    ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, ParentElement as _},
 };
 
@@ -177,6 +177,7 @@ impl ComponentMaterializer for CheckboxMaterializer {
             .payload()
             .downcast_ref::<IdPayload>()
             .ok_or_else(|| anyhow::anyhow!("Checkbox received an incompatible payload"))?;
+        let mut change = None;
         let mut component = Checkbox::new(id.0.clone())
             .disabled(request.disabled())
             .checked(request.selected());
@@ -186,8 +187,22 @@ impl ComponentMaterializer for CheckboxMaterializer {
                 CommonOp::Label(label) => component.label(label),
                 CommonOp::Tooltip(tooltip) => component.tooltip(tooltip),
                 CommonOp::Checked(checked) => component.checked(checked),
+                CommonOp::Change(argument) => {
+                    change = Some(request.resolve_callback(&argument)?);
+                    component
+                }
                 _ => component,
             };
+        }
+        if let Some(callback) = change {
+            component = component.on_click(move |checked, window, cx| {
+                callback.invoke_and_report_with(
+                    "Checkbox.onChange",
+                    &[ComponentCallbackArgument::Boolean(*checked)],
+                    window,
+                    cx,
+                );
+            });
         }
         request.finish(component)
     }
@@ -201,6 +216,7 @@ impl ComponentMaterializer for SwitchMaterializer {
             .payload()
             .downcast_ref::<IdPayload>()
             .ok_or_else(|| anyhow::anyhow!("Switch received an incompatible payload"))?;
+        let mut change = None;
         let mut component = Switch::new(id.0.clone())
             .disabled(request.disabled())
             .checked(request.selected());
@@ -210,8 +226,22 @@ impl ComponentMaterializer for SwitchMaterializer {
                 CommonOp::Label(label) => component.label(label),
                 CommonOp::Tooltip(tooltip) => component.tooltip(tooltip),
                 CommonOp::Checked(checked) => component.checked(checked),
+                CommonOp::Change(argument) => {
+                    change = Some(request.resolve_callback(&argument)?);
+                    component
+                }
                 _ => component,
             };
+        }
+        if let Some(callback) = change {
+            component = component.on_click(move |checked, window, cx| {
+                callback.invoke_and_report_with(
+                    "Switch.onChange",
+                    &[ComponentCallbackArgument::Boolean(*checked)],
+                    window,
+                    cx,
+                );
+            });
         }
         request.finish(gpui::div().child(component))
     }
@@ -225,6 +255,7 @@ impl ComponentMaterializer for ToggleMaterializer {
             .payload()
             .downcast_ref::<IdPayload>()
             .ok_or_else(|| anyhow::anyhow!("Toggle received an incompatible payload"))?;
+        let mut change = None;
         let mut component = Toggle::new(id.0.clone())
             .disabled(request.disabled())
             .checked(request.selected());
@@ -235,7 +266,21 @@ impl ComponentMaterializer for ToggleMaterializer {
                 CommonOp::Tooltip(tooltip) => component.tooltip(tooltip),
                 CommonOp::Checked(checked) => component.checked(checked),
                 CommonOp::Outline => component.outline(),
+                CommonOp::Change(argument) => {
+                    change = Some(request.resolve_callback(&argument)?);
+                    component
+                }
             };
+        }
+        if let Some(callback) = change {
+            component = component.on_click(move |checked, window, cx| {
+                callback.invoke_and_report_with(
+                    "Toggle.onChange",
+                    &[ComponentCallbackArgument::Boolean(*checked)],
+                    window,
+                    cx,
+                );
+            });
         }
         request.finish(component)
     }
@@ -262,6 +307,7 @@ fn state_methods(component: &'static str) -> Vec<MethodDescriptor> {
             CommonOp::Checked,
         ),
         support::size_method(),
+        support::change_method(component),
     ]
 }
 
