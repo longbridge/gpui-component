@@ -56,6 +56,7 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;

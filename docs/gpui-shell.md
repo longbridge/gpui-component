@@ -2766,8 +2766,8 @@ does, because the shape is what the design is about.
 
 ### 18.1 The manifest
 
-Six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`, and
-`capabilities`. Only `id`, `name`, and `entry` are required. An omitted
+Seven recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+`dependencies`, and `capabilities`. Only `id`, `name`, and `entry` are required. An omitted
 `version` is reported as `unknown`; an omitted `shell-version` accepts the
 current runtime; omitted `capabilities` grants nothing. The file is
 `gpui-shell.json` — the name makes the owning runtime explicit.
@@ -2779,6 +2779,12 @@ current runtime; omitted `capabilities` grants nothing. The file is
   "version": "1.2.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/example/omarchy-ui.git",
+      "tag": "v1.2.0"
+    }
+  },
   "capabilities": {
     "fs": {
       "read": ["${pluginDir}", "${dataDir}"],
@@ -2800,6 +2806,19 @@ current runtime; omitted `capabilities` grants nothing. The file is
   }
 }
 ```
+
+`dependencies` maps a bare JavaScript module name to a Git repository and
+exactly one `branch` or `tag`. The optional repository-relative `entry`
+defaults to `index.js`. Before linking the application module graph, the host
+fetches each repository into `<data home>/gpui-shell/dependencies/git/`. Git is
+non-interactive and each command has a 30-second timeout. A per-remote lock
+serializes mirror updates; the fetched commit is then atomically published as
+an immutable, commit-addressed checkout and registered with the same module
+generation as the application. A branch refreshes on every load; a tag resolves
+to the tagged commit. Relative imports from dependency code remain inside its
+own checkout, and runtime or Standard Runtime module names cannot be shadowed.
+This host-side acquisition step requires `git`; it does not grant the fetched
+script any network capability.
 
 `network.hosts` is the backwards-compatible broad grant: every supported
 network API may reach that host. Use `network.http` when a plugin only needs

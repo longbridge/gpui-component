@@ -303,6 +303,12 @@ grant the CLI installs in `gpui-shell.json`:
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/example/omarchy-ui.git",
+      "tag": "v1.2.0"
+    }
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -320,6 +326,23 @@ grant the CLI installs in `gpui-shell.json`:
   }
 }
 ```
+
+Git dependencies are fetched before the entry module is evaluated and cached
+under the user's gpui-shell data directory. Import the map key as a bare module:
+
+```js
+import { label, style } from "omarchy-ui";
+```
+
+Each dependency selects exactly one `tag` or `branch`. A branch is fetched on
+every application load so a restart sees its current remote head; a tag is
+resolved to its tagged commit. Downloads are non-interactive and bounded to 30
+seconds per Git command. A locked local mirror feeds immutable, commit-addressed
+checkouts, so concurrent launches and older hot-reload generations cannot
+rewrite one another. The repository root must contain `index.js`, or
+the dependency may declare a repository-relative `entry`. Relative imports
+inside the package stay confined to that package checkout. Fetching requires
+`git` on the host and happens before script capabilities apply.
 
 `network.hosts` grants the host to HTTP, raw TCP, and WebSocket clients;
 `network.http` narrows HTTP to a scheme, effective port, listed methods and

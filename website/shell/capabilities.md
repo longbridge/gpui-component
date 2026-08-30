@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## The manifest
 
-A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â€” discovery reads identity, optional version metadata, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, and `capabilities`; only `id`, `name`, and `entry` are required:
+A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â€” discovery reads identity, optional version metadata, Git dependencies, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, `dependencies`, and `capabilities`; only `id`, `name`, and `entry` are required:
 
 ```json
 {
@@ -74,6 +74,13 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/example/omarchy-ui.git",
+      "branch": "main",
+      "entry": "index.js"
+    }
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +93,18 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â
   }
 }
 ```
+
+Every Git dependency chooses exactly one non-empty `branch` or `tag`; its
+`entry` defaults to `index.js`. gpui-shell fetches dependencies into its local
+user-data cache before evaluating application code. Branches refresh on every
+load, while tags resolve to their tagged commits. Git runs non-interactively
+with a 30-second command timeout. A locked mirror publishes immutable,
+commit-addressed checkouts, preserving concurrent launches and older module
+generations. The dependency map key is the
+bare JavaScript module name, for example
+`import { label, style } from "omarchy-ui"`. Package-relative imports and
+package subpath imports stay inside that checkout. Dependency fetching uses the
+host's `git` executable and is separate from script network capabilities.
 
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted â€” write `"storage": false` to refuse it.
 

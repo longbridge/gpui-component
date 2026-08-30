@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## Manifest
 
-目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
+目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据、Git 依赖与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry`、`dependencies` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
 
 ```json
 {
@@ -74,6 +74,12 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/example/omarchy-ui.git",
+      "branch": "main"
+    }
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +92,15 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   }
 }
 ```
+
+每个 Git 依赖必须且只能选择一个非空的 `branch` 或 `tag`，`entry` 默认是
+`index.js`。gpui-shell 会在执行应用代码之前，把依赖拉取到用户数据目录下的本地缓存；
+branch 每次加载都会刷新，tag 则解析到对应的标记 commit。Git 以非交互方式运行，每条
+命令限时 30 秒；加锁的本地 mirror 会发布不可变的 commit checkout，避免并发启动或旧
+module generation 被后续刷新改写。JavaScript 以 map key 作为裸模块名导入，例如
+`import { label, style } from "omarchy-ui"`。依赖内部的相对
+import 和包 subpath import 都不能逃出该 checkout。下载使用 Host 上的 `git`，不属于
+脚本的 network capability。
 
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 
