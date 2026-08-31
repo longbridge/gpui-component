@@ -1,16 +1,20 @@
 use std::{ops::Range, time::Duration};
 
 use gpui::{
-    AnyElement, App, Context, ElementId, Entity, FollowMode, InteractiveElement as _, IntoElement,
-    ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder as _, px, rems,
+    AnyElement, App, Axis, Context, ElementId, Entity, FollowMode, InteractiveElement as _,
+    IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce,
+    SharedString, StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder as _, px,
+    rems,
 };
 use gpui_base::motion::{Transition, transition};
 
 use crate::{
     ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, button::Button,
 };
-use crate::{button::ButtonVariants as _, scroll::ScrollableElement as _};
+use crate::{
+    button::ButtonVariants as _,
+    scroll::{ScrollableElement as _, ScrollableMask},
+};
 
 const LIST_OVERDRAW: gpui::Pixels = px(400.);
 const JUMP_BUTTON_TRANSITION: Duration = Duration::from_millis(200);
@@ -335,6 +339,11 @@ impl RenderOnce for MessageScroller {
             .min_h_0()
             .overflow_hidden()
             .child(viewport)
+            // Keep vertical wheel scrolling from leaking into an ancestor
+            // scroller (like in Table): the mask consumes vertical-dominant
+            // wheel events while the list can move and chains to the ancestor
+            // only at the edges.
+            .child(ScrollableMask::new(Axis::Vertical, &list_state).id(root_id.clone()))
             .when(self.jump_button && jump_button_visibility > 0., |this| {
                 let state = self.state.clone();
 
