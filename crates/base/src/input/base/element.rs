@@ -2129,17 +2129,6 @@ impl<M: InputModeKind> Element for TextElement<M> {
             editor_style.background
         };
 
-        // Keep scrollbar offset always be positive，Start from the left position
-        let scroll_offset = if text_align == TextAlign::Right {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width).max(px(0.))
-        } else if text_align == TextAlign::Center {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width)
-                .half()
-                .max(px(0.))
-        } else {
-            px(0.)
-        };
-
         // Paint active line
         let mut offset_y = px(0.);
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
@@ -2165,6 +2154,17 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 offset_y += height;
             }
         }
+
+        // Keep scrollbar offset always be positive，Start from the left position
+        let scroll_offset = if text_align == TextAlign::Right {
+            (prepaint.scroll_size.width - prepaint.bounds.size.width).max(px(0.))
+        } else if text_align == TextAlign::Center {
+            (prepaint.scroll_size.width - prepaint.bounds.size.width)
+                .half()
+                .max(px(0.))
+        } else {
+            px(0.)
+        };
 
         // Paint glyph backgrounds
         //
