@@ -530,7 +530,6 @@ impl RenderOnce for Input {
         BaseInput::new(("input", state.entity_id()))
             .focused(focused)
             .disabled(disabled)
-            .track_focus(presentation.focus_handle())
             .styles(|styles| {
                 styles.focused(|style| {
                     style.when(
@@ -539,7 +538,7 @@ impl RenderOnce for Input {
                     )
                 })
             })
-            .role(RoleOverride::Presentational)
+            .role(Role::Group)
             .flex()
             .size_full()
             .line_height(LINE_HEIGHT)
