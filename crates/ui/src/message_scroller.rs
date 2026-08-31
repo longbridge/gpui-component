@@ -2,9 +2,9 @@ use std::{ops::Range, time::Duration};
 
 use gpui::{
     AnyElement, App, Axis, Context, ElementId, Entity, FollowMode, Hsla, InteractiveElement as _,
-    IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, div, linear_color_stop, linear_gradient, list,
-    prelude::FluentBuilder as _, px, rems,
+    IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    linear_color_stop, linear_gradient, list, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::motion::{Transition, transition};
 
@@ -332,6 +332,9 @@ impl RenderOnce for MessageScroller {
 
         let viewport = div()
             .id((root_id.clone(), "viewport"))
+            // Announce appended rows as a log region, like shadcn's
+            // `role="log"` transcript content.
+            .role(Role::Log)
             .size_full()
             .min_h_0()
             .min_w_0()

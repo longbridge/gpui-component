@@ -346,7 +346,9 @@ avoid doing network work or mutating the message collection during rendering.
 For keyboard and screen-reader behavior:
 
 - Keep the scroller inside a layout with a real height and `min_h_0()` so the
-  scroll region can receive wheel and keyboard navigation.- Wheel scrolling over the transcript is contained: while the list can move,
+  scroll region can receive wheel and keyboard navigation.
+- The transcript viewport announces itself as a log region (`Role::Log`), so
+  assistive technology can treat appended rows as live additions.- Wheel scrolling over the transcript is contained: while the list can move,
   the event never scrolls an ancestor scroller; at the top or bottom edge it
   chains to the ancestor, matching platform scroll containers.
 - Give rows meaningful text and stable application IDs; an index by itself is

@@ -266,7 +266,8 @@ MessageScroller::new("conversation", scroller.clone(), render_message)
 
 - 默认跳转按钮是可聚焦的 `Button`；`with_jump_button_label(...)` 只设置本地化 tooltip。若使用 renderer 替换为 icon-only 外观，应通过 `.label("跳到最新")` 保留可读名称，或关闭内置按钮后由应用提供自己的带 label Button。
 - “跳到最新”“加载更早消息”“正在生成”“加载失败”等状态应提供文本或明确的 Button label，不依赖滚动位置和颜色。
-- 键盘用户应能访问消息 row 中的 Link、Button、附件操作和应用自定义滚动入口。- 消息区上的滚轮事件是被包含的：list 还能滚动时事件不会带动外层滚动容器；到达顶部或底部边缘后才交给外层，与平台滚动容器的链式行为一致。
+- 键盘用户应能访问消息 row 中的 Link、Button、附件操作和应用自定义滚动入口。
+- 消息区 viewport 以 log 区域（`Role::Log`）对外声明，辅助技术可以把追加的 row 当作实时新增内容播报。- 消息区上的滚轮事件是被包含的：list 还能滚动时事件不会带动外层滚动容器；到达顶部或底部边缘后才交给外层，与平台滚动容器的链式行为一致。
 - 空状态和错误状态应由应用渲染可读内容；不要让一个空的虚拟列表看起来像加载失败。
 - 自定义 jump transition、row 动画或流式高亮时，遵循系统 reduced motion，并提供静态最终状态。
 
