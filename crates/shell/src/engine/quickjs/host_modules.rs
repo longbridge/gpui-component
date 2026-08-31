@@ -274,13 +274,13 @@ impl Loader for HostModuleLoader {
                 return Err(Exception::throw_message(
                     ctx,
                     &format!(
-                        "HostModule `{module}` registered component `{component}`, which is not a JavaScript identifier"
+                        "HostModule `{module}` component `{component}` is not a JavaScript identifier"
                     ),
                 ));
             }
             let _ = writeln!(
                 source,
-                "export const {component} = globalThis.__gpui.registered_component({module:?}, {component:?});"
+                "export const {component} = globalThis.__gpui.component({module:?}, {component:?});"
             );
         }
 

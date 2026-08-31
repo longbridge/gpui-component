@@ -56,6 +56,7 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+mod component;
 pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;
@@ -68,10 +69,10 @@ pub(crate) mod path;
 pub mod plugin;
 pub mod policy;
 pub(crate) mod process;
-mod registered_components;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
+mod script_callback;
 pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
@@ -87,13 +88,13 @@ pub(crate) mod watch;
 
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
+pub use component::ComponentArgs;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
 pub use metrics::RuntimeMetrics;
-pub use registered_components::ComponentArgs;
 pub use root::{DialogOptions, ShellRoot, ToastLevel, ToastRequest};
 pub use runtime::{
     ExitHandler, ExitRequest, clear_exit_handler, failure_surface, on_exit_request,

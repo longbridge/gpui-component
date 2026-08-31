@@ -107,7 +107,7 @@ use std::{
     cell::Cell, collections::BTreeMap, fmt, fmt::Write as _, future::Future, pin::Pin, rc::Rc,
 };
 
-use crate::registered_components::RegisteredComponent;
+use crate::component::ComponentFactory;
 
 /// A value crossing the host boundary, in either direction.
 ///
@@ -418,7 +418,7 @@ pub struct HostModule {
     /// Sorted alongside `functions`, and disjoint from it: one name is either
     /// synchronous or asynchronous, never both.
     async_functions: BTreeMap<String, HostAsyncFunction>,
-    components: BTreeMap<String, RegisteredComponent>,
+    components: BTreeMap<String, ComponentFactory>,
     /// The module's TypeScript face, if the host wrote one. See
     /// [`HostModule::declarations`].
     declarations: Option<String>,
@@ -455,8 +455,7 @@ impl HostModule {
         let name = name.into();
         self.functions.remove(&name);
         self.async_functions.remove(&name);
-        self.components
-            .insert(name, RegisteredComponent::new(build));
+        self.components.insert(name, ComponentFactory::new(build));
         self
     }
 
@@ -464,13 +463,10 @@ impl HostModule {
         self.components.keys().map(String::as_str)
     }
 
-    pub(crate) fn registered_component(
-        &self,
-        name: &str,
-    ) -> Result<RegisteredComponent, HostError> {
+    pub(crate) fn resolve_component(&self, name: &str) -> Result<ComponentFactory, HostError> {
         self.components.get(name).cloned().ok_or_else(|| {
             HostError::new(format!(
-                "HostModule `{}` has no registered component `{name}`",
+                "HostModule `{}` has no component `{name}`",
                 self.name
             ))
         })

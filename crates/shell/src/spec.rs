@@ -162,18 +162,18 @@ pub enum BackgroundKind {
 }
 
 #[derive(Clone)]
-pub struct RegisteredComponentSpec {
-    pub module: SharedString,
-    pub component: SharedString,
-    pub id: SharedString,
-    pub props: HostValue,
-    pub policy: Rc<crate::policy::Policy>,
+pub(crate) struct ModuleComponentSpec {
+    pub(crate) module: SharedString,
+    pub(crate) component: SharedString,
+    pub(crate) id: SharedString,
+    pub(crate) props: HostValue,
+    pub(crate) policy: Rc<crate::policy::Policy>,
 }
 
-impl std::fmt::Debug for RegisteredComponentSpec {
+impl std::fmt::Debug for ModuleComponentSpec {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_struct("RegisteredComponentSpec")
+            .debug_struct("ModuleComponentSpec")
             .field("module", &self.module)
             .field("component", &self.component)
             .field("id", &self.id)
@@ -182,7 +182,7 @@ impl std::fmt::Debug for RegisteredComponentSpec {
     }
 }
 
-impl PartialEq for RegisteredComponentSpec {
+impl PartialEq for ModuleComponentSpec {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module
             && self.component == other.component
@@ -193,26 +193,23 @@ impl PartialEq for RegisteredComponentSpec {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextViewFormat {
+pub(crate) enum TextViewFormat {
     Html,
     Markdown,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextViewSpec {
-    pub id: SharedString,
-    pub text: SharedString,
-    pub format: TextViewFormat,
-}
-
 /// Which constructor produced a node.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Component {
+pub(crate) enum Component {
     Div,
     HFlex,
     VFlex,
-    Registered(RegisteredComponentSpec),
-    TextView(TextViewSpec),
+    Module(ModuleComponentSpec),
+    TextView {
+        id: SharedString,
+        text: SharedString,
+        format: TextViewFormat,
+    },
     /// A retained nested script view. The frozen description keeps the entity
     /// itself alive, so releasing the numeric handle cannot invalidate a frame
     /// that was already published.
@@ -544,8 +541,8 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
-            Component::Registered(_) => "registered_component",
-            Component::TextView(_) => "TextView",
+            Component::Module(_) => "component",
+            Component::TextView { .. } => "TextView",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
             Component::Button(_) => "Button",
@@ -1170,18 +1167,18 @@ impl SpecArena {
         out.push_str(&"  ".repeat(depth));
         out.push_str(component.name());
         match component {
-            Component::Registered(spec) => out.push_str(&format!(
+            Component::Module(spec) => out.push_str(&format!(
                 " {}.{} {:?} props={:?}",
                 spec.module, spec.component, spec.id, spec.props
             )),
-            Component::TextView(spec) => out.push_str(&format!(
+            Component::TextView { id, text, format } => out.push_str(&format!(
                 " {} {:?} {:?}",
-                match spec.format {
+                match format {
                     TextViewFormat::Html => "html",
                     TextViewFormat::Markdown => "markdown",
                 },
-                spec.id,
-                spec.text,
+                id,
+                text,
             )),
             Component::Text(value)
             | Component::Button(value)

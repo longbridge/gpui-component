@@ -365,7 +365,7 @@ pub(crate) mod exports {
     /// The performance overlay, owned by `gpui-fps`.
     pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
 
-    /// Shell-owned shared types. Registered components are exported from their
+    /// Shell-owned shared types. Module components are exported from their
     /// host modules rather than through a public generic dispatcher.
     pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
@@ -4890,10 +4890,13 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
-    registered_component: (module, name) => ({
-      new: (id, props) => element(__registered_component(
-        String(module), String(name), String(id), props ?? {},
-      )),
+    component: (module, name) => ({
+      new: (id, props) => {
+        if (typeof id !== "string" || id.length === 0) {
+          throw new TypeError("a component needs a non-empty string id");
+        }
+        return element(__component(String(module), String(name), id, props ?? {}));
+      },
     }),
     __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
@@ -5226,21 +5229,21 @@ impl ShellRuntime {
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
-            let registered_runtime = runtime.clone();
+            let component_runtime = runtime.clone();
             globals.set(
-                "__registered_component",
+                "__component",
                 Func::from(move |ctx: Ctx<'_>, module: String, name: String, id: String, props: host_modules::Argument| -> JsResult<SpecId> {
                     let props = props.0;
                     if id.is_empty() {
-                        return Err(Exception::throw_type(&ctx, "a registered component needs a non-empty instance id"));
+                        return Err(Exception::throw_type(&ctx, "a component needs a non-empty string id"));
                     }
                     let registry = crate::host_modules::modules();
                     registry
                         .get(&module)
-                        .and_then(|found| found.registered_component(&name))
+                        .and_then(|found| found.resolve_component(&name))
                         .map_err(|error| Exception::throw_message(&ctx, error.message()))?;
-                    Ok(upgrade(&registered_runtime, &ctx)?.push_node(Component::Registered(
-                        crate::spec::RegisteredComponentSpec {
+                    Ok(upgrade(&component_runtime, &ctx)?.push_node(Component::Module(
+                        crate::spec::ModuleComponentSpec {
                             module: module.into(),
                             component: name.into(),
                             id: id.into(),
@@ -5260,9 +5263,11 @@ impl ShellRuntime {
                         "markdown" => crate::spec::TextViewFormat::Markdown,
                         _ => return Err(Exception::throw_type(&ctx, "TextView format must be html or markdown")),
                     };
-                    Ok(upgrade(&text_view_runtime, &ctx)?.push_node(Component::TextView(
-                        crate::spec::TextViewSpec { id: id.into(), text: text.into(), format },
-                    )))
+                    Ok(upgrade(&text_view_runtime, &ctx)?.push_node(Component::TextView {
+                        id: id.into(),
+                        text: text.into(),
+                        format,
+                    }))
                 }),
             )?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;

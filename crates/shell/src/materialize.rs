@@ -763,14 +763,14 @@ fn materialize_component(
             window,
             cx,
         ),
-        Component::Registered(spec) => {
+        Component::Module(spec) => {
             let registry = spec.policy.modules();
             let component = registry
                 .get(&spec.module)
-                .and_then(|module| module.registered_component(&spec.component));
+                .and_then(|module| module.resolve_component(&spec.component));
             let Ok(component) = component else {
                 tracing::warn!(
-                    "registered component `{}.{}` was revoked before materialization",
+                    "component `{}.{}` was revoked before materialization",
                     spec.module,
                     spec.component
                 );
@@ -786,10 +786,10 @@ fn materialize_component(
                 cx,
             )
         }
-        Component::TextView(spec) => {
-            let mut view = match spec.format {
-                crate::spec::TextViewFormat::Html => TextView::html(spec.id, spec.text),
-                crate::spec::TextViewFormat::Markdown => TextView::markdown(spec.id, spec.text),
+        Component::TextView { id, text, format } => {
+            let mut view = match format {
+                crate::spec::TextViewFormat::Html => TextView::html(id, text),
+                crate::spec::TextViewFormat::Markdown => TextView::markdown(id, text),
             }
             .style(TextViewStyle::from_theme(&Theme::global(cx)));
             if let Some(selectable) = behavior.selectable {
@@ -799,7 +799,7 @@ fn materialize_component(
                 view = view.scrollable(scrollable);
             }
             if let Some(callback) = behavior.on_link_click {
-                let route = crate::registered_components::ScriptCallbackRoute::new(
+                let route = crate::script_callback::ScriptCallbackRoute::new(
                     Rc::downgrade(runtime),
                     callback,
                 );

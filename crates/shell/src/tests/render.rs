@@ -56,7 +56,7 @@ export default class Counter extends View {
 const ENTRY: &str = "counter.js";
 
 #[gpui::test]
-fn registered_component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut TestAppContext) {
+fn component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let received = Rc::new(RefCell::new(None));
     let received_by_builder = received.clone();
@@ -73,7 +73,7 @@ fn registered_component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut
     crate::policy::set_default(
         Policy::new()
             .with_host_module(module)
-            .expect("registered component module"),
+            .expect("component module"),
     );
 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
@@ -101,7 +101,7 @@ export default class HostBody extends View {
         .expect("render");
 
     assert!(
-        tree.contains("registered_component mail.Body \"message-body\""),
+        tree.contains("component mail.Body \"message-body\""),
         "{tree}"
     );
     assert!(tree.contains("html"), "props missing from dump: {tree}");
@@ -125,6 +125,39 @@ export default class HostBody extends View {
             .and_then(HostValue::as_number),
         Some(1.25),
     );
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn component_requires_an_explicit_string_id(cx: &mut TestAppContext) {
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("mail").component("Body", |_, _, _| gpui::div().into_any_element()),
+            )
+            .expect("component module"),
+    );
+
+    for (name, expression) in [
+        ("missing-component-id.js", "Body.new()"),
+        ("numeric-component-id.js", "Body.new(42, {})"),
+    ] {
+        let source = format!(
+            r#"
+import {{ View }} from "gpui";
+import {{ Body }} from "mail";
+export default class InvalidBody extends View {{
+  render() {{ return {expression}; }}
+}}
+"#,
+        );
+        let message = render_error(cx, name, &source);
+        assert!(
+            message.contains("non-empty string id"),
+            "unexpected error for {expression}: {message}"
+        );
+    }
+
     crate::policy::set_default(Policy::new());
 }
 

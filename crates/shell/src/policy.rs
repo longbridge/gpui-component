@@ -328,7 +328,7 @@ mod tests {
     }
 
     #[test]
-    fn two_policies_do_not_share_registered_components() {
+    fn two_policies_do_not_share_components() {
         let first = Policy::new()
             .with_host_module(
                 crate::HostModule::new("cards")
