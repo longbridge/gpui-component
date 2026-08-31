@@ -8,13 +8,14 @@ use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, HighlightStyle, Hsla,
     Image, ImageFormat, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow,
     ParentElement, Pixels, ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement,
-    Styled, StyledImage as _, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px,
-    relative, rems,
+    StyleRefinement, Styled, StyledImage as _, WhiteSpace, Window, div, img,
+    prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 
 use crate::{
     StyledExt, h_flex,
+    scrollable_mask::horizontal_scroll_area,
     text::{
         CodeBlockActionsFn, CodeBlockHighlighterFn, LinkClickHandlerFn, MarkdownExtensions,
         MarkdownNode, TableActionsFn,
@@ -2178,22 +2179,27 @@ impl BlockNode {
                 // Scroll viewport owns the visible frame, including any
                 // caller-provided radius. Keeping the border here makes the
                 // rounded frame stable while the wider row track moves below it.
-                div()
-                    .id(("table", options.ix))
-                    .bg(cx.theme().tokens.colors.surface)
-                    .border_1()
-                    .border_color(style.border())
-                    .overflow_x_scroll()
-                    .track_scroll(&scroll_handle)
-                    .refine_style(&style.table())
-                    .child(
-                        // Row track sized to `max(viewport, column floors)`:
-                        // `min_w_full` fills the frame while the columns can still
-                        // shrink-to-fit (their text wrapping), the definite
-                        // `w(min_total_w)` keeps the floors once they are reached,
-                        // letting the track exceed the viewport and scroll.
-                        div().min_w_full().w(px(min_total_w)).children(rows),
-                    ),
+                //
+                // `horizontal_scroll_area` clips with `overflow_hidden` and
+                // delegates the wheel to a sibling `ScrollableMask`, so the
+                // gesture is locked to its starting axis and a horizontal swipe
+                // is consumed before an ancestor scroller (`gpui::list` under
+                // `TextView::scrollable`) can take its vertical component.
+                horizontal_scroll_area(
+                    ("table", options.ix),
+                    &scroll_handle,
+                    &StyleRefinement::default()
+                        .bg(cx.theme().tokens.colors.surface)
+                        .border_1()
+                        .border_color(style.border())
+                        .refine_style(style.table()),
+                    // Row track sized to `max(viewport, column floors)`:
+                    // `min_w_full` fills the frame while the columns can still
+                    // shrink-to-fit (their text wrapping), the definite
+                    // `w(min_total_w)` keeps the floors once they are reached,
+                    // letting the track exceed the viewport and scroll.
+                    div().min_w_full().w(px(min_total_w)).children(rows),
+                ),
             )
             // Custom actions row (e.g. copy / download) rendered below the
             // table. The hook's element spans full width; alignment is up to
