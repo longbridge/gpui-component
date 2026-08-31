@@ -48,6 +48,7 @@ syntect.workspace = true
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 smol.workspace = true
 gpui_platform.workspace = true
+reqwest_client.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 async-channel = "2.3.1"
@@ -61,7 +62,6 @@ objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString"] }
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 indoc = "2"
-reqwest_client.workspace = true
 
 [lints]
 workspace = true
