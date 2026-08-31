@@ -62,7 +62,7 @@ impl Render for AttachmentStory {
                     .description(
                         "Compose typed metadata and actions, or keep using existing child elements.",
                     )
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -99,7 +99,7 @@ impl Render for AttachmentStory {
                     .description(
                         "The card opens its target while actions stay independently clickable.",
                     )
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -135,7 +135,7 @@ impl Render for AttachmentStory {
                     .description(
                         "Typed titles and descriptions inherit loading and failure states automatically.",
                     )
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -233,7 +233,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Optional slots")
                     .description("Media, metadata, and actions remain independently composable.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -269,7 +269,7 @@ impl Render for AttachmentStory {
                     .description(
                         "Vertical attachments can turn the media slot into a full-width preview.",
                     )
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Attachment::new()
                             .axis(Axis::Vertical)
@@ -299,7 +299,7 @@ impl Render for AttachmentStory {
                     .description(
                         "Image previews keep their overlays visible while only the image dims during upload.",
                     )
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Attachment::new()
                             .axis(Axis::Vertical)
@@ -321,7 +321,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Sizes")
                     .description("Semantic sizes keep the media, text, and action density aligned.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -379,7 +379,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Group")
                     .description("Attachment groups arrange multiple files in a scrollable row.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         AttachmentGroup::new("attachment-story-group")
                             .child(
@@ -415,7 +415,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Orientation")
                     .description("The same named slots support horizontal and vertical layouts.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -442,7 +442,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Status inheritance")
                     .description("Typed children inherit lifecycle state unless explicitly overridden.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -472,7 +472,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Long filenames")
                     .description("Long metadata truncates within a constrained, zoom-aware surface.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Attachment::new()
                             .w_72()
@@ -491,7 +491,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Attachment trigger")
                     .description("Use the existing Button component to add files to a composer.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Button::new("attachment-add-files")
                             .outline()
@@ -502,7 +502,7 @@ impl Render for AttachmentStory {
             .child(
                 section("Custom style")
                     .description("Every public part accepts caller style refinements.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Attachment::new()
                             .w_full()

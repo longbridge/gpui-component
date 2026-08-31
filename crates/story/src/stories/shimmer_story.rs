@@ -69,7 +69,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Default")
                     .description("A readable, theme-aware highlight crosses the existing text.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(ShimmerText::new("Thinking…"))
@@ -81,7 +81,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Color")
                     .description("Highlight colors come from semantic theme roles.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(ShimmerText::new("Automatic theme-aware highlight"))
@@ -97,7 +97,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Duration")
                     .description("Each duration controls one complete sweep.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(
@@ -116,7 +116,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Spread")
                     .description("Spread is a relative or absolute highlight half-width.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(ShimmerText::new("Narrow highlight · 0.12").spread(0.12))
@@ -127,7 +127,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Direction")
                     .description("Reverse changes movement without replacing text or layout.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(ShimmerText::new("Forward · left to right"))
@@ -136,7 +136,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Play once")
                     .description("A stable explicit identity controls one-shot playback and replay.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -156,7 +156,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Reusable style")
                     .description("One ShimmerStyle can be shared by independent status labels.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(
@@ -171,7 +171,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Typography and wrapping")
                     .description("Text inherits typography, color, and the surrounding layout.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -187,6 +187,7 @@ impl Render for ShimmerStory {
                     .child(
                         h_flex()
                             .w(rems(24.))
+                            .max_w_full()
                             .min_w_0()
                             .child(ShimmerText::new(
                                 "Long loading messages remain readable as the surrounding region becomes narrower.",
@@ -196,7 +197,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Marker")
                     .description("Marker applies the same reusable style to its text content.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .child(
                         Marker::new()
@@ -209,7 +210,7 @@ impl Render for ShimmerStory {
             .child(
                 section("Attachment")
                     .description("An uploading or processing title can share its loading style.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Processing)
