@@ -90,85 +90,14 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
 }
 ```
 
-The string form accepts strict GitHub shorthand or a full Git URL, each with an
-optional `#ref`:
-
-```json
-{
-  "dependencies": {
-    "default-main": "huacnlee/omarchy-ui",
-    "named-ref": "huacnlee/omarchy-ui#v1.2.0",
-    "full-url": "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
-    "remote-head": "https://github.com/huacnlee/omarchy-ui"
-  }
-}
-```
-
-GitHub shorthand without `#ref` selects `main`; a full URL without `#ref`
-selects the remote's HEAD. A ref may name a branch, tag, or commit-ish such as a
-commit ID. A branch, tag, or remote HEAD is fetched and resolved on each
-application load; a commit ID continues to select that exact commit.
-
-After creating the immutable checkout, gpui-shell reads its root
-`package.json`. A string `main` names the package entry. If `package.json` or
-`main` is absent, the entry defaults to `index.js`. Malformed metadata, a
-non-string `main`, and entries that escape the checkout or do not resolve to a
-file are rejected before application JavaScript executes.
-
-The legacy object form remains fully supported. It requires exactly one
-explicit `branch` or `tag`; its optional repository-relative `entry` defaults
-to `index.js`. Existing manifests do not need to migrate. Moving to the string
-form means publishing the entry as `package.json` `main` (or root `index.js`):
-
-```json
-{
-  "dependencies": {
-    "omarchy-ui": {
-      "git": "https://github.com/huacnlee/omarchy-ui",
-      "branch": "main",
-      "entry": "src/public.js"
-    }
-  }
-}
-```
-
-gpui-shell stores dependencies below
-`~/.gpui-shell/cache/dependencies/`. Per-remote locks serialize mirror updates,
-and mirrors publish immutable, commit-addressed checkouts so concurrent loads
-and older module generations cannot rewrite one another. The exact full URL
-without its fragment is both remote and cache identity. gpui-shell verifies the
-raw configured origin while allowing Git's `url.*.insteadOf` rules to choose
-the effective fetch URL. Git runs non-interactively with a 30-second command
-timeout. The dependency map key is the bare JavaScript module name, for example
-`import { label, style } from "omarchy-ui"`; relative and package-subpath
-imports stay confined to that checkout. Fetching uses the host's `git`
-executable and is separate from script network capabilities.
-
-An editor answers that import a different way: it walks `node_modules` up from
-the importing file and knows nothing about the manifest, so a correct import is
-underlined as a module it cannot find, and every name behind it loses its type,
-its parameter hints and its documentation. Every load — and `gpui-shell
-types` — therefore links each materialized checkout into
-`<application>/node_modules` under the name the manifest gave it, and scaffolds
-a `jsconfig.json` when the directory has neither that nor a `tsconfig.json`.
-The editor then reads the same files the runtime is about to execute, so the
-signatures and JSDoc it shows cannot drift from what runs.
-
-Only entries gpui-shell owns are ever replaced or removed — a symlink into the
-dependency cache, or a directory carrying its marker file — so an installed
-package of the same name is left alone, and a link whose dependency the
-manifest no longer declares goes away. Where the platform refuses a symlink,
-such as an unprivileged Windows process, gpui-shell writes a small package that
-re-exports the checkout instead: a bare import types the same way, and a
-package-subpath import stays unresolved.
-
-The directory is called `node_modules` because that is the one place every
-editor looks; no package manager is involved, nothing is downloaded from a
-registry, and each entry is a link into the Git checkout gpui-shell already
-made. It also buys quiet: TypeScript treats what it resolves there as an
-external library and stops reporting a dependency's own implicit-`any`
-diagnostics as if they were yours. `node_modules` is generated, like
-`gpui.d.ts`. Ignore both.
+`dependencies` maps a bare module name to a JavaScript package fetched from
+Git before the entry module runs — `import { Title } from "omarchy-ui"`. The
+string form takes strict GitHub shorthand or a full Git URL with an optional
+`#ref`; the object form with an explicit `branch` or `tag` remains supported.
+Every load also links the package where an editor finds it, so the import
+carries the package's own types and documentation. See
+[Dependencies](./dependencies.md) for version selection, the package entry,
+the cache, and what an editor sees.
 
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted — write `"storage": false` to refuse it.
 

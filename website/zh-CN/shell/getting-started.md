@@ -150,7 +150,7 @@ cargo run -p gpui-shell -- types hello
 
 它会在应用旁边写出 `gpui.d.ts`。在脚本顶部加上 `// @ts-check`，编辑器就会补全整套 API，并在运行之前、在调用点上直接拒绝拼错的样式方法、不存在的颜色 token，或者 `.p("auto")`。
 
-它同时会把编辑器需要的其余部分一并配好：manifest 声明的每个 Git 依赖都会被抓取并按声明的名字链接进 `node_modules`，于是 `import { style } from "omarchy-ui"` 解析到的正是运行时将要执行的那批文件，连同该 package 自己的类型、参数与 JSDoc；若目录里既没有 `jsconfig.json` 也没有 `tsconfig.json`，还会生成一份 `jsconfig.json`。详见[能力](./capabilities.md#the-manifest)。
+它同时会把编辑器需要的其余部分一并配好：manifest 声明的每个 Git 依赖都会被抓取并按声明的名字链接进 `node_modules`，于是 `import { style } from "omarchy-ui"` 解析到的正是运行时将要执行的那批文件，连同该 package 自己的类型、参数与 JSDoc；若目录里既没有 `jsconfig.json` 也没有 `tsconfig.json`，还会生成一份 `jsconfig.json`。详见[依赖](./dependencies.md)。
 
 这份声明可信，是因为它**从运行时实际派发所依据的那几张表生成**，而不是照着文档抄的：
 
