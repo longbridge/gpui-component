@@ -212,6 +212,25 @@ fn is_block(&self) -> bool {
 
 Inline plugins are reserved for future `TextView` support.
 
+## YAML Frontmatter
+
+YAML frontmatter is opt-in because it is not part of CommonMark or GFM. Enable
+the parser construct and attach `FrontmatterPlugin` to render top-level mappings
+as a `DescriptionList`:
+
+```rust
+use gpui_component::text::{markdown, FrontmatterPlugin, MarkdownExtensions};
+
+let extensions = MarkdownExtensions::default().frontmatter();
+
+markdown("---\nname: example\ndescription: Example metadata.\n---")
+    .markdown_extensions(extensions)
+    .plugin(FrontmatterPlugin::new())
+```
+
+Values are rendered as plain text. Folded and literal block scalars are
+supported; unsupported YAML frontmatter falls back to a YAML code block.
+
 ## Code Block Actions
 
 You can render controls for Markdown code blocks:

@@ -15,9 +15,7 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt,
-    description_list::{DescriptionItem, DescriptionList},
-    h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
@@ -74,7 +72,6 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
-    Frontmatter(Frontmatter),
     /// A custom Markdown node produced by [`MarkdownExtensions`].
     Custom(MarkdownNode),
     Table(Table),
@@ -127,7 +124,6 @@ impl BlockNode {
             BlockNode::List { span, .. } => *span,
             BlockNode::ListItem { span, .. } => *span,
             BlockNode::CodeBlock(code_block) => code_block.span,
-            BlockNode::Frontmatter(frontmatter) => frontmatter.span,
             BlockNode::Custom(el) => el.span,
             BlockNode::Table(table) => table.span,
             BlockNode::Break { span, .. } => *span,
@@ -273,9 +269,6 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
-            BlockNode::Frontmatter(frontmatter) => {
-                text.push_str(&frontmatter.text_by_kind(kind));
-            }
             BlockNode::Custom(node) => {
                 if let BlockTextKind::All = kind {
                     let content = node.as_text();
@@ -329,7 +322,6 @@ impl BlockNode {
                     .any(|cell| cell.children.has_selection())
             }),
             BlockNode::CodeBlock(code_block) => code_block.has_selection(),
-            BlockNode::Frontmatter(frontmatter) => frontmatter.has_selection(),
             BlockNode::Custom { .. }
             | BlockNode::Definition { .. }
             | BlockNode::Break { .. }
@@ -358,7 +350,6 @@ impl BlockNode {
                 }
             }
             BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
-            BlockNode::Frontmatter(frontmatter) => frontmatter.clear_selection(),
             BlockNode::Custom { .. }
             | BlockNode::Definition { .. }
             | BlockNode::Break { .. }
@@ -960,68 +951,6 @@ impl Paragraph {
         if let Ok(mut state) = self.state.lock() {
             state.selection = None;
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct FrontmatterEntry {
-    pub(crate) key: Paragraph,
-    pub(crate) value: Paragraph,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Frontmatter {
-    pub(crate) entries: Vec<FrontmatterEntry>,
-    pub(crate) source: SharedString,
-    pub(crate) span: Option<Span>,
-}
-
-impl Frontmatter {
-    fn text_by_kind(&self, kind: BlockTextKind) -> String {
-        let mut text = String::new();
-        for entry in &self.entries {
-            let key = match kind {
-                BlockTextKind::All => entry.key.text(),
-                BlockTextKind::Selected => entry.key.selected_text(),
-                BlockTextKind::SelectedSource => entry.key.selected_source(),
-            };
-            let value = match kind {
-                BlockTextKind::All => entry.value.text(),
-                BlockTextKind::Selected => entry.value.selected_text(),
-                BlockTextKind::SelectedSource => entry.value.selected_source(),
-            };
-
-            if !key.is_empty() {
-                text.push_str(&key);
-                if !value.is_empty() {
-                    text.push_str(": ");
-                }
-            }
-            if !value.is_empty() {
-                text.push_str(&value);
-            }
-            if !key.is_empty() || !value.is_empty() {
-                text.push('\n');
-            }
-        }
-        text
-    }
-
-    fn has_selection(&self) -> bool {
-        self.entries
-            .iter()
-            .any(|entry| entry.key.has_selection() || entry.value.has_selection())
-    }
-
-    fn clear_selection(&self) {
-        for entry in &self.entries {
-            entry.key.clear_selection();
-            entry.value.clear_selection();
-        }
-    }
-
-    pub(crate) fn to_markdown(&self) -> String {
-        format!("---\n{}\n---", self.source.trim_end())
     }
 }
 
@@ -1850,7 +1779,6 @@ impl BlockNode {
                     code_block.code()
                 )
             }
-            BlockNode::Frontmatter(frontmatter) => frontmatter.to_markdown(),
             BlockNode::Table(table) => table.to_markdown(),
             BlockNode::Break { html, .. } => {
                 if *html {
@@ -2000,7 +1928,6 @@ impl BlockNode {
                             | BlockNode::Heading { .. }
                             | BlockNode::Blockquote { .. }
                             | BlockNode::CodeBlock(_)
-                            | BlockNode::Frontmatter(_)
                             | BlockNode::Custom(_)
                             | BlockNode::Table(_)
                             | BlockNode::HorizontalRule { .. } => {
@@ -2082,36 +2009,6 @@ impl BlockNode {
         } else {
             Self::render_wrap_table(table, &col_lens, options, node_cx, window, cx)
         }
-    }
-
-    /// Render YAML frontmatter as a compact metadata grid. Values remain plain
-    /// text and wrap naturally; only the field names receive emphasis.
-    fn render_frontmatter(
-        frontmatter: &Frontmatter,
-        options: &NodeRenderOptions,
-        node_cx: &NodeContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        let items = frontmatter.entries.iter().map(|entry| {
-            DescriptionItem::new(entry.key.render(node_cx, window, cx).into_any_element())
-                .value(entry.value.render(node_cx, window, cx).into_any_element())
-        });
-
-        div()
-            .pb(if options.is_last {
-                rems(0.)
-            } else {
-                node_cx.style.paragraph_gap
-            })
-            .w_full()
-            .child(
-                DescriptionList::horizontal()
-                    .label_width(rems(12.))
-                    .columns(1)
-                    .children(items),
-            )
-            .into_any_element()
     }
 
     /// Horizontally scrollable table layout (opt-in via `style.table`
@@ -2523,9 +2420,6 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
-            BlockNode::Frontmatter(frontmatter) => {
-                Self::render_frontmatter(frontmatter, &options, node_cx, window, cx)
-            }
             BlockNode::Custom(node) => {
                 let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
                     Some(rendered) => rendered,

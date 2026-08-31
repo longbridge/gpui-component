@@ -176,12 +176,24 @@ impl PartialEq for MarkdownNode {
 #[derive(Clone, Default)]
 pub struct MarkdownExtensions {
     enable_mdx: bool,
+    enable_frontmatter: bool,
     block_parsers: Vec<Arc<MarkdownBlockParserFn>>,
     block_renderers: HashMap<SharedString, Arc<MarkdownBlockRenderFn>>,
     revision: u64,
 }
 
 impl MarkdownExtensions {
+    /// Enable YAML frontmatter parsing.
+    ///
+    /// Frontmatter is disabled by default because it is not part of CommonMark
+    /// or GFM. Register a block parser or [`MarkdownPlugin`] to render the
+    /// resulting [`mdast::Node::Yaml`] node.
+    pub fn frontmatter(mut self) -> Self {
+        self.enable_frontmatter = true;
+        self.bump_revision();
+        self
+    }
+
     /// Enable MDX JSX/expression constructs.
     ///
     /// This disables raw HTML constructs because `markdown-rs` gives HTML
@@ -264,7 +276,7 @@ impl MarkdownExtensions {
 
     pub(crate) fn parse_options(&self) -> ParseOptions {
         let mut options = ParseOptions::gfm();
-        options.constructs.frontmatter = true;
+        options.constructs.frontmatter = self.enable_frontmatter;
         if self.enable_mdx {
             options.constructs.html_flow = false;
             options.constructs.html_text = false;

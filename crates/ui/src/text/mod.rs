@@ -1,5 +1,6 @@
 mod document;
 mod format;
+mod frontmatter;
 mod inline;
 mod inline_flow;
 mod markdown_ext;
@@ -14,6 +15,7 @@ mod utils;
 mod window_selection;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+pub use frontmatter::*;
 pub use markdown_ext::*;
 pub use node::TableData;
 pub use state::*;
