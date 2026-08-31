@@ -1,10 +1,10 @@
 use std::{ops::Range, time::Duration};
 
 use gpui::{
-    AnyElement, App, Axis, Context, ElementId, Entity, FollowMode, InteractiveElement as _,
+    AnyElement, App, Axis, Context, ElementId, Entity, FollowMode, Hsla, InteractiveElement as _,
     IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder as _, px,
-    rems,
+    SharedString, StyleRefinement, Styled, Window, div, linear_color_stop, linear_gradient, list,
+    prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::motion::{Transition, transition};
 
@@ -167,6 +167,7 @@ pub struct MessageScroller {
     jump_button_style: StyleRefinement,
     jump_button_renderer: Option<Box<dyn FnOnce(Button) -> Button>>,
     jump_button_transition: Duration,
+    bottom_fade: Option<Hsla>,
     scrollbar: bool,
     jump_button: bool,
     jump_button_label: SharedString,
@@ -196,6 +197,7 @@ impl MessageScroller {
             jump_button_style: StyleRefinement::default(),
             jump_button_renderer: None,
             jump_button_transition: JUMP_BUTTON_TRANSITION,
+            bottom_fade: None,
             scrollbar: true,
             jump_button: true,
             jump_button_label: "Jump to latest".into(),
@@ -262,6 +264,16 @@ impl MessageScroller {
     /// always adopt the final state immediately.
     pub fn with_jump_button_transition(mut self, duration: Duration) -> Self {
         self.jump_button_transition = duration;
+        self
+    }
+
+    /// Fade the transcript's bottom edge into `color`.
+    ///
+    /// A partially visible row melts into the surface behind the scroller
+    /// instead of clipping mid-line. Pass the color of that surface; the
+    /// fade is off by default and sits under the jump button.
+    pub fn with_bottom_fade(mut self, color: impl Into<Hsla>) -> Self {
+        self.bottom_fade = Some(color.into());
         self
     }
 }
@@ -339,6 +351,21 @@ impl RenderOnce for MessageScroller {
             .min_h_0()
             .overflow_hidden()
             .child(viewport)
+            .when_some(self.bottom_fade, |this, color| {
+                this.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(rems(3.))
+                        .bg(linear_gradient(
+                            180.,
+                            linear_color_stop(color.opacity(0.), 0.),
+                            linear_color_stop(color, 1.),
+                        )),
+                )
+            })
             // Keep vertical wheel scrolling from leaking into an ancestor
             // scroller (like in Table): the mask consumes vertical-dominant
             // wheel events while the list can move and chains to the ancestor
@@ -430,12 +457,14 @@ mod tests {
             .with_row_style(StyleRefinement::default())
             .with_jump_button_style(StyleRefinement::default())
             .with_jump_button_renderer(|button| button.large())
-            .with_jump_button_transition(Duration::from_millis(300));
+            .with_jump_button_transition(Duration::from_millis(300))
+            .with_bottom_fade(gpui::white());
 
         assert!(!scroller.scrollbar);
         assert!(!scroller.jump_button);
         assert_eq!(scroller.jump_button_label, "Latest");
         assert!(scroller.jump_button_renderer.is_some());
         assert_eq!(scroller.jump_button_transition, Duration::from_millis(300));
+        assert_eq!(scroller.bottom_fade, Some(gpui::white()));
     }
 }

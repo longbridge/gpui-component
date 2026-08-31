@@ -260,6 +260,8 @@ MessageScroller::new("conversation", scroller.clone(), render_message)
 
 组件会在每个 row 包装层保留默认尾部间距，以便 append/prepend 和高度测量保持一致。自定义 `with_row_style(...)` 时应明确自己是否要额外增加间距，避免重复 padding。GPUI list 只在垂直方向偏移 row，因此 list padding 的水平分量（默认值与 refinement 均是）由每个 row 包装层承载。
 
+`with_bottom_fade(color)` 让消息区底缘渐隐到指定颜色：被裁切一半的 row 融入 scroller 背后的表面，而不是在行中间生硬截断。传入 scroller 所在表面的颜色；默认关闭。
+
 ## 虚拟化、性能与可变高度
 
 - `MessageScroller` 使用 GPUI `list(...)`，只创建 viewport 附近的 row；不需要额外 Provider、Viewport、Content 或 Item wrapper。
@@ -321,6 +323,7 @@ GPUI 版本保留必要的滚动行为，省略 React primitive 中重复的 Pro
 | `with_jump_button_style(style)` | 在按钮默认样式之后应用 refinement。 |
 | `with_jump_button_renderer(renderer)` | 修改已配置行为的 Button，并保留滚动操作。 |
 | `with_jump_button_transition(duration)` | 设置按钮显示/隐藏过渡；零时长关闭过渡。 |
+| `with_bottom_fade(color)` | 底缘渐隐到周围表面的颜色；默认关闭。 |
 | `Styled` | 调整根容器。 |
 
 ### 类型链接

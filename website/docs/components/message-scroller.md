@@ -335,6 +335,10 @@ The boundaries are:
   breathing room.
 - `scrollbar(false)` hides the built-in vertical scrollbar; it does not disable
   scrolling or remove keyboard/wheel interaction.
+- `with_bottom_fade(color)` fades the transcript's bottom edge into the given
+  color, so a partially visible row melts into the surrounding surface instead
+  of clipping mid-line. Pass the color of the surface behind the scroller; the
+  fade is off by default.
 
 Use theme roles such as `group_box`, `background`, `border`, and `foreground`
 for custom surfaces. Keep content padding in the surrounding conversation
@@ -404,6 +408,7 @@ model around this component.
 | `with_jump_button_style(style)` | themed secondary button | Refine the built-in button. |
 | `with_jump_button_renderer(callback)` | default Button | Adjust the configured button while keeping its action. |
 | `with_jump_button_transition(duration)` | 200 ms | Set enter/leave duration; reduced motion skips it. |
+| `with_bottom_fade(color)` | off | Fade the bottom edge into the surrounding surface color. |
 | `Styled` methods | full-size, clipped root | Style the outer scroller element. |
 
 [MessageScroller]: https://docs.rs/gpui-component/latest/gpui_component/message_scroller/struct.MessageScroller.html
