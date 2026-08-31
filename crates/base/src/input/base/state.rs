@@ -4810,53 +4810,75 @@ mod tests {
         });
     }
 
-    /// Unfolding by offset opens only the folds hiding that offset: sibling
-    /// folds stay closed, candidates survive, and an offset on a fold's
-    /// header line (still visible) leaves the fold alone.
+    /// Unfolding at a position opens exactly the folds hiding it.
+    ///
+    /// A fold keeps its own first and last line visible, so a position on
+    /// either of them opens nothing. Nested folds all open at once, sibling
+    /// folds stay closed, and the opened ranges stay fold candidates.
     #[gpui::test]
-    fn test_unfold_ranges_containing(cx: &mut TestAppContext) {
+    fn test_unfold_at(cx: &mut TestAppContext) {
+        use crate::input::{FoldRange, Position};
+
         let view = InputView::<EditorMode>::new(cx);
         let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
         let input = view.input;
 
+        // An outer fold over lines 0..=5, a fold nested inside it, and a
+        // sibling fold that must never be touched.
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.set_value("a\nb\nc\nd\ne\nf\ng\nh", window, cx);
+                state.set_value("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl", window, cx);
                 state.apply_highlighter_fold_candidates(
                     vec![
-                        crate::input::FoldRange::new(0, 3),
-                        crate::input::FoldRange::new(4, 6),
+                        FoldRange::new(0, 5),
+                        FoldRange::new(2, 4),
+                        FoldRange::new(7, 10),
                     ],
                     cx,
                 );
                 state.display_map.set_folded(0, true);
-                state.display_map.set_folded(4, true);
+                state.display_map.set_folded(2, true);
+                state.display_map.set_folded(7, true);
             });
         });
 
-        // An offset on the first fold's header line is visible, nothing opens.
-        cx.update(|_, cx| {
-            input.update(cx, |state, cx| {
-                let offset = state.text.line_start_offset(0);
-                state.unfold_ranges_containing(offset, cx);
+        // The outer fold's own first and last line stay visible, so neither
+        // position opens anything.
+        for line in [0, 5] {
+            cx.update(|_, cx| {
+                input.update(cx, |state, cx| {
+                    assert!(!state.display_map.is_buffer_line_hidden(line));
+                    assert!(!state.unfold_at(Position::new(line as u32, 0), cx));
+                });
+                input.read_with(cx, |state, _| {
+                    assert!(state.display_map.is_folded_at(0));
+                    assert!(state.display_map.is_folded_at(2));
+                    assert!(state.display_map.is_folded_at(7));
+                });
             });
-            input.read_with(cx, |state, _| {
-                assert!(state.display_map.is_folded_at(0));
-                assert!(state.display_map.is_folded_at(4));
-            });
-        });
+        }
 
-        // An offset hidden inside the first fold opens it, and only it.
+        // Line 3 is hidden by both the outer and the nested fold, so both
+        // open; the sibling fold does not.
         cx.update(|_, cx| {
             input.update(cx, |state, cx| {
-                let offset = state.text.line_start_offset(2);
-                state.unfold_ranges_containing(offset, cx);
+                assert!(state.unfold_at(Position::new(3, 0), cx));
             });
             input.read_with(cx, |state, _| {
+                assert!(!state.display_map.is_buffer_line_hidden(3));
                 assert!(!state.display_map.is_folded_at(0));
-                assert!(state.display_map.is_folded_at(4));
-                // The opened range is still a candidate for refolding.
+                assert!(!state.display_map.is_folded_at(2));
+                assert!(state.display_map.is_folded_at(7));
+                // The opened ranges are still candidates for refolding.
                 assert!(state.display_map.is_fold_candidate(0));
+                assert!(state.display_map.is_fold_candidate(2));
+            });
+        });
+
+        // Nothing is hidden there any more, so a second call is a no-op.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                assert!(!state.unfold_at(Position::new(3, 0), cx));
             });
         });
     }
@@ -5262,30 +5284,39 @@ impl InputBaseState<crate::input::EditorMode> {
         cx.notify();
     }
 
-    /// Unfold any folded ranges that hide the given byte offset.
+    /// Unfold any folded ranges that hide the given position.
     ///
     /// Use this to reveal a position before acting on it (e.g. before
     /// [`Self::set_cursor_position`], which stops at a fold boundary),
     /// without touching folds elsewhere in the buffer. Fold candidates are
     /// kept, so the opened ranges can be folded again from the gutter.
-    /// An offset on a fold's header line is already visible, so that fold
-    /// stays closed.
-    pub fn unfold_ranges_containing(&mut self, offset: usize, cx: &mut Context<Self>) {
+    ///
+    /// A fold keeps its own first and last line visible, so a position on
+    /// either of them opens nothing. Nested folds all open, since opening
+    /// only the outermost would leave the position hidden.
+    ///
+    /// Returns whether any fold was opened.
+    pub fn unfold_at(&mut self, position: impl Into<Position>, cx: &mut Context<Self>) -> bool {
+        let offset = self.text.position_to_offset(&position.into());
         let line = self.text.offset_to_point(offset).row;
+        // A fold hides start_line + 1 ..= end_line - 1, so a line is hidden
+        // exactly when some folded range strictly contains it.
         let covering: Vec<usize> = self
             .display_map
             .folded_ranges()
             .iter()
-            .filter(|fold| line > fold.start_line && line <= fold.end_line)
+            .filter(|fold| line > fold.start_line && line < fold.end_line)
             .map(|fold| fold.start_line)
             .collect();
         if covering.is_empty() {
-            return;
+            return false;
         }
+
         for start_line in covering {
             self.display_map.set_folded(start_line, false);
         }
         cx.notify();
+        true
     }
 
     /// Set enable/disable line number.
