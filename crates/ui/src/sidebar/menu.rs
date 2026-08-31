@@ -383,6 +383,9 @@ impl SidebarItem for SidebarMenuItem {
                             )
                             .on_click({
                                 move |_, _, cx| {
+                                    // Keep expanding/collapsing independent from
+                                    // activating the parent menu item.
+                                    cx.stop_propagation();
                                     open_state.update(cx, |is_open, cx| {
                                         *is_open = !*is_open;
                                         cx.notify();
