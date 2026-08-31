@@ -568,9 +568,6 @@ pub fn run(app: Application, component: impl Into<String>) {
         gpui_base::init(cx);
         #[cfg(not(target_family = "wasm"))]
         {
-            let http_client =
-                reqwest_client::ReqwestClient::user_agent("gpui-base/examples").unwrap();
-            cx.set_http_client(Arc::new(http_client));
             cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.on_window_closed(|cx, _| {
@@ -618,6 +615,7 @@ pub fn run_embedded(app: Application, component: impl Into<String>) -> gpui::App
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(dead_code)]
 pub fn run_native(component: &str) {
     run(gpui_platform::application(), component.to_owned());
 }
