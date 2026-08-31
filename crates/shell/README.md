@@ -234,7 +234,7 @@ semantic token name — `background`, `foreground`, `surface`,
 `surface_foreground`, `primary`, `primary_foreground`, `secondary`,
 `secondary_foreground`, `muted`, `muted_foreground`, `accent`,
 `accent_foreground`, `destructive`, `destructive_foreground`, `border`, `input`,
-`ring` — or a `#rrggbb` literal. Passing values from
+`ring`, `selection` — or a `#rrggbb` literal. Passing values from
 `cx.theme().colors` is preferred. Semantic token name strings remain
 accepted for compatibility; a literal bypasses the theme.
 
