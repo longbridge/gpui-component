@@ -36,6 +36,7 @@ use smallvec::SmallVec;
 use crate::{
     dependencies::{GitDependencyStore, MaterializedDependency},
     entities::{EntityHandle, EntityStore},
+    host_modules::HostValue,
     metrics::Metrics,
     policy::Policy,
     runtime::{ApplicationGeneration, CallbackArena, CallbackEntry},
@@ -342,6 +343,7 @@ pub(crate) mod exports {
         "InputState",
         "NumberInput",
         "Textarea",
+        "TextView",
         "TextareaState",
         "SliderState",
         "Slider",
@@ -363,7 +365,8 @@ pub(crate) mod exports {
     /// The performance overlay, owned by `gpui-fps`.
     pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
 
-    /// Shell-owned shared types. This module currently has no run-time values.
+    /// Shell-owned shared types. Module components are exported from their
+    /// host modules rather than through a public generic dispatcher.
     pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
 
@@ -2994,6 +2997,54 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
+    pub(crate) fn dispatch_host_event(
+        self: &Rc<Self>,
+        id: CallbackId,
+        payload: HostValue,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("host component callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = host_modules::into_js(ctx, payload)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in host component handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
     /// Reports which way a `NumberInput` stepped, by the two names base's
     /// `StepAction` carries.
     ///
@@ -4839,6 +4890,14 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
+    component: (module, name) => ({
+      new: (id, props) => {
+        if (typeof id !== "string" || id.length === 0) {
+          throw new TypeError("a component needs a non-empty string id");
+        }
+        return element(__component(String(module), String(name), id, props ?? {}));
+      },
+    }),
     __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
@@ -4976,6 +5035,10 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    TextView: {
+      html: (id, text) => element(__text_view(String(id), String(text), "html")),
+      markdown: (id, text) => element(__text_view(String(id), String(text), "markdown")),
+    },
     CalendarState: { new: () => calendarState(__calendar_state_new()) },
     SliderState: {
       new: (options) => {
@@ -5092,6 +5155,7 @@ impl ShellRuntime {
             let behaviors = rquickjs::Array::new(ctx.clone())?;
             for (index, name) in [
                 "on_click",
+                "on_link_click",
                 "on_mouse_move",
                 "on_hover",
                 "on_key_down",
@@ -5112,6 +5176,8 @@ impl ShellRuntime {
                 "on_dismiss",
                 "on_step",
                 "disabled",
+                "selectable",
+                "scrollable",
                 "selected",
                 "checked",
                 "accessibility_label",
@@ -5163,7 +5229,47 @@ impl ShellRuntime {
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
+            let component_runtime = runtime.clone();
+            globals.set(
+                "__component",
+                Func::from(move |ctx: Ctx<'_>, module: String, name: String, id: String, props: host_modules::Argument| -> JsResult<SpecId> {
+                    let props = props.0;
+                    if id.is_empty() {
+                        return Err(Exception::throw_type(&ctx, "a component needs a non-empty string id"));
+                    }
+                    let registry = crate::host_modules::modules();
+                    registry
+                        .get(&module)
+                        .and_then(|found| found.resolve_component(&name))
+                        .map_err(|error| Exception::throw_message(&ctx, error.message()))?;
+                    Ok(upgrade(&component_runtime, &ctx)?.push_node(Component::Module(
+                        crate::spec::ModuleComponentSpec {
+                            module: module.into(),
+                            component: name.into(),
+                            id: id.into(),
+                            props,
+                            policy: crate::scope::policy(),
+                        },
+                    )))
+                }),
+            )?;
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
+            let text_view_runtime = runtime.clone();
+            globals.set(
+                "__text_view",
+                Func::from(move |ctx: Ctx<'_>, id: String, text: String, format: String| -> JsResult<SpecId> {
+                    let format = match format.as_str() {
+                        "html" => crate::spec::TextViewFormat::Html,
+                        "markdown" => crate::spec::TextViewFormat::Markdown,
+                        _ => return Err(Exception::throw_type(&ctx, "TextView format must be html or markdown")),
+                    };
+                    Ok(upgrade(&text_view_runtime, &ctx)?.push_node(Component::TextView {
+                        id: id.into(),
+                        text: text.into(),
+                        format,
+                    }))
+                }),
+            )?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
             text_constructor(
@@ -5847,6 +5953,7 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "on_click"
+            | "on_link_click"
             | "on_resize"
             | "on_change"
             | "on_open_change"
@@ -5902,6 +6009,8 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "disabled"
+            | "selectable"
+            | "scrollable"
             | "selected"
             | "checked"
             | "accessibility_label"
@@ -5953,6 +6062,8 @@ impl ShellRuntime {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
+                    "selectable" => "selectable",
+                    "scrollable" => "scrollable",
                     "selected" => "selected",
                     "checked" => "checked",
                     "tooltip" => "tooltip",
@@ -7004,6 +7115,7 @@ fn instantiate_template_binding(
 fn callback_op_name(method: &str) -> Option<&'static str> {
     Some(match method {
         "on_click" => "on_click",
+        "on_link_click" => "on_link_click",
         "on_mouse_move" => "on_mouse_move",
         "on_hover" => "on_hover",
         "on_key_down" => "on_key_down",

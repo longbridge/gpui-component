@@ -18,6 +18,7 @@ use std::{collections::HashSet, rc::Rc};
 use gpui::SharedString;
 use smallvec::SmallVec;
 
+use crate::HostValue;
 use crate::value::Bridged;
 
 /// Index of a node inside a [`SpecArena`].
@@ -160,12 +161,55 @@ pub enum BackgroundKind {
     },
 }
 
+#[derive(Clone)]
+pub(crate) struct ModuleComponentSpec {
+    pub(crate) module: SharedString,
+    pub(crate) component: SharedString,
+    pub(crate) id: SharedString,
+    pub(crate) props: HostValue,
+    pub(crate) policy: Rc<crate::policy::Policy>,
+}
+
+impl std::fmt::Debug for ModuleComponentSpec {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ModuleComponentSpec")
+            .field("module", &self.module)
+            .field("component", &self.component)
+            .field("id", &self.id)
+            .field("props", &self.props)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for ModuleComponentSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.module == other.module
+            && self.component == other.component
+            && self.id == other.id
+            && self.props == other.props
+            && Rc::ptr_eq(&self.policy, &other.policy)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextViewFormat {
+    Html,
+    Markdown,
+}
+
 /// Which constructor produced a node.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Component {
+pub(crate) enum Component {
     Div,
     HFlex,
     VFlex,
+    Module(ModuleComponentSpec),
+    TextView {
+        id: SharedString,
+        text: SharedString,
+        format: TextViewFormat,
+    },
     /// A retained nested script view. The frozen description keeps the entity
     /// itself alive, so releasing the numeric handle cannot invalidate a frame
     /// that was already published.
@@ -497,6 +541,8 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
+            Component::Module(_) => "module_component",
+            Component::TextView { .. } => "TextView",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
             Component::Button(_) => "Button",
@@ -1121,6 +1167,19 @@ impl SpecArena {
         out.push_str(&"  ".repeat(depth));
         out.push_str(component.name());
         match component {
+            Component::Module(spec) => out.push_str(&format!(
+                " {}.{} {:?} props={:?}",
+                spec.module, spec.component, spec.id, spec.props
+            )),
+            Component::TextView { id, text, format } => out.push_str(&format!(
+                " {} {:?} {:?}",
+                match format {
+                    TextViewFormat::Html => "html",
+                    TextViewFormat::Markdown => "markdown",
+                },
+                id,
+                text,
+            )),
             Component::Text(value)
             | Component::Button(value)
             | Component::Link(value)

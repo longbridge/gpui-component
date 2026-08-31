@@ -269,7 +269,7 @@ fn host_modules() -> String {
                 // Rust type of that name carries, so `any` would be wider than
                 // the runtime: a script passing a function or a Symbol would
                 // type-check and then be refused at the call.
-                out.push_str("  import { HostValue } from \"gpui\";\n\n");
+                out.push_str("  import { Element, HostValue } from \"gpui\";\n\n");
                 for function in module.function_names() {
                     // Permissive about shape, but not wrong about the one thing
                     // the caller has to get right: an asynchronous export is
@@ -282,6 +282,12 @@ fn host_modules() -> String {
                     let _ = writeln!(
                         out,
                         "  export function {function}(...args: HostValue[]): {returns};"
+                    );
+                }
+                for component in module.component_names() {
+                    let _ = writeln!(
+                        out,
+                        "  export const {component}: {{ new(id: string, props: HostValue): Element }};"
                     );
                 }
             }
@@ -2050,6 +2056,17 @@ const BASE: &str = r#"  /** A row. */
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+  export interface TextViewElement extends Element {
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): TextViewElement;
+    selectable(value?: boolean): TextViewElement;
+    scrollable(value?: boolean): TextViewElement;
+  }
+  export const TextView: {
+    html(id: string, html: string): TextViewElement;
+    markdown(id: string, markdown: string): TextViewElement;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -3469,6 +3486,8 @@ const SCHEDULING: &str = r#"
 
 #[cfg(test)]
 mod tests {
+    use gpui::IntoElement as _;
+
     use super::*;
 
     /// The element methods that are not style methods, so a test can subtract
@@ -3778,7 +3797,8 @@ mod tests {
         crate::export_module(
             crate::HostModule::new("audit")
                 .function("observe", |_| Ok(crate::HostValue::Null))
-                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) })),
+                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) }))
+                .component("AuditPanel", |_, _, _| gpui::div().into_any_element()),
         )
         .expect("`audit` is not reserved");
 
@@ -3807,7 +3827,7 @@ mod tests {
         // `HostValue` rather than `any`: the boundary is not wider than the
         // Rust type of that name, and the declarations should not claim it is.
         assert!(
-            declarations.contains("  import { HostValue } from \"gpui\";"),
+            declarations.contains("  import { Element, HostValue } from \"gpui\";"),
             "the permissive signatures below need this import to resolve"
         );
         assert!(
@@ -3817,6 +3837,9 @@ mod tests {
             declarations
                 .contains("  export function drain(...args: HostValue[]): Promise<HostValue>;")
         );
+        assert!(declarations.contains(
+            "  export const AuditPanel: { new(id: string, props: HostValue): Element };"
+        ));
 
         crate::clear_exported_modules();
         assert!(
@@ -4103,6 +4126,23 @@ mod tests {
     fn render_accepts_every_runtime_renderable_shape() {
         let declarations = declarations();
         assert!(declarations.contains("abstract render(cx: Context): Element | Entity | string;"));
+    }
+
+    #[test]
+    fn text_view_behaviors_are_not_declared_on_every_element() {
+        let declarations = declarations();
+        let element = declarations
+            .split_once("export interface Element")
+            .expect("Element declaration")
+            .1
+            .split_once("\n  }")
+            .expect("end of Element declaration")
+            .0;
+        assert!(!element.contains("on_link_click("));
+        assert!(!element.contains("selectable("));
+        assert!(!element.contains("scrollable("));
+        assert!(declarations.contains("export interface TextViewElement extends Element"));
+        assert!(declarations.contains("html(id: string, html: string): TextViewElement;"));
     }
 
     #[test]

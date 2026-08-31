@@ -56,6 +56,7 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+mod component;
 pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;
@@ -71,6 +72,7 @@ pub(crate) mod process;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
+mod script_callback;
 pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
@@ -86,6 +88,7 @@ pub(crate) mod watch;
 
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
+pub use component::ComponentArgs;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use host_modules::{
