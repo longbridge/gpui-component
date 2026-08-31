@@ -541,7 +541,7 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
-            Component::Module(_) => "component",
+            Component::Module(_) => "module_component",
             Component::TextView { .. } => "TextView",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",

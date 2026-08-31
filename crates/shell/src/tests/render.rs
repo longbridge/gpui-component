@@ -101,7 +101,7 @@ export default class HostBody extends View {
         .expect("render");
 
     assert!(
-        tree.contains("component mail.Body \"message-body\""),
+        tree.contains("module_component mail.Body \"message-body\""),
         "{tree}"
     );
     assert!(tree.contains("html"), "props missing from dump: {tree}");
