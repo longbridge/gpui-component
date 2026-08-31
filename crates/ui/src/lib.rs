@@ -1,7 +1,6 @@
 use gpui::App;
 use std::ops::Deref;
 
-mod async_util;
 mod component_traits;
 mod element_ext;
 pub mod global_state;
@@ -136,7 +135,6 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     menu::init(cx);
     table::init(cx);
-    text::init(cx);
     tooltip::init(cx);
 }
 

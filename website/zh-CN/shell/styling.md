@@ -106,7 +106,7 @@ render(cx) {
 | 表面 | `surface`、`surface_foreground` |
 | 强调 | `primary`、`primary_foreground`、`secondary`、`secondary_foreground` |
 | 弱化 | `muted`、`muted_foreground` |
-| 高亮 | `accent`、`accent_foreground` |
+| 高亮 | `accent`、`accent_foreground`、`selection` |
 | 危险 | `destructive`、`destructive_foreground` |
 | 框架 | `border`、`input`、`ring` |
 

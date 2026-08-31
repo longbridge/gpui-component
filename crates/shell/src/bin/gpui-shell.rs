@@ -262,7 +262,6 @@ fn run(arguments: Arguments) {
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
             gpui_shell::init(cx);
-            install_palette(cx);
 
             if arguments.is_development() {
                 // Before `ShellRuntime::new`: the policy is read when the
@@ -382,7 +381,6 @@ fn check(arguments: CheckArguments) -> ! {
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
             gpui_shell::init(cx);
-            install_palette(cx);
 
             let runtime = match ShellRuntime::new(cx) {
                 Ok(runtime) => runtime,
@@ -535,49 +533,6 @@ fn grant_local_access(root: &Path, manifest: Option<&gpui_shell::plugin::PluginM
 
     gpui_shell::set_capabilities(local_capabilities(root, &store, manifest));
     tracing::debug!("storage: {}", store.display());
-}
-
-/// The palette this command ships.
-///
-/// It lives with the binary rather than with the runtime because a palette is a
-/// product decision: `gpui-shell` the command is an application and gets to
-/// have a look, while `gpui_shell` the library must not decide how everything
-/// built on it appears. An embedder installs its own the same way.
-const PALETTE: &str = include_str!("default-tokens.json");
-
-#[derive(serde::Deserialize)]
-struct CommandThemes {
-    light: CommandTheme,
-}
-
-#[derive(serde::Deserialize)]
-struct CommandTheme {
-    colors: gpui_base::ColorTokens,
-    #[serde(default)]
-    radius: gpui_base::RadiusTokens,
-    #[serde(default)]
-    spacing: gpui_base::SpacingTokens,
-    #[serde(default)]
-    typography: gpui_base::TypographyTokens,
-    #[serde(default)]
-    shadow: gpui_base::ShadowTokens,
-}
-
-fn install_palette(cx: &mut App) {
-    match serde_json::from_str::<CommandThemes>(PALETTE) {
-        Ok(themes) => {
-            gpui_base::Theme::global_mut(cx).tokens = gpui_base::SemanticThemeTokens {
-                colors: themes.light.colors,
-                radius: themes.light.radius,
-                spacing: themes.light.spacing,
-                typography: themes.light.typography,
-                shadow: themes.light.shadow,
-            };
-        }
-        // The file is compiled in, so a parse error is a build-time mistake
-        // that reached a user; the neutral fallback keeps the window legible.
-        Err(error) => tracing::error!("shipped palette did not parse: {error}"),
-    }
 }
 
 /// Reads and validates inert application metadata before any entry code runs.

@@ -49,6 +49,7 @@ mod radio_group;
 mod resizable;
 mod scrollbar;
 mod select;
+mod selectable_text;
 mod sheet;
 pub mod slider;
 mod state_style;
@@ -56,6 +57,7 @@ mod styled;
 mod switch;
 mod table;
 mod tabs;
+pub mod text;
 mod text_boundary;
 mod text_selection;
 mod theme;
@@ -141,6 +143,7 @@ pub use scrollbar::{
     ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,
 };
 pub use select::Select;
+pub use selectable_text::SelectableText;
 pub use sheet::Sheet;
 pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
@@ -152,6 +155,10 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+pub use text::{
+    MarkdownExtensions, MarkdownNode, MarkdownPlugin, SelectionFormat, TableData, Text, TextView,
+    TextViewDefaults, TextViewPlugin, TextViewState, TextViewStyle, html, markdown,
+};
 pub use text_selection::{
     TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
     TextSelectionEvent, TextSelectionHandle, TextSelectionLayer, TextSelectionProjection,
@@ -193,4 +200,5 @@ pub fn init(cx: &mut App) {
     number_input::init(cx);
     input::init(cx);
     tree::init(cx);
+    text::init(cx);
 }

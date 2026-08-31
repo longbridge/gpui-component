@@ -34,7 +34,7 @@ cargo run -p gpui-base --example motion
 
 已知时长、向目标值变化时使用 `transition`。每个独立运动值都要有稳定 ID：
 
-```rust,ignore
+```rust
 let opacity = transition(
     ("save-dialog", "opacity"),
     if open { 1.0 } else { 0.0 },
@@ -52,7 +52,7 @@ let opacity = transition(
 
 目标可能在运动中变化时使用 `spring`。它同时保留位置与速度，适合选择指示器和空间值回落。
 
-```rust,ignore
+```rust
 let x = spring(
     "selected-indicator",
     selected_x,

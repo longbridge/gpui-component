@@ -1,10 +1,10 @@
 use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
-use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
-use gpui_base::{
+use crate::{
     TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint, TextSelectionEvent,
     TextSelectionHandle, TextSelectionRegistration, TextSelectionSnapshot,
 };
+use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 
 use super::TextViewState;
 
