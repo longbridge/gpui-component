@@ -1,104 +1,338 @@
-mod document;
-mod format;
-mod inline;
-mod inline_flow;
-mod markdown_ext;
-mod node;
-pub(crate) mod selection;
-mod selection_adapter;
-mod state;
+//! Compatibility facade for rich text now owned by `gpui-base`.
+
+mod compat;
 mod style;
-mod text_view;
-mod utils;
+
+pub use compat::{
+    Text, TextView, TextViewLayoutState, TextViewPlugin, TextViewPrepaintState, html, markdown,
+};
+pub use gpui_base::text::{
+    MarkdownBlockParserFn, MarkdownBlockRenderFn, MarkdownExtensions, MarkdownNode,
+    MarkdownParseContext, MarkdownPlugin, SelectionFormat, TableData, TextViewState, markdown_ast,
+};
+pub use style::TextViewStyle;
+
+#[cfg(feature = "tree-sitter")]
+use std::{cell::RefCell, collections::HashMap};
+
+use gpui::Styled as _;
+#[cfg(feature = "tree-sitter")]
+use gpui_base::input::{InputEdit, Point, RopeExt as _};
+#[cfg(feature = "tree-sitter")]
+use ropey::Rope;
+
+#[cfg(feature = "tree-sitter")]
+use crate::highlighter::{LanguageRegistry, SyntaxHighlighter};
+
 #[cfg(test)]
 mod window_selection;
 
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
-pub use markdown_ext::*;
-pub use node::TableData;
-pub use state::*;
-pub use style::*;
-pub use text_view::*;
+/// Derives the Base rich-text style installed by the component theme adapter.
+pub(crate) fn base_text_view_style(theme: &crate::Theme) -> gpui_base::TextViewStyle {
+    let radius = theme.semantic_tokens().radius.md;
+    let mut table = gpui::StyleRefinement::default();
+    table.corner_radii.top_left = Some(radius.into());
+    table.corner_radii.top_right = Some(radius.into());
+    table.corner_radii.bottom_left = Some(radius.into());
+    table.corner_radii.bottom_right = Some(radius.into());
+    let mut code_block = gpui::StyleRefinement::default();
+    code_block.corner_radii = table.corner_radii.clone();
+    let table_head = gpui::StyleRefinement::default()
+        .bg(theme.table_head)
+        .text_color(theme.table_head_foreground);
 
-pub(crate) fn init(cx: &mut App) {
-    state::init(cx);
+    gpui_base::TextViewStyle::default()
+        .with_foreground(theme.foreground)
+        .with_muted_foreground(theme.muted_foreground)
+        .with_link(theme.link)
+        .with_selection(theme.selection)
+        .with_code_background(theme.muted)
+        .with_border(theme.border)
+        .with_code_block(code_block)
+        .with_table(table)
+        .with_table_head(table_head)
+        .with_inline_code(gpui::HighlightStyle {
+            background_color: Some(theme.accent),
+            ..Default::default()
+        })
+        .with_dark(theme.is_dark())
 }
 
-/// Create a new markdown text view with code location as id.
-#[track_caller]
-pub fn markdown(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
-    TextView::markdown(id, source)
+pub(crate) fn install_text_view_defaults(theme: &crate::Theme, cx: &mut gpui::App) {
+    let defaults = gpui_base::TextViewDefaults::new().with_style(base_text_view_style(theme));
+
+    #[cfg(feature = "tree-sitter")]
+    let defaults = defaults.with_code_block_highlighter(component_code_block_highlighter(
+        theme.highlight_theme.clone(),
+    ));
+
+    defaults.install(cx);
 }
 
-/// Create a new html text view with code location as id.
-#[track_caller]
-pub fn html(source: impl Into<SharedString>) -> TextView {
-    let id: ElementId = ElementId::CodeLocation(*std::panic::Location::caller());
-    TextView::html(id, source)
-}
-
-#[derive(IntoElement, Clone)]
-pub enum Text {
-    String(SharedString),
-    TextView(Box<TextView>),
-}
-
-impl From<SharedString> for Text {
-    fn from(s: SharedString) -> Self {
-        Self::String(s)
-    }
-}
-
-impl From<&str> for Text {
-    fn from(s: &str) -> Self {
-        Self::String(SharedString::from(s.to_string()))
-    }
-}
-
-impl From<String> for Text {
-    fn from(s: String) -> Self {
-        Self::String(s.into())
-    }
-}
-
-impl From<TextView> for Text {
-    fn from(e: TextView) -> Self {
-        Self::TextView(Box::new(e))
-    }
-}
-
-impl Text {
-    /// Set the style for [`TextView`].
-    ///
-    /// Do nothing if this is `String`.
-    pub fn style(self, style: TextViewStyle) -> Self {
-        match self {
-            Self::String(s) => Self::String(s),
-            Self::TextView(e) => Self::TextView(Box::new(e.style(style))),
+#[cfg(feature = "tree-sitter")]
+pub(crate) fn component_code_block_highlighter(
+    highlight_theme: std::sync::Arc<crate::highlighter::HighlightTheme>,
+) -> impl Fn(&gpui_base::text::CodeBlock) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)>
++ Send
++ Sync
++ 'static {
+    move |block| {
+        thread_local! {
+            static HIGHLIGHTERS: RefCell<HashMap<gpui::SharedString, SyntaxHighlighter>> =
+                RefCell::new(HashMap::new());
         }
-    }
 
-    /// Get the text content.
-    pub(crate) fn get_text(&self, cx: &App) -> SharedString {
-        match self {
-            Self::String(s) => s.clone(),
-            Self::TextView(view) => {
-                if let Some(state) = &view.state {
-                    state.read(cx).source()
-                } else {
-                    SharedString::default()
-                }
+        let Some(lang) = block.lang() else {
+            return Vec::new();
+        };
+        let code = block.code();
+        HIGHLIGHTERS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let highlighter = cache
+                .entry(lang.clone())
+                .or_insert_with(|| SyntaxHighlighter::new(lang.as_ref()));
+            if let Some(config) = LanguageRegistry::singleton().language(lang.as_ref())
+                && highlighter.language() != &config.name
+            {
+                *highlighter = SyntaxHighlighter::new(lang.as_ref());
             }
-        }
+
+            let old_end_byte = highlighter.text().len();
+            let old_end_position = highlighter.text().offset_to_point(old_end_byte);
+            let code_rope = Rope::from_str(code.as_ref());
+            let edit = InputEdit {
+                start_byte: 0,
+                old_end_byte,
+                new_end_byte: code.len(),
+                start_position: Point::new(0, 0),
+                old_end_position,
+                new_end_position: code_rope.offset_to_point(code.len()),
+            };
+            highlighter.update_input(Some(edit), &code_rope, None);
+            highlighter.styles(&(0..code.len()), highlight_theme.as_ref())
+        })
     }
 }
 
-impl RenderOnce for Text {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        match self {
-            Self::String(s) => s.into_any_element(),
-            Self::TextView(e) => e.into_any_element(),
+#[cfg(test)]
+mod tests {
+    use crate::Theme;
+
+    /// The component highlighter is the only place that still knows about
+    /// `LanguageRegistry` and `HighlightTheme`, so these two cases follow it
+    /// here from the code block it used to live in.
+    #[cfg(feature = "tree-sitter")]
+    mod code_block_highlighter {
+        use std::ops::Range;
+
+        use gpui::{HighlightStyle, Hsla, SharedString};
+        use gpui_base::text::CodeBlock;
+
+        use crate::highlighter::{HighlightTheme, LanguageConfig, LanguageRegistry};
+
+        fn register_json(lang: &SharedString) {
+            LanguageRegistry::singleton().register(
+                lang.as_ref(),
+                &LanguageConfig::new(
+                    lang.clone(),
+                    tree_sitter_json::LANGUAGE.into(),
+                    vec![],
+                    "(number) @number",
+                    "",
+                    "",
+                ),
+            );
         }
+
+        fn color_at(
+            styles: &[(Range<usize>, HighlightStyle)],
+            range: Range<usize>,
+        ) -> Option<Hsla> {
+            styles
+                .iter()
+                .find(|(span, _)| span.start <= range.start && span.end >= range.end)
+                .and_then(|(_, style)| style.color)
+        }
+
+        #[test]
+        fn registering_a_language_refreshes_the_cached_highlighter() {
+            let lang = SharedString::from("json-cache-test");
+            let code = SharedString::from(r#"{"value": 42}"#);
+            let number = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+            let highlighter =
+                super::super::component_code_block_highlighter(HighlightTheme::default_light());
+
+            // The first call caches a plain-text highlighter for the unknown
+            // language; the cache must not outlive the registration.
+            let block = CodeBlock::from_code(code.clone(), Some(lang.clone()));
+            assert_eq!(color_at(&highlighter(&block), number.clone()), None);
+
+            register_json(&lang);
+
+            let block = CodeBlock::from_code(code, Some(lang));
+            assert!(
+                color_at(&highlighter(&block), number).is_some(),
+                "a newly registered language must reach the cached highlighter"
+            );
+        }
+
+        #[test]
+        fn styles_follow_the_highlight_theme_they_were_built_with() {
+            let lang = SharedString::from("json-theme-test");
+            register_json(&lang);
+            let code = SharedString::from(r#"{"value": 42}"#);
+            let number = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+
+            let light = HighlightTheme::default_light();
+            let dark = HighlightTheme::default_dark();
+            let light_number = light.style("number").and_then(|style| style.color);
+            let dark_number = dark.style("number").and_then(|style| style.color);
+            assert_ne!(
+                light_number, dark_number,
+                "the default themes must use different number colors"
+            );
+
+            let block = CodeBlock::from_code(code, Some(lang));
+            let light_styles = super::super::component_code_block_highlighter(light)(&block);
+            let dark_styles = super::super::component_code_block_highlighter(dark)(&block);
+
+            assert_eq!(color_at(&light_styles, number.clone()), light_number);
+            assert_eq!(
+                color_at(&dark_styles, number),
+                dark_number,
+                "a theme change must not reuse syntax styles from the previous theme"
+            );
+        }
+    }
+
+    #[test]
+    fn component_theme_adapter_maps_text_colors_without_highlighting() {
+        let theme = Theme::default();
+        let style = super::base_text_view_style(&theme);
+
+        assert_eq!(style.foreground(), theme.foreground);
+        assert_eq!(style.muted_foreground(), theme.muted_foreground);
+        assert_eq!(style.link(), theme.link);
+        assert_eq!(style.selection(), theme.selection);
+        assert_eq!(style.inline_code().background_color, Some(theme.accent));
+        let radius = theme.semantic_tokens().radius.md;
+        assert_eq!(style.table().corner_radii.top_left, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.top_right, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.bottom_left, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.bottom_right, Some(radius.into()));
+    }
+
+    #[test]
+    fn component_text_view_table_respects_square_base_radius_token() {
+        let mut theme = Theme::default();
+        theme.radius = gpui::px(0.);
+
+        let style = super::base_text_view_style(&theme);
+        let square = Some(gpui::px(0.).into());
+        assert_eq!(style.table().corner_radii.top_left, square);
+        assert_eq!(style.table().corner_radii.top_right, square);
+        assert_eq!(style.table().corner_radii.bottom_left, square);
+        assert_eq!(style.table().corner_radii.bottom_right, square);
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[gpui::test]
+    fn component_initialization_installs_default_code_highlighting(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+
+        cx.update(|cx| {
+            assert!(gpui_base::TextViewDefaults::global(cx).has_code_block_highlighter());
+        });
+    }
+
+    #[test]
+    fn legacy_text_paths_reexport_base_implementation() {
+        let mut style = super::TextViewStyle::default();
+        style.highlight_theme = crate::highlighter::HighlightTheme::default_dark();
+
+        let _: super::TextView = super::markdown("# compatible")
+            .style(style)
+            .selectable(true)
+            .scrollable(true);
+    }
+
+    #[test]
+    fn legacy_text_view_keeps_element_associated_types() {
+        fn assert_element_types<T>()
+        where
+            T: gpui::Element<
+                    RequestLayoutState = super::TextViewLayoutState,
+                    PrepaintState = super::TextViewPrepaintState,
+                >,
+        {
+        }
+
+        assert_element_types::<super::TextView>();
+    }
+
+    #[test]
+    fn legacy_default_style_keeps_active_component_theme_colors() {
+        let mut theme = Theme::default();
+        theme.foreground = gpui::rgb(0xf4f4f5).into();
+        theme.link = gpui::rgb(0x38bdf8).into();
+        theme.selection = gpui::rgba(0x2563eb66).into();
+
+        let style = super::compat::resolve_component_style(&theme, super::TextViewStyle::default());
+
+        assert_eq!(style.foreground(), theme.foreground);
+        assert_eq!(style.link(), theme.link);
+        assert_eq!(style.selection(), theme.selection);
+    }
+
+    #[test]
+    fn legacy_table_refinement_keeps_component_radius() {
+        let theme = Theme::default();
+        let mut table = gpui::StyleRefinement::default();
+        table.overflow.x = Some(gpui::Overflow::Scroll);
+
+        let style = super::compat::resolve_component_style(
+            &theme,
+            super::TextViewStyle::default().table(table),
+        );
+
+        let radius = Some(theme.semantic_tokens().radius.md.into());
+        assert_eq!(style.table().corner_radii.top_left, radius);
+        assert_eq!(style.table().corner_radii.top_right, radius);
+        assert_eq!(style.table().corner_radii.bottom_left, radius);
+        assert_eq!(style.table().corner_radii.bottom_right, radius);
+        assert_eq!(style.table().overflow.x, Some(gpui::Overflow::Scroll));
+    }
+
+    #[test]
+    fn legacy_partial_styles_refine_component_theme_defaults() {
+        let theme = Theme::default();
+        let mut table_head = gpui::StyleRefinement::default();
+        table_head.text.font_weight = Some(gpui::FontWeight::BOLD);
+        let inline_code = gpui::HighlightStyle {
+            font_style: Some(gpui::FontStyle::Italic),
+            ..Default::default()
+        };
+
+        let style = super::compat::resolve_component_style(
+            &theme,
+            super::TextViewStyle::default()
+                .table_head(table_head)
+                .inline_code(inline_code),
+        );
+
+        assert_eq!(style.table_head().background, Some(theme.table_head.into()));
+        assert_eq!(
+            style.table_head().text.color,
+            Some(theme.table_head_foreground)
+        );
+        assert_eq!(
+            style.table_head().text.font_weight,
+            Some(gpui::FontWeight::BOLD)
+        );
+        assert_eq!(style.inline_code().background_color, Some(theme.accent));
+        assert_eq!(
+            style.inline_code().font_style,
+            Some(gpui::FontStyle::Italic)
+        );
     }
 }

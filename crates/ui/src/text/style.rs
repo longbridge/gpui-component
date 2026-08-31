@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use gpui::{App, HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
 
-use crate::{ActiveTheme as _, highlighter::HighlightTheme};
+use crate::highlighter::HighlightTheme;
 
-/// TextViewStyle used to customize the style for [`TextView`].
+/// TextViewStyle used to customize the style for [`super::TextView`].
+///
+/// This is the component-level style. It is folded onto the style the active
+/// [`crate::Theme`] already derived, so a field left at its default keeps the
+/// themed value rather than overriding it with a neutral one.
 #[derive(Clone)]
 pub struct TextViewStyle {
     /// Gap of each paragraphs, default is 1 rem.
@@ -13,8 +17,8 @@ pub struct TextViewStyle {
     pub heading_base_font_size: Pixels,
     /// Function to calculate heading font size based on heading level (1-6).
     ///
-    /// The first parameter is the heading level (1-6), the second parameter is the base font size.
-    /// The second parameter is the base font size.
+    /// The first parameter is the heading level (1-6), the second parameter is
+    /// the base font size.
     pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
@@ -43,7 +47,26 @@ pub struct TextViewStyle {
     /// Default is [`HighlightStyle::default()`], the `background_color` will
     /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
+    /// Whether content-specific rendering should use dark-mode assets.
+    /// Whether content-specific rendering should use dark-mode assets.
     pub is_dark: bool,
+}
+
+impl Default for TextViewStyle {
+    fn default() -> Self {
+        Self {
+            paragraph_gap: rems(1.),
+            heading_base_font_size: px(14.),
+            heading_font_size: None,
+            highlight_theme: HighlightTheme::default_light().clone(),
+            code_block: StyleRefinement::default(),
+            table: StyleRefinement::default(),
+            table_head: StyleRefinement::default(),
+            table_cell: StyleRefinement::default(),
+            inline_code: HighlightStyle::default(),
+            is_dark: false,
+        }
+    }
 }
 
 impl PartialEq for TextViewStyle {
@@ -68,30 +91,14 @@ impl PartialEq for TextViewStyle {
     }
 }
 
-impl Default for TextViewStyle {
-    fn default() -> Self {
-        Self {
-            paragraph_gap: rems(1.),
-            heading_base_font_size: px(14.),
-            heading_font_size: None,
-            highlight_theme: HighlightTheme::default_light().clone(),
-            code_block: StyleRefinement::default(),
-            table: StyleRefinement::default(),
-            table_head: StyleRefinement::default(),
-            table_cell: StyleRefinement::default(),
-            inline_code: HighlightStyle::default(),
-            is_dark: false,
-        }
-    }
-}
-
 impl TextViewStyle {
     /// Set paragraph gap, default is 1 rem.
     pub fn paragraph_gap(mut self, gap: Rems) -> Self {
         self.paragraph_gap = gap;
         self
     }
-
+    /// Set the function that resolves a heading's font size from its level
+    /// (1-6) and [`Self::heading_base_font_size`].
     pub fn heading_font_size<F>(mut self, f: F) -> Self
     where
         F: Fn(u8, Pixels) -> Pixels + Send + Sync + 'static,
@@ -99,19 +106,16 @@ impl TextViewStyle {
         self.heading_font_size = Some(Arc::new(f));
         self
     }
-
     /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
         self
     }
-
     /// Set style for inline code spans.
     pub fn inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
         self
     }
-
     /// Set extra style for the table container.
     ///
     /// Set `overflow_x: scroll` on the refinement for adaptive layout: cells
@@ -121,13 +125,11 @@ impl TextViewStyle {
         self.table = style;
         self
     }
-
     /// Set extra style for the table header row.
     pub fn table_head(mut self, style: StyleRefinement) -> Self {
         self.table_head = style;
         self
     }
-
     /// Set extra style for each table cell.
     ///
     /// With the scroll table layout, `white_space: nowrap` here keeps cells
@@ -136,42 +138,5 @@ impl TextViewStyle {
     pub fn table_cell(mut self, style: StyleRefinement) -> Self {
         self.table_cell = style;
         self
-    }
-
-    /// Returns the [`HighlightStyle`] to use for inline code,
-    /// fallback `background_color` to `cx.theme().accent`, if it is `None`.
-    pub(crate) fn inline_code_highlight(&self, cx: &App) -> HighlightStyle {
-        let mut style = self.inline_code;
-        if style.background_color.is_none() {
-            style.background_color = Some(cx.theme().accent);
-        }
-        style
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn selection_layout_fingerprint_covers_callback_table_and_theme_fields() {
-        let base = TextViewStyle::default();
-        let heading = base.clone().heading_font_size(|_, size| size);
-        assert!(heading == base.clone().heading_font_size(|_, size| size));
-        assert!(heading != base.clone().heading_font_size(|_, size| size * 2.));
-
-        let mut table = StyleRefinement::default();
-        table.text.white_space = Some(gpui::WhiteSpace::Nowrap);
-        assert!(base != base.clone().table_cell(table));
-
-        let mut dark = base.clone();
-        dark.is_dark = true;
-        assert!(base != dark);
-    }
-
-    #[test]
-    fn cloning_preserves_the_same_heading_callback_fingerprint() {
-        let style = TextViewStyle::default().heading_font_size(|_, size| size);
-        assert!(style == style.clone());
     }
 }

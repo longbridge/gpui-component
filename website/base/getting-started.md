@@ -53,6 +53,42 @@ Button::new("save")
 
 Keep each `ElementId` stable across renders so GPUI can preserve element and focus state. Controlled components such as Checkbox, Switch, Radio, and Toggle report the next value through callbacks; store that value in your view and pass it back on the next render.
 
+## Default color tokens
+
+`gpui-base` provides readable light and dark semantic palettes through
+`ColorTokens::light()` and `ColorTokens::dark()`. `ColorTokens::default()` uses
+the light palette. Both palettes use `Hsla` values and match the semantic roles
+of the default `gpui-component` themes.
+
+```rust
+use gpui_base::{ColorTokens, SemanticThemeTokens, Theme};
+
+// Pick the palette that matches the application's current appearance.
+let colors = if is_dark {
+    ColorTokens::dark()
+} else {
+    ColorTokens::light()
+};
+
+Theme::global_mut(cx).tokens = SemanticThemeTokens {
+    colors,
+    ..Default::default()
+};
+```
+
+The palette contains semantic roles rather than component-specific colors:
+`background` and `foreground`, `surface` and `surface_foreground`, `primary`,
+`secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, and
+`selection`, including the corresponding foreground roles. Base components
+derive what they can from these roles — a link takes `primary`, for instance —
+rather than adding a component-specific token for it. `selection` is its own
+role because no other one can stand in for it: it is painted under the glyphs
+and has to stay legible there, which neither `accent` nor `ring` guarantees.
+
+Calling `gpui_component::init` projects its active light or dark theme into the
+same Base tokens automatically. Applications that use only `gpui-base` should
+install the matching palette when their appearance mode changes.
+
 ## Run the shared examples
 
 The examples used by this website also run as a native GPUI application:

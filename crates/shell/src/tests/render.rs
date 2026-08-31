@@ -8,8 +8,15 @@
 use crate::{
     HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
-use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
-use std::{cell::Cell, path::PathBuf, rc::Rc};
+use gpui::{
+    AppContext as _, IntoElement as _, Modifiers, ParentElement as _, TestAppContext,
+    VisualTestContext, point, px,
+};
+use std::{
+    cell::{Cell, RefCell},
+    path::PathBuf,
+    rc::Rc,
+};
 
 const COUNTER: &str = r#"
 import { div, View } from "gpui";
@@ -47,6 +54,192 @@ export default class Counter extends View {
 /// The entry name only affects diagnostics, but each engine has its own
 /// convention and the tests should read the way real code does.
 const ENTRY: &str = "counter.js";
+
+#[gpui::test]
+fn component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let received = Rc::new(RefCell::new(None));
+    let received_by_builder = received.clone();
+    let module = HostModule::new("mail").component("Body", move |mut args, _, _| {
+        *received_by_builder.borrow_mut() = Some((
+            args.id().to_owned(),
+            args.props().clone(),
+            args.children().len(),
+        ));
+        gpui::div()
+            .children(args.take_children())
+            .into_any_element()
+    });
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(module)
+            .expect("component module"),
+    );
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { div, View } from "gpui";
+import { Body } from "mail";
+
+export default class HostBody extends View {
+  render() {
+    return Body.new("message-body", { html: "<strong>Hello</strong>", zoom: 1.25 })
+      .child(div().child("fallback"));
+  }
+}
+
+"#;
+    let view_type = runtime.load_source("host-body.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+
+    assert!(
+        tree.contains("module_component mail.Body \"message-body\""),
+        "{tree}"
+    );
+    assert!(tree.contains("html"), "props missing from dump: {tree}");
+    assert!(tree.contains("text \"fallback\""), "child missing: {tree}");
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+    assert_eq!(
+        received.borrow().as_ref().map(|(_, _, children)| *children),
+        Some(1),
+        "the host owns the materialized children",
+    );
+    assert_eq!(
+        received.borrow().as_ref().map(|(id, _, _)| id.as_str()),
+        Some("message-body"),
+    );
+    assert_eq!(
+        received
+            .borrow()
+            .as_ref()
+            .and_then(|(_, props, _)| props.get("zoom"))
+            .and_then(HostValue::as_number),
+        Some(1.25),
+    );
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn component_requires_an_explicit_string_id(cx: &mut TestAppContext) {
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("mail").component("Body", |_, _, _| gpui::div().into_any_element()),
+            )
+            .expect("component module"),
+    );
+
+    for (name, expression) in [
+        ("missing-component-id.js", "Body.new()"),
+        ("numeric-component-id.js", "Body.new(42, {})"),
+    ] {
+        let source = format!(
+            r#"
+import {{ View }} from "gpui";
+import {{ Body }} from "mail";
+export default class InvalidBody extends View {{
+  render() {{ return {expression}; }}
+}}
+"#,
+        );
+        let message = render_error(cx, name, &source);
+        assert!(
+            message.contains("non-empty string id"),
+            "unexpected error for {expression}: {message}"
+        );
+    }
+
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn revoking_a_component_module_releases_its_builder_while_the_view_lives(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let retained = Rc::new(());
+    let captured = retained.clone();
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("extension").component("Leaf", move |_, _, _| {
+                    let _keep_alive = &captured;
+                    gpui::div().into_any_element()
+                }),
+            )
+            .expect("component module"),
+    );
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source(
+            "extension.js",
+            r#"
+import { View } from "gpui";
+import { Leaf } from "extension";
+export default class Extension extends View {
+  render() { return Leaf.new("leaf", {}); }
+}
+"#,
+        )
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    draw(&mut context, &view);
+    assert_eq!(Rc::strong_count(&retained), 2);
+
+    crate::clear_exported_modules();
+    assert_eq!(
+        Rc::strong_count(&retained),
+        1,
+        "a live snapshot must not retain a revoked component factory"
+    );
+    drop(view);
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn text_view_records_format_content_and_behavior(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { TextView } from "gpui-base";
+export default class RichText extends View {
+  render() {
+    return TextView.html("message", "<p>Hello <strong>world</strong></p>")
+      .selectable(true)
+      .scrollable(false)
+      .on_link_click((_url, _cx) => {});
+  }
+}
+"#;
+    let view_type = runtime.load_source("rich-text.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+    assert!(tree.contains("TextView html \"message\""), "{tree}");
+    assert!(tree.contains("<strong>world</strong>"), "{tree}");
+    assert!(tree.contains(":selectable"), "{tree}");
+    assert!(tree.contains(":on_link_click(fn)"), "{tree}");
+}
 
 #[gpui::test]
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
@@ -3322,6 +3515,7 @@ export default class ThemeSwitch extends View {
         primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
         muted: color, muted_foreground: color, accent: color, accent_foreground: color,
         destructive: color, destructive_foreground: color, border: color, input: color, ring: color,
+        selection: color,
       },
       spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
       radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },

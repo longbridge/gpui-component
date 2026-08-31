@@ -31,8 +31,8 @@ use gpui_base::{
     Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
     SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
     TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
-    Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
-    TreeState, VirtualListScrollHandle, v_virtual_list,
+    TextViewState, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree,
+    TreeItem, TreeState, VirtualListScrollHandle, v_virtual_list,
 };
 use palette::{activate as activate_palette, canvas as example_canvas, example_rgb};
 #[cfg(target_family = "wasm")]
@@ -111,6 +111,7 @@ pub const COMPONENTS: &[&str] = &[
     "table",
     "tabs",
     "text-selection",
+    "text-view",
     "textarea",
     "toast",
     "toggle",
@@ -162,13 +163,14 @@ pub struct BaseShowcase {
     text_selection_auto_scroll: AutoScroll,
     text_selection_active: bool,
     text_selection_text: String,
+    text_view: gpui::Entity<TextViewState>,
     #[cfg(test)]
     text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
     pub fn new(component: impl Into<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        activate_palette(window);
+        activate_palette(window, cx);
         let component = component.into();
         let input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -351,11 +353,12 @@ impl BaseShowcase {
             text_selection_auto_scroll: AutoScroll::default(),
             text_selection_active: false,
             text_selection_text: String::new(),
+            text_view: cx.new(|cx| TextViewState::markdown(components::TEXT_VIEW_MARKDOWN, cx)),
             #[cfg(test)]
             text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
         };
         cx.observe_window_appearance(window, |this, window, cx| {
-            activate_palette(window);
+            activate_palette(window, cx);
             this.refresh_editor_styles(cx);
             cx.notify();
         })
@@ -438,7 +441,7 @@ impl BaseShowcase {
 
 impl Render for BaseShowcase {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        activate_palette(window);
+        activate_palette(window, cx);
         let content = match self.component.as_str() {
             "accordion" => self.accordion(cx).into_any_element(),
             "alert-dialog" => self.alert_dialog(cx).into_any_element(),
@@ -472,6 +475,7 @@ impl Render for BaseShowcase {
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
             "text-selection" => self.text_selection(window, cx).into_any_element(),
+            "text-view" => self.text_view(window).into_any_element(),
             "textarea" => self.textarea().into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
@@ -485,6 +489,7 @@ impl Render for BaseShowcase {
         let show_back = self.navigation_enabled && self.component != "overview";
         // Surfaces rather than parts: these take the whole viewport.
         let fills_viewport = matches!(self.component.as_str(), "dock");
+        let is_text_view = self.component == "text-view";
         let entity = cx.entity().downgrade();
         div()
             .size_full()
@@ -545,9 +550,10 @@ impl Render for BaseShowcase {
                             .p_4()
                             .child(
                                 div()
-                                    .map(|this| match fills_viewport {
-                                        true => this.flex_1().size_full().min_h(px(420.)),
-                                        false => this.flex_none(),
+                                    .map(|this| match (fills_viewport, is_text_view) {
+                                        (true, _) => this.flex_1().size_full().min_h(px(420.)),
+                                        (false, true) => this.flex_1().w_full().max_w(px(720.)),
+                                        (false, false) => this.flex_none(),
                                     })
                                     .child(content),
                             ),
@@ -609,6 +615,7 @@ pub fn run_embedded(app: Application, component: impl Into<String>) -> gpui::App
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(dead_code)]
 pub fn run_native(component: &str) {
     run(gpui_platform::application(), component.to_owned());
 }

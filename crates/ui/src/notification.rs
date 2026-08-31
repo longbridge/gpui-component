@@ -24,6 +24,7 @@ const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
 const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
 const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(382.);
+const NOTIFICATION_ADVANCE_INTERVAL: Duration = Duration::from_millis(50);
 struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -694,32 +695,51 @@ pub struct NotificationList {
     pub(crate) notifications: ToastManager<NotificationId, Entity<Notification>>,
     stacks: Vec<(Anchor, AnchorStack)>,
     focus_handle: FocusHandle,
+    /// Whether the lifecycle clock is running. The loop clears it as it exits.
+    is_advancing: bool,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
 impl NotificationList {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let view = cx.entity().downgrade();
-        cx.spawn_in(window, async move |_, cx| {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self {
+            notifications: ToastManager::new(ToastMotion::sonner()),
+            stacks: Vec::new(),
+            focus_handle: cx.focus_handle().tab_stop(true),
+            is_advancing: false,
+            _subscriptions: HashMap::new(),
+        }
+    }
+
+    /// Tick the toast lifecycle until the last notification is unmounted.
+    ///
+    /// It advances the transition phases and samples the pause inputs (stack
+    /// expansion, window activation) that reach the list through no event.
+    /// With nothing mounted there is nothing to do, so an idle window arms no
+    /// timer.
+    fn start_advancing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_advancing {
+            return;
+        }
+        self.is_advancing = true;
+        // Detached rather than kept as a `Task`: the loop ends itself, and a
+        // handle on the list would have to be dropped from inside its own future.
+        cx.spawn_in(window, async move |view, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(NOTIFICATION_ADVANCE_INTERVAL)
                     .await;
-                if view
-                    .update_in(cx, |view, window, cx| view.advance(window, cx))
-                    .is_err()
-                {
+                let running = view.update_in(cx, |view, window, cx| {
+                    view.advance(window, cx);
+                    view.is_advancing = !view.notifications.is_empty();
+                    view.is_advancing
+                });
+                if !matches!(running, Ok(true)) {
                     break;
                 }
             }
         })
         .detach();
-        Self {
-            notifications: ToastManager::new(ToastMotion::sonner()),
-            stacks: Vec::new(),
-            focus_handle: cx.focus_handle().tab_stop(true),
-            _subscriptions: HashMap::new(),
-        }
     }
 
     fn is_expanded(&self) -> bool {
@@ -822,6 +842,7 @@ impl NotificationList {
             },
             cx.background_executor().now(),
         );
+        self.start_advancing(window, cx);
         cx.notify();
     }
 
@@ -1238,6 +1259,47 @@ mod tests {
             .advance_clock(Duration::from_millis(1));
         cx.run_until_parked();
         assert!(ids(&list, cx).is_empty());
+    }
+
+    #[gpui::test]
+    fn lifecycle_clock_runs_only_while_a_notification_is_mounted(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        // A list that has never shown anything arms no timer.
+        cx.background_executor.advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("tick").id::<FooKind>(), window, cx);
+        });
+        assert!(list.read_with(cx, |list, _| list.is_advancing));
+
+        // Autohide expiry plus the exit transition stops the clock with it.
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_secs(5));
+        cx.run_until_parked();
+        flush_dismiss(cx);
+        assert!(ids(&list, cx).is_empty());
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
+
+        // A later notification restarts it.
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("again").id::<BarKind>(), window, cx);
+        });
+        assert!(list.read_with(cx, |list, _| list.is_advancing));
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_secs(5));
+        cx.run_until_parked();
+        flush_dismiss(cx);
+        assert!(ids(&list, cx).is_empty());
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
     }
 
     #[gpui::test]

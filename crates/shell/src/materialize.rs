@@ -58,7 +58,8 @@ use gpui::{
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
 use gpui_base::{
-    Button, Checkbox, CheckboxState, ElementExt as _, Link, ScrollbarAxis, Switch,
+    Button, Checkbox, CheckboxState, ElementExt as _, Link, ScrollbarAxis, Switch, TextView,
+    TextViewStyle, Theme,
     animation::{ease_in_cubic, ease_in_out_cubic, ease_out_cubic},
     h_flex,
     input::{Input, InputBase},
@@ -217,6 +218,9 @@ impl StateStyles {
 #[derive(Default)]
 struct Behavior {
     disabled: bool,
+    selectable: Option<bool>,
+    text_scrollable: Option<bool>,
+    on_link_click: Option<CallbackId>,
 
     /// Whether a `NumberInput` stacks both step buttons to the right of the
     /// text, rather than putting one on each side of it.
@@ -759,6 +763,53 @@ fn materialize_component(
             window,
             cx,
         ),
+        Component::Module(spec) => {
+            let registry = spec.policy.modules();
+            let component = registry
+                .get(&spec.module)
+                .and_then(|module| module.resolve_component(&spec.component));
+            let Ok(component) = component else {
+                tracing::warn!(
+                    "component `{}.{}` was revoked before materialization",
+                    spec.module,
+                    spec.component
+                );
+                return div().into_any_element();
+            };
+            component.build(
+                crate::ComponentArgs {
+                    id: &spec.id,
+                    props: &spec.props,
+                    children: children.into_vec(),
+                },
+                window,
+                cx,
+            )
+        }
+        Component::TextView { id, text, format } => {
+            let mut view = match format {
+                crate::spec::TextViewFormat::Html => TextView::html(id, text),
+                crate::spec::TextViewFormat::Markdown => TextView::markdown(id, text),
+            }
+            .style(TextViewStyle::from_theme(&Theme::global(cx)));
+            if let Some(selectable) = behavior.selectable {
+                view = view.selectable(selectable);
+            }
+            if let Some(scrollable) = behavior.text_scrollable {
+                view = view.scrollable(scrollable);
+            }
+            if let Some(callback) = behavior.on_link_click {
+                let route = crate::script_callback::ScriptCallbackRoute::new(
+                    Rc::downgrade(runtime),
+                    callback,
+                );
+                view = view.on_link_click(move |url, _event, window, cx| {
+                    route.emit(crate::HostValue::from(url.to_string()), window, cx);
+                });
+            }
+            Styled::style(&mut view).refine(&refinement);
+            view.into_any_element()
+        }
         Component::Text(value) => {
             // A text run, not a `div` holding one. GPUI implements
             // `IntoElement` for a string, so `div().child("x")` is one element
@@ -2135,6 +2186,7 @@ pub(in crate::materialize) fn resolve_ops(
             }
             SpecOp::Callback(name, id) => match *name {
                 "on_click" => behavior.on_click = Some(*id),
+                "on_link_click" => behavior.on_link_click = Some(*id),
                 "on_mouse_move" => behavior.on_mouse_move = Some(*id),
                 "on_hover" => behavior.on_hover = Some(*id),
                 "on_key_down" => behavior.on_key_down = Some(*id),
@@ -2654,6 +2706,8 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .map(SharedString::from);
         }
         "disabled" => behavior.disabled = flag.unwrap_or(true),
+        "selectable" => behavior.selectable = Some(flag.unwrap_or(true)),
+        "scrollable" => behavior.text_scrollable = Some(flag.unwrap_or(true)),
         "selected" => behavior.selected = flag.unwrap_or(true),
         "checked" => behavior.checked = flag.unwrap_or(true),
         "value" => behavior.value = args.first().and_then(|value| value.as_f32().ok()),

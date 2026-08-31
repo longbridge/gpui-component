@@ -1,7 +1,7 @@
 ---
 title: Dock and Panels
 description: A dockable layout drawn entirely by script — panels that survive a restart, chrome you draw yourself, and commands instead of callbacks.
-order: 12
+order: 13
 ---
 
 # Dock and Panels

@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## The manifest
 
-A directory is recognized by **`gpui-shell.json`**. The manifest is inert data — discovery reads identity, optional version metadata, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, and `capabilities`; only `id`, `name`, and `entry` are required:
+A directory is recognized by **`gpui-shell.json`**. The manifest is inert data — discovery reads identity, optional version metadata, Git dependencies, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, `dependencies`, and `capabilities`; only `id`, `name`, and `entry` are required:
 
 ```json
 {
@@ -74,6 +74,9 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,15 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
   }
 }
 ```
+
+`dependencies` maps a bare module name to a JavaScript package fetched from
+Git before the entry module runs — `import { Title } from "omarchy-ui"`. The
+string form takes strict GitHub shorthand or a full Git URL with an optional
+`#ref`; the object form with an explicit `branch` or `tag` remains supported.
+Every load also links the package where an editor finds it, so the import
+carries the package's own types and documentation. See
+[Dependencies](./dependencies.md) for version selection, the package entry,
+the cache, and what an editor sees.
 
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted — write `"storage": false` to refuse it.
 

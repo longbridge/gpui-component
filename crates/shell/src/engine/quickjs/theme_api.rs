@@ -103,6 +103,7 @@ fn apply_colors(
             "border" => colors.border = value,
             "input" => colors.input = value,
             "ring" => colors.ring = value,
+            "selection" => colors.selection = value,
             _ => unreachable!(),
         }
     }

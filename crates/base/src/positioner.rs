@@ -5,7 +5,7 @@
 //! tooltips, and menus.
 
 use gpui::{
-    Anchor, AnyElement, App, Bounds, Display, Element, GlobalElementId, Half as _,
+    Anchor, AnyElement, App, Bounds, Display, Element, GlobalElementId, Half as _, HitboxBehavior,
     InspectorElementId, IntoElement, LayoutId, ParentElement, Pixels, Point, Position, Size, Style,
     Window, point, px,
 };
@@ -62,6 +62,7 @@ pub struct ResolvedPosition {
 pub struct Positioner {
     strategy: Strategy,
     margin: Pixels,
+    occlude: bool,
     children: Vec<AnyElement>,
 }
 
@@ -81,6 +82,7 @@ impl Positioner {
                 offset: px(0.),
             },
             margin: px(4.),
+            occlude: false,
             children: Vec::new(),
         }
     }
@@ -94,6 +96,7 @@ impl Positioner {
         Self {
             strategy: Strategy::Corner { anchor, position },
             margin: px(4.),
+            occlude: false,
             children: Vec::new(),
         }
     }
@@ -124,6 +127,17 @@ impl Positioner {
         if let Strategy::Side { offset: slot, .. } = &mut self.strategy {
             *slot = offset;
         }
+        self
+    }
+
+    /// Blocks the mouse over the positioned popup.
+    ///
+    /// Off by default, because a tooltip that swallowed the pointer would
+    /// un-hover the very trigger keeping it open. An interactive surface — a
+    /// popover, a menu, a dropdown — wants it on: what the surface covers is
+    /// the surface's, not the panel underneath.
+    pub fn occlude(mut self) -> Self {
+        self.occlude = true;
         self
     }
 
@@ -327,6 +341,12 @@ impl Element for Positioner {
             window.viewport_size(),
             self.margin + client_inset,
         );
+        // Ahead of the children so it blocks what is behind the popup without
+        // blocking the popup's own content.
+        if self.occlude {
+            window.insert_hitbox(position.bounds, HitboxBehavior::BlockMouse);
+        }
+
         let offset = position.bounds.origin - bounds.origin;
         let offset = point(offset.x.round(), offset.y.round());
 

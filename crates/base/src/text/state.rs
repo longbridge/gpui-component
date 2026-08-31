@@ -13,12 +13,12 @@ use gpui::{
 };
 
 use crate::{
-    ElementExt,
+    AutoScroll, ElementExt, TextSelection,
     async_util::{Receiver, Sender, unbounded},
     input::{self, SelectAll},
-    scroll::AutoScroll,
     text::{
-        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, TableActionsFn, TextViewStyle,
+        CodeBlockActionsFn, CodeBlockHighlighterFn, LinkClickHandlerFn, MarkdownExtensions,
+        TableActionsFn, TextViewStyle,
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
@@ -101,6 +101,7 @@ pub struct TextViewState {
     pub(super) clamped: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
+    pub(super) code_block_highlighter: Option<std::sync::Arc<CodeBlockHighlighterFn>>,
     pub(super) table_actions: Option<std::sync::Arc<TableActionsFn>>,
     pub(super) link_click_handler: Option<std::sync::Arc<LinkClickHandlerFn>>,
     pub(super) markdown_extensions: Arc<MarkdownExtensions>,
@@ -199,6 +200,7 @@ impl TextViewState {
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)).measure_all(),
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
+            code_block_highlighter: None,
             table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
@@ -253,13 +255,13 @@ impl TextViewState {
         cx.notify();
     }
 
-    /// Set whether the text is selectable, default false.
+    /// Set whether the text view scrolls internally, default false.
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
         self
     }
 
-    /// Set whether the text is selectable, default false.
+    /// Set whether the text view scrolls internally, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
         if !scrollable {
             self.reset_selection_and_adapter(cx);
@@ -304,8 +306,11 @@ impl TextViewState {
             return;
         }
 
+        let parser_configuration_changed = !self
+            .markdown_extensions
+            .has_same_parser_configuration(&markdown_extensions);
         self.markdown_extensions = markdown_extensions;
-        if self.format == TextViewFormat::Markdown {
+        if parser_configuration_changed && self.format == TextViewFormat::Markdown {
             let text = self.text.clone();
             self.increment_update(&text, false, cx);
         }
@@ -440,8 +445,24 @@ impl TextViewState {
         count.checked_sub(1)
     }
 
-    pub(super) fn bounds(&self) -> Bounds<Pixels> {
+    #[doc(hidden)]
+    pub fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
+    }
+
+    #[doc(hidden)]
+    pub fn list_state(&self) -> &ListState {
+        &self.list_state
+    }
+
+    #[doc(hidden)]
+    pub fn is_selecting(&self) -> bool {
+        self.is_selecting
+    }
+
+    #[doc(hidden)]
+    pub fn focus_handle(&self) -> &FocusHandle {
+        &self.focus_handle
     }
 
     /// Whether this view has a view-local selection (select-all, multi-click, or override),
@@ -589,6 +610,7 @@ impl Render for TextViewState {
         let mut node_cx = self.parsed_content.node_cx.clone();
 
         node_cx.code_block_actions = self.code_block_actions.clone();
+        node_cx.code_block_highlighter = self.code_block_highlighter.clone();
         node_cx.table_actions = self.table_actions.clone();
         node_cx.link_click_handler = self.link_click_handler.clone();
         node_cx.markdown_extensions = self.markdown_extensions.clone();
@@ -646,7 +668,7 @@ impl Render for TextViewState {
                     && ((size_changed && selection_involves_view && !compatible_layout_update)
                         || (revision_changed && has_selection_snapshot))
                 {
-                    gpui_base::TextSelection::clear(window, cx);
+                    TextSelection::clear(window, cx);
                 }
             })
     }

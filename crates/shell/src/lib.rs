@@ -56,6 +56,8 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+mod component;
+pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
@@ -70,6 +72,7 @@ pub(crate) mod process;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
+mod script_callback;
 pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
@@ -85,6 +88,7 @@ pub(crate) mod watch;
 
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
+pub use component::ComponentArgs;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use host_modules::{
@@ -112,6 +116,34 @@ use gpui::App;
 /// must report a write failure to its caller.
 pub fn write_type_declarations(root: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
     typings::write_application(root)
+}
+
+/// Links an application's declared Git dependencies where an editor finds them.
+///
+/// `gpui.d.ts` describes the runtime; this describes the packages the manifest
+/// adds to it. Without it `import { style } from "omarchy-ui"` is a module an
+/// editor cannot resolve, so the names behind it have no types, no parameter
+/// hints and no documentation even though the runtime resolves them fine.
+///
+/// The dependencies are fetched if the cache does not already hold them, which
+/// is why this is separate from [`write_type_declarations`]: one writes a file,
+/// the other may reach the network. [`ShellRuntime::load`] does both, so an
+/// ordinary host needs neither. This explicit operation exists for tooling such
+/// as `gpui-shell types` that must report a failure to its caller.
+///
+/// An application without a manifest, or one that declares no dependencies, has
+/// nothing to link and is not an error. Returns the links that were written.
+pub fn write_dependency_links(root: &std::path::Path) -> anyhow::Result<Vec<PathBuf>> {
+    if !root.join(plugin::MANIFEST_FILE).is_file() {
+        return Ok(Vec::new());
+    }
+    let manifest = plugin::PluginManifest::read(root)?;
+    if manifest.dependencies().is_empty() {
+        return Ok(Vec::new());
+    }
+    let store = dependencies::GitDependencyStore::for_user()?;
+    let dependencies = store.materialize_all(&manifest)?;
+    store.link_for_editor(root, &dependencies)
 }
 
 /// Grants an application its capabilities.

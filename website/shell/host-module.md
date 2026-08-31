@@ -1,7 +1,7 @@
 ---
 title: HostModule
 description: How a host lends its own Rust to a script — registration, the import that reaches it, the plain-data boundary, and the rules a Host function runs under.
-order: 11
+order: 12
 ---
 
 # HostModule

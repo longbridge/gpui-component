@@ -98,6 +98,74 @@ use crate::value::Bridged;
 /// having them in the project, not by being told where.
 pub const FILE_NAME: &str = "gpui.d.ts";
 
+/// The editor configuration filename, in the spelling a JavaScript project uses.
+pub const CONFIG_FILE_NAME: &str = "jsconfig.json";
+
+/// The configuration this one is written beside, and defers to.
+const TYPESCRIPT_CONFIG_FILE_NAME: &str = "tsconfig.json";
+
+/// What an editor has to be told before `gpui.d.ts` and the linked packages
+/// mean anything.
+///
+/// The settings match the ones the applications in this repository were
+/// written against — `examples/js_todolist/jsconfig.json` and its siblings —
+/// so a generated project and a hand-written one are checked the same way.
+/// The file explains each of them to whoever opens it, which is why it carries
+/// its own `"// why"`.
+///
+/// It is only ever written into a directory that has no configuration at all,
+/// so `checkJs` turns checking on for an application that had none rather than
+/// changing the terms under an application that already chose.
+const EDITOR_CONFIG: &str = r#"{
+  "// why": [
+    "Written once by gpui-shell, then yours: an existing jsconfig.json or",
+    "tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "`moduleResolution` is how a bare specifier is answered. Left to be",
+    "inferred it can still land on the resolution that never looks in",
+    "node_modules, and a Git dependency the runtime resolves fine is",
+    "underlined as a module the editor cannot find.",
+    "",
+    "`lib` decides which globals exist. The default hands a script the",
+    "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
+    "not have — and their declarations collide with the ones gpui.d.ts makes,",
+    "so the file describing the API is itself reported as the error.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true
+  }
+}
+"#;
+
+/// Writes the editor configuration beside an application, once.
+///
+/// Only when the directory has neither configuration file: the first launch
+/// scaffolds one, and everything after that leaves the author's own settings
+/// alone. Returns the path only when it actually wrote.
+fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+    let path = directory.join(CONFIG_FILE_NAME);
+    if std::fs::symlink_metadata(&path).is_ok()
+        || std::fs::symlink_metadata(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).is_ok()
+    {
+        return Ok(None);
+    }
+    std::fs::write(&path, EDITOR_CONFIG)?;
+    Ok(Some(path))
+}
+
 /// Emits the TypeScript declarations for the script API.
 ///
 /// The output is deterministic — no timestamps, no reflection order — so
@@ -201,7 +269,7 @@ fn host_modules() -> String {
                 // Rust type of that name carries, so `any` would be wider than
                 // the runtime: a script passing a function or a Symbol would
                 // type-check and then be refused at the call.
-                out.push_str("  import { HostValue } from \"gpui\";\n\n");
+                out.push_str("  import { Element, HostValue } from \"gpui\";\n\n");
                 for function in module.function_names() {
                     // Permissive about shape, but not wrong about the one thing
                     // the caller has to get right: an asynchronous export is
@@ -214,6 +282,12 @@ fn host_modules() -> String {
                     let _ = writeln!(
                         out,
                         "  export function {function}(...args: HostValue[]): {returns};"
+                    );
+                }
+                for component in module.component_names() {
+                    let _ = writeln!(
+                        out,
+                        "  export const {component}: {{ new(id: string, props: HostValue): Element }};"
                     );
                 }
             }
@@ -246,6 +320,16 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
 
     let mut written = Vec::new();
     let mut first_error = None;
+    // The application root only: one project, one configuration, and a nested
+    // directory that happens to import `gpui` is part of it rather than a
+    // second project.
+    match write_editor_config(root) {
+        Ok(Some(path)) => written.push(path),
+        Ok(None) => {}
+        Err(error) => {
+            first_error.get_or_insert(error);
+        }
+    }
     for directory in directories {
         match refresh(&directory) {
             Ok(Some(path)) => written.push(path),
@@ -1972,6 +2056,17 @@ const BASE: &str = r#"  /** A row. */
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+  export interface TextViewElement extends Element {
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): TextViewElement;
+    selectable(value?: boolean): TextViewElement;
+    scrollable(value?: boolean): TextViewElement;
+  }
+  export const TextView: {
+    html(id: string, html: string): TextViewElement;
+    markdown(id: string, markdown: string): TextViewElement;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -3142,7 +3237,6 @@ const BASE_IMPORTS: &str = r#"  import {
     Context,
     Element,
     FocusHandle,
-    Placement,
   } from "gpui";
 
 "#;
@@ -3392,6 +3486,8 @@ const SCHEDULING: &str = r#"
 
 #[cfg(test)]
 mod tests {
+    use gpui::IntoElement as _;
+
     use super::*;
 
     /// The element methods that are not style methods, so a test can subtract
@@ -3701,7 +3797,8 @@ mod tests {
         crate::export_module(
             crate::HostModule::new("audit")
                 .function("observe", |_| Ok(crate::HostValue::Null))
-                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) })),
+                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) }))
+                .component("AuditPanel", |_, _, _| gpui::div().into_any_element()),
         )
         .expect("`audit` is not reserved");
 
@@ -3730,7 +3827,7 @@ mod tests {
         // `HostValue` rather than `any`: the boundary is not wider than the
         // Rust type of that name, and the declarations should not claim it is.
         assert!(
-            declarations.contains("  import { HostValue } from \"gpui\";"),
+            declarations.contains("  import { Element, HostValue } from \"gpui\";"),
             "the permissive signatures below need this import to resolve"
         );
         assert!(
@@ -3740,6 +3837,9 @@ mod tests {
             declarations
                 .contains("  export function drain(...args: HostValue[]): Promise<HostValue>;")
         );
+        assert!(declarations.contains(
+            "  export const AuditPanel: { new(id: string, props: HostValue): Element };"
+        ));
 
         crate::clear_exported_modules();
         assert!(
@@ -4029,6 +4129,23 @@ mod tests {
     }
 
     #[test]
+    fn text_view_behaviors_are_not_declared_on_every_element() {
+        let declarations = declarations();
+        let element = declarations
+            .split_once("export interface Element")
+            .expect("Element declaration")
+            .1
+            .split_once("\n  }")
+            .expect("end of Element declaration")
+            .0;
+        assert!(!element.contains("on_link_click("));
+        assert!(!element.contains("selectable("));
+        assert!(!element.contains("scrollable("));
+        assert!(declarations.contains("export interface TextViewElement extends Element"));
+        assert!(declarations.contains("html(id: string, html: string): TextViewElement;"));
+    }
+
+    #[test]
     fn view_lifecycle_declaration_matches_runtime_calls() {
         let declarations = declarations();
         assert!(declarations.contains(
@@ -4283,9 +4400,34 @@ mod tests {
         let written = write_application(&directory).expect("declarations are writable");
         let path = directory.join(FILE_NAME);
 
-        assert_eq!(written, vec![path.clone()]);
+        assert_eq!(
+            written,
+            vec![directory.join(CONFIG_FILE_NAME), path.clone()]
+        );
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn an_existing_editor_configuration_is_never_replaced() {
+        let directory = std::env::temp_dir().join(format!(
+            "gpui-shell-typings-config-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("application root");
+        std::fs::write(directory.join(TYPESCRIPT_CONFIG_FILE_NAME), "{}").expect("a tsconfig");
+
+        write_application(&directory).expect("declarations are writable");
+
+        assert!(!directory.join(CONFIG_FILE_NAME).exists());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).unwrap(),
+            "{}"
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }

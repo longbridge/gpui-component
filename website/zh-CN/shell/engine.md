@@ -1,7 +1,7 @@
 ---
 title: 引擎接缝
 description: QuickJS 位于一条内部接口之后、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测。
-order: 14
+order: 15
 ---
 
 # The Engine Seam

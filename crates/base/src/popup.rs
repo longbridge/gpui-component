@@ -136,6 +136,9 @@ impl RenderOnce for Popup {
             deferred(
                 Positioner::corner(anchor, position.get())
                     .margin(WINDOW_MARGIN)
+                    // The host blocks the mouse, so no caller has to remember:
+                    // what a popup covers belongs to the popup.
+                    .occlude()
                     .child(content),
             )
             .with_priority(POPUP_PRIORITY),
@@ -180,6 +183,74 @@ mod tests {
                     .size(px(20.)),
             )
         }
+    }
+
+    /// A caller that styles its own surface — a hover card, a dropdown — does
+    /// not have to remember to block the mouse. The host does it, so the panel
+    /// a popup covers stops reacting to a pointer that is over the popup.
+    struct OcclusionHarness {
+        background_hovered: Rc<Cell<bool>>,
+        content_hovered: Rc<Cell<bool>>,
+    }
+
+    impl Render for OcclusionHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let background = self.background_hovered.clone();
+            let content = self.content_hovered.clone();
+            div()
+                .relative()
+                .size(px(200.))
+                .child(
+                    div()
+                        .id("background")
+                        .absolute()
+                        .size_full()
+                        .on_mouse_move(move |_, _, _| background.set(true)),
+                )
+                .child(
+                    Popup::new("popup", div().size(px(100.))).content(
+                        div()
+                            .id("content")
+                            .size(px(40.))
+                            .on_mouse_move(move |_, _, _| content.set(true)),
+                    ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn the_popup_surface_blocks_the_panel_it_covers(cx: &mut gpui::TestAppContext) {
+        let background_hovered = Rc::new(Cell::new(false));
+        let content_hovered = Rc::new(Cell::new(false));
+        let (_, window) = cx.add_window_view({
+            let background_hovered = background_hovered.clone();
+            let content_hovered = content_hovered.clone();
+            move |_, _| OcclusionHarness {
+                background_hovered,
+                content_hovered,
+            }
+        });
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| window.draw(cx).clear(cx));
+
+        window.simulate_mouse_move(
+            gpui::point(px(20.), px(110.)),
+            None,
+            gpui::Modifiers::default(),
+        );
+        assert!(!background_hovered.get());
+        // The surface blocks what is behind it, not its own content: the
+        // hitbox goes in ahead of the children, never over them.
+        assert!(content_hovered.get());
+
+        // The same pointer outside the surface still reaches the panel, so the
+        // assertion above is about occlusion and not a dead listener.
+        window.simulate_mouse_move(
+            gpui::point(px(150.), px(180.)),
+            None,
+            gpui::Modifiers::default(),
+        );
+        assert!(background_hovered.get());
     }
 
     #[gpui::test]

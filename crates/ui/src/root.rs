@@ -570,10 +570,6 @@ impl Styled for Root {
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
-        if !cx.has_global::<crate::global_state::UiGlobalState>() {
-            crate::global_state::init(cx);
-        }
-        crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
         let active_scope = self.active_text_selection_scope();
         TextSelection::activate_scope(active_scope, window, cx);
 
