@@ -10,7 +10,7 @@ order: 8
 
 唯一的例外是存储，而且只在 manifest 这一层：没有写 `storage` 的应用会拿到属于它自己的 `localStorage`，就像浏览器不问自答地给每个 origin 一个那样。这是关于作者**要写什么**的约定，不是模型上的口子——Rust 侧的 `Capabilities` 在 Host 开口之前照样拒绝，manifest 也照样可以写 `"storage": false`。见 [Storage](#storage)。
 
-授权由 Host 决定，因为只有 Host 知道它对即将运行的这段代码信任到什么程度。至于它主动**递出去**的东西——它自己的、有意暴露的那部分 Rust——见 [HostModule](./host-module.md)。视图在加载时冻结 capabilities；修改默认值只影响之后加载的应用，不会悄悄改变已经按某项授权运行的代码。
+授权由 Host 决定，因为只有 Host 知道它对即将运行的这段代码信任到什么程度。至于它主动**递出去**的东西——它自己的、有意暴露的那部分 Rust——见 [HostModule](./host-module.md)。 View 在加载时冻结 capabilities；修改默认值只影响之后加载的应用，不会悄悄改变已经按某项授权运行的代码。
 
 ```rust
 gpui_shell::set_capabilities(
@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## Manifest
 
-目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
+目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据、Git 依赖与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry`、`dependencies` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
 
 ```json
 {
@@ -74,6 +74,9 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,13 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   }
 }
 ```
+
+`dependencies` 把裸模块名映射到一个 JavaScript package，gpui-shell 会在 entry
+module 运行之前从 Git 抓取它——`import { Title } from "omarchy-ui"`。字符串形式
+接受严格的 GitHub 简写或完整 Git URL，可带可选的 `#ref`；显式指定 `branch` 或
+`tag` 的 object 形式同样保持支持。每次加载还会把 package 链接到编辑器能找到的
+位置，于是这条 import 会带上 package 自己的类型与文档。版本选择、package entry、
+缓存，以及编辑器看见的东西，详见[依赖](./dependencies.md)。
 
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 
@@ -143,7 +153,7 @@ await fs.writeFile("notes.md", source + "\n");
 `writeFile` 每次最多接受 8 MiB。`readdir` 最多返回 10,000 个 entry 或累计 1 MiB 的 UTF-8 文件名（先触及哪个就按哪个停止），避免恶意目录让一个 promise 造成无界分配。
 
 ::: tip 仍然不要在 `render` 里读文件
-`render` 描述界面，它没法 await。在 `init` 或事件回调里读，把结果留在视图上，拿到后 `cx.notify()`。
+`render` 描述界面，它没法 await。在 `init` 或事件回调里读，把结果留在 View 上，拿到后 `cx.notify()`。
 :::
 
 ## Storage

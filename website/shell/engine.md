@@ -1,7 +1,7 @@
 ---
 title: The Engine Seam
 description: QuickJS behind one internal interface, why the seam exists, and the three measurements that tell script cost apart from frame cost.
-order: 13
+order: 15
 ---
 
 # The Engine Seam
@@ -38,13 +38,13 @@ cargo test -p gpui-shell --release --lib benchmark -- --nocapture
 
 | | What it measures | 443 nodes | Paid |
 | --- | --- | --- | --- |
-| **A** | script → snapshot | **1.4 ms** | once per application change |
-| **B** | snapshot → GPUI elements | **0.7 ms** | every frame |
+| **A** | script → Snapshot | **1.4 ms** | once per application change |
+| **B** | Snapshot → GPUI elements | **0.7 ms** | every frame |
 | **C** | a full cached repaint | **1.8 ms**, **no JavaScript at all** | every frame |
 
 Run it in release or the figures mean nothing. Every absolute number on this page comes from a release build on a MacBook Pro (M3, 8 cores, 24 GB), and moves with the machine.
 
-**C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view run no JavaScript at all. If a single one of them ever does, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
+**C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged View run no JavaScript at all. If a single one of them ever does, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
 
 One size cannot show which of the three costs scale, so a fourth test walks the same panel up to 8,403 nodes. It sits behind `--ignored` because the largest size takes seconds:
 
@@ -54,9 +54,9 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 
 Describing costs 1.1 ms at 443 nodes, then 5.1, 10.3 and 20.5 ms as the panel grows to 2,103, 4,203 and 8,403. A whole frame — B plus GPUI's layout and paint, which is what C measures — costs 1.3, 5.9, 12.0 and 27.0 ms. Both scale close to linearly with the node count. What does not scale is the JavaScript: no frame at any size runs a line of it. Three things that settles:
 
-- **4,203 nodes is where the snapshot decides the outcome.** 12 ms a frame holds 60 FPS; rebuilding the description for every frame would cost 22 ms and drop them. Below that size both models have room to spare, which is worth knowing before reading too much into the ratio.
+- **4,203 nodes is where the Snapshot decides the outcome.** 12 ms a frame holds 60 FPS; rebuilding the description for every frame would cost 22 ms and drop them. Below that size both models have room to spare, which is worth knowing before reading too much into the ratio.
 - **The description cost did not vanish, it moved.** 20 ms for 8,403 nodes is paid when the user acts rather than sixty times a second, but it is still 20 ms — which is why the per-call cost remains the number a second engine would be judged on.
-- **Past a few thousand nodes the bill is not script at all.** 27 ms a frame at that size, with the VM untouched, is materialization, layout and paint. A view that large wants virtualizing; a faster engine would not move it.
+- **Past a few thousand nodes the bill is not script at all.** 27 ms a frame at that size, with the VM untouched, is materialization, layout and paint. A View that large wants virtualizing; a faster engine would not move it.
 
 Read A against the design's own budget — 1.5 ms for one script `render` — and it clears it, but with less room than hoped: the budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the measurement reports about 320 ns across 443. A panel three times this size would not fit in one pass. What changed is how often that matters. At 120 FPS the old model would have spent 168 ms of every second describing an interface nobody had changed; the same panel now costs 1.4 ms when the user actually changes something, and 0.7 ms to repaint. The levers the design names for genuinely enormous panels — driving the per-call cost down, memoizing unchanged subtrees, virtualizing long lists — are still [not implemented](./elements.md#not-there-yet), and are now optimizations rather than prerequisites.
 
@@ -80,7 +80,7 @@ Opt-in runtime counters sampled one-second intervals and separated script descri
 
 One active-window FPS HUD sample reported **69 FPS**, **10.9 ms** frame time and **18.3%** dropped frames. That HUD measurement includes GPUI layout and paint and therefore is not directly interchangeable with either runtime counter, but it confirms the end-to-end workload was missing the 8.33 ms target.
 
-The useful conclusion is narrower than “JavaScript is slow.” A clean snapshot can be materialized in about 1 ms, comfortably inside the frame budget. A quote-driven dirty update, however, spends roughly 12–13.5 ms before that materialization is complete because the application rebuilds and records its full description. Repeatedly invalidating the root script view therefore dominates this workload; optimizing only the native materializer would not recover 120 FPS.
+The useful conclusion is narrower than “JavaScript is slow.” A clean Snapshot can be materialized in about 1 ms, comfortably inside the frame budget. A quote-driven dirty update, however, spends roughly 12–13.5 ms before that materialization is complete because the application rebuilds and records its full description. Repeatedly invalidating the root script View therefore dominates this workload; optimizing only the native materializer would not recover 120 FPS.
 
 These figures deliberately exclude debug builds and samples taken after the window lost active status. Both change scheduling and frame presentation enough to make their FPS readings unsuitable for an architectural comparison. They are also a workload measurement, not a replacement for the reproducible crate benchmark above: quote frequency, visible content, hardware and display timing all affect the absolute result.
 
@@ -88,8 +88,8 @@ These figures deliberately exclude debug builds and samples taken after the wind
 
 The VM and GPUI's `App` share one thread — the main one — inside one process. `ShellRuntime` is an `Rc` with `RefCell` interiors, so it is neither `Send` nor `Sync`. There is no worker and no second VM.
 
-<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
-<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
+<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the Snapshot, the callback arena keyed by Snapshot generation, and GPUI's frame arena which lasts one draw.">
+<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the Snapshot, the callback arena keyed by Snapshot generation, and GPUI's frame arena which lasts one draw.">
 
 Background work never touches the VM. Timers (`cx.sleep`, `cx.timer`) count down there, and filesystem, process, fetch, TCP and WebSocket operations hand off their blocking work there. Results settle on the foreground executor, so JavaScript continuations still run on the main thread in a `Task` scope. GPUI also does its own work on its own threads once the elements exist.
 
@@ -104,11 +104,11 @@ Memory splits four ways, each with a different owner and a different moment of r
 | What | Where it lives | Released when |
 | --- | --- | --- |
 | Objects, closures, module scope | The QuickJS heap, capped at 256 MiB | Its GC runs, or the runtime drops |
-| The element description arena | Rust; moved into the snapshot it produced | That snapshot drops |
-| Registered callbacks | A Rust arena keyed by snapshot generation | That snapshot drops and retires its generation |
+| The element description arena | Rust; moved into the Snapshot it produced | That Snapshot drops |
+| Registered callbacks | A Rust arena keyed by Snapshot generation | That Snapshot drops and retires its generation |
 | GPUI elements | GPUI's own frame arena | The draw that built them ends |
 
-A view holds **two** snapshots rather than one: the live description, and the one it replaced. The previous is kept a generation longer because a frame already in flight may still be reading it, and releasing it early would retire callbacks that frame still needs.
+A View holds **two** Snapshots rather than one: the live description, and the one it replaced. The previous is kept a generation longer because a frame already in flight may still be reading it, and releasing it early would retire callbacks that frame still needs.
 
 Nothing that crosses the boundary is an object. An element handle is an integer index into the arena, retained host state — an `InputState`'s rope, cursor and selection — lives in a GPUI entity the script addresses through a handle, and every argument and result is plain data.
 
@@ -155,12 +155,12 @@ The proportion is itself the argument for the seam: above it is the actual desig
 
 | Above the seam — engine independent | Below the seam — what an engine implements |
 | --- | --- |
-| The render snapshot: what one script `render` produces and what frames replay | Converting an engine value to the runtime's neutral value type |
+| The render Snapshot: what one script `render` produces and what frames replay | Converting an engine value to the runtime's neutral value type |
 | The element description arena, single-use checking, and the debug tree | The module system's shape — ES modules and a resolver, versus `require` and a path list |
 | Materialization: descriptions into real GPUI elements, pure Rust | Method dispatch — functions on a shared prototype, versus an `__index` metamethod |
 | The call scope: phases, generations, and the crate's only `unsafe` | The callback handle type |
 | The style table, parametric styles and spelling suggestions | Converting the neutral error type into the language's own exception |
-| The default token palette and colour token resolution | How a view is defined — `class extends View`, versus a metatable |
+| The default token palette and colour token resolution | How a View is defined — `class extends View`, versus a metatable |
 | The capability model and path resolution | The language-specific part of the sandbox |
 | Length and colour coercion | |
 | The neutral error type, the callback arena, the error overlay | |
@@ -168,13 +168,13 @@ The proportion is itself the argument for the seam: above it is the actual desig
 
 None of the modules on the left names a VM anywhere in its source. That is what makes the seam real: it is not a trait, it is the fact that the rest of the crate reaches the engine through about a dozen entry points and nothing else.
 
-A trait would actually be worse here. The two handle types — a view class and a view instance — carry lifetimes of their own on the QuickJS side, and forcing them through a trait would move that complexity into the type system without removing any of it.
+A trait would actually be worse here. The two handle types — a View class and a View instance — carry lifetimes of their own on the QuickJS side, and forcing them through a trait would move that complexity into the type system without removing any of it.
 
 The contract's load-bearing rule is about *when*, not what: **the engine's `build_snapshot` is the only entry into script `render`, and nothing calls it per frame.** An engine that rendered opportunistically — on a repaint, on a hover, on a timer — would put script cost back on the frame budget, which is the coupling the seam exists to prevent. Benchmark C is what would catch it.
 
 ## Portability
 
-If a second engine is ever added, **scripts will not be portable between them.** They would be different languages: a view is `class Counter extends View` in JavaScript and would be something else anywhere else.
+If a second engine is ever added, **scripts will not be portable between them.** They would be different languages: a View is `class Counter extends View` in JavaScript and would be something else anywhere else.
 
 What has to be the same is everything around them — the binding surface, the render protocol, the phase rules, the capability model, the error messages. The requirement the design imposes is behavioural: the same use case must produce the **same description tree** under either engine, and the same application activity must trigger the **same number of script `render` calls**. That is what would keep the seam from rotting into two divergent runtimes.
 
@@ -184,7 +184,7 @@ The seam's contract does not yet cover asynchronous work.
 
 QuickJS requires the host to drain its job queue itself — nothing after an `await` runs until somebody asks — and that is not a shape every engine shares. So the scheduler cannot sit entirely above the seam. It needs two operations from an engine: turning a host task into something the script can await, and running the pending jobs.
 
-Promise jobs are drained at host-call boundaries, and a render that merely notices pending jobs queues a foreground drain instead of executing arbitrary continuations on the paint path. That preserves the central invariant: an async continuation may invalidate a view, but a frame never re-enters JavaScript just because it is a frame.
+Promise jobs are drained at host-call boundaries, and a render that merely notices pending jobs queues a foreground drain instead of executing arbitrary continuations on the paint path. That preserves the central invariant: an async continuation may invalidate a View, but a frame never re-enters JavaScript just because it is a frame.
 
 Until both are addressed, the scheduler is QuickJS-specific. The rule it will be held to is the one that applies to any new capability: it goes above the seam unless it genuinely cannot be expressed there.
 
@@ -192,6 +192,6 @@ Until both are addressed, the scheduler is QuickJS-specific. The rule it will be
 
 Two questions the seam invites.
 
-`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is what makes the 240–340 ns per recorded call possible at all. A separate process would put an IPC round trip on every recorded builder call, and there is no budget for one even at the reduced frequency snapshots buy. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
+`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is what makes the 240–340 ns per recorded call possible at all. A separate process would put an IPC round trip on every recorded builder call, and there is no budget for one even at the reduced frequency Snapshots buy. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
 
 The wasm target is the other reason the seam is drawn where it is. QuickJS is plain C and compiles to WebAssembly; not every candidate engine does, and some generate machine code, which is a constraint on platforms that forbid writable-executable memory. Neither fact decides today's engine, but they are why "the engine is a parameter, not a part of the architecture" is written down at all.

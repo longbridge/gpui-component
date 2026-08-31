@@ -21,9 +21,11 @@ GPUI Component 是一个基于 [GPUI](https://gpui.rs) 的综合性 Rust 桌面�
 - **Dock 布局**：可调整面板、可拖拽标签、嵌套分割、边缘停靠和 Tiles 自由布局
 - **丰富内容**：原生 Markdown 与 HTML、语法高亮和图表
 - **设计自由**：使用完整视觉系统，或基于 `gpui-base` 构建自己的系统
+- **类型化动效**：CSS 对齐的 easing、timing、keyframes、spring、presence 与测量式展开，稳定采样路径零分配
 - **跨平台**：通过一份 Rust 代码交付 macOS、Windows 和 Linux
 
 ## 下一步
 
 - 阅读 [开始使用](./getting-started)
 - 浏览 [组件文档](./components/index)
+- 阅读 [GPUI Base 动画与动效](/zh-CN/base/motion)

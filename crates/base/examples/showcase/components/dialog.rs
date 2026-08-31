@@ -39,7 +39,7 @@ impl BaseShowcase {
                         DialogBackdrop::new()
                             .absolute()
                             .inset_0()
-                            .bg(rgb(0x000000))
+                            .bg(super::example_rgb(0x000000))
                             .opacity(0.2),
                     )
                     .popup(
@@ -57,9 +57,9 @@ impl BaseShowcase {
                                     .flex_col()
                                     .items_stretch()
                                     .text_xs()
-                                    .bg(rgb(0xffffff))
+                                    .bg(super::example_rgb(0xffffff))
                                     .border_1()
-                                    .border_color(rgb(0xd4d4d4))
+                                    .border_color(super::example_rgb(0xd4d4d4))
                                     .child(
                                         DialogTitle::new()
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -68,7 +68,7 @@ impl BaseShowcase {
                                     .child(
                                         DialogDescription::new()
                                             .mt_2()
-                                            .text_color(rgb(0x737373))
+                                            .text_color(super::example_rgb(0x737373))
                                             .child(
                                                 "Update the public details shown on your profile.",
                                             ),
@@ -81,7 +81,7 @@ impl BaseShowcase {
                                             .h_7()
                                             .px_2()
                                             .border_1()
-                                            .border_color(rgb(0xd4d4d4))
+                                            .border_color(super::example_rgb(0xd4d4d4))
                                             .on_mouse_down(MouseButton::Left, {
                                                 let input = self.input.clone();
                                                 move |_, window, cx| {
@@ -108,7 +108,7 @@ impl BaseShowcase {
                                                         .items_center()
                                                         .justify_center()
                                                         .border_1()
-                                                        .border_color(rgb(0xd4d4d4))
+                                                        .border_color(super::example_rgb(0xd4d4d4))
                                                         .child("Cancel"),
                                                 ),
                                             )
@@ -120,8 +120,8 @@ impl BaseShowcase {
                                                     .flex()
                                                     .items_center()
                                                     .justify_center()
-                                                    .bg(rgb(0x171717))
-                                                    .text_color(rgb(0xffffff))
+                                                    .bg(super::example_rgb(0x171717))
+                                                    .text_color(super::example_rgb(0xffffff))
                                                     .on_click({
                                                         let entity = cx.entity().downgrade();
                                                         move |_, _, cx| {

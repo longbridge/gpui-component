@@ -1,7 +1,7 @@
 ---
 title: HostModule
 description: How a host lends its own Rust to a script — registration, the import that reaches it, the plain-data boundary, and the rules a Host function runs under.
-order: 11
+order: 12
 ---
 
 # HostModule
@@ -132,7 +132,7 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
 }
 ```
 
-**`cx.notify()` from inside one is delivered after the call unwinds.** So a Host function may mutate an entity and ask the views watching it to re-render, without that re-render happening underneath the script that called it.
+**`cx.notify()` from inside one is delivered after the call unwinds.** So a Host function may mutate an entity and ask the Views watching it to re-render, without that re-render happening underneath the script that called it.
 
 ## Work that should not hold the thread
 
@@ -170,7 +170,7 @@ That is the same rule as [the three above](#three-rules-a-host-function-runs-und
 
 - **A refusal from the synchronous half throws at the call site.** `arguments.string(0)?` failing is a `TypeError` where the call was written, not a rejected promise the script has to await to hear about.
 - **A failure from the future rejects the promise**, carrying `module.function` in the message, so `try`/`catch` around the `await` works normally.
-- **A cancelled call stays pending for ever.** If the view goes away or its application is reloaded, the continuation never runs and no error is invented for code that was asked to stop — the same answer `cx.sleep` gives.
+- **A cancelled call stays pending for ever.** If the View goes away or its application is reloaded, the continuation never runs and no error is invented for code that was asked to stop — the same answer `cx.sleep` gives.
 
 Declare the return type as a `Promise` yourself. The registry checks that the names on both sides agree; it does not read signatures, so nothing catches a declaration that leaves the `Promise` off.
 

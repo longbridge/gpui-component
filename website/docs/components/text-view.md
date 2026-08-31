@@ -7,7 +7,9 @@ description: Renders Markdown and HTML text with optional custom Markdown plugin
 
 `TextView` renders formatted text in GPUI. It supports Markdown and simple HTML, text selection, code block actions, and custom Markdown plugins for project-specific syntax.
 
-`TextView::selectable(true)` uses the shared window selection engine from `gpui-base`. See [GPUI Base Text Selection](/base/text-selection.md) when integrating plain text or a custom renderer with the same selection.
+The canonical implementation now lives in `gpui-base`; this module remains a compatibility re-export and provides component-theme adaptation. Base-only setup, complete default styling, and opt-in syntax highlighting are documented on [GPUI Base TextView](/base/text-view.md).
+
+TextView is selectable by default and uses the shared window selection engine from `gpui-base`. Use `.selectable(false)` only when selection must be disabled. See [GPUI Base Text Selection](/base/text-selection.md) when integrating plain text or a custom renderer with the same selection.
 
 ## Import
 
@@ -25,7 +27,6 @@ Use the `markdown` helper when you only need to render Markdown text:
 use gpui_component::text::markdown;
 
 markdown("# Hello\n\nThis is **Markdown**.")
-    .selectable(true)
     .scrollable(true)
 ```
 
@@ -35,7 +36,6 @@ You can also construct a `TextView` directly when you need a stable id:
 use gpui_component::text::TextView;
 
 TextView::markdown("preview", markdown_source)
-    .selectable(true)
 ```
 
 ### HTML

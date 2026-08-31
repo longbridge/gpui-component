@@ -234,6 +234,12 @@ A virtual list requires the caller to provide item sizes. Vertical lists use eac
 
 Foundation controls do not install animation automatically. Applications choose animation properties and timing according to their own visual language.
 
+See the [Motion guide](../../website/base/motion.md) and run its five focused interactive demonstrations with:
+
+```bash
+cargo run -p gpui-base --example motion
+```
+
 ### Themes and Styles
 
 - `Theme` stores base-layer global configuration, including semantic tokens and scrollbar defaults.

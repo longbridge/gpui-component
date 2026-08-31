@@ -10,7 +10,6 @@ use std::{
     collections::HashSet,
     rc::Rc,
     sync::Arc,
-    time::Duration,
 };
 
 use gpui::{
@@ -20,7 +19,6 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
-    Spring,
     dock::{
         AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
         TabGroupContext, TabGroupRenderer,
@@ -36,7 +34,6 @@ use crate::{
     h_flex,
     menu::DropdownMenu as _,
     tab::{Tab, TabBar},
-    v_flex,
 };
 
 /// Names the tab bar's zoom button in the debug-bounds map, so a test can ask
@@ -46,13 +43,6 @@ const ZOOM_CONTROL_SELECTOR: &str = "dock-tab-bar-zoom-control";
 /// The size the styled drag preview occupies, reported to base so a drop
 /// placeholder knows where to fly in from.
 const DRAG_PREVIEW_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(96.), px(30.));
-
-/// Motion for the drop placeholder as it follows the drop that would land.
-///
-/// Critically damped, so the placeholder never reads as covering a region the
-/// drop would not take. The tolerance is coarse: this runs during a drag, where
-/// a frame spent on half a pixel competes with the drag itself.
-const PLACEHOLDER_SPRING: Spring = Spring::new(Duration::from_millis(200)).with_epsilon(0.5);
 
 /// The preview that follows the cursor while a panel is dragged.
 ///
@@ -646,16 +636,10 @@ impl TabGroupRenderer for TabGroupSkin {
     fn frame(&self, group: &TabGroupContext, _: &mut Window, cx: &mut App) -> Stateful<Div> {
         let control = zoom_control(group, cx);
 
-        // `v_flex`, not `div`: gpui's default display is Block, and in block
-        // layout a child's `flex_grow` is ignored — the content region below
-        // the tab bar would resolve to zero height, because its only
-        // descendant is the panel view, positioned absolutely by `cached` and
-        // contributing no content height. The old `TabPanel::bind_actions`
-        // returned `v_flex()` for the same reason.
-        v_flex()
+        // The column, the fill and the clip are base's now, applied around
+        // this. What is left is the background and the two actions.
+        div()
             .id("tab-panel")
-            .size_full()
-            .overflow_hidden()
             .bg(cx.theme().tokens.background)
             // A collapsed group is a strip of tabs with no content, and the
             // actions act on content. The old dock gated them the same way.
@@ -699,12 +683,9 @@ impl TabGroupRenderer for TabGroupSkin {
                 .and_then(PanelHandle::of)
                 .is_none_or(|handle| handle.inner_padding(cx));
 
-        v_flex()
-            .id("active-panel")
-            // A collapsed group draws its tab strip and nothing else, so the
-            // content region must not claim any space.
-            .when(!group.is_collapsed(), |this| this.flex_1())
-            .when(padded, |this| this.pt_2())
+        // The fill and the collapsed-group exception are base's; the padding
+        // is this skin's, and is the only reason this hook is implemented.
+        div().id("active-panel").when(padded, |this| this.pt_2())
     }
 
     fn render_tab_bar(
@@ -763,19 +744,20 @@ impl TabGroupRenderer for TabGroupSkin {
         // springs carry it through instead, and the element no longer needs an
         // outer frame to hold the destination while an inner one walks to it.
         let id = "drop-placeholder";
-        let left = spring((id, "left"), to.origin().x, PLACEHOLDER_SPRING, window, cx);
-        let top = spring((id, "top"), to.origin().y, PLACEHOLDER_SPRING, window, cx);
+        let placeholder_spring = cx.theme().motion_tokens().spring_move.with_epsilon(0.5);
+        let left = spring((id, "left"), to.origin().x, placeholder_spring, window, cx);
+        let top = spring((id, "top"), to.origin().y, placeholder_spring, window, cx);
         let width = spring(
             (id, "width"),
             to.size().width,
-            PLACEHOLDER_SPRING,
+            placeholder_spring,
             window,
             cx,
         );
         let height = spring(
             (id, "height"),
             to.size().height,
-            PLACEHOLDER_SPRING,
+            placeholder_spring,
             window,
             cx,
         );

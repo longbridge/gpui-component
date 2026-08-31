@@ -24,6 +24,7 @@ behavior and infrastructure in `gpui-base`.
 - **Dock Layout**: Resizable panels, draggable tabs, nested splits, edge docks, and freeform Tiles.
 - **Rich Content**: Native Markdown and HTML, syntax highlighting, and charts.
 - **Design Freedom**: Use the complete visual system or build your own on `gpui-base`.
+- **Typed Motion**: CSS-aligned easing, timing, keyframes, springs, presence, and measured reveal with allocation-free steady sampling.
 - **Cross Platform**: Ship one Rust codebase to macOS, Windows, and Linux.
 
 ## Quick Example
@@ -80,6 +81,8 @@ fn main() {
 ```
 
 ## Community & Support
+
+Learn how to build interruptible 120 FPS animation in the [GPUI Base Motion guide](/base/motion).
 
 - [GitHub Repository](https://github.com/longbridge/gpui-component)
 - [Issue Tracker](https://github.com/longbridge/gpui-component/issues)

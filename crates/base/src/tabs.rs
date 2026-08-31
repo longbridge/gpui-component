@@ -325,7 +325,7 @@ mod tests {
         });
         context.update(|window, cx| window.draw(cx).clear(cx));
 
-        let (root, child) = captured.lock().unwrap().clone();
+        let (root, child) = *captured.lock().unwrap();
         assert_eq!(
             child.expect("child bounds").center(),
             root.expect("tab bounds").center()

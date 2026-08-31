@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{hash::Hash, rc::Rc};
 
 use gpui::{App, Bounds, Hsla, PathBuilder, Pixels, SharedString, Window, fill, px};
 use gpui_component_macros::IntoPlot;
@@ -18,7 +18,7 @@ use super::build_band_labels;
 pub struct CandlestickChart<T, X, Y>
 where
     T: 'static,
-    X: PartialEq + Into<SharedString> + 'static,
+    X: Eq + Hash + Into<SharedString> + 'static,
     Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     data: Vec<T>,
@@ -35,7 +35,7 @@ where
 
 impl<T, X, Y> CandlestickChart<T, X, Y>
 where
-    X: PartialEq + Into<SharedString> + 'static,
+    X: Eq + Hash + Into<SharedString> + 'static,
     Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     pub fn new<I>(data: I) -> Self
@@ -107,7 +107,7 @@ where
 
 impl<T, X, Y> Plot for CandlestickChart<T, X, Y>
 where
-    X: PartialEq + Into<SharedString> + 'static,
+    X: Eq + Hash + Into<SharedString> + 'static,
     Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {

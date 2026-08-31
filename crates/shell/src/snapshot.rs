@@ -52,7 +52,7 @@ use std::rc::{Rc, Weak};
 
 use crate::{
     engine::ShellRuntime,
-    spec::{SpecArena, SpecId},
+    spec::{SpecArena, SpecId, StructureFingerprint},
 };
 
 /// One frozen description of a script view's interface.
@@ -91,6 +91,16 @@ impl RenderSnapshot {
 
     pub(crate) fn arena(&self) -> &SpecArena {
         &self.arena
+    }
+
+    /// The shape of this description, with its values left out.
+    ///
+    /// Compared against its predecessor's by [`crate::view::ScriptView`] to
+    /// count how often a rebuild produced the structure it replaced. See
+    /// [`StructureFingerprint`] for what that measurement is for and what it
+    /// deliberately does not prove.
+    pub(crate) fn structure(&self) -> StructureFingerprint {
+        self.arena.structure()
     }
 
     /// The description as text. Rendering never needs a GPU to be verified, and

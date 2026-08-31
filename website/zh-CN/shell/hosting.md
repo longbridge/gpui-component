@@ -1,12 +1,12 @@
 ---
 title: Hosting
-description: Rust 这一侧的全貌——运行时的生命周期、挂载脚本视图、从 Host 状态刷新它、指标、退出请求与 hot-reload。
-order: 10
+description: Rust 这一侧的全貌——运行时的生命周期、挂载脚本 View、从 Host 状态刷新它、指标、退出请求与 hot-reload。
+order: 11
 ---
 
 # Hosting
 
-[Getting Started](./getting-started.md) 给的是把脚本视图放上屏幕的那四行。这一页是 Rust 接口的其余部分：该调什么、什么时候调，以及那两三处“看起来该调的那个其实是错的”。
+[Getting Started](./getting-started.md) 给的是把脚本 View 放上屏幕的那四行。这一页是 Rust 接口的其余部分：该调什么、什么时候调，以及那两三处“看起来该调的那个其实是错的”。
 
 ## 运行时
 
@@ -42,9 +42,9 @@ cx.open_window(options, move |window, cx| {
 
 存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于 Host 已经批准；两条路径都按 Host 当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让 Host panic。需要自行处理结构化错误的 Host 使用 `try_load`。失败状态的 root 没有可供监听的应用，因此 `watch` 会返回 `Err`；这里忽略这个错误，才能保留可选择的失败界面。
 
-下面的低层方法只供需要把脚本视图装进既有 Rust 组合的 Host 使用。
+下面的低层方法只供需要把脚本 View 装进既有 Rust 组合的 Host 使用。
 
-加载把源码变成一个**视图类型**——脚本 default 导出的那个类。实例化把这个类型变成一个**视图对象**，也就是一个活的实例：
+加载把源码变成一个**View 类型**——脚本 default 导出的那个类。实例化把这个类型变成一个**View 对象**，也就是一个活的实例：
 
 ```rust
 let view_type = runtime.load_app(&root, "main.js")?;    // 一个目录
@@ -59,7 +59,7 @@ let object = runtime.instantiate(&view_type, window, cx)?;
 
 ## 挂载
 
-脚本视图和别的 GPUI 视图没有两样，它挂在**一个 `ShellRoot` 之下**：
+脚本 View 和别的 GPUI View 没有两样，它挂在**一个 `ShellRoot` 之下**：
 
 ```rust
 cx.open_window(options, move |window, cx| {
@@ -69,7 +69,7 @@ cx.open_window(options, move |window, cx| {
 })
 ```
 
-`ShellRoot` 持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航——正是 `Root` 对一个 `gpui-component` 窗口所起的作用。`window.open_dialog` 这一类调用要经由它找到根视图，所以挂在别的根视图之下的脚本会拿到一条讲清原因的拒绝，而不是悄无声息地没反应。
+`ShellRoot` 持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航——正是 `Root` 对一个 `gpui-component` 窗口所起的作用。`window.open_dialog` 这一类调用要经由它找到根 View，所以挂在别的根 View 之下的脚本会拿到一条讲清原因的拒绝，而不是悄无声息地没反应。
 
 Host 也可以直接驱动同样这几个界面，插件面板与 Host 自己的 UI 因此落在同一个栈里：
 
@@ -81,28 +81,28 @@ root.update(cx, |root, cx| {
 });
 ```
 
-## Host 状态变了，怎么刷新视图
+## Host 状态变了，怎么刷新 View
 
 这是最容易调错的一个，而且调错了不会报错。
 
 ```text
-cx.notify()        ── 把这个视图再画一遍       （不跑脚本）
+cx.notify()        ── 把这个 View 再画一遍       （不跑脚本）
 view.refresh(cx)   ── 而且它的描述已经过期了   （脚本会跑）
 ```
 
-因为脚本的一次 `render` [不等于一帧渲染](./state.md#render-什么时候执行)，光调 `cx.notify()` 重绘的是已经存在的那份 snapshot。如果 Host 改动的是脚本**会读到**的东西——某个 HostModule 背后的实体、一项设置、一份文档——就必须告诉视图：描述本身已经过期了。
+因为脚本的一次 `render` [不等于一帧渲染](./state.md#render-什么时候执行)，光调 `cx.notify()` 重绘的是已经存在的那份 Snapshot。如果 Host 改动的是脚本**会读到**的东西——某个 HostModule 背后的实体、一项设置、一份文档——就必须告诉 View：描述本身已经过期了。
 
 ```rust
 runtime.refresh(&root, cx)?;
 ```
 
-runtime 会先确认 `root` 装载的是它自己的应用，再让脚本视图失效并安排重绘。 Host 不需要拿到具体的 `ScriptView`，也不会因为手工 downcast 或混用另一个 runtime 的视图而刷新错误对象。
+runtime 会先确认 `root` 装载的是它自己的应用，再让脚本 View 失效并安排重绘。 Host 不需要拿到具体的 `ScriptView`，也不会因为手工 downcast 或混用另一个 runtime 的 View 而刷新错误对象。
 
 反过来调错则立刻看得见——界面就是不更新——这与 GPUI 里忘了调 `cx.notify()` 是同一种失败方式。
 
 ## 脚本能碰到什么
 
-三项 Host 设置的生命周期不同。Capabilities 会在每个新视图加载时冻结；store handle 与 HostModule registry 则是该视图共享的实时 Host 配置，替换后会在下一次调用生效：
+三项 Host 设置的生命周期不同。Capabilities 会在每个新 View 加载时冻结；store handle 与 HostModule registry 则是该 View 共享的实时 Host 配置，替换后会在下一次调用生效：
 
 ```rust
 gpui_shell::set_capabilities(
@@ -130,11 +130,14 @@ reading.materializations();    // 跟着帧走
 reading.script_render_time();  // 脚本 render 里的总耗时
 reading.native_time();         // 其中花在 HostModule 里的部分
 reading.slowest_script_render();
+reading.structure_repeat_rate();  // 一次重建产出的结构，与它替换掉的那份是否相同
 ```
 
 `RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，每秒速率就是这么算的。这里没有重置：计数器属于运行时，把它们清零会把正在读它们的其他人一起挪动。要量某一段，就自己留一个基线再相减——Shell story 每次切换 feed 都会取一次基线，所以它的读数回答的是“这个 feed 要花多少”，而不是“这个窗口从打开到现在干了多少”。
 
 回归测试可以直接对 `script_renders` 做断言；[基准测试里的第三个数](./engine.md#那次实测)靠的正是这一点。
+
+`structure_repeats()` 与 `structure_changes()` 回答的是另一个问题：在那些有上一份描述可比的重建里，有多少次产出的**结构**完全相同——相同的组件、相同的 builder 方法、相同的树，只有其中的取值变了。运行时不会因为这个答案而少做任何事；它存在，是为了给[Snapshot 缓存止步于哪里](./performance.md#snapshot-缓存止步于哪里)量个尺寸。 View 的第一次构建没有前一份可比，两个计数都不计它。
 
 ## 开发构建的配置
 
@@ -181,7 +184,7 @@ gpui_shell::on_exit_request(|request, window, cx| {
 });
 ```
 
-`request.code()` 是脚本要求的退出码，`request.view()` 在有的情况下会指出请求来自哪个视图——插件 Host 关掉的应该是**那个**插件的面板，若换成关窗口，就等于让一个插件终结了别人的工作。
+`request.code()` 是脚本要求的退出码，`request.view()` 在有的情况下会指出请求来自哪个 View——插件 Host 关掉的应该是**那个**插件的面板，若换成关窗口，就等于让一个插件终结了别人的工作。
 
 **授权了 exit 却没装处理器的 Host，会在调用现场被告知**，而不是永远不知道：`process.exit()` 会抛出异常，并点名 `on_exit_request`。一个没人回应的请求，是朝着讨好方向说的谎——脚本拿到了成功，而什么都没发生。
 
@@ -193,19 +196,19 @@ gpui_shell::on_exit_request(|request, window, cx| {
 runtime.watch(&root, window, cx)?.forget();
 ```
 
-`runtime.watch` 从已加载的 root 读取解析后的目录与 manifest entry，不再让 Host 维护第二份可能漂移的元数据。它不暗藏构建模式策略：CLI 在解析到 `--watch` 后启用监听，嵌入式 Host 则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watcher` 持有这次监听：把它 drop 掉，循环就停；`.forget()` 则让它跟随视图继续运行。视图、运行时或窗口任意一个消失时，循环也会自己结束。
+`runtime.watch` 从已加载的 root 读取解析后的目录与 manifest entry，不再让 Host 维护第二份可能漂移的元数据。它不暗藏构建模式策略：CLI 在解析到 `--watch` 后启用监听，嵌入式 Host 则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watcher` 持有这次监听：把它 drop 掉，循环就停；`.forget()` 则让它跟随 View 继续运行。 View、运行时或窗口任意一个消失时，循环也会自己结束。
 
-一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个视图：新代码加载失败时，上一个视图继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
+一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个 View：新代码加载失败时，上一个 View 继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
 
-视图本身能挺过重载。`ScriptView::replace_object` 只换掉脚本产出的那部分，实体保留下来，随之保留的还有窗口、焦点与元素身份。
+View 本身能挺过重载。`ScriptView::replace_object` 只换掉脚本产出的那部分，实体保留下来，随之保留的还有窗口、焦点与元素身份。
 
 插件 unload 是比移除单个 view 更强的生命周期边界：manager 会在丢弃插件前取消所有携带该插件 `Policy` 的 outstanding task，包括没有 owner 的工作。任何 continuation 都不能继续保留或使用已卸载插件的权限。
 
 ## 脚本出错的时候
 
-抛异常的脚本不会把界面一起带走。最后一份可用的 snapshot 仍然挂在那里，失败信息报在它上面，读者的滚动位置、焦点、正在读的内容都还在。在有什么让视图失效之前，运行时不会重跑那个失败的 `render`。
+抛异常的脚本不会把界面一起带走。最后一份可用的 Snapshot 仍然挂在那里，失败信息报在它上面，读者的滚动位置、焦点、正在读的内容都还在。在有什么让 View 失效之前，运行时不会重跑那个失败的 `render`。
 
-记得装一个 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 与非法 phase 调用，target 是 `gpui_shell::script`；没有 subscriber 的话这些全部被丢弃，症状就是一个悄悄不再响应的视图。
+记得装一个 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 与非法 phase 调用，target 是 `gpui_shell::script`；没有 subscriber 的话这些全部被丢弃，症状就是一个悄悄不再响应的 View。
 
 ## 还没有的东西
 

@@ -420,7 +420,7 @@ mod tests {
         });
         context.update(|window, cx| window.draw(cx).clear(cx));
 
-        let (root, child) = captured.lock().unwrap().clone();
+        let (root, child) = *captured.lock().unwrap();
         let root = root.expect("button bounds");
         let child = child.expect("child bounds");
         assert_eq!(child.center(), root.center());

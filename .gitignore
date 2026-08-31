@@ -9,6 +9,7 @@ node_modules/
 .claude/worktrees/
 /.superpowers/
 docs/superpowers/
+docs/research/
 /.scratch/
 
 # WASM build artifacts

@@ -56,6 +56,8 @@ pub struct ColorPicker {
     state: Entity<ColorPickerState>,
     featured_colors: Option<Vec<Hsla>>,
     label: Option<SharedString>,
+    /// The announced name, when the visible label is not it.
+    accessibility_label: Option<SharedString>,
     icon: Option<Icon>,
     size: Size,
     anchor: Anchor,
@@ -71,6 +73,7 @@ impl ColorPicker {
             featured_colors: None,
             size: Size::Medium,
             label: None,
+            accessibility_label: None,
             icon: None,
             anchor: Anchor::TopLeft,
         }
@@ -99,6 +102,17 @@ impl ColorPicker {
     /// Default is `None`.
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Set the name a screen reader announces, when the visible label is not
+    /// it.
+    ///
+    /// A color picker's name comes from its [`label`](Self::label) by default.
+    /// Setting this replaces the announced name without changing the visible
+    /// label.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -462,9 +476,12 @@ impl RenderOnce for ColorPicker {
         BaseColorPicker::new(self.id.clone())
             .open(open)
             .track_focus(&focus_handle)
-            .when_some(self.label.clone(), |this, label| {
-                this.accessibility_label(label)
-            })
+            .when_some(
+                self.accessibility_label
+                    .clone()
+                    .or_else(|| self.label.clone()),
+                |this, label| this.accessibility_label(label),
+            )
             .on_open_change(move |open, _, cx| {
                 open_state.update(cx, |state, cx| state.set_open(open, cx));
             })
@@ -490,6 +507,40 @@ impl RenderOnce for ColorPicker {
                     })
                     .child(self.render_colors(window, cx)),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{AppContext as _, TestAppContext};
+
+    use super::*;
+
+    #[gpui::test]
+    fn an_explicit_accessibility_label_replaces_the_visible_one(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let state = cx.new(|cx| ColorPickerState::new(window, cx));
+
+            let plain = ColorPicker::new(&state).label("Color");
+            assert_eq!(plain.accessibility_label, None);
+            assert_eq!(plain.label.as_deref(), Some("Color"));
+
+            let named = ColorPicker::new(&state)
+                .label("Color")
+                .accessibility_label("Text color");
+            assert_eq!(
+                named.accessibility_label.as_deref(),
+                Some("Text color"),
+                "an explicit name must win over the visible label"
+            );
+            assert_eq!(
+                named.label.as_deref(),
+                Some("Color"),
+                "and must not change what is drawn"
+            );
+        });
     }
 }
 

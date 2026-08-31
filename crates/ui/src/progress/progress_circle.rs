@@ -3,13 +3,13 @@ use gpui::Bounds;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, IntoElement, ParentElement,
-    Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, ease_in_out, px, relative,
+    Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window, canvas, ease_in_out, px,
+    relative,
 };
-use gpui_base::Progress as BaseProgress;
+use gpui_base::{Progress as BaseProgress, Transition, transition};
 use instant::Duration;
 use std::f32::consts::TAU;
 
-use super::ProgressState;
 use crate::plot::shape::{Arc, ArcData};
 
 /// A circular progress indicator element.
@@ -19,6 +19,7 @@ pub struct ProgressCircle {
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    accessibility_label: Option<SharedString>,
     size: Size,
     children: Vec<AnyElement>,
     loading: bool,
@@ -31,6 +32,7 @@ impl ProgressCircle {
             id: id.into(),
             value: Default::default(),
             color: None,
+            accessibility_label: None,
             style: StyleRefinement::default(),
             size: Size::default(),
             children: Vec::new(),
@@ -58,6 +60,12 @@ impl ProgressCircle {
     /// The value should be between 0.0 and 100.0.
     pub fn value(mut self, value: f32) -> Self {
         self.value = value.clamp(0., 100.);
+        self
+    }
+
+    /// Set the accessible name exposed by the progress indicator.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -155,15 +163,24 @@ impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
         let loading = self.loading;
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
-        let prev_target = state.read(cx).target();
-        let has_changed = prev_target != value;
+        let accessibility_label = self.accessibility_label;
+        let animated_value = transition(
+            (self.id.clone(), "value"),
+            value,
+            Transition::new(cx.theme().motion_tokens().duration_normal)
+                .easing(cx.theme().motion_tokens().easing_move.clone()),
+            window,
+            cx,
+        );
 
         let color = self.color.unwrap_or(cx.theme().progress_bar);
 
         BaseProgress::new(self.id.clone())
             .value(value)
             .indeterminate(loading)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
             .flex()
             .items_center()
             .justify_center()
@@ -178,32 +195,7 @@ impl RenderOnce for ProgressCircle {
             .refine_style(&self.style)
             .children(self.children)
             .map(|this| {
-                if has_changed {
-                    let from = prev_target;
-                    state.read(cx).set_target(value);
-
-                    let duration = Duration::from_secs_f64(0.15);
-                    cx.spawn({
-                        let state = state.clone();
-                        async move |cx| {
-                            cx.background_executor().timer(duration).await;
-                            _ = state.update(cx, |this, _| {
-                                this.value = this.target();
-                            });
-                        }
-                    })
-                    .detach();
-
-                    this.with_animation(
-                        format!("progress-circle-{}", from),
-                        Animation::new(duration),
-                        move |this, delta| {
-                            let v = from + (value - from) * delta;
-                            this.child(Self::render_circle(0., v, color))
-                        },
-                    )
-                    .into_any_element()
-                } else if loading {
+                if loading {
                     this.with_animation(
                         "progress-circle-loading",
                         Animation::new(Duration::from_secs(1)).repeat(),
@@ -215,9 +207,26 @@ impl RenderOnce for ProgressCircle {
                     )
                     .into_any_element()
                 } else {
-                    this.child(Self::render_circle(0., value, color))
+                    this.child(Self::render_circle(0., animated_value, color))
                         .into_any_element()
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stores_an_explicit_accessibility_label() {
+        let plain = ProgressCircle::new("upload");
+        assert_eq!(plain.accessibility_label, None);
+
+        let named = ProgressCircle::new("upload").accessibility_label("Upload progress");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Upload progress")
+        );
     }
 }

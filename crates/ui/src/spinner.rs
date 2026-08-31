@@ -73,3 +73,31 @@ impl RenderOnce for Spinner {
             .into_element()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Render, TestAppContext, px, size};
+
+    struct SpinnerHost;
+
+    impl Render for SpinnerHost {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            Spinner::new()
+        }
+    }
+
+    #[gpui::test]
+    fn reduced_motion_spinner_is_static_and_requests_no_frame(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let window = cx.open_window(size(px(100.), px(100.)), |_, _| SpinnerHost);
+        cx.run_until_parked();
+
+        assert_eq!(
+            window
+                .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+                .unwrap(),
+            0
+        );
+    }
+}

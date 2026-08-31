@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::{ActiveTheme, AxisExt, StyledExt, ThemeStyled as _};
 pub use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
-use gpui_base::{Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack, Spring, spring};
+use gpui_base::{Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack, spring};
 
 use gpui::{
     App, Axis, Background, Corners, DefiniteLength, ElementId, Entity, EntityId, Hsla,
@@ -15,13 +15,6 @@ use gpui::{
 const THUMB_RING_WIDTH: Pixels = px(3.);
 /// Opacity of the fully grown thumb ring.
 const THUMB_RING_OPACITY: f32 = 0.5;
-/// Thumb ring grow and shrink motion.
-///
-/// A click presses and releases faster than the ring finishes growing, so the
-/// ring is sprung to decelerate through the reversal. Critically damped, so it
-/// never grows past the ring width the thumb reserves for it.
-const THUMB_RING_SPRING: Spring = Spring::new(Duration::from_millis(150));
-
 /// The animated hover ring of one thumb.
 struct ThumbRing {
     interaction: Entity<ThumbInteraction>,
@@ -62,7 +55,7 @@ impl ThumbRing {
             } else {
                 0.
             },
-            THUMB_RING_SPRING,
+            cx.theme().motion_tokens().spring_control,
             window,
             cx,
         );

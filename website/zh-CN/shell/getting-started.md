@@ -6,7 +6,7 @@ order: 2
 
 # Getting Started
 
-`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由 Host 构建运行时、决定脚本能碰到什么，并把脚本视图挂在它想挂的位置。直接运行一个脚本目录——也就是下面那个 `gpui-shell` 二进制——是随之而来的开发便利，而不是它的定位。
+`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由 Host 构建运行时、决定脚本能碰到什么，并把脚本 View 挂在它想挂的位置。直接运行一个脚本目录——也就是下面那个 `gpui-shell` 二进制——是随之而来的开发便利，而不是它的定位。
 
 ## 把运行时接进 Rust 应用
 
@@ -97,7 +97,7 @@ cargo run -p gpui-shell -- hello
 
 **能力由哪个包提供，就从哪个模块导入。** `"gpui"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
-**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
+**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在 View 创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在 View 失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
 **样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是 Host 接口，camelCase 的是你的代码。
 
@@ -113,7 +113,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
 
-参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。如果目录中存在 `gpui-shell.json`，二进制会先验证它，并采用其中声明的 `entry` 与 capabilities。
+参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根 View。如果目录中存在 `gpui-shell.json`，二进制会先验证它，并采用其中声明的 `entry` 与 capabilities。
 
 ## 不运行也能检查脚本
 
@@ -150,6 +150,8 @@ cargo run -p gpui-shell -- types hello
 
 它会在应用旁边写出 `gpui.d.ts`。在脚本顶部加上 `// @ts-check`，编辑器就会补全整套 API，并在运行之前、在调用点上直接拒绝拼错的样式方法、不存在的颜色 token，或者 `.p("auto")`。
 
+它同时会把编辑器需要的其余部分一并配好：manifest 声明的每个 Git 依赖都会被抓取并按声明的名字链接进 `node_modules`，于是 `import { style } from "omarchy-ui"` 解析到的正是运行时将要执行的那批文件，连同该 package 自己的类型、参数与 JSDoc；若目录里既没有 `jsconfig.json` 也没有 `tsconfig.json`，还会生成一份 `jsconfig.json`。详见[依赖](./dependencies.md)。
+
 这份声明可信，是因为它**从运行时实际派发所依据的那几张表生成**，而不是照着文档抄的：
 
 - 样式方法名来自 JavaScript prelude 构建元素原型时遍历的同一份列表；
@@ -169,7 +171,7 @@ cargo run -p gpui-shell -- hello --dev      # 隐含 --watch
 
 `--watch` 每秒轮询应用目录四次，对一串连续写入去抖 200 ms，然后重载。一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。
 
-重载会在碰到实时视图之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的视图继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
+重载会在碰到实时 View 之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的 View 继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
 
 `--dev` 隐含 `--watch`，并在构造运行时之前开启 development mode。它恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。见 [Capabilities](./capabilities.md#沙箱)。
 
@@ -186,7 +188,7 @@ gpui-shell --help | --version
 | -------------- | ------------------------------------------- |
 | `<directory>`  | 应用根目录，或其中的 `main.js`              |
 | `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1` |
-| `types`        | 在应用旁边写出 `gpui.d.ts`                  |
+| `types`        | 写出 `gpui.d.ts`、链接 manifest 依赖、生成配置 |
 | `--watch`      | 源码变化时重载                              |
 | `--dev`        | 开发模式，隐含 `--watch`                    |
 | `--print-spec` | 配合 `check`，额外打印构建出的元素描述      |

@@ -6,11 +6,11 @@ order: 2
 
 # Getting Started
 
-`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script views where it wants them. Running a script directory on its own — the `gpui-shell` binary below — is the development convenience that comes with that, not the point of it.
+`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script Views where it wants them. Running a script directory on its own — the `gpui-shell` binary below — is the development convenience that comes with that, not the point of it.
 
 ## Add the runtime to a Rust application
 
-A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script view under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
+A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script View under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
 
 ```rust
 use gpui_shell::{Capabilities, ShellRuntime};
@@ -46,7 +46,7 @@ Two of those lines carry rules rather than mechanics.
 
 **Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
 
-Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a view that quietly stopped responding.
+Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a View that quietly stopped responding.
 
 ## The script it loads
 
@@ -98,7 +98,7 @@ Four things in that file are worth naming now, because everything else builds on
 
 **One module per crate that provides it.** `"gpui"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. A name belongs to exactly one of them, so an import line says which layer a script depends on. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
-**`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns one element, retained `Entity` or string, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
+**`main.js` must `export default` a class extending `View`.** `init` runs once when the View is created; `render` returns one element, retained `Entity` or string, and runs when the View is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
 **Style methods are `snake_case`, your own code is `camelCase`.** `items_center`, `on_click`, `text_color`, `gap_2` keep their Rust spelling, because the no-argument style surface is generated from GPUI's reflection table rather than written by hand. Anything the application declares itself — variables, methods, object keys — is ordinary JavaScript. The contrast is deliberate: a `snake_case` call is host surface, a `camelCase` one is your code.
 
@@ -114,7 +114,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
 
-The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` by default, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view. If the directory contains `gpui-shell.json`, the binary validates that manifest first and uses its declared `entry` and capabilities.
+The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` by default, takes the class that module default-exports, constructs one instance, and mounts it as the window's root View. If the directory contains `gpui-shell.json`, the binary validates that manifest first and uses its declared `entry` and capabilities.
 
 ## Check a script without running it
 
@@ -151,6 +151,8 @@ cargo run -p gpui-shell -- types hello
 
 This writes `gpui.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
 
+It also sets up everything else the editor needs: each Git dependency the manifest declares is fetched and linked into `node_modules` under its declared name, so `import { style } from "omarchy-ui"` resolves to the same files the runtime will execute and carries the package's own types, parameters and JSDoc; and a `jsconfig.json` is scaffolded when the directory has neither that nor a `tsconfig.json`. See [Dependencies](./dependencies.md).
+
 The declarations can be trusted because they are **generated from the tables the runtime dispatches through**, not transcribed from this documentation:
 
 - style method names come from the same list the JavaScript prelude loops over to build the element prototype;
@@ -170,7 +172,7 @@ cargo run -p gpui-shell -- hello --dev      # implies --watch
 
 `--watch` polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.
 
-A reload does all of its fallible work before it touches the live view. If the new code fails to load, the previous view keeps running, the error goes to stderr, and a toast with a stable id reports it in the window; the next successful reload retracts that toast. A broken save never costs you the window.
+A reload does all of its fallible work before it touches the live View. If the new code fails to load, the previous View keeps running, the error goes to stderr, and a toast with a stable id reports it in the window; the next successful reload retracts that toast. A broken save never costs you the window.
 
 `--dev` implies `--watch` and enables development mode before the runtime is constructed. It restores dynamic-code constructors and leaves built-in prototypes writable, while capability checks remain unchanged. See [Capabilities](./capabilities.md#the-sandbox).
 
@@ -187,7 +189,7 @@ gpui-shell --help | --version
 | -------------- | --------------------------------------------------------------- |
 | `<directory>`  | The application root, or the `main.js` inside it                |
 | `check`        | Load and render once without a window; exit `0` or `1`          |
-| `types`        | Write `gpui.d.ts` next to the application                       |
+| `types`        | Write `gpui.d.ts`, link the manifest's dependencies, scaffold config |
 | `--watch`      | Reload when the sources change                                  |
 | `--dev`        | Development mode; implies `--watch`                             |
 | `--print-spec` | With `check`, also print the element description that was built |

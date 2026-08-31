@@ -1,7 +1,7 @@
 ---
 title: Dock
 description: A dockable workspace — splits, tab groups, tiles, and edge docks — whose layout is pure data and whose appearance is entirely yours.
-order: 5
+order: 6
 example: dock
 exampleKind: base
 ---

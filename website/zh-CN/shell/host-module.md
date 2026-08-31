@@ -1,7 +1,7 @@
 ---
 title: HostModule
 description: Host 如何把自己的 Rust 借给脚本——注册、脚本侧的 import、纯数据边界，以及 Host function 运行时受到的约束。
-order: 11
+order: 12
 ---
 
 # HostModule
@@ -132,7 +132,7 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
 }
 ```
 
-**从里面发出的 `cx.notify()` 在调用退栈之后才送达。** 所以 Host function 可以改一个 entity 并请求所有观察它的视图重渲染，而这次重渲染不会发生在调用它的那段脚本的下面。
+**从里面发出的 `cx.notify()` 在调用退栈之后才送达。** 所以 Host function 可以改一个 entity 并请求所有观察它的 View 重渲染，而这次重渲染不会发生在调用它的那段脚本的下面。
 
 ## 不该占住线程的活
 
@@ -170,7 +170,7 @@ const rows = await query("select 1");
 
 - **同步那一半的拒绝，在调用点抛出。** `arguments.string(0)?` 失败是写下这次调用的地方抛 `TypeError`，而不是一个要 await 才听得到的 rejected promise。
 - **future 的失败会 reject 这个 promise**，消息里带着 `module.function`，所以 `await` 外面包 `try`/`catch` 就是正常写法。
-- **被取消的调用会永远 pending。** 视图消失、或者它的应用被重载，那么续体不会执行，也不会给一段被要求停下来的代码编造一个错误——跟 `cx.sleep` 的答案一致。
+- **被取消的调用会永远 pending。** View 消失、或者它的应用被重载，那么续体不会执行，也不会给一段被要求停下来的代码编造一个错误——跟 `cx.sleep` 的答案一致。
 
 返回类型里的 `Promise` 要你自己写。注册表只核对两边的名字，不读签名，所以声明里漏掉 `Promise` 不会被任何东西抓到。
 
@@ -234,7 +234,7 @@ fn market_module(market: &Entity<Market>) -> HostModule {
                 flip.update(cx, |market, cx| {
                     let watched = market.watch(&symbol)?;
                     // 在这次调用退栈之后才送达，所以它不会重新进入引擎：
-                    // story 和脚本视图会一起重渲染。
+                    // story 和脚本 View 会一起重渲染。
                     cx.notify();
                     Ok(HostValue::from(watched))
                 })

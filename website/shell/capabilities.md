@@ -10,7 +10,7 @@ A script gets **nothing** by default. No file access, no clipboard, no process e
 
 The one exception is storage, and only at the manifest layer: an application that does not mention `storage` gets its own `localStorage`, the way a browser hands one to every origin without being asked. That is a convention about what an author has to *write*, not a hole in the model — the Rust `Capabilities` still deny it until a host says otherwise, and a manifest may still say `"storage": false`. See [Storage](#storage).
 
-The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [HostModule](./host-module.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
+The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [HostModule](./host-module.md). A View freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
 
 ```rust
 gpui_shell::set_capabilities(
@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## The manifest
 
-A directory is recognized by **`gpui-shell.json`**. The manifest is inert data — discovery reads identity, optional version metadata, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, and `capabilities`; only `id`, `name`, and `entry` are required:
+A directory is recognized by **`gpui-shell.json`**. The manifest is inert data — discovery reads identity, optional version metadata, Git dependencies, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, `dependencies`, and `capabilities`; only `id`, `name`, and `entry` are required:
 
 ```json
 {
@@ -74,6 +74,9 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,15 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
   }
 }
 ```
+
+`dependencies` maps a bare module name to a JavaScript package fetched from
+Git before the entry module runs — `import { Title } from "omarchy-ui"`. The
+string form takes strict GitHub shorthand or a full Git URL with an optional
+`#ref`; the object form with an explicit `branch` or `tag` remains supported.
+Every load also links the package where an editor finds it, so the import
+carries the package's own types and documentation. See
+[Dependencies](./dependencies.md) for version selection, the package entry,
+the cache, and what an editor sees.
 
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted — write `"storage": false` to refuse it.
 
@@ -143,7 +155,7 @@ A **denial still throws at the call site** rather than rejecting. The capability
 `writeFile` accepts at most 8 MiB per call. `readdir` stops at 10,000 entries or 1 MiB of UTF-8 name bytes, whichever comes first, so an adversarial directory cannot turn one promise into unbounded allocation.
 
 ::: tip Still do not read a file from `render`
-`render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the view, and `cx.notify()` when it arrives.
+`render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the View, and `cx.notify()` when it arrives.
 :::
 
 ## Storage

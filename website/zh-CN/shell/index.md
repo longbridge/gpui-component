@@ -72,8 +72,8 @@ export default class Counter extends View {
 
 文本编辑、语法高亮、LSP、虚拟化与动画采样都留在 Rust。这条线是职责划分，而不是对脚本的限制：所有必须贴着 GPU 与系统运行的部分都归 Host，插件因此不会成为应用性能与稳定性上的变量。
 
-::: warning 插件是目标，接口尚未开放
-插件之下的机制已经建成并有测试覆盖——manifest 解析与发现、加载与卸载、每个插件独立的 policy 与数据目录，以及 `ScriptPanel`、`ScriptDockSkin`、面板名 interning 与注册表往返。但 `gpui_shell::dock` 目前是 crate-private，脚本还够不到面板，CLI 也尚未使用 `PluginManager`；贡献注册表（`gpui.command`、`gpui.register_panel`、`gpui.keymap`）与授权 UI 都还没做。**今天能完整跑通的是独立脚本这条路径。** 见 [Dock 面板](./dock.md)。
+::: warning 插件是目标，但接口还没有全部开放
+插件之下的机制已经建成并有测试覆盖——manifest 解析与发现、加载与卸载、每个插件独立的 policy 与数据目录。脚本现在已经可以贡献面板并绘制 dock 的 chrome：`DockArea`、`dock_area(...)` 与 `DockArea.register_panel` 都已公开，带着脚本面板的布局也能熬过一次重启。还缺的是贡献注册表的其余部分（`gpui.command`、`gpui.keymap`）、授权 UI，以及一个用上 `PluginManager` 的 CLI。**今天能完整跑通的是独立脚本这条路径，dock 也在其中。** 见 [Dock 与面板](./dock.md)。
 :::
 
 ## 核心特点
@@ -86,7 +86,7 @@ export default class Counter extends View {
 
 ### 能力：一整层应用层，而不是一套控件
 
-脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、链接与控件、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的视图状态、由 Host 留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务、原生 transition 与 spring，以及需要授权才能用的文件、存储、剪贴板、进程、HTTP、TCP 与 WebSocket 接口。
+脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、链接与控件、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的 View 状态、由 Host 留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务、原生 transition 与 spring，以及需要授权才能用的文件、存储、剪贴板、进程、HTTP、TCP 与 WebSocket 接口。
 
 围绕它的还有：`--watch` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
 
@@ -96,7 +96,7 @@ export default class Counter extends View {
 
 ### 性能：脚本不在每一帧里
 
-`render` **不是**每帧跑一次。它把界面描述一次、存进一份 snapshot；在下一次 `cx.notify()` 之前，每一次重绘都由 Rust 重放这份 snapshot。指针划过按钮、光标闪烁、列表滚动、原生 transition 或 spring 推进，这些重绘都不执行 JavaScript。
+`render` **不是**每帧跑一次。它把界面描述一次、存进一份 Snapshot；在下一次 `cx.notify()` 之前，每一次重绘都由 Rust 重放这份 Snapshot。指针划过按钮、光标闪烁、列表滚动、原生 transition 或 spring 推进，这些重绘都不执行 JavaScript。
 
 运行时把两件事分开计数，gallery 的 Shell story（`cargo run -- shell`）把这两个数摆在界面上：
 
@@ -111,12 +111,12 @@ export default class Counter extends View {
 
 帧数取决于屏幕，JavaScript 的次数取决于数据。第二行里另外 41 帧重放的是已有的描述。
 
-成本因此按用户操作计，而不是按帧计。443 节点的面板，跑一遍 `render`、把整个界面记进 snapshot 要 1.1 ms，只在状态变化时付；之后每一帧 1.3 ms，那是渲染本身——把 snapshot 变成元素、布局、绘制，其中没有 JavaScript。
+成本因此按用户操作计，而不是按帧计。443 节点的面板，跑一遍 `render`、把整个界面记进 Snapshot 要 1.1 ms，只在状态变化时付；之后每一帧 1.3 ms，那是渲染本身——把 Snapshot 变成元素、布局、绘制，其中没有 JavaScript。
 
 | | 每帧成本 |
 | --- | --- |
-| 没有 snapshot | 1.1 ms (JS render) + 1.3 ms (Rust render) = **2.4 ms/frame render** |
-| 有 snapshot | **1.3 ms** |
+| 没有 Snapshot | 1.1 ms (JS render) + 1.3 ms (Rust render) = **2.4 ms/frame render** |
+| 有 Snapshot | **1.3 ms** |
 
 面板变大也不改变这条性质：[基准测试](./engine.md#那次实测)覆盖到 8,403 个节点，各档的每一帧都不执行 JavaScript，最小一档由每次 CI 运行的断言保证。
 
@@ -130,19 +130,20 @@ export default class Counter extends View {
 
 ### 安全：默认什么都没有，语言本身也一并收紧
 
-`Capabilities::default()` 是空集——没有文件访问、没有存储、没有剪贴板、不能执行进程、没有网络。 Host 在加载视图之前决定授权，视图随后在自己的整个生命周期里保持这份授权；`fs` 接口上的每一条路径都走**同一个**解析器，任何落在授权根之外的结果都会被拒绝。
+`Capabilities::default()` 是空集——没有文件访问、没有存储、没有剪贴板、不能执行进程、没有网络。 Host 在加载 View 之前决定授权， View 随后在自己的整个生命周期里保持这份授权；`fs` 接口上的每一条路径都走**同一个**解析器，任何落在授权根之外的结果都会被拒绝。
 
 在授权之下，沙箱还收紧了语言本身——因为一个 VM 早晚要同时承载多个插件：`eval` 与四个函数编译器全部移除，内置原型被冻结，避免一个插件改动 `Object.prototype` 波及另一个；模块解析被限制在应用目录内；堆（256 MiB）、解释器栈（1 MiB）与单次调用耗时（`render` 为 50 ms）都有上限。其中的耗时上限是一个 `catch` 无法吞掉的中断，这一点由测试保证。见 [Capabilities](./capabilities.md)。
 
 ## 一次渲染是怎么走完的
 
-<img src="/shell-architecture.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制" class="shell-architecture" />
+<img class="architecture-light" src="/shell-architecture-light.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制">
+<img class="architecture-dark" src="/shell-architecture-dark.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制">
 
 这张图画的是一帧的过程，而这张图的形状基本解释了本节文档的其余部分。
 
-GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`，`.child()` 按值取走子元素，视图每次重绘都从零重建整棵元素树。因此一个 JavaScript 对象永远不可能**就是**一个 GPUI 元素——它没有东西可以长期持有。
+GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`，`.child()` 按值取走子元素， View 每次重绘都从零重建整棵元素树。因此一个 JavaScript 对象永远不可能**就是**一个 GPUI 元素——它没有东西可以长期持有。
 
-所以脚本不构建元素，而是**描述**元素。builder 链上的每一次调用，都会把一条操作记录进一块元素描述 arena；脚本手里的对象只带一个指向 arena 的整数下标。当 GPUI 要求视图渲染时，Rust 把这些记录下来的操作重放成真实元素、交给 GPUI，然后整块清空 arena。布局、绘制、命中测试、滚动与 IME 全程不再回到脚本。
+所以脚本不构建元素，而是**描述**元素。builder 链上的每一次调用，都会把一条操作记录进一块元素描述 arena；脚本手里的对象只带一个指向 arena 的整数下标。当 GPUI 要求 View 渲染时，Rust 把这些记录下来的操作重放成真实元素、交给 GPUI，然后整块清空 arena。布局、绘制、命中测试、滚动与 IME 全程不再回到脚本。
 
 由此直接推出三条结论，每条对应下面一个页面：
 
@@ -165,7 +166,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 ## 适用场景
 
 - **为已有的 GPUI 应用增加插件能力——首要场景。** 插件跑在 Host 进程内，能力由 Host 一项一项授予，起点是什么都没有。扩展产品不再意味着 fork 或者发一个新版本：界面与业务逻辑以脚本形式交付，改动不需要重新编译、也不需要重新分发二进制；插件出错会呈现为一个可恢复的错误，而不是把 Host 一起带走。
-- **基于 `gpui-shell` 编写纯 JavaScript 的应用——次要场景。** 整个应用层——元素、样式、视图状态、浮层与系统接口——都在 JavaScript 一侧，而渲染、文本编辑、虚拟化与每一个动画帧仍留在 Rust。这里也是一个插件在挂进 Host 之前被写出来、被验证的地方。
+- **基于 `gpui-shell` 编写纯 JavaScript 的应用——次要场景。** 整个应用层——元素、样式、 View 状态、浮层与系统接口——都在 JavaScript 一侧，而渲染、文本编辑、虚拟化与每一个动画帧仍留在 Rust。这里也是一个插件在挂进 Host 之前被写出来、被验证的地方。
 
 ## 它在架构中的位置
 
@@ -197,9 +198,11 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | [State and Views](./state.md) | `init` / `render`、`cx.notify()`、留存状态、异步 |
 | [Overlays](./overlays.md) | dialog、sheet、toast，以及 phase 规则 |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`、默认拒绝、文件、存储、进程与网络 API |
+| [依赖](./dependencies.md) | shell package：什么样的仓库算一个，manifest 如何命名与钉住它，以及编辑器拿到的类型 |
 | [Hosting](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
 | [HostModule](./host-module.md) | 把 Host 自己的 Rust 借给脚本，以及那条纯数据边界 |
-| [Dock Panels](./dock.md) | 把脚本视图变成可停靠面板，以及重启后什么会留下 |
+| [Dock 与面板](./dock.md) | 把脚本 View 变成可停靠面板、为它绘制 chrome，以及重启后什么会留下 |
+| [Performance](./performance.md) | 脚本的成本：失效频率乘以描述规模、 View 这条边界，以及那几个计数器 |
 | [The Engine Seam](./engine.md) | QuickJS、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测 |
 
 ## 当前状态

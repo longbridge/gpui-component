@@ -12,14 +12,24 @@ use crate::{
     v_flex,
 };
 use gpui::{
-    AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
+    AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, ElementId, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
+    MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
     prelude::FluentBuilder, px, uniform_list,
 };
 
 use super::*;
+
+/// How far behind the pointer a resize drag trails the column edge.
+const HANDLE_SIZE: Pixels = px(2.);
+
+/// Grab room on each side of a resize handle's hairline, so the divider can be
+/// caught without pixel-hunting. Both halves of the band are this wide, so
+/// widening the grab area stays symmetric about the boundary. `resizable`'s
+/// handle pads a hairline the same way, and by the same amount, see
+/// `crates/base/src/resizable/resize_handle.rs`.
+const HANDLE_PADDING: Pixels = px(4.);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionMode {
@@ -389,9 +399,58 @@ where
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
 
-        self.horizontal_scroll_handle
-            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        // Resolve the offset here instead of deferring it to the virtual list.
+        //
+        // The header and the rows share `horizontal_scroll_handle`, but only
+        // the rows are a `VirtualList`, and a deferred `scroll_to_item` is
+        // applied during that list's prepaint — which runs *after* the header
+        // has already been rendered and prepainted with the old offset. The
+        // header would therefore stay one frame behind the rows.
+        match self.horizontal_offset_for_col(col_ix) {
+            Some(offset_x) => {
+                let mut offset = self.horizontal_scroll_handle.offset();
+                offset.x = offset_x;
+                self.horizontal_scroll_handle.set_offset(offset);
+            }
+            // Before the first layout the viewport size is unknown, let the
+            // virtual list resolve the offset once it has been laid out.
+            None => self
+                .horizontal_scroll_handle
+                .scroll_to_item(col_ix, ScrollStrategy::Top),
+        }
+
         cx.notify();
+    }
+
+    /// The horizontal scroll offset that brings the scrollable (non-fixed)
+    /// column at `col_ix` fully into view.
+    ///
+    /// This mirrors the nearest-edge behavior of [`VirtualListScrollHandle::scroll_to_item`]
+    /// with [`ScrollStrategy::Top`]: an already visible column keeps the current
+    /// offset, otherwise the column is aligned to the edge it overflows. Both
+    /// of those move the offset towards a column that exists, so the result
+    /// never runs past the content and needs no extra clamping.
+    ///
+    /// Returns `None` when the viewport size is not known yet, or when `col_ix`
+    /// is out of range.
+    fn horizontal_offset_for_col(&self, col_ix: usize) -> Option<Pixels> {
+        let viewport_width = self.horizontal_scroll_handle.bounds().size.width;
+        if viewport_width <= px(0.) {
+            return None;
+        }
+
+        let cols = self.col_groups.get(self.fixed_left_cols_count()..)?;
+        let col_left: Pixels = cols.get(..col_ix)?.iter().map(|col| col.width).sum();
+        let col_right = col_left + cols.get(col_ix)?.width;
+        let offset_x = self.horizontal_scroll_handle.offset().x;
+
+        Some(if col_left + offset_x < px(0.) {
+            -col_left
+        } else if col_right + offset_x > viewport_width {
+            viewport_width - col_right
+        } else {
+            offset_x
+        })
     }
 
     /// Returns the selected row index.
@@ -1284,34 +1343,55 @@ where
         }
     }
 
+    /// The other half of that band, for the boundary on the *left* of column
+    /// `ix` — the one owned by column `ix - 1`.
+    ///
+    /// It is positioned absolutely so that reaching back over the boundary
+    /// costs the header row no width, and it paints after this column's own
+    /// cell so that it, and not a column reorder, receives the drag.
+    fn render_leading_resize_handle(
+        &self,
+        ix: usize,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let Some(prev) = ix.checked_sub(1).filter(|ix| self.is_col_resizable(*ix)) else {
+            return div().into_any_element();
+        };
+
+        self.resize_handle_band(prev, ("resizable-handle-leading", ix).into(), cx)
+            .absolute()
+            .top_0()
+            .left_0()
+            .h_full()
+            .w(HANDLE_PADDING)
+            .into_any_element()
+    }
+
+    /// The half of column `ix`'s resize handle that lies inside column `ix`,
+    /// along with the hairline that marks the boundary.
+    ///
+    /// It is [`HANDLE_PADDING`] wide, like the half on the far side, so the
+    /// grab area is symmetric about the boundary. The negative margin keeps
+    /// the band's net contribution to the header row zero, and `justify_end`
+    /// pins the hairline to the column edge.
     fn render_resize_handle(
         &self,
         ix: usize,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        const HANDLE_SIZE: Pixels = px(2.);
-
-        let resizable = self.col_resizable
-            && self
-                .col_groups
-                .get(ix)
-                .map(|col| col.is_resizable())
-                .unwrap_or(false);
-        if !resizable {
+        if !self.is_col_resizable(ix) {
             return div().into_any_element();
         }
 
         let group_id = SharedString::from(format!("resizable-handle:{}", ix));
 
-        h_flex()
-            .id(("resizable-handle", ix))
+        self.resize_handle_band(ix, ("resizable-handle", ix).into(), cx)
             .group(group_id.clone())
-            .occlude()
-            .cursor_col_resize()
             .h_full()
-            .w(HANDLE_SIZE)
-            .ml(-(HANDLE_SIZE))
+            .w(HANDLE_PADDING)
+            .ml(-HANDLE_PADDING)
             .justify_end()
             .items_center()
             .child(
@@ -1322,6 +1402,37 @@ where
                     .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
                     .w(px(1.)),
             )
+            .into_any_element()
+    }
+
+    fn is_col_resizable(&self, ix: usize) -> bool {
+        self.col_resizable
+            && self
+                .col_groups
+                .get(ix)
+                .map(|col| col.is_resizable())
+                .unwrap_or(false)
+    }
+
+    /// The interactive band that drags the boundary on the right of column
+    /// `ix`, carrying no styling that places or paints it.
+    ///
+    /// Paint order decides which element is offered a drag first: later
+    /// siblings win, and a header cell starts a column reorder. So a single
+    /// band straddling the boundary would lose its outer half to the next
+    /// column's cell. Each boundary is covered by two bands instead, one in
+    /// the `th` on either side, each rendered after that `th`'s own cell and
+    /// so above everything it overlaps.
+    fn resize_handle_band(
+        &self,
+        ix: usize,
+        id: ElementId,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        h_flex()
+            .id(id)
+            .occlude()
+            .cursor_col_resize()
             .on_drag_move(
                 cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
                     match e.drag(cx) {
@@ -1376,7 +1487,6 @@ where
                     cx.notify();
                 }),
             )
-            .into_any_element()
     }
 
     /// Render the row header cell (when cell_selectable is enabled)
@@ -1521,8 +1631,10 @@ where
                         }
                     }),
             )
-            // resize handle
+            // resize handle cell right side
             .child(self.render_resize_handle(col_ix, window, cx))
+            // resize handle cell left side
+            .child(self.render_leading_resize_handle(col_ix, window, cx))
             // to save the bounds of this col.
             .on_prepaint({
                 let view = cx.entity().clone();

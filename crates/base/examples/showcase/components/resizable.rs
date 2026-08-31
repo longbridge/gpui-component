@@ -1,4 +1,4 @@
-use gpui::{IntoElement, ParentElement as _, Styled as _, div, px, rgb};
+use gpui::{IntoElement, ParentElement as _, Styled as _, div, px};
 use gpui_base::{h_resizable, resizable_panel};
 
 use super::super::BaseShowcase;
@@ -10,7 +10,7 @@ impl BaseShowcase {
             .h_40()
             .text_xs()
             .border_1()
-            .border_color(rgb(0x171717))
+            .border_color(super::example_rgb(0x171717))
             .child(
                 h_resizable("example-resizable")
                     .child(
@@ -24,14 +24,17 @@ impl BaseShowcase {
                                     .items_center()
                                     .justify_center()
                                     .border_r_1()
-                                    .border_color(rgb(0x171717))
+                                    .border_color(super::example_rgb(0x171717))
                                     .p_2()
                                     .items_start()
                                     .justify_start()
                                     .flex_col()
                                     .gap_1()
                                     .child(
-                                        div().text_xs().text_color(rgb(0x737373)).child("PROJECT"),
+                                        div()
+                                            .text_xs()
+                                            .text_color(super::example_rgb(0x737373))
+                                            .child("PROJECT"),
                                     )
                                     .children(["Overview", "Components", "Settings"].map(
                                         |label| {
@@ -54,7 +57,7 @@ impl BaseShowcase {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .bg(rgb(0xffffff))
+                                .bg(super::example_rgb(0xffffff))
                                 .p_2()
                                 .items_start()
                                 .justify_start()
@@ -63,7 +66,7 @@ impl BaseShowcase {
                                 .child(div().child("Workspace"))
                                 .child(
                                     div()
-                                        .text_color(rgb(0x737373))
+                                        .text_color(super::example_rgb(0x737373))
                                         .child("Drag the divider to resize navigation."),
                                 ),
                         ),

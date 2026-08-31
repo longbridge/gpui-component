@@ -98,6 +98,74 @@ use crate::value::Bridged;
 /// having them in the project, not by being told where.
 pub const FILE_NAME: &str = "gpui.d.ts";
 
+/// The editor configuration filename, in the spelling a JavaScript project uses.
+pub const CONFIG_FILE_NAME: &str = "jsconfig.json";
+
+/// The configuration this one is written beside, and defers to.
+const TYPESCRIPT_CONFIG_FILE_NAME: &str = "tsconfig.json";
+
+/// What an editor has to be told before `gpui.d.ts` and the linked packages
+/// mean anything.
+///
+/// The settings match the ones the applications in this repository were
+/// written against — `examples/js_todolist/jsconfig.json` and its siblings —
+/// so a generated project and a hand-written one are checked the same way.
+/// The file explains each of them to whoever opens it, which is why it carries
+/// its own `"// why"`.
+///
+/// It is only ever written into a directory that has no configuration at all,
+/// so `checkJs` turns checking on for an application that had none rather than
+/// changing the terms under an application that already chose.
+const EDITOR_CONFIG: &str = r#"{
+  "// why": [
+    "Written once by gpui-shell, then yours: an existing jsconfig.json or",
+    "tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "`moduleResolution` is how a bare specifier is answered. Left to be",
+    "inferred it can still land on the resolution that never looks in",
+    "node_modules, and a Git dependency the runtime resolves fine is",
+    "underlined as a module the editor cannot find.",
+    "",
+    "`lib` decides which globals exist. The default hands a script the",
+    "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
+    "not have — and their declarations collide with the ones gpui.d.ts makes,",
+    "so the file describing the API is itself reported as the error.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true
+  }
+}
+"#;
+
+/// Writes the editor configuration beside an application, once.
+///
+/// Only when the directory has neither configuration file: the first launch
+/// scaffolds one, and everything after that leaves the author's own settings
+/// alone. Returns the path only when it actually wrote.
+fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+    let path = directory.join(CONFIG_FILE_NAME);
+    if std::fs::symlink_metadata(&path).is_ok()
+        || std::fs::symlink_metadata(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).is_ok()
+    {
+        return Ok(None);
+    }
+    std::fs::write(&path, EDITOR_CONFIG)?;
+    Ok(Some(path))
+}
+
 /// Emits the TypeScript declarations for the script API.
 ///
 /// The output is deterministic — no timestamps, no reflection order — so
@@ -246,6 +314,16 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
 
     let mut written = Vec::new();
     let mut first_error = None;
+    // The application root only: one project, one configuration, and a nested
+    // directory that happens to import `gpui` is part of it rather than a
+    // second project.
+    match write_editor_config(root) {
+        Ok(Some(path)) => written.push(path),
+        Ok(None) => {}
+        Err(error) => {
+            first_error.get_or_insert(error);
+        }
+    }
     for directory in directories {
         match refresh(&directory) {
             Ok(Some(path)) => written.push(path),
@@ -673,11 +751,43 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    */
   export interface Context {
     /**
-     * Requests a re-render. Legal from an event handler or a task; calling it
-     * during `render` throws, because notifying yourself while rendering is a
-     * loop.
+     * Requests a re-render of the current view, or of one retained `Entity`.
+     *
+     * Pass a target after changing shared state that retained child reads. It
+     * invalidates that child's script description without invoking its
+     * `update(props)`; use `entity.set_props(props)` when the child must receive
+     * and process new props.
+     *
+     * Legal from an event handler or a task. Calling it during `render` throws,
+     * because notifying a view while rendering is a loop.
      */
-    notify(): void;
+    notify(target?: Entity): void;
+    /**
+     * `App::bind_keys`. Installs key bindings and answers how many.
+     *
+     * The keymap is the application's, not a window's or a view's, so a chord
+     * bound here is live wherever its `context` predicate matches. The whole
+     * list is validated before any of it is installed: a keymap half applied
+     * because one entry had a typo is a worse state than one not applied, and
+     * the script cannot see which half made it.
+     *
+     * Illegal from `render`.
+     */
+    bind_keys(bindings: KeyBinding[]): number;
+    /**
+     * `App::stop_propagation`. Stops this event reaching the handlers above
+     * this element.
+     *
+     * GPUI delivers an event to every handler on the path, so a row inside a
+     * list with its own `on_click` fires both. Call this from the inner one to
+     * keep the event there.
+     */
+    stop_propagation(): void;
+    /**
+     * `App::propagate`. Undoes a `stop_propagation()` made earlier in the same
+     * dispatch, letting the event continue.
+     */
+    propagate(): void;
     phase(): import("gpui-shell").ScopePhase;
     /** Reads the current `gpui_base::Theme` semantic token projection. */
     theme(): import("gpui-base").Theme;
@@ -769,6 +879,19 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     alt: boolean;
     /** Command on macOS, Windows key elsewhere. */
     platform: boolean;
+    /** The Function key. */
+    function: boolean;
+  }
+
+  /** The Caps Lock state carried by GPUI modifier-change events. */
+  export interface Capslock {
+    on: boolean;
+  }
+
+  /** What an `on_modifiers_changed` handler receives. */
+  export interface ModifiersChangedEvent {
+    modifiers: Modifiers;
+    capslock: Capslock;
   }
 
   /** What an `on_click` handler receives. Keyboard activation counts as one. */
@@ -777,12 +900,93 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     modifiers: Modifiers;
   }
 
+  /**
+   * What an `on_key_down` or `on_key_up` handler receives.
+   *
+   * `keystroke` is the whole chord in the spelling a key binding is written
+   * in — `"cmd-shift-s"`, `"escape"`, `"ctrl-alt-delete"` — and is what a
+   * comparison is normally written against. `key` and `modifiers` are the
+   * same thing taken apart, for when only one half matters.
+   *
+   * The platform modifier is spelled `cmd` on every platform, including Linux
+   * and Windows. GPUI spells it for the platform it was built for, which is
+   * right for a keymap a person reads and wrong for a string a program
+   * compares: one script runs on all three, and `event.keystroke === "cmd-s"`
+   * has to mean the same thing in all three. It is also the spelling
+   * `cx.bind_keys` accepts everywhere, so a binding and the event it produces
+   * agree by construction.
+   */
+  export interface KeyEvent {
+    /** The key printed on the key that was pressed, e.g. `"s"` or `"escape"`. */
+    key: string;
+    /** The full chord, as GPUI's `Keystroke::unparse` spells it. */
+    keystroke: string;
+    /** The character this keystroke would type, when it types one. */
+    key_char?: string;
+    modifiers: Modifiers;
+    /** Whether the key is being held down. Absent on `on_key_up`. */
+    is_held?: boolean;
+  }
+
   export interface Point { x: number; y: number; }
+  export interface Size { width: number; height: number; }
   /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
     bounds: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /**
+   * What an `on_mouse_down`, `on_mouse_up` or `on_mouse_down_out` handler
+   * receives.
+   *
+   * `local_position` and `bounds` are absent when the element has not been
+   * painted yet, and on an `on_mouse_down_out` press they describe an element
+   * the pointer is outside of — so `local_position` there is negative, or past
+   * the far edge, which is exactly what says which way.
+   */
+  export interface MouseButtonEvent {
+    button: MouseButton;
+    /** How many presses in the current sequence; `2` on a double-click. */
+    click_count: number;
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /** What an `on_action` handler receives. */
+  export interface ActionEvent {
+    /** The action's name, as the script bound and registered it. */
+    action: string;
+  }
+
+  /** One entry of `cx.bind_keys`. */
+  export interface KeyBinding {
+    /** The chord, e.g. `"cmd-s"`, or a sequence: `"ctrl-k ctrl-s"`. */
+    keystroke: string;
+    /** The action this chord dispatches. */
+    action: string;
+    /**
+     * Where it applies, as a key-context predicate matched against the
+     * `key_context(...)` an element declares — `"Editor"`, `"Pane && !modal"`.
+     * Omitted, the binding is global.
+     */
+    context?: string;
+  }
+
+  /** What an `on_scroll_wheel` handler receives. */
+  export interface ScrollWheelEvent {
+    /** The scroll distance in pixels, whichever unit the device reported. */
+    delta: Point;
+    /** The same distance in lines, when the device reported lines. */
+    delta_lines?: Point;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
 
@@ -889,6 +1093,20 @@ const ELEMENT_METHODS: &str = r#"    /**
      */
     content(element: Element): Element;
     /**
+     * Fills an `Avatar`'s `image` slot, which takes an `AvatarImage`.
+     *
+     * Consumed exactly as `content` is — a slot element is not also drawn as a
+     * child. Base renders this one when it is there and the `fallback` when it
+     * is not, so filling both is how a picture gets something to fall back to.
+     */
+    image(element: Element): Element;
+    /** Fills an `Avatar`'s `fallback` slot, which takes an `AvatarFallback`. */
+    fallback(element: Element): Element;
+    /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
+    header(element: Element): Element;
+    /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
+    panel(element: Element): Element;
+    /**
      * Fills the `trigger` slot of a `Popover` or a `HoverCard`: the element
      * that is on screen while the surface is closed, and that opens it.
      *
@@ -951,6 +1169,104 @@ const ELEMENT_METHODS: &str = r#"    /**
     on_mouse_move(handler: (event: MouseMoveEvent, cx: Context) => void): Element;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_key_down`, delivered while this element or
+     * something inside it holds the keyboard.
+     *
+     * A key event travels the focus path, so `track_focus(handle)` is half of
+     * this registration rather than a separate concern: without it the handler
+     * sits on an element the keyboard never reaches and nothing arrives. The
+     * event continues to the handlers above unless `cx.stop_propagation()`
+     * says otherwise.
+     *
+     * Wired on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`,
+     * `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. On any other component it
+     * is recorded and never reaches GPUI, and the log says so — wrap it and
+     * write the handler on the wrapper. The same list applies to `on_key_up`,
+     * the four pointer handlers, `on_action` and `key_context`.
+     *
+     * Wired is not the same as reachable. A key travels the focus path, so a
+     * component that accepts no focus handle — `Tab` — hears presses and never
+     * hears keys, however well both are wired.
+     */
+    on_key_down(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */
+    on_key_up(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_modifiers_changed`, on the keyboard focus path. */
+    on_modifiers_changed(
+      handler: (event: ModifiersChangedEvent, cx: Context) => void,
+    ): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down`, for one button.
+     *
+     * Lower-level than `on_click`, and the reason to reach for it is that a
+     * press is not a click: it fires before the release, it reports which
+     * button, and `click_count` distinguishes a double-click. Registering it
+     * for two buttons on one element is fine — the two handlers are
+     * independent.
+     */
+    on_mouse_down(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /** GPUI `InteractiveElement::on_mouse_up`, for one button. */
+    on_mouse_up(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down_out`: a press anywhere *outside*
+     * this element, delivered during the capture phase.
+     *
+     * This is how a surface a script drew itself is dismissed by a press
+     * elsewhere — the same listener base's own components close on. It fires
+     * for any button.
+     */
+    on_mouse_down_out(handler: (event: MouseButtonEvent, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_scroll_wheel`: wheel and trackpad scrolling
+     * over this element.
+     *
+     * For scrolling a region, `overflow_scroll()` is the answer and this is
+     * not: it hands GPUI's own retained scroll container the job. Use this when
+     * the gesture drives something else — a zoom, a value, a custom viewport.
+     */
+    on_scroll_wheel(handler: (event: ScrollWheelEvent, cx: Context) => void): Element;
+    /**
+     * `handler(event, cx)` when the named action is dispatched to this element
+     * or to something inside it.
+     *
+     * An action is the level above a keystroke: `cx.bind_keys` says which
+     * chord means `"save"`, in which context, and this says what `"save"`
+     * does. A menu item or a button dispatching the same name through
+     * `window.dispatch_action("save")` reaches the same handler without
+     * pretending to be a keyboard.
+     *
+     * Registering several on one element is fine and they are independent. An
+     * action none of them names carries on to an element further out.
+     */
+    on_action(action: string, handler: (event: ActionEvent, cx: Context) => void): Element;
+    /**
+     * `InteractiveElement::key_context`: the key-binding context this element
+     * and its subtree sit in.
+     *
+     * What a binding's `context` predicate is matched against, so one chord can
+     * mean one thing in a list and another in an editor. The value is a name or
+     * a predicate expression, not free text; an unparsable one is reported and
+     * the context is left unset.
+     */
+    key_context(context: string): Element;
+    /**
+     * An `AccordionHeader`'s announced heading level — "heading level 3" — as
+     * `aria-level` means it. Defaults to 3. It announces; it sizes nothing.
+     */
+    aria_level(level: number): Element;
+    /**
+     * Whether an `AccordionPanel` stays in the tree while shut. Off by default;
+     * on, its content keeps a scroll position or a half-typed field across a
+     * close and reopen.
+     */
+    keep_mounted(value?: boolean): Element;
     /**
      * `handler(key, cx)` when a row of a virtual list is clicked, where `key`
      * is what the list's `get_key(index)` returned for that row.
@@ -1357,6 +1673,57 @@ const ELEMENT_METHODS: &str = r#"    /**
     active(declare: (el: Element) => Element | void): Element;
     /** Styles applied while the element has focus. */
     focus(declare: (el: Element) => Element | void): Element;
+    /**
+     * Displays the tab at `index` in `group` when this element is clicked.
+     *
+     * One of the twelve **dock commands**, which are how an element a dock's
+     * chrome drew says what it does. A chrome handler runs once per container
+     * per frame for as long as the dock is on screen, so it may not register an
+     * event handler — one created there would pile up for as long as the dock
+     * stood. A command carries no script value: it names a container in the
+     * area and what to ask it, and base does the work.
+     *
+     * Every command takes the object its handler was given — the group, the
+     * dock, the tile — as its first argument. They belong on a `div`, an
+     * `h_flex` or a `v_flex`; a `Button` builds its own interior and has
+     * nowhere to put one.
+     */
+    select_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /** Closes `panel` when this element is clicked, if its group allows it. */
+    close_panel(group: import("gpui-base").DockGroup, panel: number): Element;
+    /** Zooms the group in, or back out. */
+    toggle_zoom(group: import("gpui-base").DockGroup): Element;
+    /**
+     * Makes this element the drag source for the tab at `index`, carrying
+     * base's own panel payload — so dropping it on another group, or on the
+     * area itself, moves the panel there.
+     */
+    drag_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /**
+     * Accepts a dragged panel here. `index` is the slot it lands in; leave it
+     * out to append, which is what a drop past the last tab means.
+     */
+    drop_tab(group: import("gpui-base").DockGroup, index?: number): Element;
+    /** Opens or closes the dock when this element is clicked. */
+    toggle_dock(dock: import("gpui-base").DockRegion): Element;
+    /**
+     * Drags the dock's edge. Base clamps every size it is given against the
+     * area and the opposite dock, so nothing here has to.
+     */
+    resize_dock(dock: import("gpui-base").DockRegion): Element;
+    /** Drags the tile around its canvas, raising it first. */
+    move_tile(tile: import("gpui-base").DockTile): Element;
+    /** Drags one edge or corner of the tile. */
+    resize_tile(
+      tile: import("gpui-base").DockTile,
+      side: import("gpui-base").TileResizeSide,
+    ): Element;
+    /** Brings the tile above the others when this element is pressed. */
+    raise_tile(tile: import("gpui-base").DockTile): Element;
+    /** Zooms the tile to fill its dock, or back out. */
+    toggle_tile_zoom(tile: import("gpui-base").DockTile): Element;
+    /** Closes the tile. */
+    close_tile(tile: import("gpui-base").DockTile): Element;
 "#;
 
 fn shell_types() -> String {
@@ -1581,6 +1948,88 @@ const WINDOW: &str = r#"
      * overlays above — it builds a description like any other element.
      */
     paint_path(path: Path, background: Background | Color): Element;
+
+    /**
+     * `Window::dispatch_action`. Dispatches an action down this window's focus
+     * path, reaching the same handlers a bound chord would.
+     *
+     * This is how a menu item or a toolbar button does what a keystroke does,
+     * without either of them knowing about the other. Illegal from `render`.
+     */
+    dispatch_action(action: string): void;
+
+    /**
+     * `Window::rem_size`. The pixel value one `rem` currently means.
+     *
+     * Legal from `render`, like every measurement below it: a view that sizes
+     * itself from the window has to ask during the pass that draws it.
+     */
+    rem_size(): number;
+    /** `Window::line_height`, in pixels. */
+    line_height(): number;
+    /** `Window::viewport_size`: the drawable area, in pixels. */
+    viewport_size(): Size;
+    /** `Window::bounds`: where the window is on screen, and how big. */
+    bounds(): import("gpui-shell").ElementBounds;
+    /** `Window::mouse_position`, in window coordinates. */
+    mouse_position(): Point;
+    /**
+     * `Window::appearance`, reduced to the two a script can draw for.
+     *
+     * GPUI reports four — each of light and dark has a vibrant variant — but
+     * the difference is in how the platform paints *behind* the window, which
+     * a script neither controls nor needs to branch on.
+     */
+    appearance(): "light" | "dark";
+    /** `Window::is_window_active`: whether this window has the platform's focus. */
+    is_window_active(): boolean;
+    /** `Window::is_fullscreen`. */
+    is_fullscreen(): boolean;
+    /** `Window::is_maximized`. */
+    is_maximized(): boolean;
+
+    /**
+     * `Window::set_rem_size`. Rescales everything expressed in rems.
+     *
+     * Illegal from `render`, as is everything below it: a frame that changes
+     * the window it is drawing into is a frame arguing with itself. Call it
+     * from an event handler or a task.
+     */
+    set_rem_size(size: number): void;
+    /**
+     * `Window::refresh`: redraw every view in this window, not just this one.
+     *
+     * The most expensive call on this object, and the one easiest to reach for.
+     * Every view rebuilds -- retained children, charts, virtualized lists, the
+     * lot -- so calling it where `cx.notify()` would do turns one view's update
+     * into all of them, and calling it per incoming message turns a data feed
+     * into a frame-rate problem. An application that pushed a quote through it
+     * for each tick of a live market watchlist measured seven frames a second.
+     *
+     * Reach for it only when there is genuinely no view to notify:
+     *
+     * - `cx.notify()` repaints the view that owns the state that changed, which
+     *   is almost always the right call.
+     * - `handle.set_props(...)` repaints a nested view from its parent.
+     * - A dock panel is the case that tempts you here, because a panel rebuilt
+     *   by `DockArea.load` is not the instance the script created and
+     *   `set_props` on the old handle reaches nothing. If you must refresh for
+     *   that reason, coalesce: let a timer collect a burst into one call rather
+     *   than making one per event.
+     */
+    refresh(): void;
+    /** `Window::focus_next`: move the keyboard to the next tab stop. */
+    focus_next(): void;
+    /** `Window::focus_prev`: move it to the previous one. */
+    focus_prev(): void;
+    /** `Window::activate_window`: bring this window to the front. */
+    activate_window(): void;
+    /** `Window::minimize_window`. */
+    minimize_window(): void;
+    /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
+    zoom_window(): void;
+    /** `Window::toggle_fullscreen`. */
+    toggle_fullscreen(): void;
   }
 
 "#;
@@ -1630,6 +2079,203 @@ const BASE: &str = r#"  /** A row. */
    * you announced, and add `transition("width", ...)` if it should slide.
    */
   export const ProgressIndicator: PartType;
+  /**
+   * An avatar root. It renders its `image` slot, or its `fallback` slot when
+   * there is no image, and never both.
+   *
+   * That choice is the whole of what it does. It draws no circle, no size and
+   * no background, so the picture is yours: `w`, `h`, `rounded_full` and a
+   * background go on the root, and the fallback is styled where it is written.
+   *
+   * ```js
+   * Avatar.new().w(40).h(40).rounded_full().overflow_hidden()
+   *   .image(AvatarImage.new("avatars/ada.png").size_full())
+   *   .fallback(AvatarFallback.new().size_full().items_center().justify_center().child("AL"));
+   * ```
+   *
+   * Ordinary children are drawn beside whichever slot won, which is where a
+   * status dot or a badge goes.
+   */
+  export const Avatar: PartType;
+  /**
+   * The image slot: a picture from the application's own directory, at the
+   * same kind of path `image(...)` takes.
+   *
+   * It is a slot type, not an element — used as an ordinary child it draws
+   * nothing and says so in the log. Give it `size_full()` unless you want it at
+   * its natural size.
+   */
+  export const AvatarImage: { new(path: string): Element };
+  /**
+   * The fallback slot: an ordinary box holding whatever stands in for the
+   * image — initials, a shape, an `svg(...)`.
+   *
+   * A slot type like `AvatarImage`, and worth filling: an `Avatar` with an
+   * image path that does not resolve has nothing else to show.
+   */
+  export const AvatarFallback: PartType;
+  /**
+   * A pagination root: a navigation landmark carrying the announced label, and
+   * nothing on screen.
+   *
+   * The page buttons are yours. What base contributes that you cannot write
+   * for yourself is which page numbers to show — that is `pagination_items`
+   * below, a calculation rather than a component.
+   *
+   * ```js
+   * Pagination.new("results").accessibility_label("Results").h_flex().gap_1().children(
+   *   pagination_items(this.page, this.pages).map((item) =>
+   *     item.ellipsis
+   *       ? div().child("…")
+   *       : Button.new(`page-${item.page}`)
+   *           .selected(item.page === this.page)
+   *           .on_click((_, cx) => { this.page = item.page; cx.notify(); })
+   *           .child(String(item.page)),
+   *   ),
+   * );
+   * ```
+   */
+  export const Pagination: ComponentType;
+  /**
+   * An accordion root: a group holding items, and nothing on screen.
+   *
+   * None of the five parts draws anything — no chevron, no border, no
+   * animation, no layout. What they carry is what a screen reader reads: the
+   * group, the heading and its level, the button and its expanded state, and
+   * the region that button controls.
+   *
+   * The item owns `open` and passes it down to both the trigger and the panel,
+   * so it is set once rather than three times in agreement with itself.
+   *
+   * ```js
+   * Accordion.new("faq").child(
+   *   AccordionItem.new()
+   *     .open(this.open === "shipping")
+   *     .header(
+   *       AccordionHeader.new(
+   *         AccordionTrigger.new("shipping-trigger")
+   *           .on_change((open, cx) => { this.open = open ? "shipping" : null; cx.notify(); })
+   *           .child("Shipping"),
+   *       ).aria_level(3),
+   *     )
+   *     .panel(AccordionPanel.new().child("Two to five business days.")),
+   * );
+   * ```
+   */
+  export const Accordion: ComponentType;
+  /**
+   * One item. `open(...)` in, and the trigger's `on_change(...)` out.
+   *
+   * `disabled(true)` stops the trigger under it responding, whatever the
+   * trigger itself says.
+   */
+  export const AccordionItem: PartType;
+  /**
+   * The heading that owns one item's trigger, which it takes at construction
+   * for the same reason `Popup.new` takes its own: a heading whose button
+   * arrived a frame later would announce nothing in between.
+   *
+   * `aria_level(n)` is what a screen reader reads out — "heading level 3" —
+   * and defaults to 3. It announces; it does not size any text.
+   */
+  export const AccordionHeader: { new(trigger: Element): Element };
+  /**
+   * The region an item reveals. Left out of the tree entirely while shut,
+   * unless `keep_mounted(true)` — which is how its content keeps a scroll
+   * position or a half-typed field across a close and reopen.
+   */
+  export const AccordionPanel: PartType;
+  /**
+   * The button. It announces the item's expanded state and asks for the
+   * opposite: `on_change` receives `true` when a shut item was pressed.
+   *
+   * `open` and `disabled` come from the item, so setting them here is
+   * overwritten. Without an `on_change` nothing can open.
+   */
+  export const AccordionTrigger: ComponentType;
+  /**
+   * A calendar's month, and the date chosen in it. Retained: create it in
+   * `init`, never in `render`.
+   *
+   * `month_days()` is why this exists — which dates fall in which week, where
+   * the neighbouring months' days go, and how many weeks this month needs.
+   * You draw the cells: a button per day, styled how you like.
+   *
+   * Base's `Calendar` element is deliberately not bound. It walks the same
+   * grid calling a renderer once per cell — up to forty-two crossings into
+   * JavaScript per frame, from inside GPUI's layout pass, for cells that carry
+   * no behavior. Reading the grid here and drawing it yourself is the same
+   * work without them.
+   *
+   * ```js
+   * const grid = this.calendar.month_days()[0];
+   * v_flex().children(grid.map((week) =>
+   *   h_flex().children(week.map((day) =>
+   *     Button.new(day)
+   *       .selected(day === this.calendar.value())
+   *       .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+   *       .child(String(Number(day.slice(8)))),
+   *   )),
+   * ));
+   * ```
+   *
+   * Dates are `"YYYY-MM-DD"` — sortable as text, and readable by `new Date(s)`
+   * when you need a weekday name or a localized month label.
+   */
+  export const CalendarState: { new(): CalendarStateHandle };
+  /** A selected date: one day, a `[start, end]` range, or nothing. */
+  export type CalendarDate = string | [string | null, string | null] | null;
+  export interface CalendarStateHandle {
+    /**
+     * The grid, as months of weeks of days. One month unless base was asked
+     * for more; each week is always seven days, and the first and last carry
+     * the neighbouring months' days so the rows line up under their weekday
+     * headings.
+     */
+    month_days(): string[][][];
+    /** The year the grid is for. */
+    year(): number;
+    /** Its month, 1–12. */
+    month(): number;
+    /** Today, as the state read it when it was created. */
+    today(): string;
+    /** What is selected. */
+    value(): CalendarDate;
+    /** Selects a day, a range, or nothing. */
+    set_value(next: CalendarDate): void;
+    /** Moves the grid forward one month. Illegal from `render`. */
+    next_month(): void;
+    /** And back one. Illegal from `render`. */
+    prev_month(): void;
+    /**
+     * `"change"` is the only event, and reports a date being selected. As
+     * everywhere else, registering twice means the second handler.
+     */
+    on(event: "change", handler: (date: CalendarDate, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+  /**
+   * Which page numbers to draw, and where the gaps fall.
+   *
+   * Keeps the first page, the last page and a window around the current one,
+   * collapsing each broken run into an ellipsis. `visible_pages` defaults to
+   * seven and is clamped to a minimum of five; a total of one page or fewer
+   * answers an empty list, because a control for a single page is not one.
+   *
+   * An ellipsis names the pages it stands for, inclusive on both ends, so it
+   * can be a "jump to" control rather than inert text.
+   *
+   * Legal from `render` — it reads nothing and is where the buttons are built.
+   */
+  export function pagination_items(
+    current_page: number,
+    total_pages: number,
+    visible_pages?: number,
+  ): PaginationEntry[];
+  /** One entry of the page layout: a page, or a gap standing for a range. */
+  export type PaginationEntry =
+    | { page: number; ellipsis?: undefined }
+    | { ellipsis: [first: number, last: number]; page?: undefined };
   /**
    * One option in a radio group. No styling: draw the dot yourself.
    *
@@ -1817,13 +2463,14 @@ const BASE: &str = r#"  /** A row. */
    * `content_focus_handle(...)` the list's; without the first, nothing on
    * screen has the keyboard and no key reaches the root at all.
    *
-   * **Arrow-key navigation of an open list is not there.** Base opens the list
-   * on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
+   * **Arrow-key navigation of an open list is yours to write.** Base opens the
+   * list on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
    * expects whatever is inside to run the highlight from its own key bindings.
-   * The shell has no key-binding layer, so nothing takes over: the pointer
-   * works, Escape closes, Enter and ↓ open, and moving the highlight with the
-   * keyboard once open does not. Say so in your UI rather than shipping a
-   * control that looks keyboard-operable and is not.
+   * Nothing does that for you — but the pieces are here: put `on_key_down` on
+   * the content element the keyboard was moved to and move your own highlight,
+   * or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box
+   * the pointer works, Escape closes, Enter and ↓ open, and the highlight does
+   * not move; a control shipped that way looks keyboard-operable and is not.
    *
    * **The highlighted option marks itself.** GPUI puts the active descendant on
    * the option element rather than on the container, so the root cannot mark
@@ -2273,6 +2920,263 @@ const BASE: &str = r#"  /** A row. */
    */
   export const OtpInput: { new: (state: OtpState) => Element };
 
+  /** Where a region sits relative to the center of a dock area. */
+  export type DockPlacement = "center" | "left" | "right" | "bottom";
+
+  /** One panel, as `panels()` reports it. */
+  export interface DockPanel {
+    /** Stable for as long as the panel lives. Pass it to `remove_panel`. */
+    readonly id: number;
+    /** Namespaced: `shell:<application>/<name>`. */
+    readonly name: string;
+    readonly placement: DockPlacement;
+    /** The container holding it, which is also `group.node` in the chrome. */
+    readonly node: number;
+    /** Its position in that container. */
+    readonly index: number;
+    /** Whether it is the one its container is showing. */
+    readonly active: boolean;
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** One tab of a group, as a chrome handler is given it. */
+  export interface DockTab {
+    /** Its position in the group, which is what `select_tab` takes. */
+    readonly index: number;
+    readonly name: string;
+    readonly id: number;
+    readonly active: boolean;
+    /**
+     * Hidden panels are included, and keep their place in tab order — filter
+     * on this rather than re-deriving an index into an already filtered list.
+     */
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** A tab group, as `tab_bar` and `empty_group` are given it. */
+  export interface DockGroup {
+    readonly node: number;
+    readonly active_index: number;
+    readonly zoomed: boolean;
+    readonly collapsed: boolean;
+    readonly locked: boolean;
+    readonly draggable: boolean;
+    readonly droppable: boolean;
+    readonly closable: boolean;
+    readonly tabs: readonly DockTab[];
+  }
+
+  /** One dock, as the `dock` handler is given it. */
+  export interface DockRegion {
+    readonly placement: DockPlacement;
+    /** Its extent along its own axis: width for left and right, height for bottom. */
+    readonly size: number;
+    readonly open: boolean;
+    readonly collapsible: boolean;
+  }
+
+  /** One tile of a tiles canvas, as the two tile handlers are given it. */
+  export interface DockTile {
+    readonly node: number;
+    readonly panel: { readonly name: string; readonly id: number; readonly visible: boolean };
+    /**
+     * Already resolved — base snaps, clamps and rounds before a skin sees
+     * them, so nothing here has to be positioned by hand.
+     */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    readonly z_index: number;
+    readonly moving: boolean;
+    readonly resizing: boolean;
+    readonly closable: boolean;
+    readonly zoomed: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** Where a dragged panel would land, as the `drop_indicator` handler is given it. */
+  export interface DockDrop {
+    /** `null` means the drop merges into the group's tabs rather than splitting beside it. */
+    readonly placement: Placement | null;
+    /** The hovered group's content box, in window coordinates. */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    /** Where the placeholder starts, relative to `bounds`. */
+    readonly from: import("gpui-shell").ElementBounds;
+    /** Where it settles. */
+    readonly to: import("gpui-shell").ElementBounds;
+  }
+
+  /** What `add_panel` is told about the panel it is adding. */
+  export interface DockPanelOptions {
+    /**
+     * What the panel is filed under in a saved layout, and what
+     * `DockArea.register_panel` finds it again by. Required.
+     */
+    name: string;
+    /** Default `"center"`. */
+    placement?: DockPlacement;
+    /** Seeds the dock's extent when the panel is the first thing in it. */
+    size?: number;
+    /**
+     * Places the panel on the region's tiles canvas instead of in a tab group.
+     * A region with no canvas has nowhere to put a tile, so nothing happens.
+     */
+    bounds?: { x: number; y: number; width: number; height: number };
+    /** Default `true`. */
+    closable?: boolean;
+    /** Default `true`. */
+    zoomable?: boolean;
+    /** Default `true`. */
+    visible?: boolean;
+  }
+
+  /**
+   * A dockable layout: splits, tab groups, docks and tiles that the user can
+   * rearrange, and that survives a restart.
+   *
+   * Retained for a reason none of the other handles share. **The layout is what
+   * the user changed** — a drag, a resize, a closed tab and a collapsed dock all
+   * happen without the script rendering — so it lives here rather than in a
+   * description that would put every one of them back the way the last render
+   * described it.
+   *
+   * `DockArea.new(id)` needs a live host call, so it belongs in `init` or an
+   * event handler, never in `render`.
+   *
+   * **Every edit takes effect once the call that made it has returned.**
+   * `add_panel` is handed a view from `cx.new(Class)`, which is itself still
+   * being constructed; `load` rebuilds panels, which constructs more. So
+   * `panels()` and `dump()` read the layout as it was before this turn's edits,
+   * and `on("layout_changed", …)` is where to read it after them.
+   *
+   * ```js
+   * init(_props, cx) {
+   *   DockArea.register_panel("inbox", Inbox);
+   *   this.dock = DockArea.new("workspace");
+   *   this.dock.add_panel(cx.new(Inbox), { name: "inbox", placement: "left", size: 240 });
+   *   this.dock.on("layout_changed", () => localStorage.setItem("layout", JSON.stringify(this.dock.dump())));
+   * }
+   * render() {
+   *   return dock_area(this.dock).size_full().tab_bar((group) => …);
+   * }
+   * ```
+   */
+  export interface DockArea {
+    /** Docks `view` — a view from `cx.new(Class)`, not an element. */
+    add_panel(view: import("gpui").Entity, options: DockPanelOptions): void;
+    /** Removes the panel with this id, wherever it sits. */
+    remove_panel(id: number): void;
+    /** Every panel in the area, in tree order. */
+    panels(): DockPanel[];
+    /**
+     * The whole layout as plain data: the tree, the docks, and each panel's own
+     * `serialize()` payload. Hand it back to `load` after a restart.
+     */
+    dump(): any;
+    /**
+     * Restores a layout `dump()` wrote, rebuilding each panel through the class
+     * registered under its name.
+     *
+     * A panel whose name nothing registered is not dropped: it is carried
+     * forward — name, payload and position — so uninstalling an application and
+     * reinstalling it puts its panels back where they were.
+     */
+    load(state: any): void;
+    has_dock(placement: DockPlacement): boolean;
+    is_dock_open(placement: DockPlacement): boolean;
+    toggle_dock(placement: DockPlacement): void;
+    remove_dock(placement: DockPlacement): void;
+    dock_size(placement: DockPlacement): number | null;
+    set_dock_size(placement: DockPlacement, size: number): void;
+    set_dock_collapsible(placement: DockPlacement, collapsible: boolean): void;
+    /** A locked area cannot be rearranged or dropped into; dock and tile resizing stays available. */
+    is_locked(): boolean;
+    set_locked(locked: boolean): void;
+    is_zoomed(): boolean;
+    /** Clears the zoom, whichever container holds it. */
+    zoom_out(): void;
+    /**
+     * Fires on every edit — including each step of a tile drag — so save on a
+     * timer rather than on every one.
+     */
+    on(event: "layout_changed", handler: (cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export const DockArea: {
+    new: (id: string, options?: { version?: number }) => DockArea;
+    /**
+     * Teaches the runtime to rebuild `name`'s panel from `Class` when a saved
+     * layout mentions it, and answers with the namespaced name it registered
+     * under.
+     *
+     * The class is an ordinary view class. Two of its methods carry state
+     * across a restart, and both are optional:
+     *
+     * - `serialize()` returns plain data, and is read when the layout is saved.
+     *   It runs without a host call, so it must not touch entities, `cx`, or
+     *   anything else that needs one — return a value and nothing else.
+     * - `deserialize(data)` is handed back whatever `serialize()` wrote, right
+     *   after the view is built, with a real host call available.
+     *
+     * Registering the same name twice replaces the class, which is what a hot
+     * reload does.
+     */
+    register_panel: (name: string, Class: import("gpui").ViewClass) => string;
+  };
+
+  /**
+   * Draws a dock area.
+   *
+   * Base draws **no chrome at all** — an area with none still docks, drags,
+   * resizes and persists, painting only the panels — so every tab bar, dock
+   * frame and drag bar is one of the six handlers below.
+   *
+   * Each handler is first called from inside GPUI's layout pass and is given
+   * base's own resolved state: never a drag event, a mouse position or a hit
+   * test. Its description is cached until that state or the handler changes,
+   * so unchanged frames do not enter JavaScript. It may not register event
+   * handlers — cached chrome has no script callback lifecycle of its own — so
+   * the elements it returns say what they do with a **command** instead:
+   * `select_tab(group, i)`, `close_panel(group, id)`, `toggle_dock(dock)`,
+   * `move_tile(tile)` and the rest. A command carries no script value, and base
+   * does the work.
+   */
+  export function dock_area(area: DockArea): DockAreaElement;
+
+  export interface DockAreaElement extends Element {
+    /** The tab bar above a group's displayed panel. */
+    tab_bar(handler: (group: DockGroup, cx: Context) => Element): DockAreaElement;
+    /** What a group with no displayed panel shows. */
+    empty_group(handler: (group: DockGroup, cx: Context) => Element | null): DockAreaElement;
+    /** The hint showing where a dragged panel would land. */
+    drop_indicator(handler: (drop: DockDrop, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * One dock's chrome around its content: title strip, collapse affordance,
+     * resize handle. Whatever this returns replaces the content, so put
+     * `dock_content()` where the panels belong.
+     */
+    dock(handler: (dock: DockRegion, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * The strip a tile is dragged by. Its height is fixed at base's drag-bar
+     * height, which the snapping arithmetic assumes.
+     */
+    tile_drag_bar(handler: (tile: DockTile, cx: Context) => Element): DockAreaElement;
+    /** A tile's resize affordances. */
+    tile_resize_handles(handler: (tile: DockTile, cx: Context) => Element | null): DockAreaElement;
+  }
+
+  /**
+   * Where a dock's own panels go inside the chrome the `dock` handler drew
+   * around them. Legal only inside that handler, and only once.
+   */
+  export function dock_content(): Element;
+
+  /** Which edge or corner of a tile a resize handle pulls. */
+  export type TileResizeSide = "left" | "right" | "top" | "bottom" | "bottom_right";
+
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
   /** Semantic spacing scale, aligned with `gpui_base::SpacingTokens`. */
@@ -2500,8 +3404,12 @@ interface ShellFetchResponse {
   json(): Promise<unknown>;
 }
 interface ShellFetchOptions {
-  /** GET by default; POST is available for OAuth-style form exchanges. */
-  method?: "GET" | "POST";
+  /**
+   * GET by default. Any HTTP method may be named; which of them may reach a
+   * given host and path is the plugin's `capabilities.network` policy, not
+   * this field.
+   */
+  method?: string;
   /** Client-managed framing headers such as Host and Content-Length are refused. */
   headers?: Record<string, string>;
   body?: string | Uint8Array;
@@ -2580,6 +3488,21 @@ mod tests {
         "on_click",
         "on_mouse_move",
         "on_hover",
+        "on_key_down",
+        "on_key_up",
+        "on_modifiers_changed",
+        "on_mouse_down",
+        "on_mouse_up",
+        "on_mouse_down_out",
+        "on_scroll_wheel",
+        "on_action",
+        "key_context",
+        "image",
+        "fallback",
+        "header",
+        "panel",
+        "aria_level",
+        "keep_mounted",
         "on_item_click",
         "on_change",
         "on_step",
@@ -2620,6 +3543,21 @@ mod tests {
         "cell_style",
         "cell_active_style",
         "caret_style",
+        // The dock commands. Not behaviours in the reflected sense either: no
+        // handler crosses, only the container an element names and what it asks
+        // of it. See `crate::dock::DockCommand`.
+        "select_tab",
+        "close_panel",
+        "toggle_zoom",
+        "drag_tab",
+        "drop_tab",
+        "toggle_dock",
+        "resize_dock",
+        "move_tile",
+        "resize_tile",
+        "raise_tile",
+        "toggle_tile_zoom",
+        "close_tile",
         "value",
         "indeterminate",
         "axis",
@@ -3022,7 +3960,10 @@ mod tests {
                 "missing Standard Runtime module {name}"
             );
         }
-        assert!(!declarations.contains("node:"));
+        // The alias, not the four letters: `node` is also an ordinary field
+        // name — a dock group carries the id of the layout node it mirrors.
+        assert!(!declarations.contains("declare module \"node:"));
+        assert!(!declarations.contains("from \"node:"));
         assert!(!declarations.contains("export const fs: FileSystem"));
         assert!(!declarations.contains("export const process: Process"));
         assert!(declarations.contains("declare function fetch"));
@@ -3281,6 +4222,14 @@ mod tests {
     }
 
     #[test]
+    fn targeted_notify_is_declared() {
+        assert!(
+            declarations().contains("    notify(target?: Entity): void;"),
+            "Context.notify must expose GPUI's targeted entity notification"
+        );
+    }
+
+    #[test]
     fn nested_update_rollback_contract_names_its_supported_boundary() {
         let declarations = declarations();
         for expected in [
@@ -3411,9 +4360,34 @@ mod tests {
         let written = write_application(&directory).expect("declarations are writable");
         let path = directory.join(FILE_NAME);
 
-        assert_eq!(written, vec![path.clone()]);
+        assert_eq!(
+            written,
+            vec![directory.join(CONFIG_FILE_NAME), path.clone()]
+        );
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn an_existing_editor_configuration_is_never_replaced() {
+        let directory = std::env::temp_dir().join(format!(
+            "gpui-shell-typings-config-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("application root");
+        std::fs::write(directory.join(TYPESCRIPT_CONFIG_FILE_NAME), "{}").expect("a tsconfig");
+
+        write_application(&directory).expect("declarations are writable");
+
+        assert!(!directory.join(CONFIG_FILE_NAME).exists());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).unwrap(),
+            "{}"
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }

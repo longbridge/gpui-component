@@ -9,7 +9,7 @@
 //! somewhere other than the host binary. This module is that way — see
 //! `docs/gpui-shell.md` §15.
 //!
-//! Two halves, and they are independent of each other:
+//! Three parts, and they are independent of each other:
 //!
 //! - [`ScriptPanel`] is a [`Panel`] whose body is a [`ScriptView`]. It carries
 //!   the script's own `serialize()` payload through
@@ -22,42 +22,45 @@
 //!   a script wants has to come back through the three renderer traits. The
 //!   skin forwards each one to [`DockChrome`], and a skin with no chrome is
 //!   still a working dock.
+//! - A **dock command** is what a chrome element *does*. A chrome description
+//!   is cached until its callback or resolved native state changes, so it may
+//!   not register a handler — cached elements have no script callback lifetime.
+//!   A command names a container and what to ask it,
+//!   carries no script value at all, and is resolved against the contexts the
+//!   last drawn frame recorded, when the pointer arrives.
 //!
 //! # Engine independence
 //!
-//! Nothing here knows what a script value is. The script side of both halves
+//! Nothing here knows what a script value is. The script side of the first two
 //! is a trait — [`DockChrome`] for the chrome callbacks, [`PanelScript`] for
-//! the panel's build and (de)serialize hooks — that the engine implements.
-//! This module deals only in [`Entity<ScriptView>`], [`AnyElement`] and
-//! `serde_json::Value`, which is what lets the dock work the same under either
-//! engine.
-
-#![allow(dead_code)]
-//
-// Designed and tested, but nothing in the crate drives it: a script cannot yet
-// contribute a panel, because the plugin → contribution → panel path is not
-// finished. The module is `pub(crate)` until it is — a public surface no host
-// can reach end to end is a promise about an API that has never been used.
+//! the panel's build and (de)serialize hooks — that the engine implements, and
+//! the third is plain data. This module deals only in [`Entity<ScriptView>`],
+//! [`AnyElement`], callback ids and `serde_json::Value`, which is what lets the
+//! dock work the same under either engine.
 
 use std::{
-    collections::HashSet,
+    cell::{Cell, RefCell},
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::{Arc, Mutex, OnceLock},
 };
 
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Div, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render, Stateful,
-    Styled as _, Window, div,
+    AnyElement, AnyView, App, AppContext as _, Context, Div, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    Stateful, Styled as _, Window, div,
 };
 use gpui_base::dock::{
-    DockAreaRenderer, DockContext, DropIndicator, Panel, PanelBuildContext, PanelEvent, PanelInfo,
-    PanelState, PanelView, TabGroupContext, TabGroupRenderer, TileContext, TilesRenderer,
+    DockAreaRenderer, DockContext, DockPlacement, DropIndicator, DropPlaceholderBounds, Panel,
+    PanelBuildContext, PanelEvent, PanelId, PanelInfo, PanelState, PanelView, ResizeSide,
+    TabGroupContext, TabGroupRenderer, TileContext, TilesRenderer,
 };
 use serde_json::{Value, json};
 
 use crate::{
+    entities::EntityHandle,
     scope::{self, ScopePhase},
+    spec::CallbackId,
     view::ScriptView,
 };
 
@@ -153,7 +156,7 @@ pub trait PanelScript: 'static {
     /// The script's `serialize()`, or `None` for a panel that has none.
     ///
     /// Note the `&App`: [`Panel::dump`] is a read, so there is no `&mut
-    /// Window` here and therefore no [`CallScope`](crate::scope) to open. A
+    /// Window` here and therefore no call scope to open. A
     /// script `serialize()` must be a plain value-returning method that calls
     /// nothing back into the host.
     fn serialize(&self, view: &Entity<ScriptView>, cx: &App) -> Option<Value> {
@@ -173,6 +176,38 @@ pub trait PanelScript: 'static {
         cx: &mut App,
     ) {
     }
+
+    /// The panel became, or stopped being, the one its group displays.
+    ///
+    /// A tab that is not displayed is not rendered at all, so this is the only
+    /// way a panel learns that it is back on screen — which is when a script
+    /// refreshes something it stopped keeping up to date while hidden.
+    fn set_active(
+        &self,
+        view: &Entity<ScriptView>,
+        active: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+    }
+
+    /// The panel's container was zoomed in or out around it.
+    fn set_zoomed(
+        &self,
+        view: &Entity<ScriptView>,
+        zoomed: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+    }
+
+    /// The panel left the layout and its view is about to be dropped.
+    ///
+    /// Where [`Self::build`] made something the engine has to hand back — a
+    /// retained handle, a registration — this is the matching release. A panel
+    /// whose view the *script* created and still holds is not the engine's to
+    /// free, so an implementation frees only what its own `build` produced.
+    fn release(&self, view: &Entity<ScriptView>, window: &mut Window, cx: &mut App) {}
 }
 
 /// A dockable panel whose body is a script view.
@@ -281,6 +316,26 @@ impl Panel for ScriptPanel {
             state.info = PanelInfo::panel(value);
         }
         state
+    }
+
+    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(script) = self.script.clone() {
+            script.set_active(&self.view, active, window, cx);
+        }
+    }
+
+    fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(script) = self.script.clone() {
+            script.set_zoomed(&self.view, zoomed, window, cx);
+        }
+    }
+
+    /// Base removed the panel, so whatever [`PanelScript::build`] retained for
+    /// it is released here rather than at the next teardown.
+    fn on_removed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(script) = self.script.clone() {
+            script.release(&self.view, window, cx);
+        }
     }
 }
 
@@ -463,6 +518,14 @@ pub trait DockChrome: 'static {
     /// One dock's chrome around its content: title strip, collapse
     /// affordance, resize handle. Whatever this returns replaces the content,
     /// so a chrome that wants both must place `content` itself.
+    ///
+    /// Chrome only, and the emphasis is earned. The dock's own box -- its
+    /// extent along its own axis, and the `flex_none` that holds it there --
+    /// is base's, applied around whatever this returns, so a script cannot
+    /// misplace a dock by not knowing it had a box to draw. It used to be able
+    /// to: the extent lived in base's `DockSkin::render_dock`, this hook
+    /// replaced that method whole, and its default handed the content straight
+    /// back, so every script-drawn dock came out with no width at all.
     fn dock(
         &self,
         dock: &DockContext,
@@ -497,25 +560,339 @@ struct BareChrome;
 
 impl DockChrome for BareChrome {}
 
+/// Which script handler draws each piece of chrome, right now.
+///
+/// One field per [`DockChrome`] method, and `None` means the script did not
+/// ask to draw that piece — so base's own no-chrome behavior stands.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub(crate) struct DockChromeHooks {
+    pub(crate) tab_bar: Option<CallbackId>,
+    pub(crate) empty_group: Option<CallbackId>,
+    pub(crate) drop_indicator: Option<CallbackId>,
+    pub(crate) dock: Option<CallbackId>,
+    pub(crate) tile_drag_bar: Option<CallbackId>,
+    pub(crate) tile_resize_handles: Option<CallbackId>,
+}
+
+/// The chrome handlers in force for the frame being drawn.
+///
+/// The indirection exists because the two ends move at different rates. A skin
+/// is installed once, when the area is created, and a
+/// [`DockArea`](gpui_base::dock::DockArea) offers no way to replace it
+/// afterwards — while the handlers belong to whichever script render is
+/// currently published, and a snapshot rebuilt while the dock stands has to be
+/// able to replace them without the area being rebuilt around it.
+///
+/// [`crate::materialize`] writes this as it replays a `dock_area(...)`
+/// description, which is once per frame and before base asks the skin for
+/// anything; the engine's [`DockChrome`] reads it when base does ask.
+#[derive(Default)]
+pub(crate) struct DockChromeSlots(Cell<DockChromeHooks>);
+
+impl DockChromeSlots {
+    pub(crate) fn set(&self, hooks: DockChromeHooks) {
+        self.0.set(hooks);
+    }
+
+    pub(crate) fn get(&self) -> DockChromeHooks {
+        self.0.get()
+    }
+}
+
+/// The contexts base handed the chrome while it drew, kept until it draws
+/// again.
+///
+/// A [`TabGroupContext`] carries the callbacks a skin invokes — `select_tab`,
+/// `close`, `toggle_zoom` — and lives only for the length of one chrome call.
+/// A script's tab, though, reports its click *later*, from an event handler,
+/// long after that borrow has ended. So each context is cloned as it goes past
+/// (all three are `Clone` over `Rc` handlers) and filed under the id the script
+/// was given, and a command arriving afterwards finds the one that belongs to
+/// it.
+///
+/// Cleared once per frame by [`crate::materialize`], before the area is laid
+/// out and therefore before anything is recorded again. That is what bounds it:
+/// a node that stopped existing is not re-recorded, so its entry is gone by the
+/// next frame rather than accumulating for the life of the window.
+#[derive(Default)]
+pub(crate) struct DockContexts {
+    /// Keyed by [`NodeId::as_u64`](gpui_base::dock::NodeId::as_u64) rather than
+    /// by the id itself: base does not publish a way to rebuild a `NodeId` from
+    /// a number, and a number is what comes back from script.
+    tab_groups: RefCell<HashMap<u64, TabGroupContext>>,
+    docks: RefCell<HashMap<DockPlacement, DockContext>>,
+    /// Keyed by the tile's panel, which is what identifies a tile — a canvas
+    /// holds one tile per panel, and the panel id is the one a script already
+    /// has from [`tile_data`].
+    tiles: RefCell<HashMap<u64, TileContext>>,
+}
+
+impl DockContexts {
+    /// Forgets every context, so that the frame about to be drawn records its
+    /// own.
+    pub(crate) fn clear(&self) {
+        self.tab_groups.borrow_mut().clear();
+        self.docks.borrow_mut().clear();
+        self.tiles.borrow_mut().clear();
+    }
+
+    fn record_tab_group(&self, group: &TabGroupContext) {
+        self.tab_groups
+            .borrow_mut()
+            .insert(group.node().as_u64(), group.clone());
+    }
+
+    fn record_dock(&self, dock: &DockContext) {
+        self.docks
+            .borrow_mut()
+            .insert(dock.placement(), dock.clone());
+    }
+
+    fn record_tile(&self, tile: &TileContext) {
+        self.tiles
+            .borrow_mut()
+            .insert(tile.panel_id().as_u64(), tile.clone());
+    }
+
+    pub(crate) fn tab_group(&self, node: u64) -> Option<TabGroupContext> {
+        self.tab_groups.borrow().get(&node).cloned()
+    }
+
+    pub(crate) fn dock(&self, placement: DockPlacement) -> Option<DockContext> {
+        self.docks.borrow().get(&placement).cloned()
+    }
+
+    pub(crate) fn tile(&self, panel: u64) -> Option<TileContext> {
+        self.tiles.borrow().get(&panel).cloned()
+    }
+}
+
+thread_local! {
+    /// The dock content the chrome handler running right now may place.
+    ///
+    /// Base hands a dock's content to the chrome as a finished `AnyElement`
+    /// and keeps whatever comes back, so a chrome that wants both has to place
+    /// the content itself. An element cannot cross into script, so the engine
+    /// installs the real one here for the length of the call and the script's
+    /// `dock_content()` description takes it.
+    ///
+    /// Thread-local because the two ends are a GPUI layout pass and a script
+    /// callback inside it, with base's own code in between — there is no value
+    /// to thread it through. Single-threaded by construction: the VM and
+    /// GPUI's `App` are both main-thread only.
+    static DOCK_CONTENT: RefCell<Option<AnyElement>> = const { RefCell::new(None) };
+}
+
+/// Installs a dock's content as what a `dock_content()` description resolves
+/// to, until the guard drops.
+///
+/// The previous occupant is put back rather than cleared, so a dock area
+/// nested inside a panel of another dock area is no different from one on its
+/// own.
+pub(crate) struct ContentSlot(Option<AnyElement>);
+
+impl ContentSlot {
+    pub(crate) fn install(content: AnyElement) -> Self {
+        Self(DOCK_CONTENT.with(|slot| slot.borrow_mut().replace(content)))
+    }
+
+    /// Whatever the chrome did not place, for a caller that has to draw it
+    /// anyway.
+    pub(crate) fn unplaced(&self) -> Option<AnyElement> {
+        take_dock_content()
+    }
+}
+
+impl Drop for ContentSlot {
+    fn drop(&mut self) {
+        DOCK_CONTENT.with(|slot| *slot.borrow_mut() = self.0.take());
+    }
+}
+
+/// The dock content a `dock_content()` description stands for.
+///
+/// Taken, not cloned — an `AnyElement` is a value that is consumed when it is
+/// used. A description with two of them draws the content once and says so.
+pub(crate) fn take_dock_content() -> Option<AnyElement> {
+    DOCK_CONTENT.with(|slot| slot.borrow_mut().take())
+}
+
+/// Removes the panel `id` names, wherever it sits.
+///
+/// Base removes a panel by *entity*, which a script has no way to name — it
+/// holds the `PanelId` the area reported. The two are one downcast apart: a
+/// panel is registered as an `Arc<dyn PanelView>` over the entity that
+/// implements it, and `as_any` gives it back.
+///
+/// Answers whether anything was removed, so a script asking for a panel that
+/// has already gone hears about it.
+pub(crate) fn remove_panel(
+    area: &Entity<gpui_base::dock::DockArea>,
+    panel: PanelId,
+    window: &mut Window,
+    cx: &mut App,
+) -> bool {
+    let view = area.read(cx).panel(panel).cloned();
+    let Some(view) = view else {
+        return false;
+    };
+
+    if let Some(entity) = view.as_any().downcast_ref::<Entity<ScriptPanel>>() {
+        let entity = entity.clone();
+        area.update(cx, |area, cx| area.remove_panel(entity, window, cx));
+        return true;
+    }
+    // A panel whose script would not build stands in for it, and closing one is
+    // still closing the panel as far as the layout is concerned.
+    if let Some(entity) = view.as_any().downcast_ref::<Entity<RetainedPanel>>() {
+        let entity = entity.clone();
+        area.update(cx, |area, cx| area.remove_panel(entity, window, cx));
+        return true;
+    }
+    false
+}
+
+/// What one chrome element does when it is used.
+///
+/// A [`TabGroupContext`] carries the callbacks a skin invokes and lives only
+/// for the length of one chrome call — but a tab reports its click *later*,
+/// from GPUI's event pass. So a chrome element does not hold a callback; it
+/// holds one of these, which names the container and what to ask it, and is
+/// resolved against [`DockContexts`] when the moment comes.
+///
+/// That is also why none of these is a script callback. A chrome handler runs
+/// once per frame for as long as the dock is on screen, and a handler
+/// registered from inside one would pile up exactly the way a virtual list's
+/// row handlers would — see [`crate::materialize::components::virtual_list`].
+/// A command carries no script value at all, so there is nothing to pile up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DockCommand {
+    /// Display the tab at this position in its group.
+    SelectTab { node: u64, index: usize },
+    /// Close this panel, if its group allows it.
+    ClosePanel { node: u64, panel: u64 },
+    /// Zoom this group in, or back out.
+    ToggleGroupZoom { node: u64 },
+    /// Make this tab a drag source carrying base's own panel payload.
+    DragTab { node: u64, index: usize },
+    /// Accept a dragged panel here. `index` is the slot it lands in, or `None`
+    /// to append.
+    DropTab { node: u64, index: Option<usize> },
+    /// Open or close this dock.
+    ToggleDock { placement: DockPlacement },
+    /// Drag this dock's edge. Base clamps the size it is given.
+    ResizeDock { placement: DockPlacement },
+    /// Drag this tile around its canvas.
+    MoveTile { panel: u64 },
+    /// Drag one edge or corner of this tile.
+    ResizeTile { panel: u64, side: ResizeSide },
+    /// Bring this tile above the others.
+    RaiseTile { panel: u64 },
+    /// Zoom this tile to fill its dock, or back out.
+    ToggleTileZoom { panel: u64 },
+    /// Close this tile.
+    CloseTile { panel: u64 },
+}
+
+/// The drag GPUI carries while a tile is being moved, identified by its panel.
+///
+/// A marker rather than a payload: base already holds the gesture — where the
+/// tile started, where the pointer is, what it snaps to — and all this has to
+/// do is tell one tile's `on_drag_move` from another's.
+#[derive(Clone, Copy)]
+pub(crate) struct MovingTile(pub(crate) u64);
+
+/// The same, while a tile is being resized.
+#[derive(Clone, Copy)]
+pub(crate) struct ResizingTile(pub(crate) u64);
+
+/// The same, while a dock's edge is being dragged.
+#[derive(Clone, Copy)]
+pub(crate) struct ResizingDock(pub(crate) DockPlacement);
+
+macro_rules! invisible_drag {
+    ($name:ident) => {
+        impl Render for $name {
+            /// A drag GPUI does not paint: the feedback is the tile or the dock
+            /// moving under the pointer, which base is already doing.
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Empty
+            }
+        }
+    };
+}
+
+invisible_drag!(MovingTile);
+invisible_drag!(ResizingTile);
+invisible_drag!(ResizingDock);
+
+/// One command together with the area it belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DockAction {
+    dock: EntityHandle,
+    command: DockCommand,
+}
+
+impl DockAction {
+    pub(crate) fn new(dock: EntityHandle, command: DockCommand) -> Self {
+        Self { dock, command }
+    }
+
+    pub(crate) fn dock(&self) -> EntityHandle {
+        self.dock
+    }
+
+    pub(crate) fn command(&self) -> DockCommand {
+        self.command
+    }
+}
+
 /// The appearance of a dock area, forwarded to script.
 ///
 /// Install it with
 /// [`DockArea::with_renderer`](gpui_base::dock::DockArea::with_renderer). One
 /// value implements all three renderer traits and hands out clones of itself
 /// for the per-container ones, because the only thing a container renderer
-/// needs is the same chrome handle.
+/// needs is the same chrome handle — and the same context table, so a command
+/// from a tile finds the tile a *tiles* renderer recorded.
 pub struct ScriptDockSkin {
     chrome: Rc<dyn DockChrome>,
+    contexts: Rc<DockContexts>,
+    slots: Rc<DockChromeSlots>,
 }
 
 impl ScriptDockSkin {
     pub fn new(chrome: Rc<dyn DockChrome>) -> Self {
-        Self { chrome }
+        Self {
+            chrome,
+            contexts: Rc::new(DockContexts::default()),
+            slots: Rc::new(DockChromeSlots::default()),
+        }
+    }
+
+    /// Shares the slots the chrome reads, so the frame being described and the
+    /// frame being drawn agree about which handlers are in force.
+    pub(crate) fn with_slots(mut self, slots: Rc<DockChromeSlots>) -> Self {
+        self.slots = slots;
+        self
+    }
+
+    /// The table this skin files contexts in, for the entity store to hand back
+    /// to a command.
+    pub(crate) fn contexts(&self) -> Rc<DockContexts> {
+        self.contexts.clone()
+    }
+
+    /// Where the next frame's chrome handlers are written.
+    pub(crate) fn slots(&self) -> Rc<DockChromeSlots> {
+        self.slots.clone()
     }
 
     fn clone_skin(&self) -> Self {
         Self {
             chrome: self.chrome.clone(),
+            contexts: self.contexts.clone(),
+            slots: self.slots.clone(),
         }
     }
 }
@@ -557,6 +934,7 @@ impl DockAreaRenderer for ScriptDockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        self.contexts.record_dock(dock);
         in_layout_scope(window, cx, |window, cx| {
             self.chrome.dock(dock, content, window, cx)
         })
@@ -578,9 +956,32 @@ impl TabGroupRenderer for ScriptDockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        // Recorded here rather than in `render_empty`, because this hook runs
+        // for every group and that one only for a group with nothing to show.
+        self.contexts.record_tab_group(group);
         in_layout_scope(window, cx, |window, cx| {
             self.chrome.tab_bar(group, window, cx)
         })
+    }
+
+    /// Nothing at all while the group is folded away.
+    ///
+    /// A collapsed group is a strip of tabs with no content region, and the
+    /// trait's default still renders the panel into it -- so the pane the user
+    /// folded away went on paying for itself behind the fold. The host's own
+    /// `TabPanel` has always drawn a collapsed group empty.
+    fn render_active_panel(
+        &self,
+        panel: AnyView,
+        group: &TabGroupContext,
+        _: &mut Window,
+        _: &mut App,
+    ) -> AnyElement {
+        if group.is_collapsed() {
+            return Empty.into_any_element();
+        }
+
+        panel.into_any_element()
     }
 
     fn render_empty(
@@ -589,6 +990,7 @@ impl TabGroupRenderer for ScriptDockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<AnyElement> {
+        self.contexts.record_tab_group(group);
         in_layout_scope(window, cx, |window, cx| {
             self.chrome.empty_group(group, window, cx)
         })
@@ -612,6 +1014,7 @@ impl TilesRenderer for ScriptDockSkin {
     }
 
     fn render_drag_bar(&self, tile: &TileContext, window: &mut Window, cx: &mut App) -> AnyElement {
+        self.contexts.record_tile(tile);
         in_layout_scope(window, cx, |window, cx| {
             self.chrome.tile_drag_bar(tile, window, cx)
         })
@@ -623,6 +1026,7 @@ impl TilesRenderer for ScriptDockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        self.contexts.record_tile(tile);
         in_layout_scope(window, cx, |window, cx| {
             self.chrome
                 .tile_resize_handles(tile, window, cx)
@@ -687,6 +1091,56 @@ pub fn tab_group_data(group: &TabGroupContext, cx: &App) -> Value {
         "closable": group.is_closable(),
         "tabs": tabs,
     })
+}
+
+/// Where a dragged panel would land, as plain JSON:
+///
+/// ```json
+/// {
+///   "placement": "left",
+///   "bounds": { "x": 0.0, "y": 0.0, "width": 600.0, "height": 400.0 },
+///   "from": { "x": 0.0, "y": 0.0, "width": 600.0, "height": 400.0 },
+///   "to":   { "x": 0.0, "y": 0.0, "width": 300.0, "height": 400.0 }
+/// }
+/// ```
+///
+/// `bounds` is the hovered group's content box in window coordinates;
+/// `from` and `to` are relative to it, and are the two ends of the placeholder
+/// the skin animates between. A `placement` of `null` means the drop merges
+/// into the group's tabs rather than splitting beside it.
+pub fn drop_indicator_data(indicator: &DropIndicator) -> Value {
+    let placeholder = |bounds: DropPlaceholderBounds| {
+        json!({
+            "x": f32::from(bounds.origin().x),
+            "y": f32::from(bounds.origin().y),
+            "width": f32::from(bounds.size().width),
+            "height": f32::from(bounds.size().height),
+        })
+    };
+    let bounds = indicator.bounds();
+
+    json!({
+        "placement": indicator.placement().map(placement_name),
+        "bounds": {
+            "x": f32::from(bounds.origin.x),
+            "y": f32::from(bounds.origin.y),
+            "width": f32::from(bounds.size.width),
+            "height": f32::from(bounds.size.height),
+        },
+        "from": placeholder(indicator.from()),
+        "to": placeholder(indicator.to()),
+    })
+}
+
+/// The word a split placement crosses as. Base's own spelling, lowercased,
+/// which is also what a script writes for a dock placement.
+fn placement_name(placement: gpui_base::Placement) -> &'static str {
+    match placement {
+        gpui_base::Placement::Left => "left",
+        gpui_base::Placement::Right => "right",
+        gpui_base::Placement::Top => "top",
+        gpui_base::Placement::Bottom => "bottom",
+    }
 }
 
 /// One dock's state as plain JSON:

@@ -1,12 +1,12 @@
 ---
 title: Hosting
-description: The Rust side in full — runtime lifetime, mounting script views, refreshing them from host state, metrics, exit requests and hot-reload.
-order: 10
+description: The Rust side in full — runtime lifetime, mounting script Views, refreshing them from host state, metrics, exit requests and hot-reload.
+order: 11
 ---
 
 # Hosting
 
-[Getting Started](./getting-started.md) shows the four lines that put a script view on screen. This page is the rest of the Rust surface: what to call, when, and the two or three places where the obvious call is the wrong one.
+[Getting Started](./getting-started.md) shows the four lines that put a script View on screen. This page is the rest of the Rust surface: what to call, when, and the two or three places where the obvious call is the wrong one.
 
 ## The runtime
 
@@ -52,9 +52,9 @@ application to watch, so `watch` returns `Err`; ignoring that error here keeps
 the selectable failure surface mounted.
 
 The lower-level methods below are for a host that needs to assemble a script
-view into an existing Rust composition.
+View into an existing Rust composition.
 
-Loading turns source into a **view type** — the class the script default-exports. Instantiating turns that type into a **view object**, one live instance:
+Loading turns source into a **View type** — the class the script default-exports. Instantiating turns that type into a **View object**, one live instance:
 
 ```rust
 let view_type = runtime.load_app(&root, "main.js")?;   // a directory
@@ -69,7 +69,7 @@ Instantiating runs the script's `init`, which means it needs a live `Window`: it
 
 ## Mounting
 
-A script view is a GPUI view like any other, and it goes **under a `ShellRoot`**:
+A script View is a GPUI View like any other, and it goes **under a `ShellRoot`**:
 
 ```rust
 cx.open_window(options, move |window, cx| {
@@ -79,7 +79,7 @@ cx.open_window(options, move |window, cx| {
 })
 ```
 
-`ShellRoot` owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation — the same role `Root` plays for a `gpui-component` window. `window.open_dialog` and friends reach it, so a script mounted under any other root view gets a refusal naming the reason rather than a silent no-op.
+`ShellRoot` owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation — the same role `Root` plays for a `gpui-component` window. `window.open_dialog` and friends reach it, so a script mounted under any other root View gets a refusal naming the reason rather than a silent no-op.
 
 The host can drive the same surfaces directly, which is how a plugin panel and the host's own UI end up in one stack:
 
@@ -91,28 +91,28 @@ root.update(cx, |root, cx| {
 });
 ```
 
-## Refreshing a view from host state
+## Refreshing a View from host state
 
 This is the one call that is easy to get wrong, and the mistake is silent.
 
 ```text
-cx.notify()        ── draw this view again          (no script runs)
+cx.notify()        ── draw this View again          (no script runs)
 view.refresh(cx)   ── and its description is stale  (the script runs)
 ```
 
-Because a script `render` is [not a frame render](./state.md#when-render-runs), a plain `cx.notify()` repaints the snapshot that already exists. If the host changed something the script *reads* — an entity behind a HostModule, a setting, a document — the view must be told the description itself is out of date:
+Because a script `render` is [not a frame render](./state.md#when-render-runs), a plain `cx.notify()` repaints the Snapshot that already exists. If the host changed something the script *reads* — an entity behind a HostModule, a setting, a document — the View must be told the description itself is out of date:
 
 ```rust
 runtime.refresh(&root, cx)?;
 ```
 
-The runtime checks that `root` contains one of its applications, then invalidates that script view and schedules a repaint. Keeping the typed `ScriptView` private prevents host code from downcasting the root content or refreshing a view from another runtime by mistake.
+The runtime checks that `root` contains one of its applications, then invalidates that script View and schedules a repaint. Keeping the typed `ScriptView` private prevents host code from downcasting the root content or refreshing a View from another runtime by mistake.
 
 Getting it wrong in the other direction is visible immediately — the interface simply does not update — which is the same failure mode as a forgotten `cx.notify()` in GPUI itself.
 
 ## What a script may reach
 
-The three host settings have different lifetimes. Capabilities are frozen into each newly loaded view. The store handle and HostModule registry are live host configuration shared with that view, so replacing either affects its next call:
+The three host settings have different lifetimes. Capabilities are frozen into each newly loaded View. The store handle and HostModule registry are live host configuration shared with that View, so replacing either affects its next call:
 
 ```rust
 gpui_shell::set_capabilities(
@@ -140,11 +140,14 @@ reading.materializations();    // follows frames
 reading.script_render_time();  // total time inside script `render`
 reading.native_time();         // of which, inside HostModule registrations
 reading.slowest_script_render();
+reading.structure_repeat_rate();  // how often a rebuild described the shape it replaced
 ```
 
 `RuntimeMetrics::since(&earlier)` gives the delta between two readings, which is how a per-second rate is built. There is no reset: the counters belong to the runtime, and zeroing them would move them under anything else that is reading. To measure one stretch, keep a baseline and subtract — the Shell story takes one whenever its feed changes, so its readout answers "what is this feed costing" rather than "what has this window done since it opened".
 
 A regression test can assert on `script_renders` directly; that is what keeps [the benchmark's third figure](./engine.md#the-measurement) honest.
+
+`structure_repeats()` and `structure_changes()` answer a different question: of the rebuilds that had a previous description to compare with, how many produced the same *shape* — the same components, the same builder methods, the same tree — and differed only in the values inside it. Nothing in the runtime acts on the answer; it is there to size [where the Snapshot cache stops](./performance.md#where-the-snapshot-cache-stops). A View's first build has no predecessor and is counted in neither.
 
 ## Building for development
 
@@ -195,7 +198,7 @@ gpui_shell::on_exit_request(|request, window, cx| {
 });
 ```
 
-`request.code()` is the exit code the script asked for, and `request.view()` names the view it came from, when there is one — a plugin host closes *that* plugin's panel, where one that quit the window would let a plugin end someone else's work.
+`request.code()` is the exit code the script asked for, and `request.view()` names the View it came from, when there is one — a plugin host closes *that* plugin's panel, where one that quit the window would let a plugin end someone else's work.
 
 **A host that grants exit without installing a handler is told at the call**, not never: `process.exit()` throws, naming `on_exit_request`. A request nobody answers is a lie told in the flattering direction — the script gets a success and nothing happens.
 
@@ -207,19 +210,19 @@ One call starts it, and it is the same one the `--watch` flag uses:
 runtime.watch(&root, window, cx)?.forget();
 ```
 
-`runtime.watch` reads the resolved directory and manifest entry retained by the loaded root, so there is no second copy of that metadata to drift. It has no hidden build-mode policy: the CLI enables watching after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watcher` owns the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly.
+`runtime.watch` reads the resolved directory and manifest entry retained by the loaded root, so there is no second copy of that metadata to drift. It has no hidden build-mode policy: the CLI enables watching after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watcher` owns the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the View does. The loop also ends on its own when the View, the runtime or the window goes away, because it holds all three weakly.
 
-A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live view: if the new code fails to load, the previous view keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
+A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live View: if the new code fails to load, the previous View keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
 
-The view survives a reload. `ScriptView::replace_object` swaps what the script produced while keeping the entity, and with it the window, the focus and the element identities.
+The View survives a reload. `ScriptView::replace_object` swaps what the script produced while keeping the entity, and with it the window, the focus and the element identities.
 
-Plugin unload is a stronger lifecycle boundary than removing one view: the manager cancels every outstanding task carrying that plugin's `Policy`, including owner-less work, before dropping the plugin. No continuation may retain or exercise an unloaded plugin's authority.
+Plugin unload is a stronger lifecycle boundary than removing one View: the manager cancels every outstanding task carrying that plugin's `Policy`, including owner-less work, before dropping the plugin. No continuation may retain or exercise an unloaded plugin's authority.
 
 ## When a script fails
 
-A script that throws does not take the interface with it. The last good snapshot stays mounted and the failure is reported over it, so the reader keeps their scroll, their focus, and whatever they were reading. The runtime does not re-run a failing `render` until something invalidates the view again.
+A script that throws does not take the interface with it. The last good Snapshot stays mounted and the failure is reported over it, so the reader keeps their scroll, their focus, and whatever they were reading. The runtime does not re-run a failing `render` until something invalidates the View again.
 
-Install a `tracing` subscriber. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing` with the target `gpui_shell::script`; with no subscriber every one of them is discarded, and the symptom is a view that quietly stopped responding.
+Install a `tracing` subscriber. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing` with the target `gpui_shell::script`; with no subscriber every one of them is discarded, and the symptom is a View that quietly stopped responding.
 
 ## Not there yet
 

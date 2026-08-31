@@ -106,7 +106,7 @@ The palette defines seventeen tokens:
 | Surfaces | `surface`, `surface_foreground` |
 | Emphasis | `primary`, `primary_foreground`, `secondary`, `secondary_foreground` |
 | Recessive | `muted`, `muted_foreground` |
-| Highlight | `accent`, `accent_foreground` |
+| Highlight | `accent`, `accent_foreground`, `selection` |
 | Danger | `destructive`, `destructive_foreground` |
 | Chrome | `border`, `input`, `ring` |
 
@@ -125,7 +125,7 @@ or a #rrggbb literal
 
 gpui-shell does not own a palette or theme file format. It reads the active
 `gpui_base::Theme` supplied by the host. A JavaScript application may replace
-that same Base snapshot with `set_theme({ appearance, tokens })`; theme names
+that same Base Snapshot with `set_theme({ appearance, tokens })`; theme names
 and any registry remain application state.
 
 ## State styles
@@ -189,7 +189,7 @@ render(cx) {
 }
 ```
 
-The snapshot is deeply read-only. `theme()` remains as a compatibility accessor, but `cx.theme()` is preferred. An application may call `set_theme({ appearance, tokens })` from an event or task with its own complete color, spacing, and radius token snapshot. gpui-shell writes that snapshot into gpui-base and rebuilds token-backed script views; it does not own theme names, palettes, or a file format.
+The Snapshot is deeply read-only. `theme()` remains as a compatibility accessor, but `cx.theme()` is preferred. An application may call `set_theme({ appearance, tokens })` from an event or task with its own complete color, spacing, and radius token Snapshot. gpui-shell writes that Snapshot into gpui-base and rebuilds token-backed script Views; it does not own theme names, palettes, or a file format.
 
 ## Native motion
 

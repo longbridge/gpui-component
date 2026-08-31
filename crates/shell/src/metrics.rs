@@ -53,8 +53,11 @@ pub struct RuntimeMetrics {
     script_render_time: Duration,
     slowest_script_render: Duration,
     native_time: Duration,
+    frame_script_calls: u64,
     materializations: u64,
     materialize_time: Duration,
+    structure_repeats: u64,
+    structure_changes: u64,
 }
 
 impl RuntimeMetrics {
@@ -97,6 +100,11 @@ impl RuntimeMetrics {
         self.native_time
     }
 
+    /// Calls into JavaScript made from GPUI's frame path.
+    pub fn frame_script_calls(&self) -> u64 {
+        self.frame_script_calls
+    }
+
     /// What one script render costs without the host calls inside it.
     pub fn mean_script_only(&self) -> Duration {
         mean(
@@ -130,6 +138,43 @@ impl RuntimeMetrics {
         mean(self.materialize_time, self.materializations)
     }
 
+    /// Rebuilds that produced the same *shape* as the description they
+    /// replaced — the same components, the same builder methods, the same tree
+    /// — differing only in the values inside it.
+    ///
+    /// This is the measurement a template cache rests on, and it is reported
+    /// rather than acted on: nothing in the runtime skips work when a shape
+    /// repeats. §20.7 of `docs/gpui-shell.md` explains why the number has to
+    /// come first, and what it does and does not license.
+    ///
+    /// A view's first build has no predecessor and is counted in neither this
+    /// nor [`structure_changes`], so the two sum to the rebuilds that had one
+    /// rather than to [`script_renders`].
+    ///
+    /// [`structure_changes`]: Self::structure_changes
+    /// [`script_renders`]: Self::script_renders
+    pub fn structure_repeats(&self) -> u64 {
+        self.structure_repeats
+    }
+
+    /// Rebuilds whose shape differed from the description they replaced: a
+    /// branch taken differently, a row added, a style method that was not
+    /// called last time.
+    pub fn structure_changes(&self) -> u64 {
+        self.structure_changes
+    }
+
+    /// What fraction of rebuilds with a predecessor repeated its shape, in the
+    /// range `0.0..=1.0`, or `None` when no rebuild has had one yet.
+    ///
+    /// The ceiling on what a template cache could reach, not a prediction of
+    /// what it would save: §20.7's third problem is that a repeated shape still
+    /// has to mint this render's handlers.
+    pub fn structure_repeat_rate(&self) -> Option<f64> {
+        let compared = self.structure_repeats + self.structure_changes;
+        (compared > 0).then(|| self.structure_repeats as f64 / compared as f64)
+    }
+
     /// What this reading gained over an earlier one.
     ///
     /// Rates are what a live readout wants — "script renders in the last
@@ -146,12 +191,21 @@ impl RuntimeMetrics {
             // honest answer for a reading that covers part of it.
             slowest_script_render: self.slowest_script_render,
             native_time: self.native_time.saturating_sub(earlier.native_time),
+            frame_script_calls: self
+                .frame_script_calls
+                .saturating_sub(earlier.frame_script_calls),
             materializations: self
                 .materializations
                 .saturating_sub(earlier.materializations),
             materialize_time: self
                 .materialize_time
                 .saturating_sub(earlier.materialize_time),
+            structure_repeats: self
+                .structure_repeats
+                .saturating_sub(earlier.structure_repeats),
+            structure_changes: self
+                .structure_changes
+                .saturating_sub(earlier.structure_changes),
         }
     }
 }
@@ -174,8 +228,11 @@ pub(crate) struct Metrics {
     script_render_nanos: Cell<u64>,
     slowest_script_render_nanos: Cell<u64>,
     native_nanos: Cell<u64>,
+    frame_script_calls: Cell<u64>,
     materializations: Cell<u64>,
     materialize_nanos: Cell<u64>,
+    structure_repeats: Cell<u64>,
+    structure_changes: Cell<u64>,
 }
 
 impl Metrics {
@@ -208,19 +265,22 @@ impl Metrics {
         result
     }
 
-    /// Times one window of a virtualized list's items: the script call that
-    /// describes them and the walk that turns them into elements.
+    /// Times one script call GPUI makes from inside a frame: a window of a
+    /// virtualized list's items, or one piece of a dock's chrome — the script
+    /// call that describes it and the walk that turns it into elements.
     ///
     /// Added to the materialize total without moving the materialize count.
-    /// The count is materializations *of a snapshot*, and this is not one — it
-    /// happens two or more times inside a single frame, from inside GPUI's
-    /// layout pass rather than from `materialize`. The time belongs there all
-    /// the same: it is spent on the frame's budget, which is the question that
+    /// The count is materializations *of a snapshot*, and these are not — they
+    /// happen several times inside a single frame, from inside GPUI's layout
+    /// pass rather than from `materialize`. The time belongs there all the
+    /// same: it is spent on the frame's budget, which is the question that
     /// total answers. See [`Self::time_materialize`] and the note in this
     /// module's comment.
-    pub fn time_virtual_items<R>(&self, build: impl FnOnce() -> R) -> R {
+    pub fn time_frame_script<R>(&self, build: impl FnOnce() -> R) -> R {
         let started = instant::Instant::now();
         let result = build();
+        self.frame_script_calls
+            .set(self.frame_script_calls.get() + 1);
         self.materialize_nanos
             .set(self.materialize_nanos.get() + elapsed_nanos(started));
         result
@@ -236,14 +296,31 @@ impl Metrics {
         result
     }
 
+    /// Records that a rebuild either repeated the shape of the description it
+    /// replaced or did not.
+    ///
+    /// Called only when there *was* a predecessor. A view's first build is not
+    /// a data point about whether structure repeats.
+    pub fn record_structure(&self, repeated: bool) {
+        let counter = if repeated {
+            &self.structure_repeats
+        } else {
+            &self.structure_changes
+        };
+        counter.set(counter.get() + 1);
+    }
+
     pub fn read(&self) -> RuntimeMetrics {
         RuntimeMetrics {
             script_renders: self.script_renders.get(),
             script_render_time: Duration::from_nanos(self.script_render_nanos.get()),
             slowest_script_render: Duration::from_nanos(self.slowest_script_render_nanos.get()),
             native_time: Duration::from_nanos(self.native_nanos.get()),
+            frame_script_calls: self.frame_script_calls.get(),
             materializations: self.materializations.get(),
             materialize_time: Duration::from_nanos(self.materialize_nanos.get()),
+            structure_repeats: self.structure_repeats.get(),
+            structure_changes: self.structure_changes.get(),
         }
     }
 }

@@ -66,7 +66,11 @@ impl Render for ShowcasePanel {
             .p_3()
             .text_xs()
             .child(div().child(self.title.clone()))
-            .child(div().text_color(rgb(MUTED)).child(self.body.clone()))
+            .child(
+                div()
+                    .text_color(super::example_rgb(MUTED))
+                    .child(self.body.clone()),
+            )
     }
 }
 
@@ -83,10 +87,10 @@ impl Render for DragPreview {
             .px_2()
             .py_1()
             .text_xs()
-            .bg(rgb(SURFACE))
-            .text_color(rgb(ACCENT))
+            .bg(super::example_rgb(SURFACE))
+            .text_color(super::example_rgb(ACCENT))
             .border_1()
-            .border_color(rgb(ACCENT))
+            .border_color(super::example_rgb(ACCENT))
             .child(self.title.clone())
     }
 }
@@ -149,10 +153,14 @@ impl ShowcaseDockSkin {
                     .w(RESIZE_STRIP)
                     .cursor_col_resize(),
             })
-            .child(div().bg(rgb(BORDER)).map(|line| match placement {
-                DockPlacement::Bottom => line.h(px(1.)).w_full(),
-                _ => line.w(px(1.)).h_full(),
-            }))
+            .child(
+                div()
+                    .bg(super::example_rgb(BORDER))
+                    .map(|line| match placement {
+                        DockPlacement::Bottom => line.h(px(1.)).w_full(),
+                        _ => line.w(px(1.)).h_full(),
+                    }),
+            )
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 cx.stop_propagation();
                 *resizing.borrow_mut() = Some(dock.clone());
@@ -171,7 +179,7 @@ impl DockAreaRenderer for ShowcaseDockSkin {
             .flex()
             .flex_row()
             .overflow_hidden()
-            .bg(rgb(CHROME))
+            .bg(super::example_rgb(CHROME))
             .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
                 // Cloned out before the call, so the borrow is released before
                 // resizing reaches back into another frame reading this cell.
@@ -213,7 +221,11 @@ impl DockAreaRenderer for ShowcaseDockSkin {
     ) -> Option<AnyElement> {
         Some(
             div()
-                .bg(rgb(if handle.is_active() { ACCENT } else { BORDER }))
+                .bg(super::example_rgb(if handle.is_active() {
+                    ACCENT
+                } else {
+                    BORDER
+                }))
                 .map(|line| match handle.axis() {
                     Axis::Horizontal => line.w(px(1.)).h_full(),
                     Axis::Vertical => line.h(px(1.)).w_full(),
@@ -266,7 +278,7 @@ impl TabGroupRenderer for ShowcaseDockSkin {
             .flex_col()
             .min_h(px(0.))
             .overflow_hidden()
-            .bg(rgb(SURFACE))
+            .bg(super::example_rgb(SURFACE))
     }
 
     fn content_frame(&self, _: &TabGroupContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
@@ -287,9 +299,9 @@ impl TabGroupRenderer for ShowcaseDockSkin {
             .h(TAB_BAR_HEIGHT)
             .flex_none()
             .overflow_hidden()
-            .bg(rgb(CHROME))
+            .bg(super::example_rgb(CHROME))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(super::example_rgb(BORDER))
             .children(
                 group
                     .panels()
@@ -310,8 +322,10 @@ impl TabGroupRenderer for ShowcaseDockSkin {
                             .text_xs()
                             .cursor_pointer()
                             .map(|this| match selected {
-                                true => this.bg(rgb(SURFACE)).text_color(rgb(ACCENT)),
-                                false => this.text_color(rgb(MUTED)),
+                                true => this
+                                    .bg(super::example_rgb(SURFACE))
+                                    .text_color(super::example_rgb(ACCENT)),
+                                false => this.text_color(super::example_rgb(MUTED)),
                             })
                             .child(title.clone())
                             .on_click({
@@ -436,10 +450,12 @@ impl BaseShowcase {
             .text_xs()
             .cursor_pointer()
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(super::example_rgb(BORDER))
             .map(|this| match open {
-                true => this.bg(rgb(SURFACE)).text_color(rgb(ACCENT)),
-                false => this.text_color(rgb(MUTED)),
+                true => this
+                    .bg(super::example_rgb(SURFACE))
+                    .text_color(super::example_rgb(ACCENT)),
+                false => this.text_color(super::example_rgb(MUTED)),
             })
             .child(label)
             .on_click(move |_, window, cx| {
@@ -457,7 +473,7 @@ impl BaseShowcase {
             .flex_col()
             .overflow_hidden()
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(super::example_rgb(BORDER))
             .child(
                 div()
                     .flex()
@@ -465,11 +481,11 @@ impl BaseShowcase {
                     .items_center()
                     .gap_2()
                     .p_2()
-                    .bg(rgb(CHROME))
+                    .bg(super::example_rgb(CHROME))
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(super::example_rgb(BORDER))
                     .child(self.dock_toggle(DockPlacement::Bottom, "Bottom", cx))
-                    .child(div().text_xs().text_color(rgb(MUTED)).child(
+                    .child(div().text_xs().text_color(super::example_rgb(MUTED)).child(
                         "Drag a tab onto another group to merge it, or towards an edge to split",
                     )),
             )

@@ -11,7 +11,7 @@ impl BaseShowcase {
             .h_48()
             .overflow_hidden()
             .border_1()
-            .border_color(rgb(0x171717))
+            .border_color(super::example_rgb(0x171717))
             .child(
                 v_virtual_list(
                     cx.entity(),

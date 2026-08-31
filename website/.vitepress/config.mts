@@ -33,6 +33,10 @@ function wasmExamplesDevServer() {
           res.end("WASM example is not built. Run its Makefile build target first.");
           return;
         }
+        // The Rust example is rebuilt before the VitePress dev server starts.
+        // Never let a surviving iframe reuse an older index that points at an
+        // obsolete hashed WASM asset after that restart.
+        res.setHeader("Cache-Control", "no-store");
         res.setHeader("Content-Type", contentTypes[extname(file)] ?? "application/octet-stream");
         createReadStream(file).pipe(res);
       });
@@ -122,6 +126,7 @@ const shellSidebar = createSidebar("/shell/", "GPUI Shell", "Introduction");
 const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
 const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "简介");
+const zhBaseSidebar = createSidebar("/zh-CN/base/", "GPUI Base");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";
@@ -175,9 +180,7 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
     // Shell precedes Base: it is the newest layer and the one a reader is
     // least likely to already know about.
     { text: "Shell", link: `${prefix}/shell/` },
-    // The gpui-base docs are English-only, so both locales point at the same
-    // pages; the section keeps its full "GPUI Base" name in the sidebar.
-    { text: "Base", link: "/base/" },
+    { text: "Base", link: `${prefix}/base/` },
     {
       text: resourcesText,
       items: [
@@ -312,6 +315,7 @@ const config: UserConfig = {
         sidebar: {
           ...zhSidebar,
           ...zhShellSidebar,
+          ...zhBaseSidebar,
         },
         footer: createFooter("/zh-CN", "zh"),
         langMenuLabel: "语言",
@@ -329,7 +333,9 @@ const config: UserConfig = {
   },
   markdown: {
     math: true,
-    defaultHighlightLang: "rs",
+    languages: ["rust"],
+    languageAlias: { rs: "rust" },
+    defaultHighlightLang: "rust",
     theme: {
       light: lightTheme,
       dark: darkTheme,

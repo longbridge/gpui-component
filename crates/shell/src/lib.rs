@@ -44,16 +44,20 @@
 // `gpui-base` alone and cannot borrow `gpui-component`'s copy. `runtime`,
 // `error` and `assets` publish their types through the root.
 //
-// **Designed, tested, not driven.** `dock`. A script cannot yet
-// contribute a panel. The plugin manifest is public because the shipped binary
-// now applies a local application's declared capabilities before loading it.
+// **Public because a script drives it.** `dock`. A script contributes panels
+// and draws a dock's chrome through the engine, and a Rust host can build a
+// `ScriptPanel` or install a `ScriptDockSkin` over the same seam. The plugin
+// manifest is public because the shipped binary now applies a local
+// application's declared capabilities before loading it.
 //
 // **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
 // handle are the runtime talking to itself.
 pub(crate) mod a11y;
+pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
-pub(crate) mod dock;
+pub(crate) mod dependencies;
+pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
@@ -111,6 +115,34 @@ pub fn write_type_declarations(root: &std::path::Path) -> std::io::Result<Vec<Pa
     typings::write_application(root)
 }
 
+/// Links an application's declared Git dependencies where an editor finds them.
+///
+/// `gpui.d.ts` describes the runtime; this describes the packages the manifest
+/// adds to it. Without it `import { style } from "omarchy-ui"` is a module an
+/// editor cannot resolve, so the names behind it have no types, no parameter
+/// hints and no documentation even though the runtime resolves them fine.
+///
+/// The dependencies are fetched if the cache does not already hold them, which
+/// is why this is separate from [`write_type_declarations`]: one writes a file,
+/// the other may reach the network. [`ShellRuntime::load`] does both, so an
+/// ordinary host needs neither. This explicit operation exists for tooling such
+/// as `gpui-shell types` that must report a failure to its caller.
+///
+/// An application without a manifest, or one that declares no dependencies, has
+/// nothing to link and is not an error. Returns the links that were written.
+pub fn write_dependency_links(root: &std::path::Path) -> anyhow::Result<Vec<PathBuf>> {
+    if !root.join(plugin::MANIFEST_FILE).is_file() {
+        return Ok(Vec::new());
+    }
+    let manifest = plugin::PluginManifest::read(root)?;
+    if manifest.dependencies().is_empty() {
+        return Ok(Vec::new());
+    }
+    let store = dependencies::GitDependencyStore::for_user()?;
+    let dependencies = store.materialize_all(&manifest)?;
+    store.link_for_editor(root, &dependencies)
+}
+
 /// Grants an application its capabilities.
 ///
 /// Nothing is permitted until this is called: a script gets no file, storage,
@@ -143,6 +175,11 @@ pub fn set_capabilities(capabilities: Capabilities) {
 /// needs to name it. The store is one file inside, which leaves room for other
 /// per-application state later.
 ///
+/// The id also becomes the namespace this application's dock panels persist
+/// under — `shell:<id>/<panel>` — for the same reason it places storage: a
+/// layout file has to find the panel again after a restart, and only a name
+/// survives a move.
+///
 /// ```rust,ignore
 /// let data = gpui_shell::set_bundle_id("com.example.notes")?;
 /// gpui_shell::set_capabilities(Capabilities::new().write_roots([data]));
@@ -158,6 +195,10 @@ pub fn set_capabilities(capabilities: Capabilities) {
 pub fn set_bundle_id(id: &str) -> anyhow::Result<PathBuf> {
     let directory = runtime::app_data_dir(id)?;
     set_storage_path(directory.join("store.json"));
+    // The same name namespaces the application's dock panels. Storage and a
+    // persisted layout are the two things that have to survive a restart under
+    // a name rather than a path, so they take the name from one place.
+    policy::update_default(|policy| policy.with_application(id));
     Ok(directory)
 }
 

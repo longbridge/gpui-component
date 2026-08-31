@@ -21,7 +21,7 @@ use crate::{
     engine::ShellRuntime,
     materialize::{
         Behavior, Children, StateStyles, dispatch_change, finish, tracked_focus, warn_ignored_key,
-        warn_unhonoured_a11y, with_active_and_focus, with_hover,
+        warn_unhonoured_a11y, with_active_and_focus, with_hover, with_input_handlers,
     },
 };
 
@@ -73,5 +73,6 @@ pub(in crate::materialize) fn radio(
 
     let radio = with_hover(radio, &states);
     let radio = with_active_and_focus(radio, &states);
+    let radio = with_input_handlers(radio, &behavior, runtime);
     finish(radio, refinement, children)
 }

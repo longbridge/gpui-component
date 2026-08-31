@@ -1,18 +1,18 @@
 ---
 title: API 参考
 description: 脚本能 import 或触及的每个名字——四个内置模块、cx 与 window 全局对象，以及那些不是样式的元素方法。
-order: 9
+order: 10
 ---
 
 # API Reference
 
 脚本接口的一份清单：有什么，以及它来自哪个模块。其余页面解释每样东西为什么是这个样子——这一页是用来查名字的。
 
-权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。
+权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。manifest 声明的 Git 依赖同样不在这一页：它们由同一次刷新链接进 `node_modules`，名字、签名与文档都来自 package 自身。见[依赖](./dependencies.md)。
 
 ## 模块
 
-每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接：视图、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
+每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接： View、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
 
 ```js
 import { View, div } from "gpui";
@@ -22,7 +22,7 @@ import { fps_monitor } from "gpui-fps";
 
 | 模块 | 提供 |
 | --- | --- |
-| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分：视图、样式接口与调度 |
+| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分： View、样式接口与调度 |
 | `gpui-base` | 布局辅助函数、组件与主题 |
 | `gpui-shell` | shell 桥接层自有的纯类型概念；没有运行时导出 |
 | `gpui-fps` | 性能 HUD |
@@ -48,15 +48,15 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 字符串本身也是元素，和 GPUI 里 `&str` 实现 `IntoElement` 完全一样：`.child("hello")` 就是写文本的方式，样式来自持有它的那个元素。
 
-### 视图
+### View
 
 | 名称 | 说明 |
 | --- | --- |
-| `View` | 每个视图的基类；继承它，并把子类作为 default export |
+| `View` | 每个 View 的基类；继承它，并把子类作为 default export |
 | `ViewClass` | 一个具体的 `View` 子类，也就是 `cx.new` 接受的东西 |
-| `Entity` | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
+| `Entity` | 对一个嵌套 View 的留存所有权：`set_props(props)`、`release()` |
 
-子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
+子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在 View 被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父 View 改变嵌套 View 的 props 时执行。
 
 ### 调度
 
@@ -85,8 +85,14 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `MouseButton` | `"left"`、`"right"` 或 `"middle"` |
 | `ClickEvent` | `click_count`、`modifiers` |
 | `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
+| `MouseButtonEvent` | `button`、`click_count`、`position`、`modifiers`，以及元素绘制之后才有的局部几何 |
+| `ScrollWheelEvent` | 以像素表示的 `delta`；设备按行上报时还有 `delta_lines`；以及 `touch_phase` |
+| `KeyEvent` | `keystroke`（整个组合键，平台修饰键在所有平台上都拼作 `cmd`）、`key`、`key_char`、`modifiers`、`is_held` |
+| `ActionEvent` | `action`——脚本给这个 action 起的名字 |
+| `KeyBinding` | `cx.bind_keys` 的一项：`keystroke`、`action`、可选的 `context` |
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
 | `Point` | `x`、`y` |
+| `Size` | `width`、`height` |
 | `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
 | `Background` | 由 `Background.solid(...)` 等工厂创建的可复用原生背景：`opacity(factor)`、`color_space(space)` |
 | `BackgroundStop` | 一个渐变色标，来自 `Background.stop(color, percentage)` |
@@ -112,7 +118,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `Props` | 跨 JavaScript View 桥接传递的属性包 |
 | `ElementBounds` | shell 事件使用的、带 `width` 与 `height` 的 `Point` |
 | `ScopePhase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
-| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的视图。默认是当前运行的视图；`null` 比任何视图都活得久 |
+| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的 View。默认是当前运行的 View；`null` 比任何 View 都活得久 |
 | `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
 | `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉 |
 | `MotionProperty` | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
@@ -129,13 +135,16 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | 成员 | 说明 |
 | --- | --- |
 | `notify()` | 请求重新渲染；在 `render` 期间抛异常，因为渲染中通知自己是一个死循环 |
+| `bind_keys(bindings)` | 安装键绑定并返回安装了几条；对应 `App::bind_keys` |
+| `stop_propagation()` | 让这次事件不再向上传到外层的处理器；对应 `App::stop_propagation` |
+| `propagate()` | 在同一次分发中撤销上面那一步；对应 `App::propagate` |
 | `phase()` | 这次调用处于哪个 `ScopePhase` |
 | `theme()` | 当前 `gpui_base::Theme` 的语义 token 投影 |
 | `open_url(url)` | 把一个绝对的 `http`/`https` URL 交给系统处理器 |
 | `read_from_clipboard()` | 剪贴板里的文本，没有文本时是 `undefined` |
 | `write_to_clipboard(text)` | 替换剪贴板里的文本 |
 | `focus_handle()` | 一个新的 `FocusHandle`；属于 `init` 或事件处理器，绝不属于 `render` |
-| `new(Class, props?)` | 创建一个留存的嵌套视图，并返回拥有它的 `Entity` |
+| `new(Class, props?)` | 创建一个留存的嵌套 View，并返回拥有它的 `Entity` |
 | `spawn(body, opts?)` | 执行 `body(cx)` 并接管它返回的 promise，让 rejection 得到上报 |
 | `sleep(ms?)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve |
 | `timer` | `Timer`：`after` 与 `every` |
@@ -150,7 +159,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 ## `window` 全局对象
 
-这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
+这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个 View——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -166,8 +175,20 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `remove_toast(id)` | 撤回一个 toast，并回答它当时是否还在显示 |
 | `clear_toasts()` | 撤回所有 toast，并回答撤回了几个 |
 | `paint_path(path, background)` | 用原生背景绘制不可变几何；对应 `Window::paint_path` |
+| `dispatch_action(action)` | 沿本窗口的焦点路径派发一个 action；对应 `Window::dispatch_action` |
+| `rem_size()` / `line_height()` | 窗口的排版度量，单位是像素 |
+| `viewport_size()` / `bounds()` | 可绘制区域，以及窗口在屏幕上的位置 |
+| `mouse_position()` | 指针位置，窗口坐标 |
+| `appearance()` | `"light"` 或 `"dark"` |
+| `is_window_active()` / `is_fullscreen()` / `is_maximized()` | 平台窗口的状态 |
+| `set_rem_size(size)` | 重新缩放所有以 rem 表达的尺寸 |
+| `refresh()` | 重绘窗口里的每一个 View |
+| `focus_next()` / `focus_prev()` | 把键盘移到相邻的一个 tab stop |
+| `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | 平台窗口控制 |
 | `localStorage` | Web Storage，背后是 Host 放好的一个文件，跨重启存活 |
 | `sessionStorage` | Web Storage，只在内存里，随进程一起消失 |
+
+上面这些度量——从 `rem_size()` 一直到 `is_maximized()`——在 `render` 中都是合法的：一个要按窗口尺寸决定自身大小的 View，只能在绘制它的那一趟里问。而所有*改变*窗口的调用在 `render` 中都会被拒绝，理由和 `cx.notify()` 一样：一帧去改自己正在绘制的窗口，就是这一帧在和自己较劲。
 
 `open_dialog`、`open_sheet` 与 `open_sheet_at` 接受的是**一个返回元素的函数**，而不是元素：dialog 活得比打开它的那次调用久，每次重绘时这个函数都会再执行一次。除了两个 `has_active_*` 查询与 `paint_path`，这里的一切在 `render` 中都不合法。见 [Overlays](./overlays.md)。
 
@@ -218,6 +239,17 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | [`Progress`](../../base/primitives/progress.md) | 只有报读，没有进度条；单独的 `Progress.new(...)` 什么都不画 |
 | [`ProgressTrack`](../../base/primitives/progress.md) | 凹槽：一个由你设定尺寸与颜色的普通元素 |
 | [`ProgressIndicator`](../../base/primitives/progress.md) | 已填充的部分；按你报读的百分比设置它的宽度 |
+| [`Avatar`](../../base/primitives/avatar.md) | 渲染它的 `image` 槽；没有图片时渲染 `fallback`。它自己不画圆形、尺寸或背景 |
+| [`AvatarImage`](../../base/primitives/avatar.md) | 图片槽：`AvatarImage.new(path)`，用在别处无效 |
+| [`AvatarFallback`](../../base/primitives/avatar.md) | 兜底槽：一个普通盒子，放首字母、图形或 `svg` |
+| [`Pagination`](../../base/primitives/pagination.md) | 一个 navigation landmark，带报读的标签；页码按钮由脚本自己画 |
+| `pagination_items(current, total, visible?)` | 该画哪些页码、省略号落在哪。`visible` 默认 7，最小 5；总页数 ≤ 1 时返回空 |
+| [`Accordion`](../../base/primitives/accordion.md) | 一个 group，装 item |
+| [`AccordionItem`](../../base/primitives/accordion.md) | 一个条目：`open(...)` 进，trigger 的 `on_change(...)` 出；它把自己的 `open` 传给下面两半 |
+| [`AccordionHeader`](../../base/primitives/accordion.md) | 标题：`AccordionHeader.new(trigger)`，`aria_level(n)` 报读层级（默认 3） |
+| [`AccordionPanel`](../../base/primitives/accordion.md) | 展开的区域。关闭时不在树里，除非 `keep_mounted(true)` |
+| [`AccordionTrigger`](../../base/primitives/accordion.md) | 按钮：报读展开状态，`on_change` 请求相反的那个 |
+| [`CalendarState`](../../base/primitives/calendar.md) | 留存的日历状态：月网格、当前月份、选中的日期 |
 | [`SliderState`](../../base/primitives/slider.md) | 留存的 slider 状态，也是一次拖拽写入的地方 |
 | [`Slider`](../../base/primitives/slider.md) | 根：报读数值，并拥有 release |
 | [`SliderTrack`](../../base/primitives/slider.md) | 按下与拖拽的表面 |
@@ -252,7 +284,7 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | [`Combobox`](../../base/primitives/combobox.md) | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
 | [`DatePicker`](../../base/primitives/date-picker.md) | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
 
-在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表还没有方向键导航，而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
+在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表的方向键导航要你自己接（零件都在，见下），而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
 
 ### 表格与列表
 
@@ -271,6 +303,19 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | [`Scrollbar`](../../base/primitives/scrollbar.md) | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
 
 两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由 Host 在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
+
+### Dock
+
+| 名称 | 是什么 |
+| --- | --- |
+| `DockArea.new(id, options?)` | 一个可停靠布局，retained；`options` 为 `{ version?: number }` |
+| `DockArea.register_panel(name, Class)` | 教会运行时用 `Class` 重建 `name` 这块面板；返回加了命名空间的名字 |
+| `dock_area(area)` | 画出它，并承载六个 chrome handler |
+| `dock_content()` | 一侧 dock 自己的面板，在你画的 chrome 里应该出现的位置 |
+
+area 上的方法是 `add_panel(view, options)`、`remove_panel(id)`、`panels()`、`dump()`、`load(state)`、`has_dock`、`is_dock_open`、`toggle_dock`、`remove_dock`、`dock_size`、`set_dock_size`、`set_dock_collapsible`、`is_locked`、`set_locked`、`is_zoomed`、`zoom_out`、`on("layout_changed", handler)` 与 `release()`。
+
+**每一次编辑都在发起它的那次调用返回之后按调用顺序应用**——面板的主体来自 `cx.new(Class)`，那时它自己还在构造中——所以 `panels()` 与 `dump()` 读到的是本轮编辑之前的布局。见 [Dock 与面板](./dock.md)。
 
 ### 留存句柄
 
@@ -342,6 +387,36 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | `scroll_to_item(index: number, strategy?): void` | 在下一帧之前把某一项带到屏幕上；`strategy` 是 `"top"`（默认）或 `"center"` |
 | `scroll_to_bottom(): void` | 滚到末尾 |
 
+
+### 日历
+
+`CalendarState` 存在的理由是 `month_days()`——哪些日期落在哪一周、相邻月份的日子补在哪里、这个月需要几行。格子由脚本自己画。
+
+```js
+const grid = this.calendar.month_days()[0];
+v_flex().children(grid.map((week) =>
+  h_flex().children(week.map((day) =>
+    Button.new(day)
+      .selected(day === this.calendar.value())
+      .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+      .child(String(Number(day.slice(8)))),
+  )),
+));
+```
+
+base 的 `Calendar` 元素**没有**绑定，这是个决定而不是遗漏：它遍历同一份网格，每个格子调用一次渲染回调——一帧最多四十二次跨语言调用，而且发生在 GPUI 的 layout 过程里，为的是一批本身不带任何行为的格子。在这里读到网格自己画，是同样的活，少了那四十二次穿越。
+
+日期一律是 `"YYYY-MM-DD"`：按文本排序即是按时间排序，`new Date(s)` 能直接读——需要星期名或本地化月份名时用它。
+
+| 方法 | 说明 |
+| --- | --- |
+| `month_days()` | 网格：按月分组的“周”，每周固定七天，首尾两周带相邻月份的日子 |
+| `year()` / `month()` | 网格对应的年份与月份（1–12） |
+| `today()` | 状态创建时读到的今天 |
+| `value()` / `set_value(next)` | 选中的日期：一天、`[start, end]` 区间，或 `null` |
+| `next_month()` / `prev_month()` | 把网格前后移一个月；在 `render` 中不合法 |
+| `on("change", handler)` | 唯一的事件，报告一个日期被选中 |
+
 ### 主题
 
 | 名称 | 说明 |
@@ -368,6 +443,13 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | `PartType` | `gpui-base` 中没有自身身份的子部件共同使用的 `new()` 形态 |
 | `Placement` | `"top"`、`"bottom"`、`"left"` 或 `"right"`，镜像 `gpui_base::Placement` |
 | `ComponentType` | `gpui-base` 中带身份的组件构造器共同使用的 `new(id)` 形态 |
+| `DockPlacement` | `"center"`、`"left"`、`"right"` 或 `"bottom"` |
+| `DockPanel` | `panels()` 报告的一块面板：`id`、`name`、`placement`、`node`、`index`、`active` 与三个标志位 |
+| `DockGroup` / `DockTab` | 一个标签组与它的一个标签页，也就是 `tab_bar` 与 `empty_group` 拿到的东西 |
+| `DockRegion` | 一侧 dock，也就是 `dock` handler 拿到的东西 |
+| `DockTile` | 一个 tile，bounds 已经解析好 |
+| `DockDrop` | 被拖动的面板会落在哪里 |
+| `TileResizeSide` | `"left"`、`"right"`、`"top"`、`"bottom"` 或 `"bottom_right"` |
 
 ### 组合模式
 
@@ -421,7 +503,7 @@ Select.new("mode")
   );
 ```
 
-展开后用方向键移动高亮这件事目前没有：base 期待里面的东西用自己的按键绑定来跑高亮，而 shell 没有按键绑定层。指针可用，Escape 关闭，Enter 与 ↓ 展开。
+展开后用方向键移动高亮这件事要你自己写：base 期待里面的东西用自己的按键绑定来跑高亮，而它不会替你跑。零件都在——把 `on_key_down` 放在键盘被移过去的那个 content 元素上，自己移动高亮；或者在自己的 `key_context` 下把 ↑ / ↓ 绑到 action。开箱状态是：指针可用，Escape 关闭，Enter 与 ↓ 展开，高亮不动。
 
 **虚拟列表和它的滚动条按名字配对。** 列表自己不画滚动条，而且配对在运行前不做任何校验，所以两半都要写。
 
@@ -436,7 +518,7 @@ v_flex().relative().h(200)
   .child(Scrollbar.vertical("rows").absolute().inset_0());
 ```
 
-**嵌套视图创建一次，然后作为子元素挂上。** `cx.new` 属于 `init` 或事件处理器；实体在任何接受子元素的位置都能当子元素。
+**嵌套 View 创建一次，然后作为子元素挂上。** `cx.new` 属于 `init` 或事件处理器；实体在任何接受子元素的位置都能当子元素。
 
 ```js
 init(props, cx) {
@@ -478,6 +560,10 @@ render() {
 | 方法 | 作用 |
 | --- | --- |
 | `content(element)` | `Collapsible`、`Popover`、`HoverCard` 或 `Popup` 的内容 |
+| `image(element)` | `Avatar` 的图片槽，接受一个 `AvatarImage` |
+| `fallback(element)` | `Avatar` 的兜底槽，接受一个 `AvatarFallback` |
+| `header(element)` | `AccordionItem` 的 header 槽，接受一个 `AccordionHeader` |
+| `panel(element)` | `AccordionItem` 的 panel 槽，接受一个 `AccordionPanel` |
 | `trigger(element)` | `Popover` 或 `HoverCard` 的触发器 |
 | `input(element)` | `NumberInput` 的编辑器插槽；留空则画出裸编辑器 |
 | `decrement_button(element)` | `NumberInput` 减少按钮的外观——重放到 base 的按钮上，而不是直接渲染 |
@@ -491,6 +577,13 @@ render() {
 | `on_click(handler)` | 激活时的 `(ClickEvent, cx)` |
 | `on_mouse_move(handler)` | 指针悬停在元素上时的 `(MouseMoveEvent, cx)` |
 | `on_hover(handler)` | 指针进入与离开时的 `(hovered, cx)` |
+| `on_key_down(handler)` | 该元素持有键盘时按下按键的 `(KeyEvent, cx)` |
+| `on_key_up(handler)` | 同一条焦点路径上松开按键的 `(KeyEvent, cx)` |
+| `on_mouse_down(button, handler)` | 按下该按钮时的 `(MouseButtonEvent, cx)` |
+| `on_mouse_up(button, handler)` | 松开时的 `(MouseButtonEvent, cx)` |
+| `on_mouse_down_out(handler)` | 在该元素之外任意位置按下时的 `(MouseButtonEvent, cx)` |
+| `on_scroll_wheel(handler)` | 滚轮或触控板滚动时的 `(ScrollWheelEvent, cx)` |
+| `on_action(action, handler)` | 该命名 action 被派发到此元素或其内部时的 `(ActionEvent, cx)` |
 | `on_change(handler)` | 开关变化时的 `(checked, cx)`；新值由脚本保存 |
 | `on_step(handler)` | `("increment" \| "decrement", cx)`，并且它会**取代**内置的步进 |
 | `on_item_click(handler)` | 虚拟列表某一行被点击时的 `(key, cx)`，按 key 而不是按下标 |
@@ -498,6 +591,30 @@ render() {
 | `on_confirm(handler)` | 在打开的 `Select` 或 `Combobox` 中按下回车；无参数 |
 | `on_dismiss(handler)` | 在打开的 `Select` 或 `Combobox` 中按下 Escape，早于 `on_open_change(false)` |
 | `on_resize(handler)` | 可调整组的拖拽结束后的 `(sizes, cx)` |
+
+
+### Actions 与键绑定
+
+一个 action 是比按键高一层的东西。`cx.bind_keys` 说哪个组合键在什么上下文里意味着 `"save"`，元素上的 `on_action("save", ...)` 说 `"save"` 做什么；菜单项或工具栏按钮用 `window.dispatch_action("save")` 派发同一个名字，就能走到同一个处理器，而两边都不必知道对方存在。
+
+```js
+init(_props, cx) {
+  cx.bind_keys([{ keystroke: "cmd-s", action: "save", context: "Editor" }]);
+}
+
+render(_cx) {
+  return div()
+    .key_context("Editor")
+    .track_focus(this.handle)
+    .on_action("save", (event, cx) => this.save(cx));
+}
+```
+
+`context` 是一个匹配元素 `key_context(...)` 的谓词表达式，所以同一个组合键可以在列表里是一个意思、在编辑器里是另一个意思。同一个元素上注册多个 `on_action` 是可以的，彼此独立；一个它们都没认领的 action 会继续往外层元素传。
+
+上面这组——`on_key_down`、`on_key_up`、四个指针事件、`on_action` 与 `key_context`——接线在 `div`、`h_flex`、`v_flex`、`Button`、`Link`、`Checkbox`、`Switch`、`Radio`、`Toggle`、`Tabs` 与 `Tab` 上。写在其余组件上的处理器会被记录下来但永远到不了 GPUI，日志里会说明——把它包一层，写在外层元素上。
+
+接线了不等于收得到。按键沿焦点路径传递，所以一个不接受脚本焦点句柄的组件——比如 `Tab`——听得到按下、永远听不到按键，无论两者接线得多好。
 
 ### 控件状态
 
@@ -511,6 +628,7 @@ render() {
 | `indeterminate(value)` | 把 `Progress` 的数值从无障碍树里撤下 |
 | `open(value)` | `Collapsible` 是否渲染内容，或浮层是否正在显示 |
 | `default_open(value)` | 非受控的 `Popover` 是否以打开状态开始 |
+| `keep_mounted(value)` | 关闭的 `AccordionPanel` 是否留在树里。默认关；开启后它的内容能跨越一次关闭保住滚动位置或半填的输入 |
 | `start(value)` | `SliderThumb` 是区间 slider 的哪一个滑块 |
 | `href(url)` | `Link` 的绝对 HTTP(S) 目标 |
 
@@ -525,6 +643,7 @@ render() {
 | `set_position(position, size)` | 从 1 开始的位置与总数——“第 2 个 tab，共 5 个” |
 | `row_count(count)` | `Table` 的总行数，包含未渲染的行 |
 | `column_count(count)` | `Table` 的总列数 |
+| `aria_level(level)` | `AccordionHeader` 报读的标题层级，默认 3；只报读，不改字号 |
 | `axis(value)` | `RadioGroup` 或 `ToggleGroup` 的方向；只有语义，不做任何布局 |
 | `tooltip(text)` | 只对指针有效的悬停说明，不能替代 `accessibility_label` |
 
@@ -561,6 +680,38 @@ render() {
 | `open_delay(ms)` | 指针要在 `HoverCard` 触发器上停留多久；默认 600 |
 | `close_delay(ms)` | `HoverCard` 关闭前等待多久；默认 300 |
 | `overlay_closable(value)` | 在打开的 `Popover` 之外按下是否将其关闭 |
+
+### Dock 命令
+
+dock 的 chrome 画出来的元素*做什么*。缓存的 chrome 描述没有脚本事件处理器的生命周期，所以其中不能注册事件处理器——取而代之的是不携带任何脚本值的命令，由 base 完成实际动作。每一个的第一个参数都是它所在 handler 拿到的那个对象；它们只能挂在 `div`、`h_flex` 或 `v_flex` 上。
+
+| 方法 | 触发 | 作用 |
+| --- | --- | --- |
+| `select_tab(group, index)` | 点击 | 显示那个标签页 |
+| `close_panel(group, panel_id)` | 点击 | 关闭该面板（如果它所在的 group 允许） |
+| `toggle_zoom(group)` | 点击 | 放大 group，或还原 |
+| `drag_tab(group, index)` | 拖动 | 让该元素成为这个标签页的拖动源 |
+| `drop_tab(group, index?)` | 放下 | 在此接收被拖来的面板；不给 index 就追加到末尾 |
+| `toggle_dock(dock)` | 点击 | 展开或收起这侧 dock |
+| `resize_dock(dock)` | 拖动 | 拖动 dock 的边；每个位置都由 base 钳制 |
+| `move_tile(tile)` | 拖动 | 在画布上移动这个 tile |
+| `resize_tile(tile, side)` | 拖动 | 拖动某条边或某个角 |
+| `raise_tile(tile)` | 按下 | 把这个 tile 提到最上层 |
+| `toggle_tile_zoom(tile)` | 点击 | 让 tile 放大占满所在 dock |
+| `close_tile(tile)` | 点击 | 关闭这个 tile |
+
+### Dock chrome
+
+六个 handler，全都可选，且只能挂在 `dock_area(...)` 上。每一个都会先在 GPUI 的 layout pass 内部被调用，拿到的是 base 已经解析好的状态；描述会缓存到该状态或 handler 改变为止。
+
+| 方法 | 画什么 |
+| --- | --- |
+| `tab_bar(handler)` | 一个 group 当前显示面板上方的标签栏 |
+| `empty_group(handler)` | 没有可显示面板的 group 显示什么 |
+| `drop_indicator(handler)` | 被拖动的面板会落在哪里 |
+| `dock(handler)` | 一侧 dock 包住内容的外框；把 `dock_content()` 放进去 |
+| `tile_drag_bar(handler)` | 拖动 tile 用的那条拖拽条 |
+| `tile_resize_handles(handler)` | tile 的缩放把手 |
 
 ### 动效
 
