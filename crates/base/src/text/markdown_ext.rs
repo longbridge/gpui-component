@@ -239,6 +239,21 @@ impl MarkdownExtensions {
         self.revision
     }
 
+    /// Whether replacing these extension handles can change the parsed tree.
+    ///
+    /// Render methods commonly rebuild equivalent plugin closures every frame.
+    /// Their globally unique revisions differ, but the parser shape remains
+    /// stable; render handles may be refreshed without reparsing the document.
+    pub(crate) fn has_same_parser_configuration(&self, other: &Self) -> bool {
+        self.enable_mdx == other.enable_mdx
+            && self.block_parsers.len() == other.block_parsers.len()
+            && self.block_renderers.len() == other.block_renderers.len()
+            && self
+                .block_renderers
+                .keys()
+                .all(|name| other.block_renderers.contains_key(name))
+    }
+
     pub(crate) fn push_block_parser<F>(&mut self, parser: F)
     where
         F: for<'a> Fn(&mdast::Node, &MarkdownParseContext<'a>) -> Option<MarkdownNode>

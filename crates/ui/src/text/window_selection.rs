@@ -700,6 +700,10 @@ mod tests {
         text_view: Entity<TextViewState>,
     }
 
+    struct AutoScrollTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
     struct PaddedScrollableTextViewTest {
         text_view: Entity<TextViewState>,
     }
@@ -732,6 +736,108 @@ mod tests {
                 ),
             )
         }
+    }
+
+    impl Render for AutoScrollTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div()
+                    .debug_selector(|| "scrollable-text-view".into())
+                    .h(px(300.))
+                    .overflow_hidden()
+                    .child(
+                        TextView::new(&self.text_view)
+                            .flex_none()
+                            .px_5()
+                            .selectable(true)
+                            .scrollable(true),
+                    ),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn compatibility_text_view_drag_selection_auto_scrolls_both_directions(
+        cx: &mut TestAppContext,
+    ) {
+        use gpui::ListOffset;
+
+        let source = (0..100)
+            .map(|ix| format!("Paragraph {ix} with enough text to select"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| AutoScrollTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let view = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<AutoScrollTextViewTest>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let bounds = cx
+            .debug_bounds("scrollable-text-view")
+            .expect("scrollable TextView bounds");
+        let before = view.read_with(cx, |view, cx| {
+            let state = view.text_view.read(cx);
+            let offset = state.list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        let start = point(bounds.left() + px(30.), bounds.top() + px(30.));
+        let edge = point(bounds.left() + px(60.), bounds.bottom() - px(2.));
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(edge, Some(MouseButton::Left), Modifiers::default());
+        cx.executor().advance_clock(Duration::from_millis(64));
+        cx.run_until_parked();
+
+        let after = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::default());
+        assert_ne!(
+            before, after,
+            "dragging at the viewport edge must auto-scroll"
+        );
+
+        let list_state =
+            view.read_with(cx, |view, cx| view.text_view.read(cx).list_state().clone());
+        list_state.scroll_to(ListOffset {
+            item_ix: 99,
+            offset_in_item: px(0.),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let before_up = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        let start = point(bounds.left() + px(30.), bounds.bottom() - px(30.));
+        let edge = point(bounds.left() + px(60.), bounds.top() + px(2.));
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(edge, Some(MouseButton::Left), Modifiers::default());
+        cx.executor().advance_clock(Duration::from_millis(64));
+        cx.run_until_parked();
+        let after_up = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::default());
+        assert_ne!(
+            before_up, after_up,
+            "dragging at the top viewport edge must auto-scroll upward"
+        );
     }
 
     impl Render for PaddedScrollableTextViewTest {
