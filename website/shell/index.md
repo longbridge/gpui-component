@@ -198,6 +198,7 @@ What the script gains in exchange for the extra typing is the whole application 
 | [State and Views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
 | [Overlays](./overlays.md) | Dialogs, the sheet, toasts, and the phase rule |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`, default deny, filesystem, storage, process and network APIs |
+| [Dependencies](./dependencies.md) | Shell packages: what makes one, how a manifest names and pins it, and the types an editor gets |
 | [Hosting](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [HostModule](./host-module.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Dock and Panels](./dock.md) | A script View as a dockable panel, the chrome you draw for it, and what survives a restart |

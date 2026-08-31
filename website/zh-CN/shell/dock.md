@@ -1,7 +1,7 @@
 ---
 title: Dock 与面板
 description: 完全由脚本绘制的可停靠布局——重启后仍在原处的面板、自己画的 chrome，以及用命令代替回调。
-order: 12
+order: 13
 ---
 
 # Dock 与面板

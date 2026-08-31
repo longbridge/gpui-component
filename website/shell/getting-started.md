@@ -151,7 +151,7 @@ cargo run -p gpui-shell -- types hello
 
 This writes `gpui.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
 
-It also sets up everything else the editor needs: each Git dependency the manifest declares is fetched and linked into `node_modules` under its declared name, so `import { style } from "omarchy-ui"` resolves to the same files the runtime will execute and carries the package's own types, parameters and JSDoc; and a `jsconfig.json` is scaffolded when the directory has neither that nor a `tsconfig.json`. See [Capabilities](./capabilities.md#the-manifest).
+It also sets up everything else the editor needs: each Git dependency the manifest declares is fetched and linked into `node_modules` under its declared name, so `import { style } from "omarchy-ui"` resolves to the same files the runtime will execute and carries the package's own types, parameters and JSDoc; and a `jsconfig.json` is scaffolded when the directory has neither that nor a `tsconfig.json`. See [Dependencies](./dependencies.md).
 
 The declarations can be trusted because they are **generated from the tables the runtime dispatches through**, not transcribed from this documentation:
 

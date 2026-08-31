@@ -90,73 +90,12 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 }
 ```
 
-字符串形式支持严格的 GitHub 简写或完整 Git URL，两者都可以带可选的 `#ref`：
-
-```json
-{
-  "dependencies": {
-    "default-main": "huacnlee/omarchy-ui",
-    "named-ref": "huacnlee/omarchy-ui#v1.2.0",
-    "full-url": "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
-    "remote-head": "https://github.com/huacnlee/omarchy-ui"
-  }
-}
-```
-
-不带 `#ref` 的 GitHub 简写默认选择 `main`；不带 `#ref` 的完整 URL 则选择远端
-HEAD。ref 可以是 branch、tag 或 commit-ish（例如 commit ID）。每次加载应用时都会
-重新 fetch 并解析 branch、tag 或远端 HEAD；commit ID 始终选择同一个 commit。
-
-创建不可变 checkout 后，gpui-shell 会读取根目录的 `package.json`。字符串类型的
-`main` 指定 package entry；没有 `package.json` 或没有 `main` 时默认使用
-`index.js`。格式错误的 metadata、非字符串 `main`、逃出 checkout 的 entry，或未
-解析到文件的 entry，都会在应用 JavaScript 执行前令加载失败。
-
-旧的 object 形式保持完全兼容：它必须显式且只指定一个 `branch` 或 `tag`，可选的
-repository-relative `entry` 仍默认是 `index.js`。现有 manifest 无需迁移；若改为
-字符串形式，则应通过 `package.json` 的 `main`（或根目录 `index.js`）发布 entry：
-
-```json
-{
-  "dependencies": {
-    "omarchy-ui": {
-      "git": "https://github.com/huacnlee/omarchy-ui",
-      "branch": "main",
-      "entry": "src/public.js"
-    }
-  }
-}
-```
-
-gpui-shell 把依赖存储在 `~/.gpui-shell/cache/dependencies/`。每个 remote 的锁会串行化
-mirror 更新；mirror 发布不可变的、按 commit 寻址的 checkout，因此并发加载和旧
-module generation 不会互相改写。去掉 fragment 后的完整 URL 同时是 remote identity
-和 cache identity。gpui-shell 会校验 raw configured origin，同时允许 Git 的
-`url.*.insteadOf` 规则选择实际 fetch URL。Git 以非交互方式运行，每条命令限时 30
-秒。JavaScript 以 map key 作为裸模块名导入，例如
-`import { label, style } from "omarchy-ui"`；依赖内部的相对 import 和 package
-subpath import 都不能逃出该 checkout。下载使用 Host 上的 `git`，不属于脚本的
-network capability。
-
-编辑器解析同一条 import 的方式完全不同：它从导入文件向上查找 `node_modules`，对
-manifest 一无所知。于是一条正确的 import 会被标红成找不到的模块，它背后的每个名字
-也随之失去类型、参数提示和文档。因此每次加载——以及 `gpui-shell types`——都会把
-materialize 出来的 checkout 按 manifest 给的名字链接到
-`<application>/node_modules`；若目录里既没有 `jsconfig.json` 也没有
-`tsconfig.json`，还会生成一份 `jsconfig.json`。这样编辑器读到的就是运行时即将执行
-的同一批文件，它显示的签名和 JSDoc 不会和实际运行的代码脱节。
-
-只有 gpui-shell 自己写下的条目会被替换或删除——指向依赖缓存的 symlink，或带有它
-标记文件的目录——因此同名的已安装 package 不会被动到；manifest 中已移除的依赖，其
-链接也会一并清除。若平台拒绝创建 symlink（例如权限不足的 Windows 进程），
-gpui-shell 改为写入一个转发该 checkout 的小 package：裸 import 的类型效果相同，
-package subpath import 则无法解析。
-
-目录之所以叫 `node_modules`，是因为所有编辑器只认这一个位置；这里没有包管理器
-参与，不会从 registry 下载任何东西，每一项都只是指向 gpui-shell 已经拉好的 Git
-checkout 的链接。这个名字还换来了安静：TypeScript 会把从这里解析到的内容视为
-external library，不再把依赖自身的 implicit-`any` 之类诊断当成你的代码来报。
-`node_modules` 和 `gpui.d.ts` 一样属于生成物，两者都应加入忽略列表。
+`dependencies` 把裸模块名映射到一个 JavaScript package，gpui-shell 会在 entry
+module 运行之前从 Git 抓取它——`import { Title } from "omarchy-ui"`。字符串形式
+接受严格的 GitHub 简写或完整 Git URL，可带可选的 `#ref`；显式指定 `branch` 或
+`tag` 的 object 形式同样保持支持。每次加载还会把 package 链接到编辑器能找到的
+位置，于是这条 import 会带上 package 自己的类型与文档。版本选择、package entry、
+缓存，以及编辑器看见的东西，详见[依赖](./dependencies.md)。
 
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 
