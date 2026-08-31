@@ -392,7 +392,7 @@ impl MessageScrollerStory {
             .border_color(cx.theme().border)
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .child(scroller.size_full())
+            .child(scroller.with_bottom_fade(cx.theme().background).size_full())
     }
 }
 
@@ -530,18 +530,18 @@ impl Render for MessageScrollerStory {
                                         Self::render_message_row(message, index == unread_index)
                                     },
                                 )
-                                .with_list_style(StyleRefinement::default().p_5()),
+                                .with_list_style(StyleRefinement::default().p_5().pb_0())
+                                .with_bottom_fade(cx.theme().background),
                             ),
                         )
                         .child(
-                            div().w_full().p_5().child(
+                            div().w_full().px_5().pb_5().child(
                                 v_flex()
                                     .w_full()
                                     .gap_1()
                                     .p_2()
                                     .rounded_xl()
-                                    .border_1()
-                                    .border_color(cx.theme().border)
+                                    .bg(cx.theme().muted)
                                     .child(Input::new(&self.composer).appearance(false))
                                     .child(
                                         h_flex().w_full().justify_end().child(
@@ -790,6 +790,7 @@ impl Render for MessageScrollerStory {
                                         },
                                     )
                                     .with_list_style(StyleRefinement::default().p_4())
+                                    .with_bottom_fade(cx.theme().background)
                                     .size_full(),
                                 )
                             }),
