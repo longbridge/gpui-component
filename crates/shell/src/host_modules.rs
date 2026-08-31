@@ -107,6 +107,8 @@ use std::{
     cell::Cell, collections::BTreeMap, fmt, fmt::Write as _, future::Future, pin::Pin, rc::Rc,
 };
 
+use crate::registered_components::RegisteredComponent;
+
 /// A value crossing the host boundary, in either direction.
 ///
 /// The six cases are the intersection of what a script engine and JSON can both
@@ -416,7 +418,7 @@ pub struct HostModule {
     /// Sorted alongside `functions`, and disjoint from it: one name is either
     /// synchronous or asynchronous, never both.
     async_functions: BTreeMap<String, HostAsyncFunction>,
-    components: BTreeMap<String, crate::RegisteredComponent>,
+    components: BTreeMap<String, RegisteredComponent>,
     /// The module's TypeScript face, if the host wrote one. See
     /// [`HostModule::declarations`].
     declarations: Option<String>,
@@ -440,11 +442,21 @@ impl HostModule {
     }
 
     /// Exports one Rust-built element constructor from this module.
-    pub fn component(mut self, component: crate::RegisteredComponent) -> Self {
-        let name = component.name().to_owned();
+    pub fn component(
+        mut self,
+        name: impl Into<String>,
+        build: impl for<'a> Fn(
+            crate::ComponentArgs<'a>,
+            &mut gpui::Window,
+            &mut gpui::App,
+        ) -> gpui::AnyElement
+        + 'static,
+    ) -> Self {
+        let name = name.into();
         self.functions.remove(&name);
         self.async_functions.remove(&name);
-        self.components.insert(name, component);
+        self.components
+            .insert(name, RegisteredComponent::new(build));
         self
     }
 
@@ -455,7 +467,7 @@ impl HostModule {
     pub(crate) fn registered_component(
         &self,
         name: &str,
-    ) -> Result<crate::RegisteredComponent, HostError> {
+    ) -> Result<RegisteredComponent, HostError> {
         self.components.get(name).cloned().ok_or_else(|| {
             HostError::new(format!(
                 "HostModule `{}` has no registered component `{name}`",

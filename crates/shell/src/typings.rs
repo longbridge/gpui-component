@@ -3798,9 +3798,7 @@ mod tests {
             crate::HostModule::new("audit")
                 .function("observe", |_| Ok(crate::HostValue::Null))
                 .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) }))
-                .component(crate::RegisteredComponent::new("AuditPanel", |_, _, _| {
-                    gpui::div().into_any_element()
-                })),
+                .component("AuditPanel", |_, _, _| gpui::div().into_any_element()),
         )
         .expect("`audit` is not reserved");
 

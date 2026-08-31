@@ -777,7 +777,7 @@ fn materialize_component(
                 return div().into_any_element();
             };
             component.build(
-                crate::RegisteredComponentArgs {
+                crate::ComponentArgs {
                     id: &spec.id,
                     props: &spec.props,
                     children: children.into_vec(),

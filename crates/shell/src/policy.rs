@@ -330,9 +330,10 @@ mod tests {
     #[test]
     fn two_policies_do_not_share_registered_components() {
         let first = Policy::new()
-            .with_host_module(crate::HostModule::new("cards").component(
-                crate::RegisteredComponent::new("Quote", |_, _, _| gpui::div().into_any_element()),
-            ))
+            .with_host_module(
+                crate::HostModule::new("cards")
+                    .component("Quote", |_, _, _| gpui::div().into_any_element()),
+            )
             .expect("first policy");
         let second = Policy::new();
 

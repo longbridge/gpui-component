@@ -6,8 +6,7 @@
 //! keeps the fallback engine honest.
 
 use crate::{
-    HostModule, HostValue, RegisteredComponent, ScriptView, ShellRuntime, capability::Capabilities,
-    policy::Policy,
+    HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
 use gpui::{
     AppContext as _, IntoElement as _, Modifiers, ParentElement as _, TestAppContext,
@@ -61,19 +60,16 @@ fn registered_component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut
     cx.update(crate::init);
     let received = Rc::new(RefCell::new(None));
     let received_by_builder = received.clone();
-    let module = HostModule::new("mail").component(RegisteredComponent::new(
-        "Body",
-        move |mut args, _, _| {
-            *received_by_builder.borrow_mut() = Some((
-                args.id().to_owned(),
-                args.props().clone(),
-                args.children().len(),
-            ));
-            gpui::div()
-                .children(args.take_children())
-                .into_any_element()
-        },
-    ));
+    let module = HostModule::new("mail").component("Body", move |mut args, _, _| {
+        *received_by_builder.borrow_mut() = Some((
+            args.id().to_owned(),
+            args.props().clone(),
+            args.children().len(),
+        ));
+        gpui::div()
+            .children(args.take_children())
+            .into_any_element()
+    });
     crate::policy::set_default(
         Policy::new()
             .with_host_module(module)
@@ -140,13 +136,10 @@ fn revoking_a_component_module_releases_its_builder_while_the_view_lives(cx: &mu
     crate::policy::set_default(
         Policy::new()
             .with_host_module(
-                HostModule::new("extension").component(RegisteredComponent::new(
-                    "Leaf",
-                    move |_, _, _| {
-                        let _keep_alive = &captured;
-                        gpui::div().into_any_element()
-                    },
-                )),
+                HostModule::new("extension").component("Leaf", move |_, _, _| {
+                    let _keep_alive = &captured;
+                    gpui::div().into_any_element()
+                }),
             )
             .expect("component module"),
     );

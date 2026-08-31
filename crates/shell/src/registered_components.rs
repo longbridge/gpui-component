@@ -12,35 +12,26 @@ use gpui::{AnyElement, App, SharedString, Window};
 
 use crate::{HostValue, engine::ShellRuntime, spec::CallbackId};
 
-type ComponentBuilder =
-    Rc<dyn for<'a> Fn(RegisteredComponentArgs<'a>, &mut Window, &mut App) -> AnyElement>;
+type ComponentBuilder = Rc<dyn for<'a> Fn(ComponentArgs<'a>, &mut Window, &mut App) -> AnyElement>;
 
-/// One Rust-built element constructor exported from a [`crate::HostModule`].
+/// One Rust-built element constructor stored by a [`crate::HostModule`].
 #[derive(Clone)]
-pub struct RegisteredComponent {
-    name: String,
+pub(crate) struct RegisteredComponent {
     build: ComponentBuilder,
 }
 
 impl RegisteredComponent {
-    pub fn new(
-        name: impl Into<String>,
-        build: impl for<'a> Fn(RegisteredComponentArgs<'a>, &mut Window, &mut App) -> AnyElement
-        + 'static,
+    pub(crate) fn new(
+        build: impl for<'a> Fn(ComponentArgs<'a>, &mut Window, &mut App) -> AnyElement + 'static,
     ) -> Self {
         Self {
-            name: name.into(),
             build: Rc::new(build),
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     pub(crate) fn build(
         &self,
-        args: RegisteredComponentArgs<'_>,
+        args: ComponentArgs<'_>,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -52,25 +43,24 @@ impl fmt::Debug for RegisteredComponent {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RegisteredComponent")
-            .field("name", &self.name)
             .finish_non_exhaustive()
     }
 }
 
 impl PartialEq for RegisteredComponent {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && Rc::ptr_eq(&self.build, &other.build)
+        Rc::ptr_eq(&self.build, &other.build)
     }
 }
 
 /// Inputs supplied while one registered component is materialized.
-pub struct RegisteredComponentArgs<'a> {
+pub struct ComponentArgs<'a> {
     pub(crate) id: &'a SharedString,
     pub(crate) props: &'a HostValue,
     pub(crate) children: Vec<AnyElement>,
 }
 
-impl RegisteredComponentArgs<'_> {
+impl ComponentArgs<'_> {
     pub fn id(&self) -> &str {
         self.id
     }
