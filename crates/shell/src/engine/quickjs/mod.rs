@@ -16,7 +16,7 @@
 
 use std::{
     cell::{Cell, RefCell, RefMut},
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     path::Path,
     rc::{Rc, Weak},
 };
@@ -34,6 +34,7 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
+    dependencies::{GitDependencyStore, MaterializedDependency},
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
@@ -520,6 +521,7 @@ pub struct ShellRuntime {
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
     app_modules: AppModules,
+    dependency_store: GitDependencyStore,
     next_application_generation: Cell<u64>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
@@ -575,6 +577,12 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
+        Self::new_isolated_with_dependency_store(GitDependencyStore::for_user()?)
+    }
+
+    fn new_isolated_with_dependency_store(
+        dependency_store: GitDependencyStore,
+    ) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
@@ -630,6 +638,7 @@ impl ShellRuntime {
             test_http_client: RefCell::new(None),
             context,
             app_modules,
+            dependency_store,
             next_application_generation: Cell::new(1),
             js_runtime,
         });
@@ -806,9 +815,26 @@ impl ShellRuntime {
             );
         }
 
+        let dependencies = if root.join(crate::plugin::MANIFEST_FILE).is_file() {
+            let manifest = crate::plugin::PluginManifest::read(&root)?;
+            manifest
+                .dependencies()
+                .iter()
+                .map(|(name, dependency)| {
+                    self.dependency_store
+                        .materialize(name, dependency)
+                        .map(|materialized| (name.clone(), materialized))
+                })
+                .collect::<Result<BTreeMap<_, _>>>()?
+        } else {
+            BTreeMap::new()
+        };
+
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
-        let module_lease = self.app_modules.register(root.clone());
+        let module_lease = self
+            .app_modules
+            .register_with_dependencies(root.clone(), dependencies);
         let generation = module_lease.generation();
         let application = ApplicationGeneration::new(self.next_application_generation.get());
         self.next_application_generation.set(
@@ -3296,6 +3322,7 @@ struct AppModules {
 struct ApplicationModules {
     root: std::path::PathBuf,
     generation: u32,
+    dependencies: BTreeMap<String, MaterializedDependency>,
 }
 
 #[derive(Clone)]
@@ -3322,12 +3349,22 @@ impl Drop for ApplicationModuleRegistration {
 }
 
 impl AppModules {
+    #[cfg(test)]
     fn register(&self, root: std::path::PathBuf) -> ApplicationModuleLease {
+        self.register_with_dependencies(root, BTreeMap::new())
+    }
+
+    fn register_with_dependencies(
+        &self,
+        root: std::path::PathBuf,
+        dependencies: BTreeMap<String, MaterializedDependency>,
+    ) -> ApplicationModuleLease {
         let generation = self.next_generation.get().wrapping_add(1);
         self.next_generation.set(generation);
         self.applications.borrow_mut().push(ApplicationModules {
             root: root.clone(),
             generation,
+            dependencies,
         });
         ApplicationModuleLease(Rc::new(ApplicationModuleRegistration {
             applications: self.applications.clone(),
@@ -3348,7 +3385,12 @@ impl AppModules {
             .borrow()
             .iter()
             .filter(|application| {
-                application.generation == generation && base.starts_with(&application.root)
+                application.generation == generation
+                    && (base.starts_with(&application.root)
+                        || application
+                            .dependencies
+                            .values()
+                            .any(|dependency| base.starts_with(&dependency.root)))
             })
             .max_by_key(|application| application.root.components().count())
             .cloned()
@@ -3368,17 +3410,42 @@ impl AppModules {
         application: &ApplicationModules,
         base: &str,
         name: &str,
-    ) -> Option<std::path::PathBuf> {
-        let start = if name.starts_with('.') {
-            Path::new(Self::untag(base)).parent()?.to_path_buf()
+    ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        let base_path = Path::new(Self::untag(base));
+        let importing_dependency = application
+            .dependencies
+            .values()
+            .find(|dependency| base_path.starts_with(&dependency.root));
+        let (joined, boundary) = if name.starts_with('.') {
+            let boundary = importing_dependency
+                .map(|dependency| dependency.root.clone())
+                .unwrap_or_else(|| application.root.clone());
+            (base_path.parent()?.join(name), boundary)
+        } else if let Some((dependency_name, dependency)) = application
+            .dependencies
+            .iter()
+            .filter(|(dependency_name, _)| {
+                name == dependency_name.as_str()
+                    || name
+                        .strip_prefix(dependency_name.as_str())
+                        .is_some_and(|tail| tail.starts_with('/'))
+            })
+            .max_by_key(|(dependency_name, _)| dependency_name.len())
+        {
+            if name == dependency_name {
+                return Some((dependency.entry.clone(), dependency.root.clone()));
+            }
+            let subpath = name.strip_prefix(dependency_name)?.strip_prefix('/')?;
+            (dependency.root.join(subpath), dependency.root.clone())
+        } else if importing_dependency.is_some() {
+            return None;
         } else {
-            application.root.clone()
+            (application.root.join(name), application.root.clone())
         };
 
-        let joined = start.join(name);
         for candidate in [joined.clone(), joined.with_extension("js")] {
             if candidate.is_file() {
-                return candidate.canonicalize().ok();
+                return candidate.canonicalize().ok().map(|path| (path, boundary));
             }
         }
         None
@@ -3399,7 +3466,7 @@ impl Resolver for AppModules {
                 &format!("cannot identify the application importing `{name}` from `{base}`"),
             ));
         };
-        let Some(path) = self.candidate(&application, base, name) else {
+        let Some((path, boundary)) = self.candidate(&application, base, name) else {
             // A bare specifier reached the last resolver in the chain, so it is
             // neither a built-in nor a file. Saying which built-ins this
             // runtime does have is the difference between "you typed it wrong"
@@ -3423,12 +3490,12 @@ impl Resolver for AppModules {
             ));
         };
 
-        if !path.starts_with(&application.root) {
+        if !path.starts_with(&boundary) {
             return Err(Exception::throw_message(
                 ctx,
                 &format!(
                     "module `{name}` resolves outside the application directory `{}`",
-                    application.root.display()
+                    boundary.display()
                 ),
             ));
         }
@@ -7073,6 +7140,9 @@ mod keystroke_tests {
 #[cfg(test)]
 mod module_lifecycle_tests {
     use super::{AppModules, ShellRuntime};
+    use crate::dependencies::{GitDependencyStore, MaterializedDependency};
+    use std::collections::BTreeMap;
+    use std::process::Command;
 
     #[test]
     fn registrations_for_the_same_root_are_generation_scoped_and_leased() {
@@ -7183,6 +7253,187 @@ mod module_lifecycle_tests {
             .load_app(&root, "main.js")
             .expect_err("missing import must reject the load");
         assert_eq!(runtime.app_modules.registration_count(), 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_bare_dependency_import_loads_its_entry_and_relative_modules() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-third-party-module-{}",
+            std::process::id()
+        ));
+        let application = root.join("application");
+        let dependency = root.join("dependency");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&dependency).expect("dependency directory");
+        std::fs::write(
+            dependency.join("index.js"),
+            "export { label } from './theme.js';",
+        )
+        .expect("dependency entry");
+        std::fs::write(
+            dependency.join("theme.js"),
+            "export const label = 'third party'; export const tone = 'dark';",
+        )
+        .expect("dependency relative module");
+
+        let application = application.canonicalize().expect("application root");
+        let dependency = dependency.canonicalize().expect("dependency root");
+        let mut dependencies = BTreeMap::new();
+        dependencies.insert(
+            "omarchy-ui".to_owned(),
+            MaterializedDependency {
+                entry: dependency.join("index.js"),
+                root: dependency,
+            },
+        );
+        let lease = runtime
+            .app_modules
+            .register_with_dependencies(application.clone(), dependencies);
+        let generation = lease.generation();
+        let view_type = runtime
+            .load_source_with_lease(
+                &format!("{}/main.js?v={generation}", application.display()),
+                "import { label } from 'omarchy-ui'; import { tone } from 'omarchy-ui/theme.js'; export default class Panel { static label() { return `${label}:${tone}`; } }",
+                Some(lease),
+                None,
+            )
+            .expect("third-party module graph");
+
+        let label = runtime
+            .with_js(|ctx| {
+                let class = view_type.value.clone().restore(ctx)?;
+                let label: rquickjs::Function = class.get("label")?;
+                label.call::<_, String>(())
+            })
+            .expect("dependency export");
+        assert_eq!(label, "third party:dark");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_dependency_relative_import_cannot_escape_its_checkout() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-third-party-escape-{}",
+            std::process::id()
+        ));
+        let application = root.join("application");
+        let dependency = root.join("dependency");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&dependency).expect("dependency directory");
+        std::fs::write(root.join("secret.js"), "export const secret = true;")
+            .expect("outside module");
+        std::fs::write(
+            dependency.join("index.js"),
+            "export { secret } from '../secret.js';",
+        )
+        .expect("dependency entry");
+
+        let application = application.canonicalize().expect("application root");
+        let dependency = dependency.canonicalize().expect("dependency root");
+        let mut dependencies = BTreeMap::new();
+        dependencies.insert(
+            "third-party".to_owned(),
+            MaterializedDependency {
+                entry: dependency.join("index.js"),
+                root: dependency,
+            },
+        );
+        let lease = runtime
+            .app_modules
+            .register_with_dependencies(application.clone(), dependencies);
+        let generation = lease.generation();
+        let error = runtime
+            .load_source_with_lease(
+                &format!("{}/main.js?v={generation}", application.display()),
+                "import 'third-party'; export default class Panel {}",
+                Some(lease),
+                None,
+            )
+            .expect_err("dependency traversal must be refused");
+
+        assert!(error.to_string().contains("outside"), "{error:#}");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loading_an_application_fetches_its_manifest_git_dependencies() {
+        let root =
+            std::env::temp_dir().join(format!("gpui-shell-fetch-module-{}", std::process::id()));
+        let application = root.join("application");
+        let remote = root.join("remote");
+        let cache = root.join("cache");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&remote).expect("remote directory");
+        let git = |arguments: &[&str]| {
+            let output = Command::new("git")
+                .args(arguments)
+                .current_dir(&remote)
+                .output()
+                .expect("git fixture command");
+            assert!(
+                output.status.success(),
+                "git {} failed: {}",
+                arguments.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--initial-branch=main"]);
+        git(&["config", "user.name", "gpui-shell test"]);
+        git(&["config", "user.email", "gpui-shell@example.invalid"]);
+        std::fs::create_dir_all(remote.join("dist")).expect("dependency dist directory");
+        std::fs::write(
+            remote.join("dist/public.js"),
+            "export const label = 'downloaded from package main';",
+        )
+        .expect("dependency source");
+        std::fs::write(
+            remote.join("package.json"),
+            r#"{ "main": "dist/public.js" }"#,
+        )
+        .expect("dependency package manifest");
+        git(&["add", "."]);
+        git(&["commit", "-m", "dependency"]);
+
+        std::fs::write(
+            application.join(crate::plugin::MANIFEST_FILE),
+            format!(
+                r#"{{
+                    "id": "com.example.fetch",
+                    "name": "Fetch",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(&format!("file://{}#main", remote.display()))
+                    .expect("remote URL")
+            ),
+        )
+        .expect("application manifest");
+        std::fs::write(
+            application.join("main.js"),
+            "import { label } from 'omarchy-ui'; export default class Panel { static label() { return label; } }",
+        )
+        .expect("application source");
+
+        let runtime =
+            ShellRuntime::new_isolated_with_dependency_store(GitDependencyStore::new(cache))
+                .expect("runtime");
+        let view_type = runtime
+            .load_app(&application, "main.js")
+            .expect("application load");
+        let label = runtime
+            .with_js(|ctx| {
+                let class = view_type.value.clone().restore(ctx)?;
+                let label: rquickjs::Function = class.get("label")?;
+                label.call::<_, String>(())
+            })
+            .expect("dependency export");
+        assert_eq!(label, "downloaded from package main");
         let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -303,6 +303,9 @@ grant the CLI installs in `gpui-shell.json`:
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -320,6 +323,50 @@ grant the CLI installs in `gpui-shell.json`:
   }
 }
 ```
+
+Git dependencies are fetched before the entry module is evaluated. Import the
+map key as a bare module:
+
+```js
+import { label, style } from "omarchy-ui";
+```
+
+A string value may be strict GitHub shorthand (`"owner/repository"` or
+`"owner/repository#ref"`) or a full Git URL
+(`"https://github.com/owner/repository#ref"`). GitHub shorthand without a
+fragment selects `main`; a full URL without one selects the remote's HEAD. A
+fragment may name a branch, tag, or commit-ish such as a commit ID. Moving
+references are fetched on every application load, while a commit ID keeps
+selecting the same commit.
+
+For string dependencies, gpui-shell reads the root `package.json` after the
+immutable checkout is ready. A string `main` selects the package entry; a
+missing file or missing `main` defaults to `index.js`. Malformed metadata, a
+non-string `main`, or an entry that is missing, not a file, or escapes the
+checkout fails the application load before its JavaScript entry executes.
+
+The legacy object form remains supported without changes. It requires exactly
+one explicit `branch` or `tag`, and its repository-relative `entry` still
+defaults to `index.js`:
+
+```json
+{
+  "omarchy-ui": {
+    "git": "https://github.com/huacnlee/omarchy-ui",
+    "tag": "v1.2.0",
+    "entry": "src/public.js"
+  }
+}
+```
+
+Dependencies live below `~/.gpui-shell/cache/dependencies/`. A per-remote lock
+serializes updates to the local mirror; immutable commit-addressed checkouts
+keep concurrent launches and older hot-reload generations isolated. The exact
+fragment-free URL is the cache and remote identity. Its raw configured origin
+is verified even when Git's `url.*.insteadOf` changes the effective fetch URL.
+Git commands are non-interactive and bounded to 30 seconds. Relative imports
+inside a package remain confined to its checkout. Fetching requires `git` on
+the host and happens before script capabilities apply.
 
 `network.hosts` grants the host to HTTP, raw TCP, and WebSocket clients;
 `network.http` narrows HTTP to a scheme, effective port, listed methods and

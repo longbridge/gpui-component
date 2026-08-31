@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## Manifest
 
-目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
+目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据、Git 依赖与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry`、`dependencies` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
 
 ```json
 {
@@ -74,6 +74,9 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,54 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   }
 }
 ```
+
+字符串形式支持严格的 GitHub 简写或完整 Git URL，两者都可以带可选的 `#ref`：
+
+```json
+{
+  "dependencies": {
+    "default-main": "huacnlee/omarchy-ui",
+    "named-ref": "huacnlee/omarchy-ui#v1.2.0",
+    "full-url": "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
+    "remote-head": "https://github.com/huacnlee/omarchy-ui"
+  }
+}
+```
+
+不带 `#ref` 的 GitHub 简写默认选择 `main`；不带 `#ref` 的完整 URL 则选择远端
+HEAD。ref 可以是 branch、tag 或 commit-ish（例如 commit ID）。每次加载应用时都会
+重新 fetch 并解析 branch、tag 或远端 HEAD；commit ID 始终选择同一个 commit。
+
+创建不可变 checkout 后，gpui-shell 会读取根目录的 `package.json`。字符串类型的
+`main` 指定 package entry；没有 `package.json` 或没有 `main` 时默认使用
+`index.js`。格式错误的 metadata、非字符串 `main`、逃出 checkout 的 entry，或未
+解析到文件的 entry，都会在应用 JavaScript 执行前令加载失败。
+
+旧的 object 形式保持完全兼容：它必须显式且只指定一个 `branch` 或 `tag`，可选的
+repository-relative `entry` 仍默认是 `index.js`。现有 manifest 无需迁移；若改为
+字符串形式，则应通过 `package.json` 的 `main`（或根目录 `index.js`）发布 entry：
+
+```json
+{
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/huacnlee/omarchy-ui",
+      "branch": "main",
+      "entry": "src/public.js"
+    }
+  }
+}
+```
+
+gpui-shell 把依赖存储在 `~/.gpui-shell/cache/dependencies/`。每个 remote 的锁会串行化
+mirror 更新；mirror 发布不可变的、按 commit 寻址的 checkout，因此并发加载和旧
+module generation 不会互相改写。去掉 fragment 后的完整 URL 同时是 remote identity
+和 cache identity。gpui-shell 会校验 raw configured origin，同时允许 Git 的
+`url.*.insteadOf` 规则选择实际 fetch URL。Git 以非交互方式运行，每条命令限时 30
+秒。JavaScript 以 map key 作为裸模块名导入，例如
+`import { label, style } from "omarchy-ui"`；依赖内部的相对 import 和 package
+subpath import 都不能逃出该 checkout。下载使用 Host 上的 `git`，不属于脚本的
+network capability。
 
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 

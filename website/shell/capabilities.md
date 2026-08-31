@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## The manifest
 
-A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â€” discovery reads identity, optional version metadata, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, and `capabilities`; only `id`, `name`, and `entry` are required:
+A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â€” discovery reads identity, optional version metadata, Git dependencies, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, `dependencies`, and `capabilities`; only `id`, `name`, and `entry` are required:
 
 ```json
 {
@@ -74,6 +74,9 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,60 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data â
   }
 }
 ```
+
+The string form accepts strict GitHub shorthand or a full Git URL, each with an
+optional `#ref`:
+
+```json
+{
+  "dependencies": {
+    "default-main": "huacnlee/omarchy-ui",
+    "named-ref": "huacnlee/omarchy-ui#v1.2.0",
+    "full-url": "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
+    "remote-head": "https://github.com/huacnlee/omarchy-ui"
+  }
+}
+```
+
+GitHub shorthand without `#ref` selects `main`; a full URL without `#ref`
+selects the remote's HEAD. A ref may name a branch, tag, or commit-ish such as a
+commit ID. A branch, tag, or remote HEAD is fetched and resolved on each
+application load; a commit ID continues to select that exact commit.
+
+After creating the immutable checkout, gpui-shell reads its root
+`package.json`. A string `main` names the package entry. If `package.json` or
+`main` is absent, the entry defaults to `index.js`. Malformed metadata, a
+non-string `main`, and entries that escape the checkout or do not resolve to a
+file are rejected before application JavaScript executes.
+
+The legacy object form remains fully supported. It requires exactly one
+explicit `branch` or `tag`; its optional repository-relative `entry` defaults
+to `index.js`. Existing manifests do not need to migrate. Moving to the string
+form means publishing the entry as `package.json` `main` (or root `index.js`):
+
+```json
+{
+  "dependencies": {
+    "omarchy-ui": {
+      "git": "https://github.com/huacnlee/omarchy-ui",
+      "branch": "main",
+      "entry": "src/public.js"
+    }
+  }
+}
+```
+
+gpui-shell stores dependencies below
+`~/.gpui-shell/cache/dependencies/`. Per-remote locks serialize mirror updates,
+and mirrors publish immutable, commit-addressed checkouts so concurrent loads
+and older module generations cannot rewrite one another. The exact full URL
+without its fragment is both remote and cache identity. gpui-shell verifies the
+raw configured origin while allowing Git's `url.*.insteadOf` rules to choose
+the effective fetch URL. Git runs non-interactively with a 30-second command
+timeout. The dependency map key is the bare JavaScript module name, for example
+`import { label, style } from "omarchy-ui"`; relative and package-subpath
+imports stay confined to that checkout. Fetching uses the host's `git`
+executable and is separate from script network capabilities.
 
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted â€” write `"storage": false` to refuse it.
 

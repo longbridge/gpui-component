@@ -62,7 +62,7 @@ a scripting language while keeping Rust and the GPU on the render path.
 ### 1.1 Standard Runtime installation and removal
 
 The Standard Runtime is built into `gpui-shell`; a script application does not
-install LLRT, Node.js, npm packages, or a second VM. A Rust host enables it by
+install LLRT, Node.js, external package tooling, or a second VM. A Rust host enables it by
 depending on and initializing GPUI Shell:
 
 ```toml
@@ -91,8 +91,8 @@ import { connect } from "net";
 ```
 
 There are deliberately no `node:` aliases and no claim of Node.js
-compatibility. Unknown bare imports remain errors; npm/package resolution is
-not installed.
+compatibility. Unknown bare imports remain errors; only built-in modules and
+manifest-declared Git dependencies are resolved.
 
 | Surface | Implementation and authority |
 | --- | --- |
@@ -147,7 +147,7 @@ is the best-covered language in public training data, and its type declarations
 (§14.4) are a format both editors and models already read.
 
 The same coverage is also a liability: a model writing for this runtime will
-reach for `document`, full browser `fetch`, `require("fs")`, npm packages, and
+reach for `document`, full browser `fetch`, `require("fs")`, ecosystem packages, and
 `setTimeout`. Only the documented Standard Runtime subset exists. §19.1 answers
 unsupported callable globals with named stubs and rejects unknown modules,
 rather than silently pretending broad compatibility.
@@ -198,7 +198,7 @@ Seven things are deliberately absent, and will stay absent:
    `dlopen`ed native code inside the process defeats the sandbox outright.
 6. **`gpui-base` is not modified.** Everything lives in `crates/shell`.
 7. **There is no Node.js or browser compatibility layer.** There is no DOM,
-   CommonJS `require`, Node module resolution, npm, or `node:` namespace. The
+   CommonJS `require`, general Node module resolution, or `node:` namespace. The
    Standard Runtime deliberately exposes selected bare modules plus a
    WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
    compatibility. The shell's narrow `window` and `process` globals expose only
@@ -2766,8 +2766,8 @@ does, because the shape is what the design is about.
 
 ### 18.1 The manifest
 
-Six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`, and
-`capabilities`. Only `id`, `name`, and `entry` are required. An omitted
+Seven recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+`dependencies`, and `capabilities`. Only `id`, `name`, and `entry` are required. An omitted
 `version` is reported as `unknown`; an omitted `shell-version` accepts the
 current runtime; omitted `capabilities` grants nothing. The file is
 `gpui-shell.json` — the name makes the owning runtime explicit.
@@ -2779,6 +2779,9 @@ current runtime; omitted `capabilities` grants nothing. The file is
   "version": "1.2.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui#main"
+  },
   "capabilities": {
     "fs": {
       "read": ["${pluginDir}", "${dataDir}"],
@@ -2800,6 +2803,37 @@ current runtime; omitted `capabilities` grants nothing. The file is
   }
 }
 ```
+
+`dependencies` maps a bare JavaScript module name to gpui-shell Git dependency
+syntax. A string may be strict GitHub shorthand (`owner/repository` or
+`owner/repository#ref`) or a full Git URL with optional `#ref`. GitHub shorthand
+without a fragment selects `main`; a full URL without one selects the remote's
+HEAD. A ref may name a branch, tag, or commit-ish such as a commit ID. Branches,
+tags, and remote HEAD are fetched and resolved on each load; a commit ID keeps
+selecting that exact commit.
+
+Once the immutable checkout exists, gpui-shell reads its root `package.json`.
+A string `main` selects the entry; if the file or field is absent, `index.js` is
+used. Invalid JSON, a non-string `main`, or a path that is missing, not a file,
+or outside the checkout fails the load before application code executes.
+
+The original object form remains supported unchanged. It requires exactly one
+explicit `branch` or `tag`, and its optional repository-relative `entry`
+defaults to `index.js`. Existing manifests need no migration. Authors choosing
+the string form publish their entry through `package.json` `main` or root
+`index.js`.
+
+Before linking the application module graph, the host fetches each repository
+into `~/.gpui-shell/cache/dependencies/`. A per-remote lock serializes local
+mirror updates; the fetched commit is atomically published as an immutable,
+commit-addressed checkout and registered with the application's module
+generation. The exact fragment-free URL is the remote and cache identity. The
+raw configured origin is verified, while Git's `url.*.insteadOf` rules may
+still choose the effective fetch URL. Git is non-interactive and each command
+has a 30-second timeout. Relative imports from dependency code remain inside
+its checkout, and runtime or Standard Runtime module names cannot be shadowed.
+This host-side acquisition step requires `git`; it does not grant the fetched
+script any network capability.
 
 `network.hosts` is the backwards-compatible broad grant: every supported
 network API may reach that host. Use `network.http` when a plugin only needs
@@ -4088,7 +4122,7 @@ number must mean the same capabilities and the same behavior under either engine
 No packaging or distribution format exists. The intended one is the simplest
 thing that works — a `.tar.zst` plus an `index.json`, hosted on any static file
 server or git repository, installed by URL with a signature and checksum check,
-carrying pure script source with no build output and no `node_modules`. Building
+carrying pure script source with no generated dependency tree. Building
 a registry service before the plugin count justifies one would be pure
 liability.
 
@@ -4103,7 +4137,7 @@ reopened without new information.
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A second engine (LuaJIT and similar)**               | Removed rather than carried. A fallback nobody exercises rots, and this one had: no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. The seam it justified is kept, because it is what makes the rest of the crate name no VM |
 | **The WASM component model**                           | Every call crosses a serialization boundary, which is the worst possible fit for high-frequency fine-grained UI calls. Heavy toolchain, poor debugging                                                                                                                                     |
-| **Embedding Node.js or Deno**                          | The process model and the size do not match an in-process, main-thread, embedded runtime. Bringing npm in brings native dependencies and a supply chain with it. VS Code's approach requires a separate extension process to work at all                                                   |
+| **Embedding Node.js or Deno**                          | The process model, native dependency surface, and size do not match an in-process, main-thread, embedded runtime. VS Code's approach requires a separate extension process to work at all                                                                                                                       |
 | **A pure-Rust scripting language** (Rhai, Steel, Koto) | Almost no ecosystem, a new language for every author, and a thin corpus — which is disqualifying for generated interfaces                                                                                                                                                                  |
 | **Rust dylib plugins**                                 | No stable ABI, no sandbox, and the compile cost remains, so it solves none of §2.1                                                                                                                                                                                                         |
 | **Rust hot reload**                                    | Solves only the compile time. It does not address plugin distribution or third-party extension, and state preservation is fragile                                                                                                                                                          |
