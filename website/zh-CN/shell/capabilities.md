@@ -138,6 +138,26 @@ module generation 不会互相改写。去掉 fragment 后的完整 URL 同时�
 subpath import 都不能逃出该 checkout。下载使用 Host 上的 `git`，不属于脚本的
 network capability。
 
+编辑器解析同一条 import 的方式完全不同：它从导入文件向上查找 `node_modules`，对
+manifest 一无所知。于是一条正确的 import 会被标红成找不到的模块，它背后的每个名字
+也随之失去类型、参数提示和文档。因此每次加载——以及 `gpui-shell types`——都会把
+materialize 出来的 checkout 按 manifest 给的名字链接到
+`<application>/node_modules`；若目录里既没有 `jsconfig.json` 也没有
+`tsconfig.json`，还会生成一份 `jsconfig.json`。这样编辑器读到的就是运行时即将执行
+的同一批文件，它显示的签名和 JSDoc 不会和实际运行的代码脱节。
+
+只有 gpui-shell 自己写下的条目会被替换或删除——指向依赖缓存的 symlink，或带有它
+标记文件的目录——因此同名的已安装 package 不会被动到；manifest 中已移除的依赖，其
+链接也会一并清除。若平台拒绝创建 symlink（例如权限不足的 Windows 进程），
+gpui-shell 改为写入一个转发该 checkout 的小 package：裸 import 的类型效果相同，
+package subpath import 则无法解析。
+
+目录之所以叫 `node_modules`，是因为所有编辑器只认这一个位置；这里没有包管理器
+参与，不会从 registry 下载任何东西，每一项都只是指向 gpui-shell 已经拉好的 Git
+checkout 的链接。这个名字还换来了安静：TypeScript 会把从这里解析到的内容视为
+external library，不再把依赖自身的 implicit-`any` 之类诊断当成你的代码来报。
+`node_modules` 和 `gpui.d.ts` 一样属于生成物，两者都应加入忽略列表。
+
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 
 未知字段、非法 reverse-DNS id、显式填写但不合法的 SemVer、不兼容的 `shell-version`、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前令 manifest 失效。省略 `version` 时显示为 `unknown`。省略 `shell-version` 时接受当前 runtime；显式填写时，它表示应用所需的最早兼容 gpui-shell 版本。兼容规则遵循 SemVer：`0.x` 应用保持相同 minor，稳定版本保持相同 major。独立 CLI 会拒绝非法 manifest，不会在假设已经不一致时继续执行 entry。

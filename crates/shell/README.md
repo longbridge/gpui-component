@@ -473,6 +473,35 @@ so an import says which layer a script depends on.
 
 Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
 
+### Dependencies an editor can see
+
+The declarations describe the runtime. A Git dependency the manifest declares is
+the rest of what a script imports, and an editor answers `import { style } from
+"omarchy-ui"` by walking `node_modules` up from the importing file — it knows
+nothing about `gpui-shell.json`. Left alone, a correct import is underlined as a
+module it cannot find, and every name behind it has no type, no parameter hints
+and no documentation.
+
+So the same invocations link each materialized checkout into the application's
+`node_modules` under the name the manifest gave it, and scaffold a
+`jsconfig.json` when the directory has neither that nor a `tsconfig.json`. The
+editor reads the same files the runtime is about to execute, so a package's own
+JSDoc is what it shows and cannot drift from what runs.
+
+Only entries gpui-shell wrote are ever replaced or removed — a symlink into its
+dependency cache, or a directory carrying its marker file — so an installed
+package of the same name is left alone, and a link whose dependency the manifest
+no longer declares goes away. Where the platform refuses a symlink, such as an
+unprivileged Windows process, a small package that re-exports the checkout is
+written instead: a bare import types the same way, and a package-subpath import
+stays unresolved.
+
+The directory is called `node_modules` because that is the one place every
+editor looks — no package manager is involved and nothing comes from a
+registry. It also buys quiet: TypeScript treats what it resolves there as an
+external library, so a dependency's own implicit-`any` diagnostics stay out of
+your build. Ignore it, the way `gpui.d.ts` is ignored.
+
 The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
 name the dispatcher accepts.
@@ -517,8 +546,10 @@ A directory that refuses the write is logged, never fatal.
 
 Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
 beside its own example and story scripts — a committed copy could only ever be
-the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
-that turns checking on.
+the stale one. What *is* committed is the part that has no machine in it: a
+`jsconfig.json` that turns checking on. An application that has none is given
+one on its first launch, in the shape `examples/js_todolist/jsconfig.json`
+uses; from then on it belongs to whoever edits it and is never rewritten.
 
 The header names the gpui-shell version that generated it. Application/runtime
 compatibility is declared separately by `shell-version` in `gpui-shell.json`

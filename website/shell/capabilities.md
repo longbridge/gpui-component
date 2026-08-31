@@ -144,6 +144,32 @@ timeout. The dependency map key is the bare JavaScript module name, for example
 imports stay confined to that checkout. Fetching uses the host's `git`
 executable and is separate from script network capabilities.
 
+An editor answers that import a different way: it walks `node_modules` up from
+the importing file and knows nothing about the manifest, so a correct import is
+underlined as a module it cannot find, and every name behind it loses its type,
+its parameter hints and its documentation. Every load — and `gpui-shell
+types` — therefore links each materialized checkout into
+`<application>/node_modules` under the name the manifest gave it, and scaffolds
+a `jsconfig.json` when the directory has neither that nor a `tsconfig.json`.
+The editor then reads the same files the runtime is about to execute, so the
+signatures and JSDoc it shows cannot drift from what runs.
+
+Only entries gpui-shell owns are ever replaced or removed — a symlink into the
+dependency cache, or a directory carrying its marker file — so an installed
+package of the same name is left alone, and a link whose dependency the
+manifest no longer declares goes away. Where the platform refuses a symlink,
+such as an unprivileged Windows process, gpui-shell writes a small package that
+re-exports the checkout instead: a bare import types the same way, and a
+package-subpath import stays unresolved.
+
+The directory is called `node_modules` because that is the one place every
+editor looks; no package manager is involved, nothing is downloaded from a
+registry, and each entry is a link into the Git checkout gpui-shell already
+made. It also buys quiet: TypeScript treats what it resolves there as an
+external library and stops reporting a dependency's own implicit-`any`
+diagnostics as if they were yours. `node_modules` is generated, like
+`gpui.d.ts`. Ignore both.
+
 Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted — write `"storage": false` to refuse it.
 
 Unknown fields, invalid reverse-DNS ids, invalid explicitly declared SemVer values, incompatible `shell-version` values, escaping entries, and unknown `${...}` placeholders invalidate the manifest before code runs. Omitted `version` is reported as `unknown`. Omitted `shell-version` accepts the current runtime; when present, it names the oldest compatible gpui-shell release the application requires. Compatibility follows SemVer: `0.x` applications stay on the same minor line; stable releases stay on the same major line. The standalone CLI refuses an invalid manifest instead of executing its entry with silently different assumptions.
