@@ -78,10 +78,12 @@ Theme::global_mut(cx).tokens = SemanticThemeTokens {
 
 The palette contains semantic roles rather than component-specific colors:
 `background` and `foreground`, `surface` and `surface_foreground`, `primary`,
-`secondary`, `muted`, `accent`, `destructive`, `border`, `input`, and `ring`,
-including the corresponding foreground roles. Base components derive details
-such as link and text-selection colors from these roles instead of adding
-separate link or selection tokens.
+`secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, and
+`selection`, including the corresponding foreground roles. Base components
+derive what they can from these roles — a link takes `primary`, for instance —
+rather than adding a component-specific token for it. `selection` is its own
+role because no other one can stand in for it: it is painted under the glyphs
+and has to stay legible there, which neither `accent` nor `ring` guarantees.
 
 Calling `gpui_component::init` projects its active light or dark theme into the
 same Base tokens automatically. Applications that use only `gpui-base` should

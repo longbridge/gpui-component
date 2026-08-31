@@ -5,26 +5,49 @@ use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
 use crate::highlighter::HighlightTheme;
 
 /// TextViewStyle used to customize the style for [`super::TextView`].
+///
+/// This is the component-level style. It is folded onto the style the active
+/// [`crate::Theme`] already derived, so a field left at its default keeps the
+/// themed value rather than overriding it with a neutral one.
 #[derive(Clone)]
 pub struct TextViewStyle {
-    /// Gap between paragraphs. Defaults to 1 rem.
+    /// Gap of each paragraphs, default is 1 rem.
     pub paragraph_gap: Rems,
-    /// Base font size used to derive heading sizes.
+    /// Base font size for headings, default is 14px.
     pub heading_base_font_size: Pixels,
-    /// Optional heading-size resolver for levels 1 through 6.
+    /// Function to calculate heading font size based on heading level (1-6).
+    ///
+    /// The first parameter is the heading level (1-6), the second parameter is
+    /// the base font size.
     pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
-    /// Syntax-highlighting theme for fenced code blocks.
+    /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
-    /// Style refinement applied to code blocks.
+    /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
-    /// Style refinement applied to the table container.
+    /// Style refinement applied to the table container (the bordered wrapper
+    /// in wrap mode, the scroll viewport in horizontal-scroll mode).
+    ///
+    /// Set `overflow_x: scroll` here for adaptive table layout: columns fit
+    /// their content when space allows, shrink (wrapping cell text) down to a
+    /// per-column floor when the frame is narrower, and below that the table
+    /// scrolls horizontally instead of squeezing further, e.g.
+    /// `TextViewStyle::default().table({ let mut s = StyleRefinement::default(); s.overflow.x = Some(Overflow::Scroll); s })`.
     pub table: StyleRefinement,
-    /// Style refinement applied to table header rows.
+    /// Style refinement applied to the header row (the first row) of a table,
+    /// on top of the `table_head` background and foreground from the theme.
     pub table_head: StyleRefinement,
-    /// Style refinement applied to table cells.
+    /// Style refinement applied to each table cell.
+    ///
+    /// With the scroll layout, set `white_space: nowrap` here to keep cells
+    /// on a single line — columns then never shrink and the table scrolls as
+    /// soon as the content is wider than the frame.
     pub table_cell: StyleRefinement,
-    /// Highlight style applied to inline code.
+    /// The highlight style for inline code.
+    ///
+    /// Default is [`HighlightStyle::default()`], the `background_color` will
+    /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
+    /// Whether content-specific rendering should use dark-mode assets.
     /// Whether content-specific rendering should use dark-mode assets.
     pub is_dark: bool,
 }
@@ -69,12 +92,13 @@ impl PartialEq for TextViewStyle {
 }
 
 impl TextViewStyle {
-    /// Sets the gap between paragraphs.
+    /// Set paragraph gap, default is 1 rem.
     pub fn paragraph_gap(mut self, gap: Rems) -> Self {
         self.paragraph_gap = gap;
         self
     }
-    /// Sets the heading-size resolver for levels 1 through 6.
+    /// Set the function that resolves a heading's font size from its level
+    /// (1-6) and [`Self::heading_base_font_size`].
     pub fn heading_font_size<F>(mut self, f: F) -> Self
     where
         F: Fn(u8, Pixels) -> Pixels + Send + Sync + 'static,
@@ -82,27 +106,35 @@ impl TextViewStyle {
         self.heading_font_size = Some(Arc::new(f));
         self
     }
-    /// Sets the code-block style refinement.
+    /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
         self
     }
-    /// Sets the inline-code highlight style.
+    /// Set style for inline code spans.
     pub fn inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
         self
     }
-    /// Sets the table-container style refinement.
+    /// Set extra style for the table container.
+    ///
+    /// Set `overflow_x: scroll` on the refinement for adaptive layout: cells
+    /// wrap as the frame narrows, and once columns reach their minimum width
+    /// the table scrolls horizontally instead of shrinking further.
     pub fn table(mut self, style: StyleRefinement) -> Self {
         self.table = style;
         self
     }
-    /// Sets the table-header style refinement.
+    /// Set extra style for the table header row.
     pub fn table_head(mut self, style: StyleRefinement) -> Self {
         self.table_head = style;
         self
     }
-    /// Sets the table-cell style refinement.
+    /// Set extra style for each table cell.
+    ///
+    /// With the scroll table layout, `white_space: nowrap` here keeps cells
+    /// on a single line and the table scrolls whenever the content is wider
+    /// than the frame.
     pub fn table_cell(mut self, style: StyleRefinement) -> Self {
         self.table_cell = style;
         self

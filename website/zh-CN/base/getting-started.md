@@ -70,7 +70,7 @@ Theme::global_mut(cx).tokens = SemanticThemeTokens {
 };
 ```
 
-调色板描述的是语义角色，而不是某个组件的专用颜色：`background` 与 `foreground`、`surface` 与 `surface_foreground`、`primary`、`secondary`、`muted`、`accent`、`destructive`、`border`、`input` 和 `ring`，以及对应的前景色。Base 组件会从这些角色推导链接、文本选择等细节，不会额外增加 link 或 selection token。
+调色板描述的是语义角色，而不是某个组件的专用颜色：`background` 与 `foreground`、`surface` 与 `surface_foreground`、`primary`、`secondary`、`muted`、`accent`、`destructive`、`border`、`input`、`ring` 和 `selection`，以及对应的前景色。能从既有角色推导的细节，Base 组件就直接推导，例如链接颜色取自 `primary`，不再为它单独加 token。`selection` 之所以自成一个角色，是因为没有别的角色能替代：选区绘制在文字下方，必须保证文字依然清晰，而 `accent` 和 `ring` 都无法保证这一点。
 
 调用 `gpui_component::init` 时，当前浅色或深色主题会自动映射到同一套 Base token。只使用 `gpui-base` 的应用应在外观模式变化时安装对应的调色板。
 

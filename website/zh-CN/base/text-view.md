@@ -65,10 +65,10 @@ let article = TextView::html("article", html_source);
 use gpui_base::TextViewStyle;
 
 let style = TextViewStyle::default()
-    .foreground(app_colors.foreground)
-    .muted_foreground(app_colors.muted_foreground)
-    .link(app_colors.link)
-    .selection(app_colors.selection);
+    .with_foreground(app_colors.foreground)
+    .with_muted_foreground(app_colors.muted_foreground)
+    .with_link(app_colors.link)
+    .with_selection(app_colors.selection);
 
 TextView::markdown("themed", source).style(style)
 ```

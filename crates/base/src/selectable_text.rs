@@ -27,10 +27,12 @@ pub struct SelectableText {
 }
 
 impl SelectableText {
+    /// Creates a run that owns its own selection.
     pub fn new(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Self {
         Self::build(id.into(), None, text.into())
     }
 
+    /// Creates a run that joins the document `handle` belongs to.
     pub fn with_handle(
         id: impl Into<ElementId>,
         handle: TextSelectionHandle,
@@ -51,16 +53,20 @@ impl SelectableText {
         }
     }
 
+    /// Places this run in reading order among the others sharing its handle.
     pub fn document_order(mut self, order: u64) -> Self {
         self.document_order = order;
         self
     }
 
+    /// Sets the text style the run is laid out and painted with.
     pub fn text_style(mut self, style: TextStyleRefinement) -> Self {
         self.text_style = Some(style);
         self
     }
 
+    /// Overrides the selection background, which defaults to the theme's
+    /// `colors.selection` token.
     pub fn selection_color(mut self, color: Hsla) -> Self {
         self.selection_color = Some(color);
         self
@@ -216,7 +222,7 @@ impl Element for SelectableText {
         }
         let color = self
             .selection_color
-            .unwrap_or_else(|| gpui::hsla(0.58, 0.85, 0.62, 0.35));
+            .unwrap_or_else(|| crate::Theme::global(cx).tokens.colors.selection);
         for range in projection.ranges().iter().flatten().cloned() {
             Self::paint_selection(&layout, range, color, window);
         }

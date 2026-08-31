@@ -10,6 +10,12 @@ use super::{
 };
 use gpui_base::text::CodeBlock;
 
+/// The component-level rich text element.
+///
+/// The rendering, parsing and selection all live in [`gpui_base::TextView`];
+/// this wrapper exists so that the component API -- `TextViewStyle`, the
+/// component `HighlightTheme`, and the element's associated types -- keeps
+/// working unchanged.
 #[derive(Clone)]
 pub struct TextView {
     id: ElementId,
@@ -24,6 +30,7 @@ impl Styled for TextView {
 }
 
 impl TextView {
+    /// Creates a text view rendering an existing [`TextViewState`].
     pub fn new(state: &Entity<TextViewState>) -> Self {
         Self {
             id: ElementId::Name(state.entity_id().to_string().into()),
@@ -31,6 +38,7 @@ impl TextView {
             text_style: None,
         }
     }
+    /// Creates a text view that parses `text` as Markdown.
     pub fn markdown(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Self {
         let id = id.into();
         Self {
@@ -39,6 +47,7 @@ impl TextView {
             text_style: None,
         }
     }
+    /// Creates a text view that parses `text` as HTML.
     pub fn html(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Self {
         let id = id.into();
         Self {
@@ -47,26 +56,32 @@ impl TextView {
             text_style: None,
         }
     }
+    /// Sets the style, folded onto the one derived from the active theme.
     pub fn style(mut self, style: TextViewStyle) -> Self {
         self.text_style = Some(style);
         self
     }
+    /// Sets whether the text can be selected with the mouse.
     pub fn selectable(mut self, value: bool) -> Self {
         self.inner = self.inner.selectable(value);
         self
     }
+    /// Sets whether a copied selection carries Markdown source or plain text.
     pub fn selection_format(mut self, value: SelectionFormat) -> Self {
         self.inner = self.inner.selection_format(value);
         self
     }
+    /// Sets whether the view scrolls its own content.
     pub fn scrollable(mut self, value: bool) -> Self {
         self.inner = self.inner.scrollable(value);
         self
     }
+    /// Clamps the rendered content to `value` lines.
     pub fn max_lines(mut self, value: usize) -> Self {
         self.inner = self.inner.max_lines(value);
         self
     }
+    /// Renders an element in the corner of every fenced code block.
     pub fn code_block_actions<F, E>(mut self, f: F) -> Self
     where
         F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
@@ -75,6 +90,7 @@ impl TextView {
         self.inner = self.inner.code_block_actions(f);
         self
     }
+    /// Renders an element in the corner of every table.
     pub fn table_actions<F, E>(mut self, f: F) -> Self
     where
         F: Fn(&TableData, &mut Window, &mut App) -> E + Send + Sync + 'static,
@@ -83,6 +99,7 @@ impl TextView {
         self.inner = self.inner.table_actions(f);
         self
     }
+    /// Handles link clicks instead of opening the URL.
     pub fn on_link_click<F>(mut self, f: F) -> Self
     where
         F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
@@ -90,14 +107,17 @@ impl TextView {
         self.inner = self.inner.on_link_click(f);
         self
     }
+    /// Sets which Markdown extensions the parser accepts.
     pub fn markdown_extensions(mut self, value: MarkdownExtensions) -> Self {
         self.inner = self.inner.markdown_extensions(value);
         self
     }
+    /// Enables the MDX Markdown extensions.
     pub fn markdown_mdx(mut self) -> Self {
         self.inner = self.inner.markdown_mdx();
         self
     }
+    /// Parses custom block nodes out of the Markdown AST.
     pub fn markdown_block_parser<F>(mut self, parser: F) -> Self
     where
         F: for<'a> Fn(&markdown::mdast::Node, &MarkdownParseContext<'a>) -> Option<MarkdownNode>
@@ -108,6 +128,7 @@ impl TextView {
         self.inner = self.inner.markdown_block_parser(parser);
         self
     }
+    /// Renders the custom block nodes named `name`.
     pub fn markdown_block_renderer<F, E>(
         mut self,
         name: impl Into<SharedString>,
@@ -120,6 +141,7 @@ impl TextView {
         self.inner = self.inner.markdown_block_renderer(name, renderer);
         self
     }
+    /// Applies a plugin, which may install any of the hooks above.
     pub fn plugin<P>(self, plugin: P) -> Self
     where
         P: TextViewPlugin,
@@ -165,8 +187,15 @@ impl Element for TextView {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut inner = self.inner.clone();
         if let Some(style) = self.text_style.clone() {
+            // `request_layout` runs every frame, so this asks whether the
+            // caller ever replaced the theme -- a pointer comparison against
+            // the shared default -- rather than comparing two whole themes
+            // field by field.
             #[cfg(feature = "tree-sitter")]
-            if style.highlight_theme != TextViewStyle::default().highlight_theme {
+            if !std::sync::Arc::ptr_eq(
+                &style.highlight_theme,
+                &crate::highlighter::HighlightTheme::default_light(),
+            ) {
                 inner = inner.code_block_highlighter(super::component_code_block_highlighter(
                     style.highlight_theme.clone(),
                 ));
@@ -208,21 +237,46 @@ impl Element for TextView {
     }
 }
 
+/// Folds a component [`TextViewStyle`] onto the one the theme already derived.
+///
+/// The legacy type carries `StyleRefinement`s that callers filled in
+/// partially, so each one is refined onto the themed value rather than
+/// replacing it -- a caller who set only `white_space` keeps the themed
+/// padding and colors.
 pub(super) fn resolve_component_style(
     theme: &crate::Theme,
     legacy: TextViewStyle,
 ) -> gpui_base::TextViewStyle {
-    let mut style = super::base_text_view_style(theme);
-    style.paragraph_gap = legacy.paragraph_gap;
-    style.heading_base_font_size = legacy.heading_base_font_size;
-    style.heading_font_size = legacy.heading_font_size;
-    style.code_block.refine(&legacy.code_block);
-    style.table.refine(&legacy.table);
-    style.table_head.refine(&legacy.table_head);
-    style.table_cell.refine(&legacy.table_cell);
-    refine_highlight_style(&mut style.inline_code, legacy.inline_code);
-    if legacy.is_dark {
-        style.is_dark = true;
+    let themed = super::base_text_view_style(theme);
+
+    let refined = |mut base: gpui::StyleRefinement, overlay: &StyleRefinement| {
+        base.refine(overlay);
+        base
+    };
+    let code_block = refined(themed.code_block().clone(), &legacy.code_block);
+    let table = refined(themed.table().clone(), &legacy.table);
+    let table_head = refined(themed.table_head().clone(), &legacy.table_head);
+    let table_cell = refined(themed.table_cell().clone(), &legacy.table_cell);
+
+    let mut inline_code = themed.inline_code();
+    refine_highlight_style(&mut inline_code, legacy.inline_code);
+
+    // `is_dark` only ever turns on: the component theme already answered the
+    // question, and a legacy style left at its `false` default must not undo
+    // a dark theme.
+    let is_dark = themed.is_dark() || legacy.is_dark;
+
+    let mut style = themed
+        .with_paragraph_gap(legacy.paragraph_gap)
+        .with_heading_base_font_size(legacy.heading_base_font_size)
+        .with_code_block(code_block)
+        .with_table(table)
+        .with_table_head(table_head)
+        .with_table_cell(table_cell)
+        .with_inline_code(inline_code)
+        .with_dark(is_dark);
+    if let Some(heading_font_size) = legacy.heading_font_size {
+        style = style.with_heading_font_size(move |level, base| heading_font_size(level, base));
     }
     style
 }
@@ -251,7 +305,9 @@ fn refine_highlight_style(style: &mut HighlightStyle, refinement: HighlightStyle
     }
 }
 
+/// A bundle of [`TextView`] configuration that can be applied in one call.
 pub trait TextViewPlugin {
+    /// Applies this plugin's configuration to `text_view`.
     fn setup(self, text_view: TextView) -> TextView;
 }
 impl<P> TextViewPlugin for P
@@ -264,6 +320,7 @@ where
     }
 }
 
+/// Either a plain string or a rich [`TextView`].
 #[derive(IntoElement, Clone)]
 pub enum Text {
     String(SharedString),
@@ -290,6 +347,7 @@ impl From<TextView> for Text {
     }
 }
 impl Text {
+    /// Sets the style for the [`TextView`]. Does nothing for a plain string.
     pub fn style(self, style: TextViewStyle) -> Self {
         match self {
             Self::String(value) => Self::String(value),
@@ -312,6 +370,7 @@ impl RenderOnce for Text {
     }
 }
 
+/// Creates a Markdown text view identified by the caller's code location.
 #[track_caller]
 pub fn markdown(source: impl Into<SharedString>) -> TextView {
     TextView::markdown(
@@ -319,6 +378,7 @@ pub fn markdown(source: impl Into<SharedString>) -> TextView {
         source,
     )
 }
+/// Creates an HTML text view identified by the caller's code location.
 #[track_caller]
 pub fn html(source: impl Into<SharedString>) -> TextView {
     TextView::html(

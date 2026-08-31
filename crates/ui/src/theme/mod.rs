@@ -384,6 +384,7 @@ impl Theme {
             border: self.border,
             input: self.input,
             ring: self.ring,
+            selection: self.selection,
         }
     }
 
@@ -772,6 +773,7 @@ mod base_theme_projection_tests {
             color!(border);
             color!(input);
             color!(ring);
+            color!(selection);
         }
 
         cx.update(crate::init);

@@ -1170,6 +1170,15 @@ impl CodeBlock {
             .unwrap_or_default()
     }
 
+    /// Builds a code block that is not tied to a parsed document.
+    ///
+    /// [`crate::TextView::code_block_highlighter`] hands a `&CodeBlock` to the
+    /// highlighter it is given, so anyone writing one needs a way to build a
+    /// block to exercise it against.
+    pub fn from_code(code: impl Into<SharedString>, lang: Option<impl Into<SharedString>>) -> Self {
+        Self::new(code.into(), lang.map(Into::into), None::<Span>)
+    }
+
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
@@ -1275,18 +1284,18 @@ impl CodeBlock {
         div()
             .w_full()
             .min_w_0()
-            .when(!options.is_last, |this| this.pb(style.paragraph_gap))
+            .when(!options.is_last, |this| this.pb(style.paragraph_gap()))
             .child(
                 div()
                     .id(("codeblock", options.ix))
                     .w_full()
                     .min_w_0()
                     .p_3()
-                    .bg(style.code_background)
+                    .bg(style.code_background())
                     .font_family(cx.theme().tokens.typography.mono.clone())
                     .text_size(cx.theme().tokens.typography.mono_md.size)
                     .relative()
-                    .refine_style(&style.code_block)
+                    .refine_style(&style.code_block())
                     .child(Inline::new(
                         "code",
                         self.state.clone(),
@@ -1305,7 +1314,7 @@ impl CodeBlock {
                                 .absolute()
                                 .top_2()
                                 .right_2()
-                                .bg(style.code_background)
+                                .bg(style.code_background())
                                 .rounded(cx.theme().tokens.radius.md)
                                 .child(actions(&self, window, cx)),
                         )
@@ -1460,7 +1469,7 @@ impl Paragraph {
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(node_cx.style.link);
+                        highlight.color = Some(node_cx.style.link());
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
@@ -1582,7 +1591,7 @@ impl Paragraph {
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(node_cx.style.link);
+                        highlight.color = Some(node_cx.style.link());
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
@@ -1790,7 +1799,7 @@ impl BlockNode {
             })
             .when_some(checked, |this, checked| {
                 // Todo list checkbox
-                let check_svg = if style.is_dark {
+                let check_svg = if style.is_dark() {
                     CHECK_SVG_DARK
                 } else {
                     CHECK_SVG_LIGHT
@@ -1810,9 +1819,9 @@ impl BlockNode {
                                 .items_center()
                                 .justify_center()
                                 .border_1()
-                                .border_color(style.foreground)
+                                .border_color(style.foreground())
                                 .when(checked, |this| {
-                                    this.bg(style.foreground).child(
+                                    this.bg(style.foreground()).child(
                                         img(Arc::new(Image::from_bytes(
                                             ImageFormat::Svg,
                                             check_svg.to_vec(),
@@ -1991,7 +2000,7 @@ impl BlockNode {
         }
 
         // Scroll mode is opted in via `style.table` overflow-x: scroll.
-        if matches!(node_cx.style.table.overflow.x, Some(Overflow::Scroll)) {
+        if matches!(node_cx.style.table().overflow.x, Some(Overflow::Scroll)) {
             Self::render_scroll_table(table, col_lens.len(), options, node_cx, window, cx)
         } else {
             Self::render_wrap_table(table, &col_lens, options, node_cx, window, cx)
@@ -2075,7 +2084,7 @@ impl BlockNode {
         // Nowrap cells (via the `table_cell` refinement, which cascades to
         // the cell text) must never shrink below their single-line content,
         // so their floor is the content width itself.
-        let nowrap = style.table_cell.text.white_space == Some(WhiteSpace::Nowrap);
+        let nowrap = style.table_cell().text.white_space == Some(WhiteSpace::Nowrap);
         let col_min_w: Vec<f32> = if nowrap {
             col_w.clone()
         } else {
@@ -2136,9 +2145,9 @@ impl BlockNode {
                         .px_2()
                         .py_1()
                         .when(!is_last_col, |this| {
-                            this.border_r_1().border_color(style.border)
+                            this.border_r_1().border_color(style.border())
                         })
-                        .refine_style(&style.table_cell)
+                        .refine_style(&style.table_cell())
                         .child(cell.children.render(node_cx, window, cx)),
                 );
             }
@@ -2147,16 +2156,16 @@ impl BlockNode {
                     .id("row")
                     .w_full()
                     .when(row_ix < row_count - 1, |this| this.border_b_1())
-                    .border_color(style.border)
+                    .border_color(style.border())
                     .flex()
                     .flex_row()
                     // The first row is the header, as everywhere else that
                     // reads a table (`table_data`, `to_markdown`). The
                     // refinement comes last so it can override the defaults.
                     .when(row_ix == 0, |this| {
-                        this.bg(style.code_background)
-                            .text_color(style.foreground)
-                            .refine_style(&style.table_head)
+                        this.bg(style.code_background())
+                            .text_color(style.foreground())
+                            .refine_style(&style.table_head())
                     })
                     .children(cells),
             );
@@ -2173,10 +2182,10 @@ impl BlockNode {
                     .id(("table", options.ix))
                     .bg(cx.theme().tokens.colors.surface)
                     .border_1()
-                    .border_color(style.border)
+                    .border_color(style.border())
                     .overflow_x_scroll()
                     .track_scroll(&scroll_handle)
-                    .refine_style(&style.table)
+                    .refine_style(&style.table())
                     .child(
                         // Row track sized to `max(viewport, column floors)`:
                         // `min_w_full` fills the frame while the columns can still
@@ -2239,9 +2248,9 @@ impl BlockNode {
                         .px_2()
                         .py_1()
                         .when(!is_last_col, |this| {
-                            this.border_r_1().border_color(style.border)
+                            this.border_r_1().border_color(style.border())
                         })
-                        .refine_style(&style.table_cell)
+                        .refine_style(&style.table_cell())
                         .child(cell.children.render(node_cx, window, cx)),
                 );
             }
@@ -2251,16 +2260,16 @@ impl BlockNode {
                     .id("row")
                     .w_full()
                     .when(row_ix < row_count - 1, |this| this.border_b_1())
-                    .border_color(style.border)
+                    .border_color(style.border())
                     .flex()
                     .flex_row()
                     // The first row is the header, as everywhere else that
                     // reads a table (`table_data`, `to_markdown`). The
                     // refinement comes last so it can override the defaults.
                     .when(row_ix == 0, |this| {
-                        this.bg(style.code_background)
-                            .text_color(style.foreground)
-                            .refine_style(&style.table_head)
+                        this.bg(style.code_background())
+                            .text_color(style.foreground())
+                            .refine_style(&style.table_head())
                     })
                     .children(cells),
             );
@@ -2275,10 +2284,10 @@ impl BlockNode {
                     .w_full()
                     .bg(cx.theme().tokens.colors.surface)
                     .border_1()
-                    .border_color(style.border)
+                    .border_color(style.border())
                     .overflow_hidden()
                     .children(rows)
-                    .refine_style(&style.table),
+                    .refine_style(&style.table()),
             )
             // Custom actions row (e.g. copy / download) rendered below the
             // table. The hook's element spans full width; alignment is up to
@@ -2307,7 +2316,7 @@ impl BlockNode {
         let mb = if options.in_list || options.is_last {
             rems(0.)
         } else {
-            node_cx.style.paragraph_gap
+            node_cx.style.paragraph_gap()
         };
 
         match self {
@@ -2335,9 +2344,9 @@ impl BlockNode {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
-                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
-                if let Some(f) = node_cx.style.heading_font_size.as_ref() {
-                    text_size = (f)(*level, node_cx.style.heading_base_font_size);
+                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size());
+                if let Some(size) = node_cx.style.heading_font_size(*level) {
+                    text_size = size;
                 }
 
                 div()
@@ -2356,9 +2365,9 @@ impl BlockNode {
                     div()
                         .id(("blockquote", ix))
                         .w_full()
-                        .text_color(node_cx.style.muted_foreground)
+                        .text_color(node_cx.style.muted_foreground())
                         .border_l_3()
-                        .border_color(node_cx.style.border)
+                        .border_color(node_cx.style.border())
                         .px_4()
                         .children({
                             let children_len = children.len();
@@ -2419,7 +2428,7 @@ impl BlockNode {
                 .child(
                     div()
                         .id("horizontal-rule")
-                        .bg(node_cx.style.border)
+                        .bg(node_cx.style.border())
                         .h(px(2.)),
                 )
                 .into_any_element(),
@@ -2468,6 +2477,39 @@ mod tests {
                 .highlighter,
             &replacement
         ));
+    }
+
+    #[test]
+    fn a_new_highlighter_replaces_styles_instead_of_reusing_the_cache() {
+        // Swapping the highlighter is how a theme change reaches a code block:
+        // the parsed document is untouched, so the styles must come from the
+        // new highlighter rather than from the styles cached for the old one.
+        let light: Arc<CodeBlockHighlighterFn> = Arc::new(|_| {
+            vec![(
+                0..2,
+                HighlightStyle {
+                    color: Some(gpui::rgb(0x0000ff).into()),
+                    ..Default::default()
+                },
+            )]
+        });
+        let dark: Arc<CodeBlockHighlighterFn> = Arc::new(|_| {
+            vec![(
+                0..2,
+                HighlightStyle {
+                    color: Some(gpui::rgb(0xffff00).into()),
+                    ..Default::default()
+                },
+            )]
+        });
+        let block = CodeBlock::from_code("42", Some("json"));
+
+        let light_styles = block.highlighted_styles(&light);
+        let dark_styles = block.highlighted_styles(&dark);
+
+        assert_eq!(light_styles[0].1.color, Some(gpui::rgb(0x0000ff).into()));
+        assert_eq!(dark_styles[0].1.color, Some(gpui::rgb(0xffff00).into()));
+        assert_eq!(block.code(), "42", "the document must survive the swap");
     }
 
     #[test]

@@ -450,8 +450,8 @@ impl Element for Inline {
         if let Some(selection) = &state.selection {
             let color = GlobalState::global(cx)
                 .text_view_state()
-                .map(|state| state.read(cx).text_view_style.selection)
-                .unwrap_or_else(|| gpui::hsla(0.58, 0.85, 0.62, 0.35));
+                .map(|state| state.read(cx).text_view_style.selection())
+                .unwrap_or_else(|| crate::Theme::global(cx).tokens.colors.selection);
             Self::paint_selection(selection, &text_layout, &bounds, window, color);
         }
 

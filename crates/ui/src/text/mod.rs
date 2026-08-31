@@ -41,26 +41,28 @@ pub(crate) fn base_text_view_style(theme: &crate::Theme) -> gpui_base::TextViewS
         .bg(theme.table_head)
         .text_color(theme.table_head_foreground);
 
-    let mut style = gpui_base::TextViewStyle::default()
-        .foreground(theme.foreground)
-        .muted_foreground(theme.muted_foreground)
-        .link(theme.link)
-        .selection(theme.selection)
-        .code_block(code_block)
-        .table(table)
-        .table_head(table_head);
-    style.code_background = theme.muted;
-    style.border = theme.border;
-    style.inline_code.background_color = Some(theme.accent);
-    style.is_dark = theme.is_dark();
-    style
+    gpui_base::TextViewStyle::default()
+        .with_foreground(theme.foreground)
+        .with_muted_foreground(theme.muted_foreground)
+        .with_link(theme.link)
+        .with_selection(theme.selection)
+        .with_code_background(theme.muted)
+        .with_border(theme.border)
+        .with_code_block(code_block)
+        .with_table(table)
+        .with_table_head(table_head)
+        .with_inline_code(gpui::HighlightStyle {
+            background_color: Some(theme.accent),
+            ..Default::default()
+        })
+        .with_dark(theme.is_dark())
 }
 
 pub(crate) fn install_text_view_defaults(theme: &crate::Theme, cx: &mut gpui::App) {
-    let defaults = gpui_base::TextViewDefaults::new().style(base_text_view_style(theme));
+    let defaults = gpui_base::TextViewDefaults::new().with_style(base_text_view_style(theme));
 
     #[cfg(feature = "tree-sitter")]
-    let defaults = defaults.code_block_highlighter(component_code_block_highlighter(
+    let defaults = defaults.with_code_block_highlighter(component_code_block_highlighter(
         theme.highlight_theme.clone(),
     ));
 
@@ -116,21 +118,108 @@ pub(crate) fn component_code_block_highlighter(
 mod tests {
     use crate::Theme;
 
+    /// The component highlighter is the only place that still knows about
+    /// `LanguageRegistry` and `HighlightTheme`, so these two cases follow it
+    /// here from the code block it used to live in.
+    #[cfg(feature = "tree-sitter")]
+    mod code_block_highlighter {
+        use std::ops::Range;
+
+        use gpui::{HighlightStyle, Hsla, SharedString};
+        use gpui_base::text::CodeBlock;
+
+        use crate::highlighter::{HighlightTheme, LanguageConfig, LanguageRegistry};
+
+        fn register_json(lang: &SharedString) {
+            LanguageRegistry::singleton().register(
+                lang.as_ref(),
+                &LanguageConfig::new(
+                    lang.clone(),
+                    tree_sitter_json::LANGUAGE.into(),
+                    vec![],
+                    "(number) @number",
+                    "",
+                    "",
+                ),
+            );
+        }
+
+        fn color_at(
+            styles: &[(Range<usize>, HighlightStyle)],
+            range: Range<usize>,
+        ) -> Option<Hsla> {
+            styles
+                .iter()
+                .find(|(span, _)| span.start <= range.start && span.end >= range.end)
+                .and_then(|(_, style)| style.color)
+        }
+
+        #[test]
+        fn registering_a_language_refreshes_the_cached_highlighter() {
+            let lang = SharedString::from("json-cache-test");
+            let code = SharedString::from(r#"{"value": 42}"#);
+            let number = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+            let highlighter =
+                super::super::component_code_block_highlighter(HighlightTheme::default_light());
+
+            // The first call caches a plain-text highlighter for the unknown
+            // language; the cache must not outlive the registration.
+            let block = CodeBlock::from_code(code.clone(), Some(lang.clone()));
+            assert_eq!(color_at(&highlighter(&block), number.clone()), None);
+
+            register_json(&lang);
+
+            let block = CodeBlock::from_code(code, Some(lang));
+            assert!(
+                color_at(&highlighter(&block), number).is_some(),
+                "a newly registered language must reach the cached highlighter"
+            );
+        }
+
+        #[test]
+        fn styles_follow_the_highlight_theme_they_were_built_with() {
+            let lang = SharedString::from("json-theme-test");
+            register_json(&lang);
+            let code = SharedString::from(r#"{"value": 42}"#);
+            let number = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+
+            let light = HighlightTheme::default_light();
+            let dark = HighlightTheme::default_dark();
+            let light_number = light.style("number").and_then(|style| style.color);
+            let dark_number = dark.style("number").and_then(|style| style.color);
+            assert_ne!(
+                light_number, dark_number,
+                "the default themes must use different number colors"
+            );
+
+            let block = CodeBlock::from_code(code, Some(lang));
+            let light_styles = super::super::component_code_block_highlighter(light)(&block);
+            let dark_styles = super::super::component_code_block_highlighter(dark)(&block);
+
+            assert_eq!(color_at(&light_styles, number.clone()), light_number);
+            assert_eq!(
+                color_at(&dark_styles, number),
+                dark_number,
+                "a theme change must not reuse syntax styles from the previous theme"
+            );
+        }
+    }
+
     #[test]
     fn component_theme_adapter_maps_text_colors_without_highlighting() {
         let theme = Theme::default();
         let style = super::base_text_view_style(&theme);
 
-        assert_eq!(style.foreground, theme.foreground);
-        assert_eq!(style.muted_foreground, theme.muted_foreground);
-        assert_eq!(style.link, theme.link);
-        assert_eq!(style.selection, theme.selection);
-        assert_eq!(style.inline_code.background_color, Some(theme.accent));
+        assert_eq!(style.foreground(), theme.foreground);
+        assert_eq!(style.muted_foreground(), theme.muted_foreground);
+        assert_eq!(style.link(), theme.link);
+        assert_eq!(style.selection(), theme.selection);
+        assert_eq!(style.inline_code().background_color, Some(theme.accent));
         let radius = theme.semantic_tokens().radius.md;
-        assert_eq!(style.table.corner_radii.top_left, Some(radius.into()));
-        assert_eq!(style.table.corner_radii.top_right, Some(radius.into()));
-        assert_eq!(style.table.corner_radii.bottom_left, Some(radius.into()));
-        assert_eq!(style.table.corner_radii.bottom_right, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.top_left, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.top_right, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.bottom_left, Some(radius.into()));
+        assert_eq!(style.table().corner_radii.bottom_right, Some(radius.into()));
     }
 
     #[test]
@@ -140,10 +229,10 @@ mod tests {
 
         let style = super::base_text_view_style(&theme);
         let square = Some(gpui::px(0.).into());
-        assert_eq!(style.table.corner_radii.top_left, square);
-        assert_eq!(style.table.corner_radii.top_right, square);
-        assert_eq!(style.table.corner_radii.bottom_left, square);
-        assert_eq!(style.table.corner_radii.bottom_right, square);
+        assert_eq!(style.table().corner_radii.top_left, square);
+        assert_eq!(style.table().corner_radii.top_right, square);
+        assert_eq!(style.table().corner_radii.bottom_left, square);
+        assert_eq!(style.table().corner_radii.bottom_right, square);
     }
 
     #[cfg(feature = "tree-sitter")]
@@ -190,9 +279,9 @@ mod tests {
 
         let style = super::compat::resolve_component_style(&theme, super::TextViewStyle::default());
 
-        assert_eq!(style.foreground, theme.foreground);
-        assert_eq!(style.link, theme.link);
-        assert_eq!(style.selection, theme.selection);
+        assert_eq!(style.foreground(), theme.foreground);
+        assert_eq!(style.link(), theme.link);
+        assert_eq!(style.selection(), theme.selection);
     }
 
     #[test]
@@ -207,11 +296,11 @@ mod tests {
         );
 
         let radius = Some(theme.semantic_tokens().radius.md.into());
-        assert_eq!(style.table.corner_radii.top_left, radius);
-        assert_eq!(style.table.corner_radii.top_right, radius);
-        assert_eq!(style.table.corner_radii.bottom_left, radius);
-        assert_eq!(style.table.corner_radii.bottom_right, radius);
-        assert_eq!(style.table.overflow.x, Some(gpui::Overflow::Scroll));
+        assert_eq!(style.table().corner_radii.top_left, radius);
+        assert_eq!(style.table().corner_radii.top_right, radius);
+        assert_eq!(style.table().corner_radii.bottom_left, radius);
+        assert_eq!(style.table().corner_radii.bottom_right, radius);
+        assert_eq!(style.table().overflow.x, Some(gpui::Overflow::Scroll));
     }
 
     #[test]
@@ -231,16 +320,19 @@ mod tests {
                 .inline_code(inline_code),
         );
 
-        assert_eq!(style.table_head.background, Some(theme.table_head.into()));
+        assert_eq!(style.table_head().background, Some(theme.table_head.into()));
         assert_eq!(
-            style.table_head.text.color,
+            style.table_head().text.color,
             Some(theme.table_head_foreground)
         );
         assert_eq!(
-            style.table_head.text.font_weight,
+            style.table_head().text.font_weight,
             Some(gpui::FontWeight::BOLD)
         );
-        assert_eq!(style.inline_code.background_color, Some(theme.accent));
-        assert_eq!(style.inline_code.font_style, Some(gpui::FontStyle::Italic));
+        assert_eq!(style.inline_code().background_color, Some(theme.accent));
+        assert_eq!(
+            style.inline_code().font_style,
+            Some(gpui::FontStyle::Italic)
+        );
     }
 }

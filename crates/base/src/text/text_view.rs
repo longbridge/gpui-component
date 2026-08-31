@@ -33,16 +33,19 @@ pub struct TextViewDefaults {
 impl Global for TextViewDefaults {}
 
 impl TextViewDefaults {
+    /// Creates defaults that leave every text view as Base renders it.
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn style(mut self, style: TextViewStyle) -> Self {
+    /// Sets the style every text view starts from.
+    pub fn with_style(mut self, style: TextViewStyle) -> Self {
         self.style = Some(style);
         self
     }
 
-    pub fn code_block_highlighter<F>(mut self, highlighter: F) -> Self
+    /// Sets the syntax highlighter used for fenced code blocks.
+    pub fn with_code_block_highlighter<F>(mut self, highlighter: F) -> Self
     where
         F: Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync + 'static,
     {
@@ -50,14 +53,17 @@ impl TextViewDefaults {
         self
     }
 
+    /// Installs these defaults for the whole application.
     pub fn install(self, cx: &mut App) {
         cx.set_global(self);
     }
 
+    /// Returns the installed defaults, or the Base ones when none were.
     pub fn global(cx: &App) -> Self {
         cx.try_global::<Self>().cloned().unwrap_or_default()
     }
 
+    /// Whether a syntax highlighter was installed.
     pub fn has_code_block_highlighter(&self) -> bool {
         self.code_block_highlighter.is_some()
     }
@@ -581,7 +587,7 @@ impl Element for TextView {
             .when(self.scrollable, |this| this.size_full())
             .when_some(max_lines_cap, |this, cap| this.max_h(cap).overflow_hidden())
             .relative()
-            .text_color(text_view_style.foreground)
+            .text_color(text_view_style.foreground())
             .on_action(move |_: &crate::input::Copy, window, cx| {
                 let text = TextSelection::selected_text(window, cx).trim().to_string();
                 if text.is_empty() {
@@ -765,7 +771,7 @@ mod tests {
         cx.update(|cx| {
             let colors = &mut crate::Theme::global_mut(cx).tokens.colors;
             colors.primary = gpui::rgb(0x55aaff).into();
-            colors.accent = gpui::rgb(0x335577).into();
+            colors.selection = gpui::rgb(0x335577).into();
         });
         let (root, cx) = cx.add_window_view(|_, cx| TextViewTestRoot::new("[link](url)", cx));
         let cx: &mut VisualTestContext = cx;
@@ -773,8 +779,8 @@ mod tests {
         cx.run_until_parked();
         root.read_with(cx, |root, cx| {
             let style = &root.text_view.read(cx).text_view_style;
-            assert_eq!(style.link, gpui::rgb(0x55aaff).into());
-            assert_eq!(style.selection, gpui::rgb(0x335577).alpha(0.4).into());
+            assert_eq!(style.link(), gpui::rgb(0x55aaff).into());
+            assert_eq!(style.selection(), gpui::rgb(0x335577).into());
         });
     }
 
@@ -1001,7 +1007,7 @@ mod tests {
                         "table-actions",
                         "| Name | Age |\n|:--|--:|\n| Alice | 30 |\n| Bob | 41 |",
                     )
-                    .style(TextViewStyle::default().table(table_style))
+                    .style(TextViewStyle::default().with_table(table_style))
                     .table_actions(move |table, _, _| {
                         if let Ok(mut captured) = captured.lock() {
                             captured.push(table.clone());
