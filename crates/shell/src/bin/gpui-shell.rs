@@ -53,6 +53,17 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            // The declarations describe the runtime; the manifest's Git
+            // dependencies are the rest of what the editor has to resolve, and
+            // a command that wrote half of it and said nothing would leave the
+            // import underlined with no explanation.
+            match gpui_shell::write_dependency_links(&directory) {
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("gpui-shell: {error:#}");
+                    std::process::exit(1);
+                }
+            }
             return;
         }
         Ok(Invocation::Check(arguments)) => {
@@ -221,9 +232,10 @@ Arguments:
   <directory>  The application root, or the {ENTRY} inside it.
 
 Commands:
-  types        Write gpui.d.ts next to the application, so an editor — or a
-               model writing the code — sees the whole API and catches a
-               mistyped style method before it runs.
+  types        Write gpui.d.ts next to the application and link the manifest's
+               Git dependencies into node_modules, so an editor — or a model
+               writing the code — sees the whole API, the packages it imports,
+               and catches a mistyped style method before it runs.
   check        Load and render the application once without showing a window,
                then exit 0 if it worked and 1 if it did not. JavaScript has no
                compiler, so this is what takes its place: it reports syntax

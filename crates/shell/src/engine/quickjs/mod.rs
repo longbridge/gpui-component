@@ -817,15 +817,20 @@ impl ShellRuntime {
 
         let dependencies = if root.join(crate::plugin::MANIFEST_FILE).is_file() {
             let manifest = crate::plugin::PluginManifest::read(&root)?;
-            manifest
-                .dependencies()
-                .iter()
-                .map(|(name, dependency)| {
-                    self.dependency_store
-                        .materialize(name, dependency)
-                        .map(|materialized| (name.clone(), materialized))
-                })
-                .collect::<Result<BTreeMap<_, _>>>()?
+            let dependencies = self.dependency_store.materialize_all(&manifest)?;
+            // Beside the declarations, and for the same reason: the process
+            // that will resolve these imports is the one that tells an editor
+            // where they are, so a package cannot be typed against a checkout
+            // this load is not going to use. Best-effort, like the
+            // declarations — a read-only directory is not a reason to refuse to
+            // run.
+            if let Err(error) = self.dependency_store.link_for_editor(&root, &dependencies) {
+                tracing::debug!(
+                    "could not link dependencies for an editor in {}: {error:#}",
+                    root.display()
+                );
+            }
+            dependencies
         } else {
             BTreeMap::new()
         };
