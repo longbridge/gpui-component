@@ -63,7 +63,7 @@ impl Render for MessageStory {
             .child(
                 section("Alignment")
                     .description("The message owns alignment for all of its named slots.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -97,7 +97,7 @@ impl Render for MessageStory {
             .child(
                 section("Avatar")
                     .description("Use sender avatars, initials, or an empty slot to preserve alignment.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -144,7 +144,7 @@ impl Render for MessageStory {
             .child(
                 section("Header and footer")
                     .description("Compose sender metadata, timestamps, and delivery status explicitly.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -184,7 +184,7 @@ impl Render for MessageStory {
             .child(
                 section("Actions")
                     .description("Keep copy, feedback, and retry actions keyboard-accessible.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -252,7 +252,7 @@ impl Render for MessageStory {
             .child(
                 section("Attachment")
                     .description("Mix image previews, file attachments, and text within one message.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -308,7 +308,7 @@ impl Render for MessageStory {
             .child(
                 section("Multiple bubbles")
                     .description("A message can hold multiple surfaces, reactions, and long-form text.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Message::new()
                             .avatar(Avatar::new().name("Assistant").size_8())
@@ -342,9 +342,11 @@ impl Render for MessageStory {
             .child(
                 section("Group")
                     .description("Group consecutive messages while keeping each row composable.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
+                    .v_flex()
                     .child(
                         MessageGroup::new()
+                            .w_full()
                             .child(
                                 Message::new()
                                     .avatar(Avatar::new().name("Alice").size_8())
@@ -373,7 +375,7 @@ impl Render for MessageStory {
             .child(
                 section("Custom style")
                     .description("Every structural part accepts GPUI style refinements.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Message::new()
                             .p_3()
@@ -389,7 +391,7 @@ impl Render for MessageStory {
             .child(
                 section("Ghost surface")
                     .description("Typed ghost bubbles automatically remove metadata insets.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .child(
                         Message::new()
                             .with_stack_style(StyleRefinement::default().gap_3())

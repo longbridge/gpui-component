@@ -447,7 +447,7 @@ impl Render for MessageScrollerStory {
                 .description(
                     "Scroll upward, append a row, jump to unread, or prepend history to exercise each behavior.",
                 )
-                .w(rems(45.))
+                .max_w(rems(45.))
                 .v_flex()
                 .gap_3()
                 .child(
@@ -570,7 +570,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "Append one assistant response, grow its text progressively, and remeasure only that row.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -636,7 +636,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "Prepend history without disturbing the currently visible message anchor.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -681,7 +681,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "Applications resolve stable message IDs to their current row indices.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -736,7 +736,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "The application owns empty states and switches to a virtual list when data arrives.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -799,7 +799,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "Change the built-in button, transition, tooltip, list spacing, and row styles.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -852,7 +852,7 @@ impl Render for MessageScrollerStory {
                     .description(
                         "Disable built-in chrome and place the jump action wherever the product needs it.",
                     )
-                    .w(rems(45.))
+                    .max_w(rems(45.))
                     .v_flex()
                     .gap_3()
                     .child(

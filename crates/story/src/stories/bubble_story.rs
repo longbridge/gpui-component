@@ -67,7 +67,7 @@ impl Render for BubbleStory {
             .child(
                 section("Variants")
                     .description("Semantic variants match the Base UI bubble treatments.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_4()
                     .child(start_bubble().child("A strong primary bubble."))
@@ -105,7 +105,7 @@ impl Render for BubbleStory {
             .child(
                 section("Alignment")
                     .description("Use the same alignment value as Message.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -122,7 +122,7 @@ impl Render for BubbleStory {
             .child(
                 section("Reactions")
                     .description("Use action for integrated Button controls; child keeps emoji and arbitrary reactions composable.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_8()
                     .py_6()
@@ -155,7 +155,7 @@ impl Render for BubbleStory {
             .child(
                 section("Group")
                     .description("Group consecutive bubbles using the shared spacing scale.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -190,7 +190,7 @@ impl Render for BubbleStory {
             .child(
                 section("Links and buttons")
                     .description("Compose external links and application actions inside a bubble.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -226,7 +226,8 @@ impl Render for BubbleStory {
             .child(
                 section("Collapsible content")
                     .description("Keep long responses readable with an explicit disclosure action.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
+                    .v_flex()
                     .child(
                         start_bubble().with_variant(BubbleVariant::Muted).content(
                             BubbleContent::new().child(
@@ -260,7 +261,8 @@ impl Render for BubbleStory {
             .child(
                 section("Tooltip")
                     .description("Label icon-only reaction controls with their concrete meaning.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
+                    .v_flex()
                     .py_4()
                     .child(
                         Bubble::new()
@@ -280,7 +282,8 @@ impl Render for BubbleStory {
             .child(
                 section("Popover")
                     .description("Use a semantic popover for contextual failure details.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
+                    .v_flex()
                     .py_4()
                     .child(
                         start_bubble()
@@ -308,7 +311,7 @@ impl Render for BubbleStory {
             .child(
                 section("Rich content")
                     .description("Any GPUI element can be placed directly in the surface.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -339,7 +342,8 @@ impl Render for BubbleStory {
             .child(
                 section("Custom style")
                     .description("Caller refinements override the surface defaults.")
-                    .w(rems(42.5))
+                    .max_w(rems(42.5))
+                    .v_flex()
                     .child(
                         start_bubble().content(
                             BubbleContent::new()
