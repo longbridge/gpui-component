@@ -329,7 +329,7 @@ impl<'js> IntoJs<'js> for Binding {
 }
 
 /// One argument, converted on the way in.
-struct Argument(HostValue);
+pub(super) struct Argument(pub(super) HostValue);
 
 impl<'js> FromJs<'js> for Argument {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
@@ -337,7 +337,7 @@ impl<'js> FromJs<'js> for Argument {
     }
 }
 
-fn from_js<'js>(ctx: &Ctx<'js>, value: Value<'js>, depth: usize) -> JsResult<HostValue> {
+pub(super) fn from_js<'js>(ctx: &Ctx<'js>, value: Value<'js>, depth: usize) -> JsResult<HostValue> {
     if depth > MAX_DEPTH {
         return Err(Exception::throw_type(
             ctx,
@@ -404,7 +404,7 @@ impl<'js> IntoJs<'js> for Bridged {
     }
 }
 
-fn into_js<'js>(ctx: &Ctx<'js>, value: HostValue) -> JsResult<Value<'js>> {
+pub(super) fn into_js<'js>(ctx: &Ctx<'js>, value: HostValue) -> JsResult<Value<'js>> {
     Ok(match value {
         HostValue::Null => Value::new_null(ctx.clone()),
         HostValue::Bool(flag) => Value::new_bool(ctx.clone(), flag),

@@ -1165,6 +1165,12 @@ const ELEMENT_METHODS: &str = r#"    /**
      * pointer-only pending the compound keyboard behavior tracked in #2838.
      */
     on_click(handler: (event: ClickEvent, cx: Context) => void): Element;
+    /** Handles a named event emitted by a Rust `HostComponent`. */
+    on(name: string, handler: (payload: HostValue, cx: Context) => void): Element;
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): Element;
+    selectable(value?: boolean): Element;
+    scrollable(value?: boolean): Element;
     /** GPUI `InteractiveElement::on_mouse_move`, delivered while this element is hovered. */
     on_mouse_move(handler: (event: MouseMoveEvent, cx: Context) => void): Element;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
@@ -1742,6 +1748,16 @@ fn shell_types() -> String {
     }
     out.push_str("    | \"none\"\n    ;\n\n");
     out.push_str(SHELL_TYPES);
+    out.push_str("  import { Element, HostValue } from \"gpui\";\n\n");
+    out.push_str(
+        "  /** Places an element supplied by the Rust host. Styles apply to its wrapper. */\n",
+    );
+    out.push_str("  export function host_component(name: string, props: HostValue): Element;\n");
+    for component in crate::host_components::all() {
+        if let Some(declarations) = component.declared() {
+            out.push_str(&reindented(declarations));
+        }
+    }
     out
 }
 
@@ -2050,6 +2066,11 @@ const BASE: &str = r#"  /** A row. */
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+  export const TextView: {
+    html(id: string, html: string): Element;
+    markdown(id: string, markdown: string): Element;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -3486,6 +3507,8 @@ mod tests {
         "controls_right",
         "when",
         "on_click",
+        "on",
+        "on_link_click",
         "on_mouse_move",
         "on_hover",
         "on_key_down",
@@ -3510,6 +3533,8 @@ mod tests {
         "on_confirm",
         "on_dismiss",
         "disabled",
+        "selectable",
+        "scrollable",
         "selected",
         "checked",
         "accessibility_label",

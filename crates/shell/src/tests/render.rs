@@ -6,10 +6,18 @@
 //! keeps the fallback engine honest.
 
 use crate::{
-    HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
+    HostComponent, HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities,
+    policy::Policy,
 };
-use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
-use std::{cell::Cell, path::PathBuf, rc::Rc};
+use gpui::{
+    AppContext as _, IntoElement as _, Modifiers, ParentElement as _, TestAppContext,
+    VisualTestContext, point, px,
+};
+use std::{
+    cell::{Cell, RefCell},
+    path::PathBuf,
+    rc::Rc,
+};
 
 const COUNTER: &str = r#"
 import { div, View } from "gpui";
@@ -47,6 +55,99 @@ export default class Counter extends View {
 /// The entry name only affects diagnostics, but each engine has its own
 /// convention and the tests should read the way real code does.
 const ENTRY: &str = "counter.js";
+
+#[gpui::test]
+fn host_component_records_json_props_children_and_named_events(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    crate::clear_exported_components();
+    let received = Rc::new(RefCell::new(None));
+    let received_by_builder = received.clone();
+    crate::export_component(HostComponent::new("mail-body", move |args, _, _| {
+        *received_by_builder.borrow_mut() = Some((args.props.clone(), args.children.len()));
+        gpui::div().children(args.children).into_any_element()
+    }))
+    .expect("host component registration");
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { div, View } from "gpui";
+import { host_component } from "gpui-shell";
+
+export default class HostBody extends View {
+  render() {
+    return host_component("mail-body", { html: "<strong>Hello</strong>", zoom: 1.25 })
+      .on("link", (_url, _cx) => {})
+      .child(div().child("fallback"));
+  }
+}
+"#;
+    let view_type = runtime.load_source("host-body.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+
+    assert!(tree.contains("host_component \"mail-body\""), "{tree}");
+    assert!(tree.contains("html"), "props missing from dump: {tree}");
+    assert!(
+        tree.contains(":on_action(link, fn)"),
+        "event missing: {tree}"
+    );
+    assert!(tree.contains("text \"fallback\""), "child missing: {tree}");
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+    assert_eq!(
+        received.borrow().as_ref().map(|(_, children)| *children),
+        Some(1),
+        "the host owns the materialized children",
+    );
+    assert_eq!(
+        received
+            .borrow()
+            .as_ref()
+            .and_then(|(props, _)| props.get("zoom"))
+            .and_then(HostValue::as_number),
+        Some(1.25),
+    );
+    crate::clear_exported_components();
+}
+
+#[gpui::test]
+fn text_view_records_format_content_and_behavior(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { TextView } from "gpui-base";
+export default class RichText extends View {
+  render() {
+    return TextView.html("message", "<p>Hello <strong>world</strong></p>")
+      .selectable(true)
+      .scrollable(false)
+      .on_link_click((_url, _cx) => {});
+  }
+}
+"#;
+    let view_type = runtime.load_source("rich-text.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+    assert!(tree.contains("TextView html \"message\""), "{tree}");
+    assert!(tree.contains("<strong>world</strong>"), "{tree}");
+    assert!(tree.contains(":selectable"), "{tree}");
+    assert!(tree.contains(":on_link_click(fn)"), "{tree}");
+}
 
 #[gpui::test]
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {

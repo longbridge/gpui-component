@@ -18,6 +18,7 @@ use std::{collections::HashSet, rc::Rc};
 use gpui::SharedString;
 use smallvec::SmallVec;
 
+use crate::HostValue;
 use crate::value::Bridged;
 
 /// Index of a node inside a [`SpecArena`].
@@ -160,12 +161,33 @@ pub enum BackgroundKind {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct HostComponentSpec {
+    pub name: SharedString,
+    pub props: HostValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextViewFormat {
+    Html,
+    Markdown,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextViewSpec {
+    pub id: SharedString,
+    pub text: SharedString,
+    pub format: TextViewFormat,
+}
+
 /// Which constructor produced a node.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Component {
     Div,
     HFlex,
     VFlex,
+    Host(HostComponentSpec),
+    TextView(TextViewSpec),
     /// A retained nested script view. The frozen description keeps the entity
     /// itself alive, so releasing the numeric handle cannot invalidate a frame
     /// that was already published.
@@ -476,6 +498,75 @@ impl VirtualListSpec {
 }
 
 impl Component {
+    pub(crate) fn is_builtin_name(name: &str) -> bool {
+        matches!(
+            name,
+            "div"
+                | "h_flex"
+                | "v_flex"
+                | "child_view"
+                | "text"
+                | "Button"
+                | "Link"
+                | "Checkbox"
+                | "Switch"
+                | "Scrollbar"
+                | "Input"
+                | "Textarea"
+                | "NumberInput"
+                | "OtpInput"
+                | "svg"
+                | "image"
+                | "Accordion"
+                | "AccordionItem"
+                | "AccordionHeader"
+                | "AccordionPanel"
+                | "AccordionTrigger"
+                | "Pagination"
+                | "Avatar"
+                | "AvatarImage"
+                | "AvatarFallback"
+                | "path fill"
+                | "path stroke"
+                | "Tabs"
+                | "Tab"
+                | "Progress"
+                | "ProgressTrack"
+                | "ProgressIndicator"
+                | "FpsMonitor"
+                | "Slider"
+                | "SliderTrack"
+                | "SliderIndicator"
+                | "SliderThumb"
+                | "Radio"
+                | "Toggle"
+                | "RadioGroup"
+                | "ToggleGroup"
+                | "Table"
+                | "TableHeader"
+                | "TableBody"
+                | "TableRow"
+                | "TableHead"
+                | "TableCell"
+                | "TableCaption"
+                | "dock_area"
+                | "dock_content"
+                | "h_resizable"
+                | "v_resizable"
+                | "resizable_panel"
+                | "Collapsible"
+                | "Popover"
+                | "HoverCard"
+                | "Popup"
+                | "Select"
+                | "Combobox"
+                | "DatePicker"
+                | "TextView"
+                | "v_virtual_list"
+                | "h_virtual_list"
+        )
+    }
+
     /// What this node contributes to a [`StructureFingerprint`]: which
     /// constructor produced it, and nothing it carries.
     ///
@@ -497,6 +588,8 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
+            Component::Host(_) => "host_component",
+            Component::TextView(_) => "TextView",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
             Component::Button(_) => "Button",
@@ -1121,6 +1214,18 @@ impl SpecArena {
         out.push_str(&"  ".repeat(depth));
         out.push_str(component.name());
         match component {
+            Component::Host(spec) => {
+                out.push_str(&format!(" {:?} props={:?}", spec.name, spec.props))
+            }
+            Component::TextView(spec) => out.push_str(&format!(
+                " {} {:?} {:?}",
+                match spec.format {
+                    TextViewFormat::Html => "html",
+                    TextViewFormat::Markdown => "markdown",
+                },
+                spec.id,
+                spec.text,
+            )),
             Component::Text(value)
             | Component::Button(value)
             | Component::Link(value)

@@ -8,7 +8,39 @@ use std::ops::Deref;
 
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
-use crate::{Capabilities, HostError, HostModule, HostValue, ScriptView, ShellRuntime};
+use crate::{
+    Capabilities, HostComponent, HostError, HostModule, HostValue, ScriptView, ShellRuntime,
+};
+
+#[test]
+fn host_components_reject_builtin_and_duplicate_names_and_clear() {
+    crate::clear_exported_components();
+
+    let builtin = crate::export_component(HostComponent::new("Button", |_, _, _| {
+        gpui::div().into_any_element()
+    }))
+    .expect_err("a host component cannot shadow a built-in");
+    assert!(builtin.message().contains("HostComponent `Button`"));
+    assert!(builtin.message().contains("built-in component `Button`"));
+
+    crate::export_component(HostComponent::new("mail-body", |_, _, _| {
+        gpui::div().into_any_element()
+    }))
+    .expect("first registration");
+    let duplicate = crate::export_component(HostComponent::new("mail-body", |_, _, _| {
+        gpui::div().into_any_element()
+    }))
+    .expect_err("a duplicate host component is a wiring error");
+    assert!(duplicate.message().contains("HostComponent `mail-body`"));
+    assert!(duplicate.message().contains("already registered"));
+
+    crate::clear_exported_components();
+    crate::export_component(HostComponent::new("mail-body", |_, _, _| {
+        gpui::div().into_any_element()
+    }))
+    .expect("clear permits the name to be installed again");
+    crate::clear_exported_components();
+}
 
 const CLIPBOARD_PROBE: &str = r#"
 import { div, View } from "gpui";
