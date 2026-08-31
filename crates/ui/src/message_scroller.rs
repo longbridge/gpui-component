@@ -341,16 +341,8 @@ impl RenderOnce for MessageScroller {
             .min_h_0()
             .min_w_0()
             .child(list)
-            .when(self.scrollbar, |this| this.vertical_scrollbar(&list_state))
-            .refine_style(&self.content_style);
-
-        div()
-            .id(root_id.clone())
-            .relative()
-            .size_full()
-            .min_h_0()
-            .overflow_hidden()
-            .child(viewport)
+            // The fade sits above the rows but below the scrollbar and the
+            // jump button, so neither control is washed out by it.
             .when_some(self.bottom_fade, |this, color| {
                 this.child(
                     div()
@@ -366,6 +358,16 @@ impl RenderOnce for MessageScroller {
                         )),
                 )
             })
+            .when(self.scrollbar, |this| this.vertical_scrollbar(&list_state))
+            .refine_style(&self.content_style);
+
+        div()
+            .id(root_id.clone())
+            .relative()
+            .size_full()
+            .min_h_0()
+            .overflow_hidden()
+            .child(viewport)
             // Keep vertical wheel scrolling from leaking into an ancestor
             // scroller (like in Table): the mask consumes vertical-dominant
             // wheel events while the list can move and chains to the ancestor
