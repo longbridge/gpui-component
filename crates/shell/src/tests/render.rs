@@ -6,7 +6,7 @@
 //! keeps the fallback engine honest.
 
 use crate::{
-    HostComponent, HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities,
+    HostModule, HostValue, RegisteredComponent, ScriptView, ShellRuntime, capability::Capabilities,
     policy::Policy,
 };
 use gpui::{
@@ -57,30 +57,42 @@ export default class Counter extends View {
 const ENTRY: &str = "counter.js";
 
 #[gpui::test]
-fn host_component_records_json_props_children_and_named_events(cx: &mut TestAppContext) {
+fn registered_component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    crate::clear_exported_components();
     let received = Rc::new(RefCell::new(None));
     let received_by_builder = received.clone();
-    crate::export_component(HostComponent::new("mail-body", move |args, _, _| {
-        *received_by_builder.borrow_mut() = Some((args.props.clone(), args.children.len()));
-        gpui::div().children(args.children).into_any_element()
-    }))
-    .expect("host component registration");
+    let module = HostModule::new("mail").component(RegisteredComponent::new(
+        "Body",
+        move |mut args, _, _| {
+            *received_by_builder.borrow_mut() = Some((
+                args.id().to_owned(),
+                args.props().clone(),
+                args.children().len(),
+            ));
+            gpui::div()
+                .children(args.take_children())
+                .into_any_element()
+        },
+    ));
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(module)
+            .expect("registered component module"),
+    );
 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { div, View } from "gpui";
-import { host_component } from "gpui-shell";
+import { Body } from "mail";
 
 export default class HostBody extends View {
   render() {
-    return host_component("mail-body", { html: "<strong>Hello</strong>", zoom: 1.25 })
-      .on("link", (_url, _cx) => {})
+    return Body.new("message-body", { html: "<strong>Hello</strong>", zoom: 1.25 })
       .child(div().child("fallback"));
   }
 }
+
 "#;
     let view_type = runtime.load_source("host-body.js", source).expect("load");
     let window = cx.add_window(|_, _| Empty);
@@ -92,29 +104,83 @@ export default class HostBody extends View {
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
         .expect("render");
 
-    assert!(tree.contains("host_component \"mail-body\""), "{tree}");
-    assert!(tree.contains("html"), "props missing from dump: {tree}");
     assert!(
-        tree.contains(":on_action(link, fn)"),
-        "event missing: {tree}"
+        tree.contains("registered_component mail.Body \"message-body\""),
+        "{tree}"
     );
+    assert!(tree.contains("html"), "props missing from dump: {tree}");
     assert!(tree.contains("text \"fallback\""), "child missing: {tree}");
     let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
     draw(&mut context, &view);
     assert_eq!(
-        received.borrow().as_ref().map(|(_, children)| *children),
+        received.borrow().as_ref().map(|(_, _, children)| *children),
         Some(1),
         "the host owns the materialized children",
+    );
+    assert_eq!(
+        received.borrow().as_ref().map(|(id, _, _)| id.as_str()),
+        Some("message-body"),
     );
     assert_eq!(
         received
             .borrow()
             .as_ref()
-            .and_then(|(props, _)| props.get("zoom"))
+            .and_then(|(_, props, _)| props.get("zoom"))
             .and_then(HostValue::as_number),
         Some(1.25),
     );
-    crate::clear_exported_components();
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn revoking_a_component_module_releases_its_builder_while_the_view_lives(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let retained = Rc::new(());
+    let captured = retained.clone();
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("extension").component(RegisteredComponent::new(
+                    "Leaf",
+                    move |_, _, _| {
+                        let _keep_alive = &captured;
+                        gpui::div().into_any_element()
+                    },
+                )),
+            )
+            .expect("component module"),
+    );
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source(
+            "extension.js",
+            r#"
+import { View } from "gpui";
+import { Leaf } from "extension";
+export default class Extension extends View {
+  render() { return Leaf.new("leaf", {}); }
+}
+"#,
+        )
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    draw(&mut context, &view);
+    assert_eq!(Rc::strong_count(&retained), 2);
+
+    crate::clear_exported_modules();
+    assert_eq!(
+        Rc::strong_count(&retained),
+        1,
+        "a live snapshot must not retain a revoked component factory"
+    );
+    drop(view);
+    crate::policy::set_default(Policy::new());
 }
 
 #[gpui::test]

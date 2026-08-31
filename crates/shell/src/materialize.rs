@@ -763,55 +763,25 @@ fn materialize_component(
             window,
             cx,
         ),
-        Component::Host(spec) => {
-            let mut behavior = behavior;
-            let name = spec.name.clone();
-            let host_id = behavior.key.clone().unwrap_or_else(|| name.clone());
-            let events = crate::HostComponentEvents::new(
-                Rc::downgrade(runtime),
-                behavior.on_action.iter().cloned().collect(),
-            );
-            // `SpecOp::ActionCallback` is also the storage for a host
-            // component's runtime-named events. They belong to `events`, not
-            // to the wrapper's GPUI action listener.
-            behavior.on_action.clear();
-            let Some(component) = crate::host_components::get(name.as_ref()) else {
+        Component::Registered(spec) => {
+            let registry = spec.policy.modules();
+            let component = registry
+                .get(&spec.module)
+                .and_then(|module| module.registered_component(&spec.component));
+            let Ok(component) = component else {
                 tracing::warn!(
-                    "HostComponent `{}` is not registered; call gpui_shell::export_component before loading the application",
-                    name
+                    "registered component `{}.{}` was revoked before materialization",
+                    spec.module,
+                    spec.component
                 );
-                return flex_element(
-                    runtime,
-                    div(),
-                    id,
-                    refinement,
-                    behavior,
-                    states,
-                    SmallVec::new(),
-                    window,
-                    cx,
-                );
+                return div().into_any_element();
             };
-            let host = component.build(
-                crate::HostComponentArgs {
-                    id: &host_id,
+            component.build(
+                crate::RegisteredComponentArgs {
+                    id: &spec.id,
                     props: &spec.props,
                     children: children.into_vec(),
-                    events,
                 },
-                window,
-                cx,
-            );
-            let mut wrapped = SmallVec::new();
-            wrapped.push(host);
-            flex_element(
-                runtime,
-                div(),
-                id,
-                refinement,
-                behavior,
-                states,
-                wrapped,
                 window,
                 cx,
             )
@@ -829,12 +799,12 @@ fn materialize_component(
                 view = view.scrollable(scrollable);
             }
             if let Some(callback) = behavior.on_link_click {
-                let events = crate::HostComponentEvents::new(
+                let route = crate::registered_components::ScriptCallbackRoute::new(
                     Rc::downgrade(runtime),
-                    vec![(SharedString::from("link"), callback)],
+                    callback,
                 );
                 view = view.on_link_click(move |url, _event, window, cx| {
-                    events.emit("link", crate::HostValue::from(url.to_string()), window, cx);
+                    route.emit(crate::HostValue::from(url.to_string()), window, cx);
                 });
             }
             Styled::style(&mut view).refine(&refinement);

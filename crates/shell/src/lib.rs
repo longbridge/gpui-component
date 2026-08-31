@@ -61,7 +61,6 @@ pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
-mod host_components;
 pub mod host_modules;
 pub(crate) mod materialize;
 pub mod metrics;
@@ -69,6 +68,7 @@ pub(crate) mod path;
 pub mod plugin;
 pub mod policy;
 pub(crate) mod process;
+mod registered_components;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
@@ -89,11 +89,11 @@ pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
-pub use host_components::{HostComponent, HostComponentArgs, HostComponentEvents};
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
 pub use metrics::RuntimeMetrics;
+pub use registered_components::{RegisteredComponent, RegisteredComponentArgs};
 pub use root::{DialogOptions, ShellRoot, ToastLevel, ToastRequest};
 pub use runtime::{
     ExitHandler, ExitRequest, clear_exit_handler, failure_surface, on_exit_request,
@@ -347,21 +347,4 @@ pub fn export_module(module: HostModule) -> Result<(), HostError> {
 /// it goes away — see "Withdraw before going away" on [`export_module`].
 pub fn clear_exported_modules() {
     host_modules::clear_modules();
-}
-
-/// Exports one Rust-built element for scripts to place with `host_component`.
-///
-/// Script styles are applied to a wrapping `div`, because the returned
-/// [`gpui::AnyElement`] can no longer be refined. Children are materialized and
-/// handed to the host builder, which decides whether and where to place them.
-pub fn export_component(component: HostComponent) -> Result<(), HostError> {
-    host_components::add(component)
-}
-
-/// Withdraws every component installed by [`export_component`].
-///
-/// Clear before a host goes away when builders capture GPUI entities; leaving
-/// those closures registered keeps the handles alive through shutdown.
-pub fn clear_exported_components() {
-    host_components::clear();
 }

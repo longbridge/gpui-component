@@ -365,8 +365,9 @@ pub(crate) mod exports {
     /// The performance overlay, owned by `gpui-fps`.
     pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
 
-    /// Shell-owned extension points and shared types.
-    pub(crate) const GPUI_SHELL: &[&str] = &["host_component"];
+    /// Shell-owned shared types. Registered components are exported from their
+    /// host modules rather than through a public generic dispatcher.
+    pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
 
 /// Defines one `ModuleDef` per built-in module and the loader wiring for all of
@@ -4889,12 +4890,11 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
-    host_component: (name, props) => {
-      if (typeof name !== "string" || name.length === 0) {
-        throw new TypeError("host_component(name, props) expects a non-empty component name");
-      }
-      return element(__host_component(name, props ?? {}));
-    },
+    registered_component: (module, name) => ({
+      new: (id, props) => element(__registered_component(
+        String(module), String(name), String(id), props ?? {},
+      )),
+    }),
     __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
@@ -5152,7 +5152,6 @@ impl ShellRuntime {
             let behaviors = rquickjs::Array::new(ctx.clone())?;
             for (index, name) in [
                 "on_click",
-                "on",
                 "on_link_click",
                 "on_mouse_move",
                 "on_hover",
@@ -5227,15 +5226,26 @@ impl ShellRuntime {
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
-            let host_runtime = runtime.clone();
+            let registered_runtime = runtime.clone();
             globals.set(
-                "__host_component",
-                Func::from(move |ctx: Ctx<'_>, name: String, props: host_modules::Argument| -> JsResult<SpecId> {
+                "__registered_component",
+                Func::from(move |ctx: Ctx<'_>, module: String, name: String, id: String, props: host_modules::Argument| -> JsResult<SpecId> {
                     let props = props.0;
-                    Ok(upgrade(&host_runtime, &ctx)?.push_node(Component::Host(
-                        crate::spec::HostComponentSpec {
-                            name: name.into(),
+                    if id.is_empty() {
+                        return Err(Exception::throw_type(&ctx, "a registered component needs a non-empty instance id"));
+                    }
+                    let registry = crate::host_modules::modules();
+                    registry
+                        .get(&module)
+                        .and_then(|found| found.registered_component(&name))
+                        .map_err(|error| Exception::throw_message(&ctx, error.message()))?;
+                    Ok(upgrade(&registered_runtime, &ctx)?.push_node(Component::Registered(
+                        crate::spec::RegisteredComponentSpec {
+                            module: module.into(),
+                            component: name.into(),
+                            id: id.into(),
                             props,
+                            policy: crate::scope::policy(),
                         },
                     )))
                 }),
@@ -5842,7 +5852,7 @@ impl ShellRuntime {
             // The script's own name for an action, plus the handler. It is not
             // a `Callback` op because the name is discovered at run time and a
             // `Callback` holds a `&'static str`; see `SpecOp::ActionCallback`.
-            "on" | "on_action" => {
+            "on_action" => {
                 if scope::current_phase() == Some(ScopePhase::Layout) {
                     return Err(Exception::throw_type(
                         ctx,
@@ -5858,12 +5868,15 @@ impl ShellRuntime {
                     .ok_or_else(|| {
                         Exception::throw_type(
                             ctx,
-                            "on(name, handler) expects the event or action name first, \
+                            "on_action(action, handler) expects the action's name first, \
                              as a non-empty string",
                         )
                     })?;
                 let saved = args.handler_at(1).ok_or_else(|| {
-                    Exception::throw_type(ctx, "on(name, handler) expects a function second")
+                    Exception::throw_type(
+                        ctx,
+                        "on_action(action, handler) expects a function second",
+                    )
                 })?;
                 let callback = self.callbacks.borrow_mut().push(CallbackEntry {
                     value: saved,

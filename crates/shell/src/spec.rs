@@ -161,10 +161,35 @@ pub enum BackgroundKind {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct HostComponentSpec {
-    pub name: SharedString,
+#[derive(Clone)]
+pub struct RegisteredComponentSpec {
+    pub module: SharedString,
+    pub component: SharedString,
+    pub id: SharedString,
     pub props: HostValue,
+    pub policy: Rc<crate::policy::Policy>,
+}
+
+impl std::fmt::Debug for RegisteredComponentSpec {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RegisteredComponentSpec")
+            .field("module", &self.module)
+            .field("component", &self.component)
+            .field("id", &self.id)
+            .field("props", &self.props)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for RegisteredComponentSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.module == other.module
+            && self.component == other.component
+            && self.id == other.id
+            && self.props == other.props
+            && Rc::ptr_eq(&self.policy, &other.policy)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -186,7 +211,7 @@ pub enum Component {
     Div,
     HFlex,
     VFlex,
-    Host(HostComponentSpec),
+    Registered(RegisteredComponentSpec),
     TextView(TextViewSpec),
     /// A retained nested script view. The frozen description keeps the entity
     /// itself alive, so releasing the numeric handle cannot invalidate a frame
@@ -498,75 +523,6 @@ impl VirtualListSpec {
 }
 
 impl Component {
-    pub(crate) fn is_builtin_name(name: &str) -> bool {
-        matches!(
-            name,
-            "div"
-                | "h_flex"
-                | "v_flex"
-                | "child_view"
-                | "text"
-                | "Button"
-                | "Link"
-                | "Checkbox"
-                | "Switch"
-                | "Scrollbar"
-                | "Input"
-                | "Textarea"
-                | "NumberInput"
-                | "OtpInput"
-                | "svg"
-                | "image"
-                | "Accordion"
-                | "AccordionItem"
-                | "AccordionHeader"
-                | "AccordionPanel"
-                | "AccordionTrigger"
-                | "Pagination"
-                | "Avatar"
-                | "AvatarImage"
-                | "AvatarFallback"
-                | "path fill"
-                | "path stroke"
-                | "Tabs"
-                | "Tab"
-                | "Progress"
-                | "ProgressTrack"
-                | "ProgressIndicator"
-                | "FpsMonitor"
-                | "Slider"
-                | "SliderTrack"
-                | "SliderIndicator"
-                | "SliderThumb"
-                | "Radio"
-                | "Toggle"
-                | "RadioGroup"
-                | "ToggleGroup"
-                | "Table"
-                | "TableHeader"
-                | "TableBody"
-                | "TableRow"
-                | "TableHead"
-                | "TableCell"
-                | "TableCaption"
-                | "dock_area"
-                | "dock_content"
-                | "h_resizable"
-                | "v_resizable"
-                | "resizable_panel"
-                | "Collapsible"
-                | "Popover"
-                | "HoverCard"
-                | "Popup"
-                | "Select"
-                | "Combobox"
-                | "DatePicker"
-                | "TextView"
-                | "v_virtual_list"
-                | "h_virtual_list"
-        )
-    }
-
     /// What this node contributes to a [`StructureFingerprint`]: which
     /// constructor produced it, and nothing it carries.
     ///
@@ -588,7 +544,7 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
-            Component::Host(_) => "host_component",
+            Component::Registered(_) => "registered_component",
             Component::TextView(_) => "TextView",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
@@ -1214,9 +1170,10 @@ impl SpecArena {
         out.push_str(&"  ".repeat(depth));
         out.push_str(component.name());
         match component {
-            Component::Host(spec) => {
-                out.push_str(&format!(" {:?} props={:?}", spec.name, spec.props))
-            }
+            Component::Registered(spec) => out.push_str(&format!(
+                " {}.{} {:?} props={:?}",
+                spec.module, spec.component, spec.id, spec.props
+            )),
             Component::TextView(spec) => out.push_str(&format!(
                 " {} {:?} {:?}",
                 match spec.format {

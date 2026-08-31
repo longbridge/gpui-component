@@ -269,6 +269,20 @@ impl Loader for HostModuleLoader {
                 )
             };
         }
+        for component in found.component_names() {
+            if !is_identifier(component) {
+                return Err(Exception::throw_message(
+                    ctx,
+                    &format!(
+                        "HostModule `{module}` registered component `{component}`, which is not a JavaScript identifier"
+                    ),
+                ));
+            }
+            let _ = writeln!(
+                source,
+                "export const {component} = globalThis.__gpui.registered_component({module:?}, {component:?});"
+            );
+        }
 
         Module::declare(ctx.clone(), name, source)
     }

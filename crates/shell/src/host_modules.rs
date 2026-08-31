@@ -416,6 +416,7 @@ pub struct HostModule {
     /// Sorted alongside `functions`, and disjoint from it: one name is either
     /// synchronous or asynchronous, never both.
     async_functions: BTreeMap<String, HostAsyncFunction>,
+    components: BTreeMap<String, crate::RegisteredComponent>,
     /// The module's TypeScript face, if the host wrote one. See
     /// [`HostModule::declarations`].
     declarations: Option<String>,
@@ -433,8 +434,34 @@ impl HostModule {
             name: name.into(),
             functions: BTreeMap::new(),
             async_functions: BTreeMap::new(),
+            components: BTreeMap::new(),
             declarations: None,
         }
+    }
+
+    /// Exports one Rust-built element constructor from this module.
+    pub fn component(mut self, component: crate::RegisteredComponent) -> Self {
+        let name = component.name().to_owned();
+        self.functions.remove(&name);
+        self.async_functions.remove(&name);
+        self.components.insert(name, component);
+        self
+    }
+
+    pub(crate) fn component_names(&self) -> impl Iterator<Item = &str> {
+        self.components.keys().map(String::as_str)
+    }
+
+    pub(crate) fn registered_component(
+        &self,
+        name: &str,
+    ) -> Result<crate::RegisteredComponent, HostError> {
+        self.components.get(name).cloned().ok_or_else(|| {
+            HostError::new(format!(
+                "HostModule `{}` has no registered component `{name}`",
+                self.name
+            ))
+        })
     }
 
     pub fn name(&self) -> &str {
@@ -452,6 +479,7 @@ impl HostModule {
         body: impl Fn(&HostArguments) -> HostResult + 'static,
     ) -> Self {
         let name = name.into();
+        self.components.remove(&name);
         self.async_functions.remove(&name);
         self.functions.insert(name, Rc::new(body));
         self
@@ -517,6 +545,7 @@ impl HostModule {
         F: Future<Output = HostResult> + Send + 'static,
     {
         let name = name.into();
+        self.components.remove(&name);
         // One name, one kind. Registering over the other table rather than
         // beside it keeps `function_names` a single list and stops a call
         // having to decide which of two entries it meant.
@@ -589,6 +618,10 @@ impl HostModule {
         self.functions.contains_key(function) || self.async_functions.contains_key(function)
     }
 
+    fn has_export(&self, name: &str) -> bool {
+        self.has(name) || self.components.contains_key(name)
+    }
+
     /// Whether this name answers with a promise.
     ///
     /// Read by the engine when it builds the binding, because the two return
@@ -647,12 +680,13 @@ impl HostModule {
         let missing: Vec<&str> = self
             .function_names()
             .into_iter()
+            .chain(self.component_names())
             .filter(|name| !declared.contains(name))
             .collect();
         let extra: Vec<&str> = declared
             .iter()
             .copied()
-            .filter(|name| !self.has(name))
+            .filter(|name| !self.has_export(name))
             .collect();
 
         if missing.is_empty() && extra.is_empty() {
@@ -660,7 +694,7 @@ impl HostModule {
         }
 
         let mut message = format!(
-            "HostModule `{}` declares a different set of functions than it registers",
+            "HostModule `{}` declares a different set of exports than it registers",
             self.name
         );
         if !missing.is_empty() {
