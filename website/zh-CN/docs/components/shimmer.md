@@ -79,6 +79,17 @@ ShimmerText::new("正在处理文件…")
     .reverse(true)
 ```
 
+### 时长
+
+`duration(...)` 设置一次完整 sweep 的时长：
+
+```rust
+ShimmerText::new("正在连接…")
+    .duration(Duration::from_secs(4))
+```
+
+零时长会被限制为至少一毫秒，避免动画时钟失效。加载状态通常使用较慢的周期；短周期会增加注意力和运动感，应只用于确实需要强调的状态。
+
 ### 颜色
 
 默认高光会跟随文字颜色和亮/暗主题。产品有明确强调色时，可以使用主题中的语义 token：
@@ -98,17 +109,6 @@ let shimmer = ShimmerStyle::new()
 
 不要在组件调用点写固定 hex 颜色；自定义颜色应来自当前主题或应用自己的 token 层，并在亮色和暗色主题中检查对比度。
 
-### 时长
-
-`duration(...)` 设置一次完整 sweep 的时长：
-
-```rust
-ShimmerText::new("正在连接…")
-    .duration(Duration::from_secs(4))
-```
-
-零时长会被限制为至少一毫秒，避免动画时钟失效。加载状态通常使用较慢的周期；短周期会增加注意力和运动感，应只用于确实需要强调的状态。
-
 ### Spread
 
 `spread(...)` 设置高光半宽。传 `f32` 表示相对文字宽度的比例，有限值会被限制在 `0.05..=1.0`；传 `Pixels` 表示固定的绝对半宽（最小一像素），适合让长短不一的对齐 label 共享同一条高光宽度：
@@ -126,27 +126,17 @@ ShimmerText::new("正在上传…")
 
 非有限值会保留原配置。较窄的 spread 更克制，较宽的 spread 更容易被注意到。
 
-### Reverse
+### 方向与单次播放
 
-需要从右向左移动时使用 `reverse(true)`：
-
-```rust
-ShimmerText::new("正在读取历史消息…")
-    .reverse(true)
-```
-
-反向只改变动画方向，不改变布局、文字颜色或可访问文本。
-
-### Once
-
-`once(true)` 让高光完成一次 sweep 后停止：
+需要从右向左移动时使用 `reverse(true)`；`once(true)` 让高光完成一次 sweep 后停止：
 
 ```rust
 ShimmerText::new("正在准备结果…")
+    .reverse(true)
     .once(true)
 ```
 
-适合把一次视觉提示与状态迁移联系起来的场景。`once` 不会自动改变文字，也不会通知应用；状态完成后仍应由应用重新渲染普通文字。
+反向只改变动画方向，不改变布局、文字颜色或可访问文本。`once` 适合把一次视觉提示与状态迁移联系起来，但它不会自动改变文字，也不会通知应用；状态完成后仍应由应用重新渲染普通文字。
 
 ## 与 Marker 组合
 
@@ -210,7 +200,31 @@ Attachment::new()
 
 如果调用方给 `AttachmentTitle` 设置了显式 `AttachmentStatus::Complete`，标题不会播放 shimmer；`.with_shimmer_style(...)` 只配置动画，不会开启 loading。
 
-## 样式与主题
+## 在消息与气泡中使用
+
+`ShimmerText` 是普通元素，任何接受文字 child 的位置都可以使用：
+
+```rust
+use gpui_component::{
+    bubble::{Bubble, BubbleContent, BubbleVariant},
+    message::{Message, MessageContent},
+};
+
+Message::new()
+    .content(
+        MessageContent::new().bubble(
+            Bubble::new()
+                .with_variant(BubbleVariant::Ghost)
+                .content(BubbleContent::new().child(
+                    ShimmerText::new("助手正在思考…"),
+                )),
+        ),
+    )
+```
+
+生成完成后应用应切换到最终消息内容，不要让动画在操作结束后继续运行。
+
+## 样式、主题与 reduced motion
 
 `ShimmerText` 实现 `Styled`，可以像普通文字一样调整字号、颜色、最大宽度和布局：
 
@@ -224,19 +238,16 @@ ShimmerText::new("正在生成…")
 
 动画文本保持 `StyledText` 的布局，因此会继承换行和截断规则。高光的背景与 foreground 由当前主题计算；应用应避免在父级同时设置难以读取的背景和文字颜色。
 
-## Reduced motion 与可访问性
+系统启用 reduced motion 时，`ShimmerText` 会直接渲染静态 `StyledText`，不会请求动画帧。应用无需额外写一个重复的动画分支，但仍应让文字本身完整表达状态。
 
-系统启用 reduced motion 时，`ShimmerText` 会直接渲染静态 `StyledText`，不会请求动画帧。应用无需额外写一个重复的动画分支，但仍应让文字本身完整表达状态：
+## 可访问性指引
 
-```rust
-// Shimmer 开启或 reduced motion 时，辅助技术都能读到同一状态文字。
-ShimmerText::new("正在生成回复…")
-```
-
-- shimmer 是视觉提示，状态文字必须本身有意义，不能只显示无文本的高光。
+- shimmer 是视觉提示，状态文字必须本身有意义，不能只显示无文本的高光。“正在思考…”或“正在上传 report.pdf…”比无标签的动画条更有用。
 - 颜色和移动方向不能承担唯一语义；完成、失败、暂停等状态应由应用文字或控件表达。
+- 操作完成、失败或取消时，停止或替换 shimmer。
 - 高光不提供角度、RTL 自动适配或单独的 disable builder。需要关闭时，不渲染 `ShimmerText`，直接渲染普通文字；需要 RTL 语义时由应用布局和文本方向处理，也可以用 `.reverse(true)` 手动控制移动方向。
 - 如果应用在 ShimmerText 周围增加 Button、Link 或 overlay，交互控件仍需要自己的可读 label 和键盘路径。
+- 显式高光颜色应在亮色和暗色主题中都验证过，避免低对比组合。
 
 ## 何时不使用 Shimmer
 
@@ -249,30 +260,39 @@ ShimmerText::new("正在生成回复…")
 
 ### `ShimmerStyle`
 
-| 方法 | 说明 |
-| --- | --- |
-| `new()` | 创建使用默认主题高光、两秒周期、`0.3` spread、正向循环的配置。 |
-| `duration(Duration)` | 设置完整 sweep 时长；最小为一毫秒。 |
-| `highlight_color(color)` | 设置显式高光颜色，覆盖主题计算。 |
-| `spread(value)` | 设置高光半宽：`f32` 为相对比例（限制在 `0.05..=1.0`），`Pixels` 为绝对宽度（最小 1px）。 |
-| `reverse(bool)` | 设置是否从右向左移动。 |
-| `once(bool)` | 设置是否只完成一次 sweep。 |
+| 方法 | 默认值 | 说明 |
+| --- | --- | --- |
+| `new()` | 同 `Default` | 创建主题高光、两秒周期的循环配置。 |
+| `duration(Duration)` | 两秒 | 设置完整 sweep 时长；最小为一毫秒。 |
+| `highlight_color(Hsla)` | 主题计算 | 设置显式高光颜色，覆盖主题计算。 |
+| `spread(f32 \| Pixels)` | 相对 `0.3` | 设置高光半宽：`f32` 为相对比例（限制在 `0.05..=1.0`），`Pixels` 为绝对宽度（最小 1px）。 |
+| `reverse(bool)` | `false` | 设置是否从右向左移动。 |
+| `once(bool)` | `false` | 设置是否只完成一次 sweep。 |
 
 ### `ShimmerText`
 
-| 方法 | 说明 |
-| --- | --- |
-| `new(text)` | 创建带动画配置的文字。 |
-| `id(id)` | 设置动画身份，避免相同文字 sibling 共享 identity。 |
-| `with_shimmer_style(style)` | 应用完整的 `ShimmerStyle`。 |
-| `duration(...)` / `highlight_color(...)` / `spread(...)` | 直接调整对应配置。 |
-| `reverse(...)` / `once(...)` | 直接调整方向或播放次数。 |
-| `Styled` | 调整字号、颜色、宽度、字体和布局。 |
+| 方法 | 默认值 | 说明 |
+| --- | --- | --- |
+| `new(text)` | 默认样式、按文字生成身份 | 创建 loading 文字。 |
+| `id(ElementId)` | 基于文字的身份 | 区分文字相同的 sibling。 |
+| `with_shimmer_style(ShimmerStyle)` | 默认样式 | 应用完整的可复用配置。 |
+| `duration(Duration)` | 两秒 | 直接设置时长。 |
+| `highlight_color(Hsla)` | 主题计算 | 直接设置颜色。 |
+| `spread(f32 \| Pixels)` | 相对 `0.3` | 直接设置半宽。 |
+| `reverse(bool)` | `false` | 直接设置方向。 |
+| `once(bool)` | `false` | 直接设置播放次数。 |
+| `Styled` 方法 | 继承文字样式 | 调整字号、颜色、宽度、字体和布局。 |
 
-### 类型链接
+### 相关组件
 
-- [ShimmerStyle]
-- [ShimmerText]
+- [`Marker`] — 支持 spinner 或 shimmer loading 的状态行。
+- [`AttachmentTitle`] — 感知状态、可自定义 shimmer 的文件标题。
+- [`Progress`] — 确定进度。
+- [`Spinner`] — 紧凑的不确定进度指示。
 
 [ShimmerStyle]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerStyle.html
 [ShimmerText]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerText.html
+[Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
+[AttachmentTitle]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentTitle.html
+[Progress]: https://docs.rs/gpui-component/latest/gpui_component/progress/struct.Progress.html
+[Spinner]: https://docs.rs/gpui-component/latest/gpui_component/spinner/struct.Spinner.html

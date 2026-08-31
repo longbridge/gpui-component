@@ -15,6 +15,15 @@ skeleton block, own loading state, or announce progress to assistive technology.
 Keep a meaningful label in the text and let the surrounding application own the
 operation state.
 
+## When to use
+
+- “Thinking…” or “Generating…” while an AI response is being produced.
+- File titles in an `Uploading` or `Processing` state.
+- Lightweight text placeholders for short background work.
+
+Use `Skeleton` for placeholder layout blocks, `Spinner` for a rotating
+indeterminate control, and plain text when the state does not need motion.
+
 ## Import
 
 ```rust
@@ -256,10 +265,6 @@ requesting animation frames. Marker follows the same rule for typed text and
 keeps arbitrary content static. This is a rendering behavior, not a separate
 builder option; applications should keep the label meaningful in both modes.
 
-Shimmer communicates activity, not progress. Use `Progress` for a known
-percentage, `Spinner` for a compact indeterminate control, and ordinary text
-for a completed or failed state.
-
 ## Accessibility guidance
 
 - Keep a meaningful text label visible to assistive technology. “Thinking…” or
@@ -274,6 +279,16 @@ for a completed or failed state.
   shimmer itself is not interactive.
 - Verify an explicit highlight color in both light and dark themes and avoid
   low-contrast combinations.
+
+## When not to use Shimmer
+
+Shimmer communicates activity, not progress.
+
+- Use `Progress` for a known percentage.
+- Use `Spinner` for a compact rotating indicator.
+- Use `Skeleton` for multi-line placeholder layout.
+- Render ordinary text once a stable, completed, or failed state exists; do
+  not leave the animation running.
 
 ## API reference
 
