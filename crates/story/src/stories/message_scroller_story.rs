@@ -209,7 +209,7 @@ impl MessageScrollerStory {
     fn scroll_to_unread(&mut self, cx: &mut Context<Self>) {
         let unread_index = self.unread_index;
         self.scroller.update(cx, |state, cx| {
-            _ = state.scroll_to_unread(unread_index, cx);
+            _ = state.scroll_to_item(unread_index, cx);
         });
     }
 

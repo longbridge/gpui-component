@@ -137,11 +137,6 @@ impl MessageScrollerState {
         true
     }
 
-    /// Scroll to the row that represents an unread boundary.
-    pub fn scroll_to_unread(&mut self, index: usize, cx: &mut Context<Self>) -> bool {
-        self.scroll_to_item(index, cx)
-    }
-
     /// Resume tail following and scroll to the latest row.
     pub fn scroll_to_end(&mut self, cx: &mut Context<Self>) {
         self.list_state.set_follow_mode(FollowMode::Tail);
@@ -435,7 +430,7 @@ mod tests {
                 assert!(!state.splice(5..7, 0, cx));
                 assert!(state.remeasure_items(0..6, cx));
                 assert!(!state.remeasure_items(6..7, cx));
-                assert!(state.scroll_to_unread(2, cx));
+                assert!(state.scroll_to_item(2, cx));
                 assert!(!state.is_scrolled_up());
                 assert!(!state.is_following_tail());
                 state.scroll_to_end(cx);

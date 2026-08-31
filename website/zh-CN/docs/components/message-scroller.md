@@ -161,7 +161,7 @@ range 必须满足 `start <= end <= item_count()`；无效 range 会返回 `fals
 
 ## 未读与 index 定位
 
-未读 ID 和消息 ID 属于应用模型。先把 ID 转成当前 index，再调用对应 reader：
+未读 ID 和消息 ID 属于应用模型。先把 ID 转成当前 index，再调用 `scroll_to_item(...)`：
 
 ```rust
 if let Some(index) = messages
@@ -169,20 +169,12 @@ if let Some(index) = messages
     .position(|message| message.id == first_unread_id)
 {
     scroller.update(cx, |state, cx| {
-        state.scroll_to_unread(index, cx);
+        state.scroll_to_item(index, cx);
     });
 }
 ```
 
-`scroll_to_unread(...)` 当前以 index 为 viewport 起始位置，并暂停尾部跟随；靠近末尾时会受到可用滚动范围限制。普通的任意 index 定位使用同一个状态 API：
-
-```rust
-let did_scroll = scroller.update(cx, |state, cx| {
-    state.scroll_to_item(target_index, cx)
-});
-```
-
-如果 index 超出当前数量，方法返回 `false`。组件没有 ID-native 的定位、turn anchor、peek 或可见 ID API；这些行为应由应用维护 ID/index 映射，并在需要时组合自己的 header、提示或高亮。
+`scroll_to_item(...)` 以 index 为 viewport 起始位置并暂停尾部跟随；靠近末尾时受可用滚动范围限制，index 超出当前数量时返回 `false`。它是唯一的定位原语：未读边界、搜索结果、书签消息、回复目标、深链接都先在应用侧解析成 index。组件没有 ID-native 的定位、turn anchor、peek 或可见 ID API；这些行为应由应用维护 ID/index 映射，并在需要时组合自己的 header、提示或高亮。
 
 ## Reset 与初始位置
 
@@ -196,7 +188,7 @@ scroller.update(cx, |state, cx| {
 cx.notify();
 ```
 
-`reset(...)` 会重新安装 row 数量并恢复尾部跟随。若产品需要从未读位置或已保存 index 打开会话，可在 reset 后由应用调用 `scroll_to_item(...)` 或 `scroll_to_unread(...)`；已保存位置的持久化和恢复条件不属于组件状态。
+`reset(...)` 会重新安装 row 数量并恢复尾部跟随。若产品需要从未读位置或已保存 index 打开会话，可在 reset 后由应用调用 `scroll_to_item(...)`；已保存位置的持久化和恢复条件不属于组件状态。
 
 ## 跳到最新按钮
 
@@ -274,8 +266,7 @@ MessageScroller::new("conversation", scroller.clone(), render_message)
 
 - 默认跳转按钮是可聚焦的 `Button`；`with_jump_button_label(...)` 只设置本地化 tooltip。若使用 renderer 替换为 icon-only 外观，应通过 `.label("跳到最新")` 保留可读名称，或关闭内置按钮后由应用提供自己的带 label Button。
 - “跳到最新”“加载更早消息”“正在生成”“加载失败”等状态应提供文本或明确的 Button label，不依赖滚动位置和颜色。
-- 键盘用户应能访问消息 row 中的 Link、Button、附件操作和应用自定义滚动入口。
-- 消息区上的滚轮事件是被包含的：list 还能滚动时事件不会带动外层滚动容器；到达顶部或底部边缘后才交给外层，与平台滚动容器的链式行为一致。
+- 键盘用户应能访问消息 row 中的 Link、Button、附件操作和应用自定义滚动入口。- 消息区上的滚轮事件是被包含的：list 还能滚动时事件不会带动外层滚动容器；到达顶部或底部边缘后才交给外层，与平台滚动容器的链式行为一致。
 - 空状态和错误状态应由应用渲染可读内容；不要让一个空的虚拟列表看起来像加载失败。
 - 自定义 jump transition、row 动画或流式高亮时，遵循系统 reduced motion，并提供静态最终状态。
 
@@ -306,7 +297,6 @@ GPUI 版本保留必要的滚动行为，省略 React primitive 中重复的 Pro
 | `remeasure(cx)` | 标记所有 row 重新测量。 |
 | `remeasure_items(range, cx)` | 标记指定 range 重新测量。 |
 | `scroll_to_item(index, cx)` | 定位到指定 index；越界返回 `false`。 |
-| `scroll_to_unread(index, cx)` | 按未读边界语义定位到 index。 |
 | `scroll_to_end(cx)` | 恢复尾部跟随并滚到最新内容。 |
 
 ### `MessageScroller`

@@ -198,29 +198,20 @@ following and loses the incremental anchor semantics.
 ## Unread and arbitrary navigation
 
 Unread identity belongs to the application. Resolve a stable message ID to the
-current vector index, then use `scroll_to_unread(...)`:
+current vector index, then use `scroll_to_item(...)`:
 
 ```rust
 if let Some(index) = messages.iter().position(|message| message.id == unread_id) {
-    scroller.update(cx, |state, cx| {
-        let _ = state.scroll_to_unread(index, cx);
-    });
-}
-```
-
-`scroll_to_unread(...)` currently delegates to `scroll_to_item(...)`; the
-separate name keeps unread intent clear at the call site. Both return `false`
-for an out-of-range index. `scroll_to_item(...)` is also the primitive for a
-search result, a bookmarked message, a reply target, or a deep link:
-
-```rust
-let target_index = messages.iter().position(|message| message.id == target_id);
-if let Some(index) = target_index {
     scroller.update(cx, |state, cx| {
         let _ = state.scroll_to_item(index, cx);
     });
 }
 ```
+
+`scroll_to_item(...)` returns `false` for an out-of-range index. It is the
+single navigation primitive: an unread boundary, a search result, a bookmarked
+message, a reply target, and a deep link all resolve to an index in the
+application first.
 
 The current API does not expose turn anchors, peek previews, visible IDs, or
 stable-ID navigation. Map domain IDs to the current index in the application;
@@ -355,8 +346,7 @@ avoid doing network work or mutating the message collection during rendering.
 For keyboard and screen-reader behavior:
 
 - Keep the scroller inside a layout with a real height and `min_h_0()` so the
-  scroll region can receive wheel and keyboard navigation.
-- Wheel scrolling over the transcript is contained: while the list can move,
+  scroll region can receive wheel and keyboard navigation.- Wheel scrolling over the transcript is contained: while the list can move,
   the event never scrolls an ancestor scroller; at the top or bottom edge it
   chains to the ancestor, matching platform scroll containers.
 - Give rows meaningful text and stable application IDs; an index by itself is
@@ -391,7 +381,6 @@ model around this component.
 | `remeasure(cx)` | — | Remeasure all rows after global layout changes. |
 | `remeasure_items(range, cx)` | `true` if valid | Remeasure selected dynamic rows. |
 | `scroll_to_item(index, cx)` | `false` if out of range | Navigate to an arbitrary row index. |
-| `scroll_to_unread(index, cx)` | delegates to item scroll | Navigate to an application-resolved unread row. |
 | `scroll_to_end(cx)` | tail following enabled | Move to the latest row and resume following. |
 
 ### `MessageScroller`
