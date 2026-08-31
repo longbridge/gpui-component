@@ -47,6 +47,7 @@ mod progress;
 mod radio;
 mod radio_group;
 mod resizable;
+mod scrollable_mask;
 mod scrollbar;
 mod select;
 mod selectable_text;
@@ -138,6 +139,7 @@ pub use resizable::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, ResizeHandleContext,
     ResizeHandleRenderer, h_resizable, resizable_panel, v_resizable,
 };
+pub use scrollable_mask::ScrollableMask;
 pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
     ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,

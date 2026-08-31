@@ -207,7 +207,7 @@ where
 
 #[inline]
 #[track_caller]
-pub(super) fn caller_id() -> ElementId {
+fn caller_id() -> ElementId {
     ElementId::CodeLocation(*Location::caller())
 }
 

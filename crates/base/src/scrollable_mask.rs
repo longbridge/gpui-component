@@ -10,9 +10,15 @@ use gpui::{
 };
 use gpui::{Corners, Pixels};
 
-use super::ScrollbarHandle;
-use super::scrollable::caller_id;
-use crate::{AxisExt, OngoingScrollExt as _, StyledExt as _};
+use crate::{AxisExt, OngoingScrollExt as _, ScrollbarHandle, StyledExt as _};
+
+/// Default element id for a mask: the call site, so two masks built in
+/// different places never share their per-gesture axis lock.
+#[inline]
+#[track_caller]
+fn caller_id() -> ElementId {
+    ElementId::CodeLocation(*std::panic::Location::caller())
+}
 
 /// A horizontal scroll viewport that only consumes horizontal wheel deltas.
 ///
@@ -20,7 +26,6 @@ use crate::{AxisExt, OngoingScrollExt as _, StyledExt as _};
 /// scrolling when there is no vertical overflow. This wrapper keeps the visual
 /// clipping and scroll offset, while delegating wheel input to [`ScrollableMask`]
 /// so vertical wheel events can continue bubbling to the parent scroller.
-#[allow(dead_code)]
 pub(crate) fn horizontal_scroll_area(
     id: impl Into<ElementId>,
     scroll_handle: &ScrollHandle,
