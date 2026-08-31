@@ -83,9 +83,10 @@ impl MarkdownPlugin for FrontmatterPlugin {
 fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
     #[derive(Clone, Copy)]
     enum ScalarStyle {
+        Plain,
         Folded,
         Literal,
-        Nested,
+        Empty,
     }
 
     struct Entry {
@@ -99,7 +100,7 @@ fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
         match entry.style {
             ScalarStyle::Folded => {
                 if line.is_empty() {
-                    if !entry.value.is_empty() && !entry.value.ends_with('\n') {
+                    if !entry.value.is_empty() {
                         entry.value.push('\n');
                     }
                     return;
@@ -108,11 +109,12 @@ fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
                     entry.value.push(' ');
                 }
             }
-            ScalarStyle::Literal | ScalarStyle::Nested => {
+            ScalarStyle::Literal => {
                 if !entry.value.is_empty() {
                     entry.value.push('\n');
                 }
             }
+            ScalarStyle::Plain | ScalarStyle::Empty => return,
         }
         entry.value.push_str(line);
     }
@@ -130,10 +132,9 @@ fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
     for line in value.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
-            if current
-                .as_ref()
-                .is_some_and(|entry| matches!(entry.style, ScalarStyle::Literal))
-            {
+            if current.as_ref().is_some_and(|entry| {
+                matches!(entry.style, ScalarStyle::Folded | ScalarStyle::Literal)
+            }) {
                 push_continuation(current.as_mut()?, line);
             }
             continue;
@@ -142,9 +143,9 @@ fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
         let is_top_level = !line.starts_with([' ', '\t']);
         if trimmed.starts_with('#')
             && (is_top_level
-                || !current
-                    .as_ref()
-                    .is_some_and(|entry| matches!(entry.style, ScalarStyle::Literal)))
+                || !current.as_ref().is_some_and(|entry| {
+                    matches!(entry.style, ScalarStyle::Folded | ScalarStyle::Literal)
+                }))
         {
             continue;
         }
@@ -164,16 +165,21 @@ fn parse_frontmatter(value: &str) -> Option<Frontmatter> {
             let (value, style) = match raw_value {
                 ">" | ">-" | ">+" => (String::new(), ScalarStyle::Folded),
                 "|" | "|-" | "|+" => (String::new(), ScalarStyle::Literal),
-                "" => (String::new(), ScalarStyle::Nested),
-                _ => (raw_value.to_string(), ScalarStyle::Folded),
+                "" => (String::new(), ScalarStyle::Empty),
+                _ => (raw_value.to_string(), ScalarStyle::Plain),
             };
             current = Some(Entry {
                 key: key.to_string(),
                 value,
                 style,
             });
-        } else {
+        } else if current
+            .as_ref()
+            .is_some_and(|entry| matches!(entry.style, ScalarStyle::Folded | ScalarStyle::Literal))
+        {
             push_continuation(current.as_mut()?, line);
+        } else {
+            return None;
         }
     }
 
@@ -230,6 +236,35 @@ mod tests {
             frontmatter.entries[1].value.as_ref(),
             "# literal content\n\nsecond line"
         );
+    }
+
+    #[test]
+    fn preserves_blank_lines_in_folded_scalars() {
+        let frontmatter =
+            parse_frontmatter("description: >-\n  First paragraph.\n\n  Second paragraph.")
+                .expect("frontmatter mapping");
+
+        assert_eq!(
+            frontmatter.entries[0].value.as_ref(),
+            "First paragraph.\nSecond paragraph."
+        );
+    }
+
+    #[test]
+    fn preserves_indented_hashes_in_folded_scalars() {
+        let frontmatter =
+            parse_frontmatter("description: >-\n  First line\n  # not a comment\n  last line")
+                .expect("frontmatter mapping");
+
+        assert_eq!(
+            frontmatter.entries[0].value.as_ref(),
+            "First line # not a comment last line"
+        );
+    }
+
+    #[test]
+    fn rejects_nested_mappings() {
+        assert!(parse_frontmatter("config:\n  theme: dark").is_none());
     }
 
     #[test]
