@@ -8,9 +8,7 @@ use gpui::{
 };
 use gpui_base::motion::{Transition, transition};
 
-use crate::{
-    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, button::Button,
-};
+use crate::{ActiveTheme as _, Disableable as _, IconName, StyledExt as _, button::Button};
 use crate::{
     button::ButtonVariants as _,
     scroll::{ScrollableElement as _, ScrollableMask},
@@ -18,6 +16,7 @@ use crate::{
 
 const LIST_OVERDRAW: gpui::Pixels = px(400.);
 const JUMP_BUTTON_TRANSITION: Duration = Duration::from_millis(200);
+const BOTTOM_FADE_TRANSITION: Duration = Duration::from_millis(200);
 
 /// The entity-owned scrolling state for a [`MessageScroller`].
 ///
@@ -88,7 +87,20 @@ impl MessageScrollerState {
             return false;
         }
 
+        let neighbor = old_range.start.checked_sub(1);
         self.list_state.splice(old_range, count);
+
+        // The default row wrapper pads every row except the last, so a row
+        // whose "last" status may have flipped carries a stale measured
+        // height. Remeasure the new last row and the survivor next to the
+        // splice.
+        if let Some(last) = self.list_state.item_count().checked_sub(1) {
+            self.list_state.remeasure_items(last..last + 1);
+            if let Some(neighbor) = neighbor.filter(|neighbor| *neighbor != last) {
+                self.list_state.remeasure_items(neighbor..neighbor + 1);
+            }
+        }
+
         cx.notify();
         true
     }
@@ -265,8 +277,10 @@ impl MessageScroller {
     /// Fade the transcript's bottom edge into `color`.
     ///
     /// A partially visible row melts into the surface behind the scroller
-    /// instead of clipping mid-line. Pass the color of that surface; the
-    /// fade is off by default and sits under the jump button.
+    /// instead of clipping mid-line. The fade shows only while the reader is
+    /// away from the live edge — at the bottom nothing is clipped. Pass the
+    /// color of that surface; the fade is off by default and sits under the
+    /// jump button.
     pub fn with_bottom_fade(mut self, color: impl Into<Hsla>) -> Self {
         self.bottom_fade = Some(color.into());
         self
@@ -282,18 +296,29 @@ impl Styled for MessageScroller {
 impl RenderOnce for MessageScroller {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let root_id = self.id.clone();
-        let (list_state, show_jump_button) = {
+        let (list_state, scrolled_up) = {
             let state = self.state.read(cx);
-            (
-                state.list_state.clone(),
-                self.jump_button && state.is_scrolled_up(),
-            )
+            (state.list_state.clone(), state.is_scrolled_up())
         };
+        let show_jump_button = self.jump_button && scrolled_up;
         let jump_button_visibility = if self.jump_button {
             transition(
                 (root_id.clone(), "jump-button-visibility"),
                 if show_jump_button { 1. } else { 0. },
                 Transition::new(self.jump_button_transition),
+                window,
+                cx,
+            )
+        } else {
+            0.
+        };
+        // At the live edge nothing is clipped below, so a visible fade would
+        // suggest more content than there is.
+        let bottom_fade_visibility = if self.bottom_fade.is_some() {
+            transition(
+                (root_id.clone(), "bottom-fade-visibility"),
+                if scrolled_up { 1. } else { 0. },
+                Transition::new(BOTTOM_FADE_TRANSITION),
                 window,
                 cx,
             )
@@ -313,12 +338,18 @@ impl RenderOnce for MessageScroller {
         let row_inset_left = list_style.padding.left.take();
         let row_inset_right = list_style.padding.right.take();
 
+        // Read the count outside the row closure: the list holds a mutable
+        // borrow of its state while rendering rows, so the closure must not
+        // borrow it again. The count is stable within one render pass.
+        let item_count = list_state.item_count();
         let list = list(list_state.clone(), move |index, window, cx| {
             div()
                 .w_full()
                 .min_w_0()
                 .px_3()
-                .pb_8()
+                // Spacing between rows only, like a CSS gap: the list's own
+                // bottom padding owns the gap after the last row.
+                .when(index + 1 < item_count, |this| this.pb_8())
                 .when_some(row_inset_left, |this, left| this.pl(left))
                 .when_some(row_inset_right, |this, right| this.pr(right))
                 .refine_style(&row_style)
@@ -341,21 +372,25 @@ impl RenderOnce for MessageScroller {
             .child(list)
             // The fade sits above the rows but below the scrollbar and the
             // jump button, so neither control is washed out by it.
-            .when_some(self.bottom_fade, |this, color| {
-                this.child(
-                    div()
-                        .absolute()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .h(rems(3.))
-                        .bg(linear_gradient(
-                            180.,
-                            linear_color_stop(color.opacity(0.), 0.),
-                            linear_color_stop(color, 1.),
-                        )),
-                )
-            })
+            .when_some(
+                self.bottom_fade.filter(|_| bottom_fade_visibility > 0.),
+                |this, color| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .h(rems(3.))
+                            .opacity(bottom_fade_visibility)
+                            .bg(linear_gradient(
+                                180.,
+                                linear_color_stop(color.opacity(0.), 0.),
+                                linear_color_stop(color, 1.),
+                            )),
+                    )
+                },
+            )
             .when(self.scrollbar, |this| this.vertical_scrollbar(&list_state))
             .refine_style(&self.content_style);
 
@@ -384,10 +419,12 @@ impl RenderOnce for MessageScroller {
                         .justify_center()
                         .opacity(jump_button_visibility)
                         .child(
+                            // No explicit width or height: Button sizes an
+                            // icon-only button as a square on its own, and a
+                            // renderer that adds a label or another semantic
+                            // size must be able to change the layout.
                             Button::new((root_id, "jump-to-latest"))
                                 .secondary()
-                                .small()
-                                .size_7()
                                 .icon(IconName::ArrowDown)
                                 .tooltip(self.jump_button_label)
                                 .rounded(cx.theme().radius_full())
@@ -413,6 +450,7 @@ impl RenderOnce for MessageScroller {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Sizable as _;
     use gpui::AppContext as _;
 
     #[gpui::test]

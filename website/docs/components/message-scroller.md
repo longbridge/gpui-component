@@ -242,7 +242,7 @@ for the same render pass.
 
 The built-in jump button is enabled by default and appears when
 `is_scrolled_up()` becomes true. It is a configured `Button` with a secondary
-variant, small density, full radius, arrow-down icon, theme border/background,
+variant, icon-button sizing, full radius, arrow-down icon, theme border/background,
 and a localized tooltip label. It keeps the scroll action owned by the state:
 
 ```rust
@@ -322,14 +322,16 @@ The boundaries are:
   horizontal padding component — the default and any refinement — is carried
   by every row wrapper.
 - `with_row_style(...)` refines the full-width wrapper around each rendered row;
-  the default wrapper includes `pb_8()` so measured rows have transcript
-  breathing room.
+  the default wrapper includes `pb_8()` between rows, like a CSS gap. The
+  list's own bottom padding owns the gap between the last row and whatever
+  sits below the transcript.
 - `scrollbar(false)` hides the built-in vertical scrollbar; it does not disable
   scrolling or remove keyboard/wheel interaction.
 - `with_bottom_fade(color)` fades the transcript's bottom edge into the given
   color, so a partially visible row melts into the surrounding surface instead
-  of clipping mid-line. Pass the color of the surface behind the scroller; the
-  fade is off by default.
+  of clipping mid-line. It shows only while the reader is away from the live
+  edge — at the bottom nothing is clipped. Pass the color of the surface
+  behind the scroller; the fade is off by default.
 
 Use theme roles such as `group_box`, `background`, `border`, and `foreground`
 for custom surfaces. Keep content padding in the surrounding conversation

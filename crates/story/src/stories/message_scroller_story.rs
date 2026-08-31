@@ -530,7 +530,7 @@ impl Render for MessageScrollerStory {
                                         Self::render_message_row(message, index == unread_index)
                                     },
                                 )
-                                .with_list_style(StyleRefinement::default().p_5().pb_0())
+                                .with_list_style(StyleRefinement::default().p_5())
                                 .with_bottom_fade(cx.theme().background),
                             ),
                         )
@@ -547,8 +547,6 @@ impl Render for MessageScrollerStory {
                                         h_flex().w_full().justify_end().child(
                                             Button::new("message-scroller-send")
                                                 .primary()
-                                                .small()
-                                                .size_8()
                                                 .icon(IconName::ArrowUp)
                                                 .rounded(cx.theme().radius_full())
                                                 .tooltip("Send")

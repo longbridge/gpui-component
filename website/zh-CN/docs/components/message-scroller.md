@@ -250,9 +250,9 @@ MessageScroller::new("conversation", scroller.clone(), render_message)
 | `with_row_style(...)` | 每个 renderer row 外层的全宽包装。 |
 | `Styled` | `MessageScroller` 根容器。 |
 
-组件会在每个 row 包装层保留默认尾部间距，以便 append/prepend 和高度测量保持一致。自定义 `with_row_style(...)` 时应明确自己是否要额外增加间距，避免重复 padding。GPUI list 只在垂直方向偏移 row，因此 list padding 的水平分量（默认值与 refinement 均是）由每个 row 包装层承载。
+组件默认只在 row 之间保留 `pb_8()` 间距（类似 CSS gap），最后一行到消息区下方内容的间距由 list 自己的底部 padding 承担。自定义 `with_row_style(...)` 时应明确自己是否要额外增加间距，避免重复 padding。GPUI list 只在垂直方向偏移 row，因此 list padding 的水平分量（默认值与 refinement 均是）由每个 row 包装层承载。
 
-`with_bottom_fade(color)` 让消息区底缘渐隐到指定颜色：被裁切一半的 row 融入 scroller 背后的表面，而不是在行中间生硬截断。传入 scroller 所在表面的颜色；默认关闭。
+`with_bottom_fade(color)` 让消息区底缘渐隐到指定颜色：被裁切一半的 row 融入 scroller 背后的表面，而不是在行中间生硬截断。渐隐只在读者离开末尾时显示——滚到最底时下方没有被裁内容，不再遮挡最后一行。传入 scroller 所在表面的颜色；默认关闭。
 
 ## 虚拟化、性能与可变高度
 
