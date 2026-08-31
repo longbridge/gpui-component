@@ -6,13 +6,13 @@ use gpui::{
     StyleRefinement, Styled as _, Task, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _,
     bubble::{Bubble, BubbleVariant},
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
     marker::{Marker, MarkerContent, MarkerVariant},
-    message::{Message, MessageAlignment, MessageContent, MessageHeader},
+    message::{Message, MessageAlignment, MessageContent},
     message_scroller::{MessageScroller, MessageScrollerState},
     v_flex,
 };
@@ -24,7 +24,6 @@ const INITIAL_STREAM_MESSAGE_COUNT: usize = 7;
 #[derive(Clone)]
 struct DemoMessage {
     id: usize,
-    author: SharedString,
     body: SharedString,
     sent: bool,
 }
@@ -33,7 +32,6 @@ impl DemoMessage {
     fn new(id: usize, sent: bool, body: impl Into<SharedString>) -> Self {
         Self {
             id,
-            author: if sent { "You".into() } else { "Alice".into() },
             body: body.into(),
             sent,
         }
@@ -87,8 +85,27 @@ impl MessageScrollerStory {
             .collect()
     }
 
+    /// The scripted conversation for the main demo, mirroring shadcn's
+    /// message-scroller demo: an AI chat without avatars or author names.
+    fn conversation_script() -> Vec<DemoMessage> {
+        [
+            (true, "I'm building a chat for our app and the scroll behavior is driving me nuts. Every time the AI streams a reply, the whole thread jumps around."),
+            (false, "That's the classic streaming scroll problem. Render the rows with MessageScroller — it follows the tail while the reader sits at the live edge, so streamed tokens land in place instead of shoving the thread around."),
+            (true, "Okay, but what happens when someone scrolls up to re-read an older answer? I don't want to yank them back down."),
+            (false, "You won't. Scrolling up releases tail following, so the reading position is preserved while new rows keep arriving below.\n\nA jump-to-latest button appears once the reader leaves the tail; one click returns to the newest row and resumes following."),
+            (true, "And loading older history when they reach the top?"),
+            (false, "prepend inserts the earlier rows while the row the reader is on stays anchored in place — no jump to the top, no lost context."),
+            (true, "Last one — does it handle rows that change height while streaming?"),
+            (false, "Yes. Remeasure just the growing row and the list keeps its anchor, so streamed markdown, images, and expanding content stay stable."),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (sent, body))| DemoMessage::new(index, sent, body))
+        .collect()
+    }
+
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let messages = Self::preview_messages(0, 32);
+        let messages = Self::conversation_script();
         let mut stream_messages = Self::preview_messages(1_000, INITIAL_STREAM_MESSAGE_COUNT - 1);
         stream_messages.push(DemoMessage::new(
             1_000 + INITIAL_STREAM_MESSAGE_COUNT - 1,
@@ -122,7 +139,7 @@ impl MessageScrollerStory {
             history_messages,
             preview_messages,
             empty_messages: Vec::new(),
-            unread_index: 18,
+            unread_index: 4,
             next_id: 10_000,
             streaming: false,
             stream_task: None,
@@ -178,6 +195,14 @@ impl MessageScrollerStory {
             .update(cx, |input, cx| input.set_value("", window, cx));
         self.scroller
             .update(cx, |state, cx| _ = state.append(1, cx));
+        cx.notify();
+    }
+
+    fn reset_conversation(&mut self, cx: &mut Context<Self>) {
+        self.messages = Self::conversation_script();
+        self.unread_index = 4;
+        let count = self.messages.len();
+        self.scroller.update(cx, |state, cx| state.reset(count, cx));
         cx.notify();
     }
 
@@ -317,14 +342,18 @@ impl MessageScrollerStory {
     }
 
     fn render_message_row(message: DemoMessage, unread: bool) -> AnyElement {
+        // Mirror shadcn's message-scroller demo: no avatars or author names,
+        // sent rows on a muted surface, received rows as ghost text.
         let alignment = if message.sent {
             MessageAlignment::End
         } else {
             MessageAlignment::Start
         };
         let bubble = Bubble::new()
-            .when(!message.sent, |bubble| {
-                bubble.with_variant(BubbleVariant::Secondary)
+            .with_variant(if message.sent {
+                BubbleVariant::Muted
+            } else {
+                BubbleVariant::Ghost
             })
             .child(message.body);
 
@@ -346,7 +375,6 @@ impl MessageScrollerStory {
                     .child(
                         Message::new()
                             .alignment(alignment)
-                            .header(MessageHeader::new().child(message.author))
                             .content(MessageContent::new().bubble(bubble)),
                     ),
             )
@@ -459,18 +487,34 @@ impl Render for MessageScrollerStory {
                         .bg(cx.theme().background)
                         .text_color(cx.theme().foreground)
                         .child(
-                            v_flex()
+                            h_flex()
                                 .w_full()
-                                .gap_1()
+                                .items_start()
+                                .justify_between()
+                                .gap_2()
                                 .p_5()
                                 .border_b_1()
                                 .border_color(cx.theme().border)
-                                .child(div().font_semibold().child("New chat"))
                                 .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child("How can I help you today?"),
+                                    v_flex()
+                                        .gap_1()
+                                        .child(div().font_semibold().child("New Chat"))
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("How can I help you today?"),
+                                        ),
+                                )
+                                .child(
+                                    Button::new("message-scroller-reset")
+                                        .outline()
+                                        .icon(IconName::RotateCw)
+                                        .rounded(cx.theme().radius_full())
+                                        .tooltip("Reset conversation")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.reset_conversation(cx)
+                                        })),
                                 ),
                         )
                         .child(
@@ -490,21 +534,30 @@ impl Render for MessageScrollerStory {
                             ),
                         )
                         .child(
-                            h_flex()
-                                .w_full()
-                                .gap_2()
-                                .p_5()
-                                .border_t_1()
-                                .border_color(cx.theme().border)
-                                .child(Input::new(&self.composer).flex_1())
-                                .child(
-                                    Button::new("message-scroller-send")
-                                        .primary()
-                                        .label("Send")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.send_message(window, cx)
-                                        })),
-                                ),
+                            div().w_full().p_5().child(
+                                v_flex()
+                                    .w_full()
+                                    .gap_1()
+                                    .p_2()
+                                    .rounded_xl()
+                                    .border_1()
+                                    .border_color(cx.theme().border)
+                                    .child(Input::new(&self.composer).appearance(false))
+                                    .child(
+                                        h_flex().w_full().justify_end().child(
+                                            Button::new("message-scroller-send")
+                                                .primary()
+                                                .small()
+                                                .size_8()
+                                                .icon(IconName::ArrowUp)
+                                                .rounded(cx.theme().radius_full())
+                                                .tooltip("Send")
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.send_message(window, cx)
+                                                })),
+                                        ),
+                                    ),
+                            ),
                         ),
                 )
                 .child(
