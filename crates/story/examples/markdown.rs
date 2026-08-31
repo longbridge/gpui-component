@@ -1411,7 +1411,7 @@ impl Render for Example {
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())
                                             .flex_none()
-                                            .p_5()
+                                            .px_5()
                                             .scrollable(true)
                                             .selectable(true)
                                             .selection_format(self.selection_format),

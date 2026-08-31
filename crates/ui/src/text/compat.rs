@@ -386,3 +386,47 @@ pub fn html(source: impl Into<SharedString>) -> TextView {
         source,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::{
+        Context, IntoElement, ParentElement as _, Render, TestAppContext, VisualTestContext, div,
+    };
+
+    struct StatelessMarkdown {
+        renders: Arc<AtomicUsize>,
+    }
+
+    impl Render for StatelessMarkdown {
+        fn render(&mut self, _: &mut gpui::Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.renders.fetch_add(1, Ordering::Relaxed);
+            div().child(
+                super::markdown(include_str!("../../../story/examples/fixtures/test.md"))
+                    .markdown_block_parser(|_, _| None),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn stateless_markdown_facade_settles_after_parsing(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let renders = Arc::new(AtomicUsize::new(0));
+        let (_, cx) = cx.add_window_view({
+            let renders = renders.clone();
+            move |_, _| StatelessMarkdown { renders }
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        assert!(
+            renders.load(Ordering::Relaxed) <= 2,
+            "an unchanged compatibility TextView must settle after its parse, but rendered {} times",
+            renders.load(Ordering::Relaxed),
+        );
+    }
+}

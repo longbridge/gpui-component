@@ -733,6 +733,11 @@ impl Element for TextView {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
     use super::{TextView, TextViewPlugin};
     use crate::text::{TableData, TextViewState, TextViewStyle};
     use gpui::{
@@ -744,6 +749,20 @@ mod tests {
 
     struct TextViewTestRoot {
         text_view: Entity<TextViewState>,
+    }
+
+    struct StatelessMarkdownRoot {
+        renders: Arc<AtomicUsize>,
+    }
+
+    impl Render for StatelessMarkdownRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.renders.fetch_add(1, Ordering::Relaxed);
+            div().child(
+                TextView::markdown("stateless-markdown", include_str!("../../../../README.md"))
+                    .markdown_block_parser(|_, _| None),
+            )
+        }
     }
 
     struct DummyTextViewPlugin;
@@ -763,6 +782,24 @@ mod tests {
         assert!(TextView::new(&state).selectable);
         assert!(TextView::markdown("markdown", "text").selectable);
         assert!(TextView::html("html", "<p>text</p>").selectable);
+    }
+
+    #[gpui::test]
+    fn stateless_markdown_with_rebuilt_parser_settles(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let renders = Arc::new(AtomicUsize::new(0));
+        let (_, cx) = cx.add_window_view({
+            let renders = renders.clone();
+            move |_, _| StatelessMarkdownRoot { renders }
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        assert!(
+            renders.load(Ordering::Relaxed) <= 2,
+            "an unchanged TextView must settle after its parse, but rendered {} times",
+            renders.load(Ordering::Relaxed),
+        );
     }
 
     #[gpui::test]

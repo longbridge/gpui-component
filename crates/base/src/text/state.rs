@@ -306,8 +306,11 @@ impl TextViewState {
             return;
         }
 
+        let parser_configuration_changed = !self
+            .markdown_extensions
+            .has_same_parser_configuration(&markdown_extensions);
         self.markdown_extensions = markdown_extensions;
-        if self.format == TextViewFormat::Markdown {
+        if parser_configuration_changed && self.format == TextViewFormat::Markdown {
             let text = self.text.clone();
             self.increment_update(&text, false, cx);
         }
