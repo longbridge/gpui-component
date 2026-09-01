@@ -1472,6 +1472,14 @@ impl WindowSelectionState {
         // moves, so selection keeps scrolling the same related region even
         // after the anchor text has moved out of view.
         let visible_bounds = registration.registration.hitbox.content_mask.bounds;
+        // The mask can collapse to a degenerate rect when the scrollable
+        // ancestor itself gets clipped away mid-drag (e.g. scrolled out of
+        // view by this very auto scroll). There is nothing sensible left to
+        // scroll, and clamping into an empty range below panics — stop.
+        if visible_bounds.size.width < px(2.) || visible_bounds.size.height < px(2.) {
+            self.stop_anchor_auto_scroll(cx);
+            return;
+        }
         let delta = AutoScroll::compute_delta(position.y, visible_bounds);
         let Some(window) = window else {
             participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
@@ -3093,6 +3101,45 @@ mod tests {
         cx.run_until_parked();
         assert!(commands.borrow().iter().any(Option::is_some));
         assert_eq!(commands.borrow().last(), Some(&None));
+    }
+
+    #[gpui::test]
+    fn drag_auto_scroll_stops_when_the_content_mask_collapses(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, cx| WindowSelectionView {
+            selection: TextSelectionHandle::new("unused", cx),
+        });
+        window
+            .update(cx, |_, window, cx| {
+                let state = cx.new(|_| WindowSelectionState::default());
+                let participant = FakeParticipant::new("participant", cx);
+                state.update(cx, |state, cx| {
+                    participant.register(state, 0., TextSelectionScopeId::default(), 0, cx);
+                    state.begin(point(px(1.), px(1.)), false, cx);
+                });
+                // The scrollable ancestor got clipped away mid-drag, so the
+                // refreshed registration carries a collapsed content mask.
+                let collapsed = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(0.)));
+                state.update(cx, |state, cx| {
+                    state.register_participant(
+                        participant.selection.clone(),
+                        TextSelectionRegistration::new(
+                            Hitbox {
+                                id: HitboxId::placeholder(),
+                                bounds: collapsed,
+                                content_mask: ContentMask { bounds: collapsed },
+                                behavior: HitboxBehavior::Normal,
+                            },
+                            collapsed,
+                        )
+                        .with_text_bounds(vec![collapsed]),
+                        cx,
+                    );
+                    state.update_in_window(point(px(1.), px(50.)), window, cx);
+                    assert!(!state.auto_scroll.is_active());
+                    assert!(state.auto_scroll.last_drag_position.is_none());
+                });
+            })
+            .unwrap();
     }
 
     #[gpui::test]
