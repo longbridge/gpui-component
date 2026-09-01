@@ -3206,19 +3206,62 @@ const BASE: &str = r#"  /** A row. */
     readonly none: number; readonly sm: number; readonly md: number;
     readonly lg: number; readonly xl: number; readonly full: number;
   }
+  /** One entry in the type scale, aligned with `gpui_base::TextStyleToken`. */
+  export interface TextStyleToken {
+    readonly size: number;
+    readonly line_height: number;
+    /** The CSS range: 100 is thin, 400 regular, 700 bold. */
+    readonly weight: number;
+  }
+  /**
+   * Semantic type scale, aligned with `gpui_base::TypographyTokens`.
+   *
+   * `md` is the window's base text size: everything the shell draws for itself
+   * — toasts, sheets, dialog chrome — inherits it, so an application that
+   * draws densely says so here rather than restating a size per component.
+   */
+  export interface TypographyTokens {
+    /** The face the scale is set in, and the scale itself. */
+    readonly sans: string;
+    readonly xs: TextStyleToken; readonly sm: TextStyleToken; readonly md: TextStyleToken;
+    readonly lg: TextStyleToken; readonly xl: TextStyleToken;
+    /**
+     * Code: a face and one size, not a sixth step of the scale. `mono_md` is
+     * the size `mono` is set at, and the two are read together.
+     */
+    readonly mono: string;
+    readonly mono_md: TextStyleToken;
+  }
   export interface SemanticThemeTokens {
     readonly colors: ColorTokens;
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
+    readonly typography: TypographyTokens;
   }
 
   /**
    * Replaces gpui-base's active semantic tokens for the current application.
    * Legal only from an event handler or task backed by a live host call.
+   *
+   * Colours, spacing and radius are stated in full: a palette with half its
+   * roles missing is a window drawn in two themes. Typography is an override —
+   * every entry is optional, and one left out keeps the value it has — so a
+   * theme that only wants a smaller base says `{ md: { size: 12 } }` rather
+   * than restating two font families and six line heights it has no opinion
+   * about. A theme that says nothing about type is drawn as it always was.
    */
   export function set_theme(theme: {
     readonly appearance: "light" | "dark";
-    readonly tokens: SemanticThemeTokens;
+    readonly tokens: Omit<SemanticThemeTokens, "typography"> & {
+      readonly typography?: {
+        readonly sans?: string;
+        readonly mono?: string;
+      } & {
+        readonly [Step in keyof Omit<TypographyTokens, "sans" | "mono">]?: {
+          readonly [Field in keyof TextStyleToken]?: number;
+        };
+      };
+    };
   }): void;
   /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {

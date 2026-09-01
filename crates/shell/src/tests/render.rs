@@ -3541,6 +3541,128 @@ export default class ThemeSwitch extends View {
     });
 }
 
+/// A script states its type scale, and the chrome the shell draws follows it.
+///
+/// The regression this guards is a dense application with oversized
+/// notifications: everything `ShellRoot` draws for itself states no text size
+/// and inherited GPUI's 16px default, while the components an application
+/// builds set their own — so a window drawn at 12px got 16px toasts over it.
+/// `md` is the base, and it is an override: a theme that says nothing about
+/// type keeps the scale it was given.
+#[gpui::test]
+fn javascript_can_state_the_type_scale(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div } from "gpui";
+import { set_theme } from "gpui-base";
+const color = "#111111";
+const base = {
+  colors: {
+    background: color, foreground: color, surface: color, surface_foreground: color,
+    primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
+    muted: color, muted_foreground: color, accent: color, accent_foreground: color,
+    destructive: color, destructive_foreground: color, border: color, input: color, ring: color,
+    selection: color,
+  },
+  spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+  radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
+};
+export default class TypeScale extends View {
+  init() {
+    // Only what this application has an opinion about. The line height, the
+    // weight and both font families are left as they are.
+    set_theme({ appearance: "light", tokens: { ...base, typography: { md: { size: 12 } } } });
+  }
+  render(cx) { return div(); }
+}
+"##;
+    let view_type = runtime.load_source("type-scale", source).expect("load");
+    let loaded = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let object = loaded.instantiate(&view_type, window, cx).unwrap();
+        ScriptView::new(loaded, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.update(|_, cx| {
+        let typography = gpui_base::Theme::global(cx).tokens.typography.clone();
+        assert_eq!(
+            typography.md.size,
+            gpui::px(12.),
+            "the size the script stated is the one the theme carries"
+        );
+        assert_eq!(
+            typography.md.line_height,
+            gpui_base::TypographyTokens::default().md.line_height,
+            "and an entry it left out keeps the value it had"
+        );
+        assert_eq!(
+            typography.sans,
+            gpui_base::TypographyTokens::default().sans,
+            "including the font families, which it never mentioned"
+        );
+        assert_eq!(
+            typography.sm.size,
+            gpui_base::TypographyTokens::default().sm.size,
+            "and the steps beside the one it named"
+        );
+    });
+}
+
+/// A size that cannot be drawn is refused rather than applied.
+#[gpui::test]
+fn a_type_scale_of_zero_is_refused(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div } from "gpui";
+import { set_theme } from "gpui-base";
+const color = "#111111";
+export default class ZeroScale extends View {
+  init() {
+    this.refused = "";
+    try {
+      set_theme({ appearance: "light", tokens: {
+        colors: {
+          background: color, foreground: color, surface: color, surface_foreground: color,
+          primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
+          muted: color, muted_foreground: color, accent: color, accent_foreground: color,
+          destructive: color, destructive_foreground: color, border: color, input: color,
+          ring: color, selection: color,
+        },
+        spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+        radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
+        typography: { md: { size: 0 } },
+      }});
+    } catch (error) {
+      this.refused = String(error && error.message ? error.message : error);
+    }
+  }
+  render(cx) { return div().child(this.refused || "applied"); }
+}
+"##;
+    let view_type = runtime.load_source("zero-scale", source).expect("load");
+    let loaded = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let object = loaded.instantiate(&view_type, window, cx).unwrap();
+        ScriptView::new(loaded, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.update(|_, cx| {
+        assert_eq!(
+            gpui_base::Theme::global(cx).tokens.typography.md.size,
+            gpui_base::TypographyTokens::default().md.size,
+            "a refused scale leaves the one that was working alone"
+        );
+    });
+}
+
 /// The todo list exists to exercise the whole runtime at once: retained input
 /// state, controlled checkboxes, a dialog, a toast, capability-gated storage,
 /// and a filter that must survive every mutation. If a subsystem regresses,
