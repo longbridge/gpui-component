@@ -210,7 +210,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     Ok(ComponentPayload::new(TagOp::Outline))
                 })
                 .with_documentation("Uses the outline presentation."),
-                MethodDescriptor::new("roundedFull", Vec::new(), |_| {
+                MethodDescriptor::new("rounded_full", Vec::new(), |_| {
                     Ok(ComponentPayload::new(TagOp::RoundedFull))
                 })
                 .with_documentation("Uses pill-shaped corners."),

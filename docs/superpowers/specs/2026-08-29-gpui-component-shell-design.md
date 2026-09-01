@@ -27,17 +27,19 @@ unchanged. It remains the script runtime and generic host bridge. It owns:
   events, styles, and window operations;
 - dispatch from a described component name to its registered materializer.
 
-It must not import or construct a `gpui-component` control. Existing concrete
-component implementations under `crates/shell/src/materialize/components`
-and concrete arms in `materialize_component` move out of this crate. The shell
-binary may depend on the adapter to assemble the default executable; that
-composition dependency does not put component implementation in the shell
-library.
+It must not import or construct a `gpui-component` control. Existing
+`gpui-base` materializers remain part of the base-only host: despite their
+historical `materialize/components` directory name, they implement the generic
+base surface and do not depend on the themed component crate. Only concrete
+`gpui-component` registration and materialization belongs in the adapter. The
+shell binary may depend on the adapter to assemble the default executable;
+that composition dependency does not put component implementation in the
+shell library.
 
 ### `gpui-component-shell`
 
-The new adapter crate depends directly on `gpui-shell`, which in turn depends
-on both `gpui-base` and `gpui-component`. Its
+The new adapter crate depends directly on both `gpui-shell` and
+`gpui-component`; `gpui-shell` depends only on `gpui-base`. Its
 `src/shell/` directory contains one focused module per component family and a
 single public registration entry point:
 
@@ -62,10 +64,10 @@ loaded so runtime rendering does not mutate global schemas.
 ### Executable composition
 
 Using arrows from a Cargo consumer to its dependency, the dependency graph is
-`app -> gpui-component-shell -> gpui-shell -> gpui-component`, with
-`gpui-shell -> gpui-base` as the base-only path. `gpui-shell` does not depend
-back on the adapter, so Cargo sees no cycle and the existing shell package is
-not split. Although `gpui-shell` can name both UI libraries, concrete component
+`app -> gpui-component-shell -> { gpui-shell, gpui-component }`, with
+`gpui-shell -> gpui-base` as the base-only path. `gpui-shell` depends on neither
+the adapter nor the themed component crate, so Cargo sees no cycle and a
+base-only host does not link unused themed controls. Concrete component
 registration and materialization remain exclusively in the adapter.
 
 `gpui-component-shell` exposes the full-catalog registration/startup entry
@@ -110,9 +112,10 @@ Infrastructure modules such as themes, history, and highlighters are covered
 through the APIs of the controls that consume them rather than fake visual
 constructors.
 
-The migration starts by moving every existing base/component binding out of
-`gpui-shell`; it is not complete until searches and dependency checks show that
-the shell library no longer references concrete `gpui-component` controls.
+The migration starts by moving every existing themed-component binding out of
+`gpui-shell`; base bindings remain the generic host surface. It is not complete
+until searches and dependency checks show that the shell library no longer
+references concrete `gpui-component` controls.
 New bindings then cover the remainder of the inventory. Unsupported behavior
 is not silently ignored: registration or materialization reports a precise
 diagnostic naming the component, property, and supported alternative.

@@ -213,6 +213,7 @@ impl PartialEq for ComponentPayload {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum ComponentArgument {
     String(String),
     Number(f64),
@@ -312,6 +313,7 @@ enum ChildLane {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum ArgumentSchema {
     String,
     Number,
@@ -1605,6 +1607,7 @@ impl fmt::Debug for ComponentDescriptor {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum RegistryError {
     IncompatibleApiVersion {
         expected: u32,

@@ -163,12 +163,12 @@ export default class RetainedForms extends View {
   }
   render() {
     return div()
-      .child(new Input(this.input).ariaLabel("Project").disabled(false))
+      .child(new Input(this.input).aria_label("Project").disabled(false))
       .child(new NumberInput(this.input).placeholder("Quantity").disabled(true))
       .child(new OtpInput(this.otp).w(320).groups(3).disabled(false))
       .child(new Slider(this.slider).vertical().reverse().disabled(false))
-      .child(new ColorPicker(this.color).label("Accent").accessibilityLabel("Accent color"))
-      .child(new Calendar(this.calendar).numberOfMonths(2))
+      .child(new ColorPicker(this.color).label("Accent").accessibility_label("Accent color"))
+      .child(new Calendar(this.calendar).number_of_months(2))
       .child(new DatePicker(this.date).placeholder("Choose date").disabled(false));
   }
 }
@@ -196,14 +196,14 @@ export default class RetainedForms extends View {
             "ColorPicker",
             "Calendar",
             "DatePicker",
-            ":ariaLabel(registered)",
+            ":aria_label(registered)",
             ":placeholder(registered)",
             ":groups(registered)",
             ":vertical(registered)",
             ":reverse(registered)",
             ":label(registered)",
-            ":accessibilityLabel(registered)",
-            ":numberOfMonths(registered)",
+            ":accessibility_label(registered)",
+            ":number_of_months(registered)",
             ".w[Number(320.0)]",
         ] {
             assert!(tree.contains(expected), "missing `{expected}`:\n{tree}");
@@ -355,12 +355,12 @@ export default class TypedCompounds extends View {
       .child(new Accordion("faq").w(500).multiple(true)
         .child(new AccordionItem().px(2).title(div().child("Question A")).open(true).child("Answer A"))
         .child(new AccordionItem().title(div().child("Question B")).child("Answer B")))
-      .child(new TabBar("sections").w(500).selectedIndex(1).variant("underline")
+      .child(new TabBar("sections").w(500).selected_index(1).variant("underline")
         .child(new Tab().label("First"))
         .child(new Tab().label("Second")))
-      .child(new Stepper("setup").w(500).selectedIndex(1)
+      .child(new Stepper("setup").w(500).selected_index(1)
         .child(new StepperItem().child("Account")).child(new StepperItem().child("Profile")))
-      .child(new RadioGroup("density").w(500).selectedIndex(1)
+      .child(new RadioGroup("density").w(500).selected_index(1)
         .child(new Radio("comfortable").px(2).label("Comfortable"))
         .child(new Radio("compact").label("Compact")));
   }
@@ -409,10 +409,10 @@ import { InputState as BaseInputState } from "gpui-base";
 import { Input, InputState as ComponentInputState } from "gpui-component";
 export default class CoexistingStates extends View {
   init() {
-    this.baseState = BaseInputState.new({ placeholder: "Search" });
-    this.componentState = ComponentInputState();
+    this.base_state = BaseInputState.new({ placeholder: "Search" });
+    this.component_state = ComponentInputState();
   }
-  render() { return new Input(this.componentState).ariaLabel("Name"); }
+  render() { return new Input(this.component_state).aria_label("Name"); }
 }
 "#;
     let (mut context, view, _runtime) = mount(cx, source);

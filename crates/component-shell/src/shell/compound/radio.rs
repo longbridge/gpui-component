@@ -57,7 +57,7 @@ impl ComponentMaterializer for RadioMaterializer {
             let callback = request.resolve_callback(&argument)?;
             radio = radio.on_click(move |checked, window, cx| {
                 callback.invoke_and_report_with(
-                    "Radio.onChange callback failed",
+                    "Radio.on_change callback failed",
                     &[ComponentCallbackArgument::Boolean(*checked)],
                     window,
                     cx,
@@ -107,12 +107,12 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     },
                 ),
                 method(
-                    "accessibilityLabel",
+                    "accessibility_label",
                     ArgumentSchema::String,
                     "Overrides the announced name.",
                     |value| match value {
                         ComponentArgument::String(x) => Ok(RadioOp::A11y(x.clone())),
-                        _ => Err("Radio.accessibilityLabel(label) expects a string".into()),
+                        _ => Err("Radio.accessibility_label(label) expects a string".into()),
                     },
                 ),
                 method(
@@ -125,12 +125,12 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     },
                 ),
                 method(
-                    "tabStop",
+                    "tab_stop",
                     ArgumentSchema::Boolean,
                     "Controls keyboard tab-stop participation.",
                     |value| match value {
                         ComponentArgument::Boolean(x) => Ok(RadioOp::TabStop(*x)),
-                        _ => Err("Radio.tabStop(tabStop) expects a boolean".into()),
+                        _ => Err("Radio.tab_stop(tabStop) expects a boolean".into()),
                     },
                 ),
                 method(
@@ -149,16 +149,16 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     },
                 ),
                 MethodDescriptor::new(
-                    "onChange",
+                    "on_change",
                     vec![ArgumentDescriptor::new(
-                        "onChange",
+                        "on_change",
                         ArgumentSchema::Callback("(checked: boolean, cx: Context) => void"),
                     )],
                     |arguments| match arguments {
                         [argument @ ComponentArgument::Callback(_)] => {
                             Ok(ComponentPayload::new(RadioOp::OnChange(argument.clone())))
                         }
-                        _ => Err("Radio.onChange expects one callback".into()),
+                        _ => Err("Radio.on_change expects one callback".into()),
                     },
                 )
                 .with_documentation(

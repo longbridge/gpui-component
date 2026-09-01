@@ -199,7 +199,7 @@ impl RenderOnce for Bound {
                             #[cfg(test)]
                             test_probe::change(values.clone());
                             let callback = changes.borrow().change.clone();
-                            report_values(&callback, "Combobox.onChange", values, window, cx);
+                            report_values(&callback, "Combobox.on_change", values, window, cx);
                         }
                     },
                 );
@@ -212,7 +212,7 @@ impl RenderOnce for Bound {
                             #[cfg(test)]
                             test_probe::confirm(values.clone());
                             let callback = confirms.borrow().confirm.clone();
-                            report_values(&callback, "Combobox.onConfirm", values, window, cx);
+                            report_values(&callback, "Combobox.on_confirm", values, window, cx);
                         }
                     },
                 );
@@ -306,15 +306,15 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_constructors(vec![ConstructorDescriptor::new("Combobox", vec![
             ArgumentDescriptor::new("id", ArgumentSchema::String),
             ArgumentDescriptor::new("rows", ArgumentSchema::Callback("() => readonly { id: string; label: string; disabled?: boolean }[]")),
-            ArgumentDescriptor::new("onChange", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
-            ArgumentDescriptor::new("onConfirm", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
+            ArgumentDescriptor::new("on_change", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
+            ArgumentDescriptor::new("on_confirm", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
         ], |args| match args {
             [ComponentArgument::String(id), rows @ ComponentArgument::Callback(_), change @ ComponentArgument::Callback(_), confirm @ ComponentArgument::Callback(_)] if !id.trim().is_empty() => Ok(ComponentPayload::new(Payload { id:id.clone(), rows:rows.clone(), on_change:change.clone(), on_confirm:confirm.clone() })),
-            _ => Err("Combobox expects id, rows, onChange, and onConfirm callbacks".into()),
+            _ => Err("Combobox expects id, rows, on_change, and on_confirm callbacks".into()),
         })])
 .with_methods(vec![
             method("placeholder", "Sets the text shown while nothing is selected.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::Placeholder(value.clone())), _ => None }),
-            method("searchPlaceholder", "Sets the text shown in the empty search field.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::SearchPlaceholder(value.clone())), _ => None }),
+            method("search_placeholder", "Sets the text shown in the empty search field.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::SearchPlaceholder(value.clone())), _ => None }),
             method("searchable", "Shows the search field above the item list.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Searchable(*value)), _ => None }),
             method("disabled", "Disables the combobox.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
         ])

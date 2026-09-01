@@ -4,10 +4,12 @@ export const REGISTERED_SURFACES = [
   "Accordion",
   "Alert",
   "AlertDialog",
+  "Attachment",
   "Avatar",
   "BarChart",
   "Badge",
   "Breadcrumb",
+  "Bubble",
   "Button",
   "Calendar",
   "Checkbox",
@@ -33,6 +35,9 @@ export const REGISTERED_SURFACES = [
   "Link",
   "List",
   "MenuBar",
+  "Marker",
+  "Message",
+  "MessageScroller",
   "NumberInput",
   "NativeMenuTrigger",
   "Notification",
@@ -48,6 +53,7 @@ export const REGISTERED_SURFACES = [
   "Separator",
   "Select",
   "Sheet",
+  "ShimmerText",
   "Settings",
   "Sidebar",
   "Skeleton",
@@ -67,18 +73,8 @@ export const REGISTERED_SURFACES = [
   "Tree",
 ];
 
-/** @type {Record<string, string>} */
-export const DEFERRED_SURFACES = {};
-
-/** @param {string} surface @returns {{ status: "registered" } | { surface: string, status: "deferred", category: string, reason: string } | null} */
+/** @param {string} surface @returns {{ status: "registered" } | null} */
 export function surfaceStatus(surface) {
   if (REGISTERED_SURFACES.includes(surface)) return { status: "registered" };
-  const category = DEFERRED_SURFACES[surface];
-  if (!category) return null;
-  return {
-    surface,
-    status: "deferred",
-    category,
-    reason: `No public ${surface} constructor is registered; the adapter defers this ${category} surface.`,
-  };
+  return null;
 }

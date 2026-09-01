@@ -2102,73 +2102,73 @@
       "source": "ui",
       "name": "attachment",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Attachment", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+      "registration": { "status": "registered", "descriptor": "Attachment", "exports": ["Attachment"] }
     },
     {
       "source": "ui",
       "name": "bubble",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Bubble", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+      "registration": { "status": "registered", "descriptor": "Bubble", "exports": ["Bubble"] }
     },
     {
       "source": "ui",
       "name": "marker",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Marker", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+      "registration": { "status": "registered", "descriptor": "Marker", "exports": ["Marker"] }
     },
     {
       "source": "ui",
       "name": "message",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Message", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+      "registration": { "status": "registered", "descriptor": "Message", "exports": ["Message"] }
     },
     {
       "source": "ui",
       "name": "message_scroller",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "MessageScroller", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated retained binding." }
+      "registration": { "status": "registered", "descriptor": "MessageScroller", "exports": ["MessageScroller"], "states": [{ "export": "MessageScrollerState", "kind": "MessageScrollerState", "role": "retained-scroll-state" }] }
     },
     {
       "source": "ui",
       "name": "shimmer",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Shimmer", "category": "feedback", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+      "registration": { "status": "registered", "descriptor": "ShimmerText", "exports": ["ShimmerText"] }
     },
     {
       "source": "story",
       "name": "attachment",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Attachment", "category": "chat", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "Attachment", "exports": ["Attachment"] }
     },
     {
       "source": "story",
       "name": "bubble",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Bubble", "category": "chat", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "Bubble", "exports": ["Bubble"] }
     },
     {
       "source": "story",
       "name": "marker",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Marker", "category": "chat", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "Marker", "exports": ["Marker"] }
     },
     {
       "source": "story",
       "name": "message",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Message", "category": "chat", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "Message", "exports": ["Message"] }
     },
     {
       "source": "story",
       "name": "message_scroller",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "MessageScroller", "category": "chat", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "MessageScroller", "exports": ["MessageScroller"], "states": [{ "export": "MessageScrollerState", "kind": "MessageScrollerState", "role": "retained-scroll-state" }] }
     },
     {
       "source": "story",
       "name": "shimmer",
       "classification": "component",
-      "registration": { "status": "deferred", "target": "Shimmer", "category": "feedback", "reason": "The matching component binding is deferred." }
+      "registration": { "status": "registered", "descriptor": "ShimmerText", "exports": ["ShimmerText"] }
     }
   ]
 }

@@ -106,7 +106,7 @@ impl ComponentMaterializer for TriggerMaterializer {
                 .methods()
                 .filter_map(|m| m.payload().downcast_ref::<ErrorCallback>()),
         )
-        .ok_or_else(|| anyhow::anyhow!("NativeMenuTrigger requires onEffectError(callback)"))?;
+        .ok_or_else(|| anyhow::anyhow!("NativeMenuTrigger requires on_effect_error(callback)"))?;
         let effects = request.resolve_callback(&reporter.0)?.window_effects();
         let mut entries = Vec::new();
         for mut child in request.take_typed_children()? {
@@ -188,9 +188,9 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_constructors(vec![ConstructorDescriptor::new("NativeMenuTrigger", vec![ArgumentDescriptor::new("id", ArgumentSchema::String), ArgumentDescriptor::new("label", ArgumentSchema::String)], |args| match args { [ComponentArgument::String(id), ComponentArgument::String(label)] if !id.trim().is_empty() && !label.trim().is_empty() => Ok(ComponentPayload::new(Trigger { id: id.clone(), label: label.clone() })), _ => Err("NativeMenuTrigger expects non-empty id and label".into()) })])
 .with_methods(vec![
             MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))).with_documentation("Disables the native menu trigger."),
-            MethodDescriptor::new("onEffectError", vec![ArgumentDescriptor::new("callback", ArgumentSchema::Callback("(message: string, cx: Context) => void"))], |args| match args { [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(ErrorCallback(argument.clone()))), _ => Err("NativeMenuTrigger.onEffectError expects callback".into()) }).with_documentation("Reports asynchronous native menu failures."),
+            MethodDescriptor::new("on_effect_error", vec![ArgumentDescriptor::new("callback", ArgumentSchema::Callback("(message: string, cx: Context) => void"))], |args| match args { [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(ErrorCallback(argument.clone()))), _ => Err("NativeMenuTrigger.on_effect_error expects callback".into()) }).with_documentation("Reports asynchronous native menu failures."),
         ])
-.with_documentation("A real Button trigger that shows an OS NativeMenu (or fallback) in a keyed event effect. Last onEffectError wins; typed item selection dispatches ShellAction."))?;
+.with_documentation("A real Button trigger that shows an OS NativeMenu (or fallback) in a keyed event effect. Last on_effect_error wins; typed item selection dispatches ShellAction."))?;
     Ok(())
 }
 

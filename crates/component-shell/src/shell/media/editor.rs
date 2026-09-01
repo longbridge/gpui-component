@@ -54,7 +54,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             "EditorState",
             "EditorState",
             vec![ArgumentDescriptor::new(
-                "initialValue",
+                "initial_value",
                 ArgumentSchema::String,
             )],
             |args, window, cx| match args {
@@ -81,11 +81,11 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             bool_method("Editor", "bordered", "Controls the editor border.", Op::Bordered),
             bool_method("Editor", "readonly", "Controls read-only mode.", Op::Readonly),
             MethodDescriptor::new(
-                "ariaLabel",
+                "aria_label",
                 vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
                 |args| match args {
                     [ComponentArgument::String(value)] if !value.trim().is_empty() => Ok(ComponentPayload::new(Op::AriaLabel(value.clone()))),
-                    _ => Err("Editor.ariaLabel expects non-empty text".into()),
+                    _ => Err("Editor.aria_label expects non-empty text".into()),
                 },
             ).with_documentation("Sets the editor accessibility label."),
         ])

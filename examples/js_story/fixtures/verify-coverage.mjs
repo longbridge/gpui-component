@@ -204,43 +204,23 @@ const registeredSource = read("examples/js_story/stories/registered.js");
 const registeredBody = statusSource.match(
   /export const REGISTERED_SURFACES = \[([\s\S]*?)\];/,
 )?.[1];
-const deferredBody = statusSource.match(
-  /export const DEFERRED_SURFACES = \{([\s\S]*?)\};/,
-)?.[1];
-if (registeredBody == null || deferredBody == null)
-  fail("status projection is missing");
+if (registeredBody == null) fail("status projection is missing");
 const registered = new Set(
   [...registeredBody.matchAll(/"([^"]+)"/g)].map((match) => match[1]),
-);
-const deferred = new Map(
-  [...deferredBody.matchAll(/(\w+): "([^"]+)"/g)].map((match) => [
-    match[1],
-    match[2],
-  ]),
 );
 
 for (const [surface, expected] of inventorySurfaces) {
   if (expected.status === "registered") {
-    if (!registered.has(surface) || deferred.has(surface)) {
+    if (!registered.has(surface)) {
       fail(
         `${surface} is registered in inventory but not registered in the gallery status projection`,
       );
     }
-  } else if (
-    deferred.get(surface) !== expected.category ||
-    registered.has(surface)
-  ) {
-    fail(`${surface} deferred category drifts from component-inventory.json`);
   }
 }
 for (const surface of registered) {
   if (inventorySurfaces.get(surface)?.status !== "registered") {
     fail(`${surface} is marked registered outside component-inventory.json`);
-  }
-}
-for (const surface of deferred.keys()) {
-  if (inventorySurfaces.get(surface)?.status !== "deferred") {
-    fail(`${surface} is marked deferred outside component-inventory.json`);
   }
 }
 if (!registeredSource.includes('from "gpui-component"')) {
@@ -256,16 +236,10 @@ for (const surface of registered) {
 }
 if (
   !storySource.includes('availability: "registered"') ||
-  !storySource.includes('availability: "deferred"') ||
-  !statusSource.includes("reason: `No public ${surface} constructor") ||
   !storySource.includes("coveredSurfaces(story.id)") ||
-  !storySource.includes("deferredSurfaces.map") ||
-  !storySource.includes("Category: ${surface.category}") ||
-  !storySource.includes("Reason: ${surface.reason}")
+  !storySource.includes('availability: "infrastructure"')
 ) {
-  fail(
-    "story status rendering does not expose every covered deferred surface with its category and reason",
-  );
+  fail("story status rendering does not distinguish registered and infrastructure routes");
 }
 
 console.log(

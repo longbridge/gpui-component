@@ -69,7 +69,7 @@ fn draw(context: &mut VisualTestContext) {
 
 /// A two-state control that cannot report its new state is set-only: the script
 /// owns `checked`, so a click changes nothing and the control looks broken
-/// while behaving exactly as registered. `onChange` is what closes the loop.
+/// while behaving exactly as registered. `on_change` is what closes the loop.
 #[gpui::test]
 fn clicking_a_two_state_control_reports_its_new_state(cx: &mut TestAppContext) {
     let source = r#"
@@ -80,11 +80,11 @@ export default class App extends View {
   render() {
     return div().size_full()
       .child(new Checkbox("cb").label("Checkbox").checked(this.checkbox).absolute().left(0).top(0).w(200).h(30)
-        .onChange((checked, cx) => { this.checkbox = checked; cx.notify(); }))
+        .on_change((checked, cx) => { this.checkbox = checked; cx.notify(); }))
       .child(new Switch("sw").label("Switch").checked(this.switch).absolute().left(0).top(40).w(200).h(30)
-        .onChange((checked, cx) => { this.switch = checked; cx.notify(); }))
+        .on_change((checked, cx) => { this.switch = checked; cx.notify(); }))
       .child(new Toggle("tg").label("Toggle").checked(this.toggle).absolute().left(0).top(80).w(200).h(30)
-        .onChange((checked, cx) => { this.toggle = checked; cx.notify(); }))
+        .on_change((checked, cx) => { this.toggle = checked; cx.notify(); }))
       .child(`state: ${this.checkbox}|${this.switch}|${this.toggle}`);
   }
 }

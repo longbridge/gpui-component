@@ -81,17 +81,17 @@ fn basic_text_and_dropdown_materialize_through_public_host(cx: &mut TestAppConte
 import { div, View } from "gpui";
 import { DropdownButton, Text } from "gpui-component";
 export default class BasicRemaining extends View {
-  init() { this.actionHits = 0; this.menuHits = 0; }
+  init() { this.action_hits = 0; this.menu_hits = 0; }
   render() {
     return div()
       .child(new Text("Plain component text").p(2))
       .child(new DropdownButton("actions", "Actions")
         .absolute().left(0).top(60).w(180).h(40)
         .outline().disabled(false).selected(true)
-        .size("small").variant("primary").menuAnchor("bottomRight")
-        .on_click((_event, cx) => { this.actionHits += 1; cx.notify(); })
-        .menuItem("Open", (cx) => { this.menuHits += 1; cx.notify(); }))
-      .child(`Counts: ${this.actionHits}|${this.menuHits}`);
+        .size("small").variant("primary").menu_anchor("bottom_right")
+        .on_click((_event, cx) => { this.action_hits += 1; cx.notify(); })
+        .menu_item("Open", (cx) => { this.menu_hits += 1; cx.notify(); }))
+      .child(`Counts: ${this.action_hits}|${this.menu_hits}`);
   }
 }
 "#,
@@ -109,8 +109,8 @@ export default class BasicRemaining extends View {
         ":outline(registered)",
         ":size(registered)",
         ":variant(registered)",
-        ":menuAnchor(registered)",
-        ":menuItem(registered)",
+        ":menu_anchor(registered)",
+        ":menu_item(registered)",
     ] {
         assert!(tree.contains(expected), "missing `{expected}`:\n{tree}");
     }

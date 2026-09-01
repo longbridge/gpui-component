@@ -92,7 +92,17 @@ pub use anyhow;
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use component::ComponentArgs;
-pub use component_registry::*;
+#[cfg(test)]
+pub(crate) use component_registry::ComponentState;
+pub use component_registry::{
+    ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+    ComponentCallback, ComponentCallbackArgument, ComponentDataCallback, ComponentDataValue,
+    ComponentDelegateSnapshot, ComponentDescriptor, ComponentElementCallback,
+    ComponentElementFactory, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, DEFAULT_COMPONENT_MODULE, FrozenComponentRegistry, MaterializeRequest,
+    MethodDescriptor, RegistryError, StateDescriptor,
+};
+pub(crate) use component_registry::{ComponentCallbackValue, ComponentId, RecordedComponentMethod};
 pub use engine::{LoadedApplication, ShellRuntime};
 pub use error::ShellError;
 pub use gpui;

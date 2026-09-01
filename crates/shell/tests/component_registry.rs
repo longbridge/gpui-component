@@ -6,6 +6,29 @@ use gpui_shell::{
     ConstructorDescriptor, MaterializeRequest, RegistryError,
 };
 
+#[test]
+fn evolving_registry_enums_are_non_exhaustive() {
+    let source = include_str!("../src/component_registry.rs");
+    for declaration in [
+        "pub enum ComponentArgument",
+        "pub enum ArgumentSchema",
+        "pub enum RegistryError",
+    ] {
+        let offset = source.find(declaration).expect("public enum declaration");
+        let prefix = &source[..offset];
+        let attribute = prefix
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .expect("attribute before public enum");
+        assert_eq!(
+            attribute.trim(),
+            "#[non_exhaustive]",
+            "{declaration} is an evolving public seam"
+        );
+    }
+}
+
 struct EmptyMaterializer;
 
 impl ComponentMaterializer for EmptyMaterializer {

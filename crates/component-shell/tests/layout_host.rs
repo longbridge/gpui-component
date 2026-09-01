@@ -124,7 +124,7 @@ import { View } from "gpui";
 import { Textarea, TextareaState } from "gpui-component";
 export default class App extends View {
   init() { this.editor = TextareaState(); }
-  render() { return new Textarea(this.editor).appearance(true).bordered(false).readonly(true).ariaLabel("Notes").disabled(false).p(2).h(120); }
+  render() { return new Textarea(this.editor).appearance(true).bordered(false).readonly(true).aria_label("Notes").disabled(false).p(2).h(120); }
 }
 "#;
     let (mut context, view, _app) = mount(cx, source);
@@ -154,8 +154,8 @@ fn resizable_consumes_two_real_typed_panels_with_methods_style_and_children(
     let source = r#"
 import { View, div } from "gpui";
 import { Resizable, ResizablePanel } from "gpui-component";
-export default class App extends View { render() { return new Resizable("workspace").axis("horizontal").crossSize(240)
-  .child(new ResizablePanel().size(180).sizeRange(100,260).p(2).child(div().child("Navigation")))
+export default class App extends View { render() { return new Resizable("workspace").axis("horizontal").cross_size(240)
+  .child(new ResizablePanel().size(180).size_range(100,260).p(2).child(div().child("Navigation")))
   .child(new ResizablePanel().visible(true).child(div().child("Content"))); } }
 "#;
     let (mut context, view, _app) = mount(cx, source);
@@ -168,7 +168,7 @@ export default class App extends View { render() { return new Resizable("workspa
         "Resizable",
         ":axis(registered)",
         "ResizablePanel",
-        ":sizeRange(registered)",
+        ":size_range(registered)",
         ".p[Number(2.0)]",
         "Navigation",
         "Content",

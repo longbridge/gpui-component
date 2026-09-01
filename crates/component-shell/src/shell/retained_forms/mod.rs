@@ -4,7 +4,7 @@
 //! Change callbacks are deliberately not exposed here yet. These controls
 //! emit events from their retained `Entity` state, while the current shell
 //! materializer has no subscription owner (`Context<T>`) whose lifetime can
-//! retain a GPUI subscription. Adding an `onChange` method without that owner
+//! retain a GPUI subscription. Adding an `on_change` method without that owner
 //! would either drop the subscription immediately or leak it globally.
 //! Delegate-backed Select and Combobox are likewise deferred until scripts
 //! can provide an honest searchable-list delegate rather than fabricated
@@ -409,9 +409,9 @@ fn placeholder_method(owner: &'static str) -> MethodDescriptor {
 
 fn aria_label_method(owner: &'static str) -> MethodDescriptor {
     MethodDescriptor::new(
-        "ariaLabel",
+        "aria_label",
         vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-        move |arguments| string_op(arguments, &format!("{owner}.ariaLabel"), FormOp::AriaLabel),
+        move |arguments| string_op(arguments, &format!("{owner}.aria_label"), FormOp::AriaLabel),
     )
     .with_documentation("Sets the name announced by accessibility clients.")
 }
@@ -543,12 +543,12 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
             )
             .with_documentation("Sets the visible label above the picker."),
             MethodDescriptor::new(
-                "accessibilityLabel",
+                "accessibility_label",
                 vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
                 |arguments| {
                     string_op(
                         arguments,
-                        "ColorPicker.accessibilityLabel",
+                        "ColorPicker.accessibility_label",
                         FormOp::AccessibilityLabel,
                     )
                 },
@@ -563,10 +563,10 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
         "CalendarState",
         vec![
             MethodDescriptor::new(
-                "numberOfMonths",
+                "number_of_months",
                 vec![ArgumentDescriptor::new("count", ArgumentSchema::Number)],
                 |arguments| {
-                    positive_usize(arguments, "Calendar.numberOfMonths")
+                    positive_usize(arguments, "Calendar.number_of_months")
                         .map(|value| ComponentPayload::new(FormOp::Months(value)))
                 },
             )

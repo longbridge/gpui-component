@@ -1,6 +1,5 @@
 // The gallery imports only public script modules. Registered surfaces render
-// through gpui-component; deferred and infrastructure entries remain honest
-// status panels until their inventory status changes.
+// through gpui-component; infrastructure entries remain honest status panels.
 import { div } from "gpui";
 import { v_flex } from "gpui-base";
 import { coveredSurfaces } from "./coverage.js";
@@ -24,24 +23,10 @@ export function pendingStory(story) {
       render: (cx) => registeredPanel(story, surfaces, cx),
     };
   }
-  if (
-    states.length > 0 &&
-    states.every((state) => state?.status === "deferred")
-  ) {
-    const deferredSurfaces =
-      /** @type {Array<{ surface: string, status: "deferred", category: string, reason: string }>} */ (
-        states
-      );
-    return {
-      ...story,
-      availability: "deferred",
-      render: (cx) => availabilityPanel(story, deferredSurfaces, cx),
-    };
-  }
   return {
     ...story,
     availability: "infrastructure",
-    render: (cx) => availabilityPanel(story, [], cx),
+    render: (cx) => availabilityPanel(story, cx),
   };
 }
 
@@ -114,16 +99,9 @@ function case_(example, cx) {
     );
 }
 
-/** @param {StoryDefinition} story @param {Array<{ surface: string, status: "deferred", category: string, reason: string }>} deferredSurfaces @param {import("gpui").Context} cx */
-function availabilityPanel(story, deferredSurfaces, cx) {
+/** @param {StoryDefinition} story @param {import("gpui").Context} cx */
+function availabilityPanel(story, cx) {
   const colors = cx.theme().colors;
-  const infrastructure = deferredSurfaces.length === 0;
-  const heading = infrastructure
-    ? "Infrastructure coverage"
-    : "Pending deferred surfaces";
-  const detail = infrastructure
-    ? "This Story route documents a non-renderable inventory entry. It is exercised through the controls that consume it, not through a fabricated constructor."
-    : "Every deferred catalog surface covered by this route is listed with its inventory category and reason.";
 
   return v_flex()
     .id(`story-${story.id}`)
@@ -140,10 +118,15 @@ function availabilityPanel(story, deferredSurfaces, cx) {
         .text_size(18)
         .font_semibold()
         .text_color(colors.foreground)
-        .child(heading),
+        .child("Infrastructure coverage"),
     )
     .child(
-      div().text_size(13).text_color(colors.muted_foreground).child(detail),
+      div()
+        .text_size(13)
+        .text_color(colors.muted_foreground)
+        .child(
+          "This Story route documents a non-renderable inventory entry. It is exercised through the controls that consume it, not through a fabricated constructor.",
+        ),
     )
     .child(
       div()
@@ -153,40 +136,7 @@ function availabilityPanel(story, deferredSurfaces, cx) {
         .rounded(6)
         .text_size(12)
         .text_color(colors.foreground)
-        .child(
-          infrastructure
-            ? `Inventory scope: ${story.api}`
-            : `Route: ${story.id}`,
-        ),
-    )
-    .children(
-      deferredSurfaces.map((surface) =>
-        v_flex()
-          .gap(4)
-          .px(12)
-          .py(8)
-          .bg(colors.muted)
-          .rounded(6)
-          .child(
-            div()
-              .text_size(12)
-              .font_semibold()
-              .text_color(colors.foreground)
-              .child(`Pending catalog surface: ${surface.surface}`),
-          )
-          .child(
-            div()
-              .text_size(12)
-              .text_color(colors.muted_foreground)
-              .child(`Category: ${surface.category}`),
-          )
-          .child(
-            div()
-              .text_size(12)
-              .text_color(colors.muted_foreground)
-              .child(`Reason: ${surface.reason}`),
-          ),
-      ),
+        .child(`Inventory scope: ${story.api}`),
     )
     .child(
       v_flex()

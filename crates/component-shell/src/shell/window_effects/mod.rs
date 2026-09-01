@@ -252,7 +252,7 @@ impl ComponentMaterializer for Materializer {
                                             .on_ok(move |_, window, cx| {
                                                 invoke(
                                                     &ok,
-                                                    "Dialog.onOk callback failed",
+                                                    "Dialog.on_ok callback failed",
                                                     window,
                                                     cx,
                                                 );
@@ -261,7 +261,7 @@ impl ComponentMaterializer for Materializer {
                                             .on_cancel(move |_, window, cx| {
                                                 invoke(
                                                     &cancel,
-                                                    "Dialog.onCancel callback failed",
+                                                    "Dialog.on_cancel callback failed",
                                                     window,
                                                     cx,
                                                 );
@@ -270,7 +270,7 @@ impl ComponentMaterializer for Materializer {
                                             .on_close(move |_, window, cx| {
                                                 invoke(
                                                     &close,
-                                                    "Dialog.onClose callback failed",
+                                                    "Dialog.on_close callback failed",
                                                     window,
                                                     cx,
                                                 )
@@ -326,7 +326,7 @@ impl ComponentMaterializer for Materializer {
                                                     .on_ok(move |_, window, cx| {
                                                         invoke(
                                                             &ok,
-                                                            "AlertDialog.onOk callback failed",
+                                                            "AlertDialog.on_ok callback failed",
                                                             window,
                                                             cx,
                                                         );
@@ -335,7 +335,7 @@ impl ComponentMaterializer for Materializer {
                                                     .on_cancel(move |_, window, cx| {
                                                         invoke(
                                                             &cancel,
-                                                            "AlertDialog.onCancel callback failed",
+                                                            "AlertDialog.on_cancel callback failed",
                                                             window,
                                                             cx,
                                                         );
@@ -345,7 +345,7 @@ impl ComponentMaterializer for Materializer {
                                             .on_close(move |_, window, cx| {
                                                 invoke(
                                                     &close,
-                                                    "AlertDialog.onClose callback failed",
+                                                    "AlertDialog.on_close callback failed",
                                                     window,
                                                     cx,
                                                 )
@@ -404,7 +404,7 @@ impl ComponentMaterializer for Materializer {
                                             sheet.on_close(move |_, window, cx| {
                                                 invoke(
                                                     &close,
-                                                    "Sheet.onClose callback failed",
+                                                    "Sheet.on_close callback failed",
                                                     window,
                                                     cx,
                                                 )
@@ -471,7 +471,7 @@ impl ComponentMaterializer for Materializer {
                                         .on_click(move |_, window, cx| {
                                             invoke(
                                                 &click,
-                                                "Notification.onClick callback failed",
+                                                "Notification.on_click callback failed",
                                                 window,
                                                 cx,
                                             )
@@ -479,7 +479,7 @@ impl ComponentMaterializer for Materializer {
                                         .on_close(move |window, cx| {
                                             invoke(
                                                 &close,
-                                                "Notification.onClose callback failed",
+                                                "Notification.on_close callback failed",
                                                 window,
                                                 cx,
                                             )
@@ -535,7 +535,7 @@ fn descriptor(
                 ArgumentDescriptor::new("id", ArgumentSchema::String),
                 ArgumentDescriptor::new("label", ArgumentSchema::String),
                 ArgumentDescriptor::new(
-                    "onEffectError",
+                    "on_effect_error",
                     ArgumentSchema::Callback("(message: string, cx: Context) => void"),
                 ),
             ],
@@ -552,13 +552,13 @@ fn descriptor(
                     }))
                 }
                 _ => Err(format!(
-                    "{name}(id, label, onEffectError) expects two non-empty strings and a callback"
+                    "{name}(id, label, on_effect_error) expects two non-empty strings and a callback"
                 )),
             },
         )])
 .with_methods(methods)
 .with_documentation(
-            "A real button-triggered native window effect; onEffectError receives asynchronous effect failures.",
+            "A real button-triggered native window effect; on_effect_error receives asynchronous effect failures.",
         )
 }
 
@@ -581,9 +581,9 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         Kind::Dialog,
         vec![
             text("title", Op::Title),
-            callback_method("onOk", Op::OnOk),
-            callback_method("onCancel", Op::OnCancel),
-            callback_method("onClose", Op::OnClose),
+            callback_method("on_ok", Op::OnOk),
+            callback_method("on_cancel", Op::OnCancel),
+            callback_method("on_close", Op::OnClose),
         ],
     ))?;
     registry.register(descriptor(
@@ -593,18 +593,18 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             text("title", Op::Title),
             text("description", Op::Description),
             MethodDescriptor::new(
-                "showCancel",
+                "show_cancel",
                 vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],
                 |args| match args {
                     [ComponentArgument::Boolean(value)] => {
                         Ok(ComponentPayload::new(Op::ShowCancel(*value)))
                     }
-                    _ => Err("showCancel(value) expects boolean".into()),
+                    _ => Err("show_cancel(value) expects boolean".into()),
                 },
             ),
-            callback_method("onOk", Op::OnOk),
-            callback_method("onCancel", Op::OnCancel),
-            callback_method("onClose", Op::OnClose),
+            callback_method("on_ok", Op::OnOk),
+            callback_method("on_cancel", Op::OnCancel),
+            callback_method("on_close", Op::OnClose),
         ],
     ))?;
     registry.register(descriptor(
@@ -631,7 +631,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     _ => Err("placement expects top, right, bottom, or left".into()),
                 },
             ),
-            callback_method("onClose", Op::OnClose),
+            callback_method("on_close", Op::OnClose),
         ],
     ))?;
     registry.register(descriptor(
@@ -659,8 +659,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     _ => Err("type expects info, success, warning, or error".into()),
                 },
             ),
-            callback_method("onClick", Op::OnClick),
-            callback_method("onClose", Op::OnClose),
+            callback_method("on_click", Op::OnClick),
+            callback_method("on_close", Op::OnClose),
             MethodDescriptor::new(
                 "autohide",
                 vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],

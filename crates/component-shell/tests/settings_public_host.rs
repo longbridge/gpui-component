@@ -118,8 +118,8 @@ fn full_settings_hierarchy_rebuilds_lazy_native_slots_across_draws(cx: &mut Test
     let source = r#"
 import { View, div } from "gpui";
 import { LazyMarker, Settings, SettingPage, SettingGroup, SettingItem } from "gpui-component";
-export default class App extends View { render(){ return new Settings("prefs").size("small").sidebarWidth(220).sidebarSizeRange(160,320)
- .child(new SettingPage("General").description("Application preferences").defaultOpen(true).content(new LazyMarker("suffix-built"))
+export default class App extends View { render(){ return new Settings("prefs").size("small").sidebar_width(220).sidebar_size_range(160,320)
+ .child(new SettingPage("General").description("Application preferences").default_open(true).content(new LazyMarker("suffix-built"))
   .child(new SettingGroup().title("Appearance").description("Visual choices").p(2)
    .child(new SettingItem("Theme").description("Choose appearance").layout("vertical").keywords(["color","theme"]).disabled(false).content(new LazyMarker("field-built"))))); } }
 "#;
@@ -155,7 +155,7 @@ export default class App extends View { render(){ return new Settings("prefs").s
                 "SettingPage",
                 "SettingGroup",
                 "SettingItem",
-                ":sidebarSizeRange(registered)",
+                ":sidebar_size_range(registered)",
                 ".p[Number(2.0)]",
             ] {
                 assert!(tree.contains(expected), "missing `{expected}`:\n{tree}");

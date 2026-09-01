@@ -4,8 +4,8 @@ This is the JavaScript Story gallery scaffold: an auditable, reviewable route
 catalog for the component-shell work.
 
 The gallery imports the registered public `gpui-component` surface through the
-completed public component-shell host. Deferred and infrastructure routes remain
-explicit status panels rather than fabricated constructors.
+completed public component-shell host. Infrastructure routes remain explicit
+status panels rather than fabricated constructors.
 
 ## Coverage audit
 
@@ -19,19 +19,17 @@ node examples/js_story/fixtures/verify-coverage.mjs
 
 The gallery imports only public `gpui`, `gpui-base`, and `gpui-component`
 script modules. `catalog.js` explicitly imports each family module and every
-route records its Rust Story source. The inventory currently supplies 63 mirrored Story
-entries and 64 tracked catalog surfaces. The check fails if either side changes
+route records its Rust Story source. The inventory currently supplies 69 mirrored Story
+entries and 70 tracked catalog surfaces. The check fails if either side changes
 without matching catalog coverage and status.
 
 ## Registration status
 
 Registered inventory surfaces render a real public constructor and invoke a
 descriptor-backed method when that descriptor exposes one. `Breadcrumb` and
-`StatusBar` are constructor-only public descriptors. Deferred surfaces render
-every checked surface covered by their route, with the inventory category and
-reason from `stories/status.js`; the verifier checks that projection against the
-inventory. This keeps a missing binding visible without adding a private Rust
-host module.
+`StatusBar` are constructor-only public descriptors. The verifier checks the
+status projection against the inventory, so a missing binding cannot be hidden
+by an unreviewed third status.
 
 `NativeMenuTrigger` provides the registered native-menu surface used by the
 JavaScript story under the inventory's `platform-integration` category.

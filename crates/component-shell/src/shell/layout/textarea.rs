@@ -75,9 +75,9 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_methods(vec![
             MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))).with_documentation("Sets the common disabled state."),
             bool_method("Textarea", "appearance", "Sets the corresponding native textarea presentation or editing policy.", Op::Appearance), bool_method("Textarea", "bordered", "Sets the corresponding native textarea presentation or editing policy.", Op::Bordered), bool_method("Textarea", "readonly", "Sets the corresponding native textarea presentation or editing policy.", Op::Readonly),
-            MethodDescriptor::new("ariaLabel", vec![ArgumentDescriptor::new("label", ArgumentSchema::String)], |args| match args {
+            MethodDescriptor::new("aria_label", vec![ArgumentDescriptor::new("label", ArgumentSchema::String)], |args| match args {
                 [ComponentArgument::String(value)] if !value.trim().is_empty() => Ok(ComponentPayload::new(Op::AriaLabel(value.clone()))),
-                _ => Err("Textarea.ariaLabel expects non-empty text".into()),
+                _ => Err("Textarea.aria_label expects non-empty text".into()),
             }).with_documentation("Sets the accessibility label."),
         ])
 .with_documentation("A retained native multi-line text editor. Shell style and common disabled state are honored; children are rejected."))?;

@@ -106,12 +106,12 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     },
                 ),
                 unary(
-                    "accessibilityLabel",
+                    "accessibility_label",
                     ArgumentSchema::String,
                     "Sets the accessible name.",
                     |arguments| match arguments {
                         ComponentArgument::String(value) => Ok(ProgressOp::Label(value.clone())),
-                        _ => Err("Progress.accessibilityLabel(label) expects a string".into()),
+                        _ => Err("Progress.accessibility_label(label) expects a string".into()),
                     },
                 ),
                 unary(

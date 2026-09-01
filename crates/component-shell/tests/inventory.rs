@@ -64,17 +64,8 @@ fn inventory_entries_have_a_registration_or_a_reason() {
                         assert!(!state.role.is_empty(), "state role cannot be empty");
                     }
                 }
-                Some(Registration::Deferred {
-                    target,
-                    category,
-                    reason,
-                }) => {
-                    assert!(!target.is_empty(), "deferred target cannot be empty");
-                    assert!(!category.is_empty(), "deferred category cannot be empty");
-                    assert!(!reason.is_empty(), "deferred reason cannot be empty");
-                }
                 None => panic!(
-                    "{}:{} needs an explicit registered or deferred status",
+                    "{}:{} needs an explicit registered status",
                     entry.source, entry.name
                 ),
             },
@@ -210,11 +201,6 @@ enum Registration {
         related: Vec<RelatedRegistration>,
         states: Vec<StateRegistration>,
     },
-    Deferred {
-        target: String,
-        category: String,
-        reason: String,
-    },
 }
 
 struct RelatedRegistration {
@@ -305,20 +291,6 @@ impl Inventory {
                                     role: state["role"].as_str().expect("state role").to_owned(),
                                 })
                                 .collect(),
-                        },
-                        "deferred" => Registration::Deferred {
-                            target: registration["target"]
-                                .as_str()
-                                .expect("deferred target")
-                                .to_owned(),
-                            category: registration["category"]
-                                .as_str()
-                                .expect("deferred category")
-                                .to_owned(),
-                            reason: registration["reason"]
-                                .as_str()
-                                .expect("deferred reason")
-                                .to_owned(),
                         },
                         other => panic!("unknown registration status {other}"),
                     }

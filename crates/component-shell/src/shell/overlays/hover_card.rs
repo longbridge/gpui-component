@@ -40,7 +40,7 @@ fn trigger_argument(operations: &[HoverCardOp]) -> anyhow::Result<&ComponentArgu
             HoverCardOp::Trigger(argument) => Some(argument),
             _ => None,
         })
-        .ok_or_else(|| anyhow::anyhow!("HoverCard requires triggerElement(element)"))
+        .ok_or_else(|| anyhow::anyhow!("HoverCard requires trigger_element(element)"))
 }
 
 fn non_empty_id(id: &str) -> Result<String, String> {
@@ -82,7 +82,7 @@ impl ComponentMaterializer for HoverCardMaterializer {
                     let callback = request.resolve_callback(argument)?;
                     card.on_open_change(move |open, window, cx| {
                         callback.invoke_and_report_with(
-                            "HoverCard.onOpenChange callback failed",
+                            "HoverCard.on_open_change callback failed",
                             &[ComponentCallbackArgument::Boolean(*open)],
                             window,
                             cx,
@@ -115,17 +115,17 @@ fn duration_operation(
 
 fn anchor_operation(arguments: &[ComponentArgument]) -> Result<ComponentPayload, String> {
     let [ComponentArgument::Enum(anchor)] = arguments else {
-        return Err("HoverCard.cardAnchor(anchor) expects an anchor literal".into());
+        return Err("HoverCard.card_anchor(anchor) expects an anchor literal".into());
     };
     let anchor = match anchor.as_str() {
-        "topLeft" => Anchor::TopLeft,
-        "topCenter" => Anchor::TopCenter,
-        "topRight" => Anchor::TopRight,
-        "bottomLeft" => Anchor::BottomLeft,
-        "bottomCenter" => Anchor::BottomCenter,
-        "bottomRight" => Anchor::BottomRight,
-        "leftCenter" => Anchor::LeftCenter,
-        "rightCenter" => Anchor::RightCenter,
+        "top_left" => Anchor::TopLeft,
+        "top_center" => Anchor::TopCenter,
+        "top_right" => Anchor::TopRight,
+        "bottom_left" => Anchor::BottomLeft,
+        "bottom_center" => Anchor::BottomCenter,
+        "bottom_right" => Anchor::BottomRight,
+        "left_center" => Anchor::LeftCenter,
+        "right_center" => Anchor::RightCenter,
         _ => return Err(format!("unsupported HoverCard anchor `{anchor}`")),
     };
     Ok(ComponentPayload::new(HoverCardOp::Anchor(anchor)))
@@ -136,7 +136,7 @@ fn open_change_operation(arguments: &[ComponentArgument]) -> Result<ComponentPay
         [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
             HoverCardOp::OnOpenChange(argument.clone()),
         )),
-        _ => Err("HoverCard.onOpenChange(callback) expects a callback".into()),
+        _ => Err("HoverCard.on_open_change(callback) expects a callback".into()),
     }
 }
 
@@ -157,51 +157,51 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             )])
             .with_methods(vec![
                 MethodDescriptor::new(
-                    "triggerElement",
+                    "trigger_element",
                     vec![ArgumentDescriptor::new("element", ArgumentSchema::Element)],
                     |arguments| match arguments {
                         [argument @ ComponentArgument::Element(_)] => Ok(ComponentPayload::new(
                             HoverCardOp::Trigger(argument.clone()),
                         )),
-                        _ => Err("HoverCard.triggerElement(element) expects an element".into()),
+                        _ => Err("HoverCard.trigger_element(element) expects an element".into()),
                     },
                 )
                 .with_documentation("Sets the element that owns the hover interaction."),
                 MethodDescriptor::new(
-                    "cardAnchor",
+                    "card_anchor",
                     vec![ArgumentDescriptor::new(
                         "anchor",
                         ArgumentSchema::Enum(&[
-                            "topLeft",
-                            "topCenter",
-                            "topRight",
-                            "bottomLeft",
-                            "bottomCenter",
-                            "bottomRight",
-                            "leftCenter",
-                            "rightCenter",
+                            "top_left",
+                            "top_center",
+                            "top_right",
+                            "bottom_left",
+                            "bottom_center",
+                            "bottom_right",
+                            "left_center",
+                            "right_center",
                         ]),
                     )],
                     anchor_operation,
                 )
                 .with_documentation("Positions the card relative to its trigger."),
                 MethodDescriptor::new(
-                    "openDelay",
+                    "open_delay",
                     vec![ArgumentDescriptor::new(
                         "milliseconds",
                         ArgumentSchema::Number,
                     )],
-                    |arguments| duration_operation("openDelay", arguments, HoverCardOp::OpenDelay),
+                    |arguments| duration_operation("open_delay", arguments, HoverCardOp::OpenDelay),
                 )
                 .with_documentation("Sets the hover-open delay in milliseconds (0–60000)."),
                 MethodDescriptor::new(
-                    "closeDelay",
+                    "close_delay",
                     vec![ArgumentDescriptor::new(
                         "milliseconds",
                         ArgumentSchema::Number,
                     )],
                     |arguments| {
-                        duration_operation("closeDelay", arguments, HoverCardOp::CloseDelay)
+                        duration_operation("close_delay", arguments, HoverCardOp::CloseDelay)
                     },
                 )
                 .with_documentation("Sets the hover-close delay in milliseconds (0–60000)."),
@@ -220,7 +220,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Controls the component's popover surface styling."),
                 MethodDescriptor::new(
-                    "onOpenChange",
+                    "on_open_change",
                     vec![ArgumentDescriptor::new(
                         "callback",
                         ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
@@ -230,7 +230,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 .with_documentation("Runs when pointer interaction opens or closes the card."),
             ])
             .with_documentation(
-                "A hover-triggered card. Supply triggerElement(element) and lazy content(element).",
+                "A hover-triggered card. Supply trigger_element(element) and lazy content(element).",
             ),
     )?;
     Ok(())
@@ -245,7 +245,7 @@ mod tests {
         for value in [f64::NAN, -1.0, 60_001.0] {
             assert!(
                 duration_operation(
-                    "openDelay",
+                    "open_delay",
                     &[ComponentArgument::Number(value)],
                     HoverCardOp::OpenDelay,
                 )
@@ -253,7 +253,7 @@ mod tests {
             );
         }
         let payload = duration_operation(
-            "openDelay",
+            "open_delay",
             &[ComponentArgument::Number(250.0)],
             HoverCardOp::OpenDelay,
         )
@@ -317,7 +317,7 @@ mod tests {
     fn materializer_requires_the_trigger_element_operation() {
         assert_eq!(
             trigger_argument(&[]).unwrap_err().to_string(),
-            "HoverCard requires triggerElement(element)"
+            "HoverCard requires trigger_element(element)"
         );
         let operations = [HoverCardOp::Trigger(ComponentArgument::Element(7))];
         assert_eq!(

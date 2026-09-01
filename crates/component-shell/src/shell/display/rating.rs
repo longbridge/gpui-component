@@ -78,7 +78,7 @@ impl ComponentMaterializer for RatingMaterializer {
             let callback = request.resolve_callback(&argument)?;
             component = component.on_click(move |value, window, cx| {
                 callback.invoke_and_report_with(
-                    "Rating.onChange callback failed",
+                    "Rating.on_change callback failed",
                     &[ComponentCallbackArgument::Number(*value as f64)],
                     window,
                     cx,
@@ -139,16 +139,16 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 ),
                 count_method("max", "Sets the maximum number of stars.", RatingOp::Max),
                 MethodDescriptor::new(
-                    "onChange",
+                    "on_change",
                     vec![ArgumentDescriptor::new(
-                        "onChange",
+                        "on_change",
                         ArgumentSchema::Callback("(value: number, cx: Context) => void"),
                     )],
                     |arguments| match arguments {
                         [argument @ ComponentArgument::Callback(_)] => {
                             Ok(ComponentPayload::new(RatingOp::OnChange(argument.clone())))
                         }
-                        _ => Err("Rating.onChange expects one callback".into()),
+                        _ => Err("Rating.on_change expects one callback".into()),
                     },
                 )
                 .with_documentation(

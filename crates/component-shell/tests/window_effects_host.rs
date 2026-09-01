@@ -181,9 +181,9 @@ export default class App extends View {
  init() { this.errors = 0; this.closed = 0; }
  render() { const report = (_message, cx) => { this.errors += 1; cx.notify(); };
   return div().v_flex().gap(2)
-   .child(new Dialog("dialog", "Open dialog", report).w(180).title("Native dialog").onCancel(cx => { this.closed += 1; cx.notify(); }).onClose(cx => { this.closed += 1; cx.notify(); }).content(new EffectMarker("dialog-lazy")))
-   .child(new Sheet("sheet", "Open sheet", report).w(180).title("Native sheet").placement("left").onClose(cx => { this.closed += 1; cx.notify(); }).content(new EffectMarker("sheet-lazy")))
-   .child(new AlertDialog("alert", "Open alert", report).w(180).title("Native alert").description("Closed contract").showCancel(true).onCancel(cx => { this.closed += 1; cx.notify(); }).onClose(cx => { this.closed += 1; cx.notify(); }))
+   .child(new Dialog("dialog", "Open dialog", report).w(180).title("Native dialog").on_cancel(cx => { this.closed += 1; cx.notify(); }).on_close(cx => { this.closed += 1; cx.notify(); }).content(new EffectMarker("dialog-lazy")))
+   .child(new Sheet("sheet", "Open sheet", report).w(180).title("Native sheet").placement("left").on_close(cx => { this.closed += 1; cx.notify(); }).content(new EffectMarker("sheet-lazy")))
+   .child(new AlertDialog("alert", "Open alert", report).w(180).title("Native alert").description("Closed contract").show_cancel(true).on_cancel(cx => { this.closed += 1; cx.notify(); }).on_close(cx => { this.closed += 1; cx.notify(); }))
    .child(new Notification("note", "Notify", report).w(180).title("Saved").message("Native notification").type("success").autohide(false))
    .child(new Dialog("fail-dialog", "Open failing dialog", report).w(180).content(new EffectMarker("fail")))
    .child(`Errors:${this.errors}`).child(`Closed:${this.closed}`);

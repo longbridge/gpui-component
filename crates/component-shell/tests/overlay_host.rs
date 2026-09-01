@@ -87,14 +87,14 @@ import { HoverCard } from "gpui-component";
 export default class OverlayHost extends View {
   render() {
     return new HoverCard("profile")
-      .triggerElement(div().child("Profile"))
+      .trigger_element(div().child("Profile"))
       .content(div().child("Ada Lovelace"))
       .p(2)
-      .cardAnchor("bottomCenter")
-      .openDelay(125)
-      .closeDelay(250)
+      .card_anchor("bottom_center")
+      .open_delay(125)
+      .close_delay(250)
       .appearance(true)
-      .onOpenChange(open => { this.lastOpen = open; });
+      .on_open_change(open => { this.last_open = open; });
   }
 }
 "#,
@@ -108,14 +108,14 @@ export default class OverlayHost extends View {
     });
     for contract in [
         "HoverCard",
-        ":triggerElement(registered)",
+        ":trigger_element(registered)",
         "Ada Lovelace",
         ".p[Number(2.0)]",
-        ":cardAnchor(registered)",
-        ":openDelay(registered)",
-        ":closeDelay(registered)",
+        ":card_anchor(registered)",
+        ":open_delay(registered)",
+        ":close_delay(registered)",
         ":appearance(registered)",
-        ":onOpenChange(registered)",
+        ":on_open_change(registered)",
     ] {
         assert!(tree.contains(contract), "missing {contract:?} in {tree}");
     }

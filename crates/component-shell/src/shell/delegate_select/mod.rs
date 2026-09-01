@@ -177,7 +177,7 @@ impl RenderOnce for BoundSelect {
                             test_probe::selected(value.clone());
                             let callback = event_callback.borrow().clone();
                             callback.invoke_and_report_with(
-                                "Select.onSelect",
+                                "Select.on_select",
                                 &[ComponentCallbackArgument::String(value.clone())],
                                 window,
                                 cx,
@@ -284,8 +284,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_constructors(vec![ConstructorDescriptor::new("Select", vec![
             ArgumentDescriptor::new("id", ArgumentSchema::String),
             ArgumentDescriptor::new("rows", ArgumentSchema::Callback("() => readonly { id: string; label: string; disabled?: boolean }[]")),
-            ArgumentDescriptor::new("renderRow", ArgumentSchema::Callback("(row: unknown) => Element | null")),
-            ArgumentDescriptor::new("onSelect", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
+            ArgumentDescriptor::new("render_row", ArgumentSchema::Callback("(row: unknown) => Element | null")),
+            ArgumentDescriptor::new("on_select", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
         ], |args| match args {
             [ComponentArgument::String(id), rows @ ComponentArgument::Callback(_), render_row @ ComponentArgument::Callback(_), on_select @ ComponentArgument::Callback(_)] if !id.trim().is_empty() => Ok(ComponentPayload::new(Payload { id:id.clone(), rows:rows.clone(), render_row:render_row.clone(), on_select:on_select.clone() })),
             _ => Err("Select expects id, rows callback, row renderer, and selection callback".into()),

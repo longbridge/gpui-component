@@ -17,7 +17,7 @@ pub(super) enum CommonOp {
     Change(ComponentArgument),
 }
 
-/// A `onChange(checked, cx)` method for a two-state control.
+/// A `on_change(checked, cx)` method for a two-state control.
 ///
 /// Without one the control is set-only: the script owns `checked`, and a click
 /// has nowhere to report to, so the control looks interactive and never
@@ -25,16 +25,16 @@ pub(super) enum CommonOp {
 /// once.
 pub(super) fn change_method(component: &'static str) -> MethodDescriptor {
     MethodDescriptor::new(
-        "onChange",
+        "on_change",
         vec![ArgumentDescriptor::new(
-            "onChange",
+            "on_change",
             ArgumentSchema::Callback("(checked: boolean, cx: Context) => void"),
         )],
         move |arguments| match arguments {
             [argument @ ComponentArgument::Callback(_)] => {
                 Ok(ComponentPayload::new(CommonOp::Change(argument.clone())))
             }
-            _ => Err(format!("{component}.onChange expects one callback")),
+            _ => Err(format!("{component}.on_change expects one callback")),
         },
     )
     .with_documentation("Reports the new checked state after a click.")

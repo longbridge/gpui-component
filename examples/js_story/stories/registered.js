@@ -8,12 +8,14 @@ import {
   AccordionItem,
   Alert,
   AlertDialog,
+  Attachment,
   ErrorAlert,
   Avatar,
   AreaChart,
   BarChart,
   Badge,
   Breadcrumb,
+  Bubble,
   Button,
   Calendar,
   CalendarState,
@@ -56,6 +58,10 @@ import {
   MenuBar,
   MenuItem,
   MenuSeparator,
+  Marker,
+  Message,
+  MessageScroller,
+  MessageScrollerState,
   NumberInput,
   NativeMenuItem,
   NativeMenuSeparator,
@@ -79,6 +85,7 @@ import {
   Separator,
   Select,
   Sheet,
+  ShimmerText,
   SettingGroup,
   SettingItem,
   SettingPage,
@@ -152,7 +159,7 @@ const setState = (key, value, cx) => {
 /**
  * Whether an accordion section is open.
  *
- * `Accordion.onToggle` reports the whole open set, and each `AccordionItem`
+ * `Accordion.on_toggle` reports the whole open set, and each `AccordionItem`
  * asks about itself.
  *
  * @param {string} key @param {number[]} fallback @param {number} index
@@ -174,6 +181,112 @@ const accordionOpen = (key, fallback, index) =>
  */
 export function registeredExamples(surface) {
   switch (surface) {
+    case "Attachment":
+      return [
+        {
+          label: "Pending upload metadata",
+          element: asElement(
+            new Attachment("story-attachment")
+              .status("pending")
+              .child("design-notes.pdf · 2.4 MB"),
+          ),
+        },
+        {
+          label: "Failed upload",
+          element: asElement(
+            new Attachment("story-attachment-failed")
+              .status("failed")
+              .child("Unable to upload screenshot.png"),
+          ),
+        },
+      ];
+    case "Bubble":
+      return [
+        {
+          label: "Incoming secondary bubble",
+          element: asElement(
+            new Bubble()
+              .alignment("start")
+              .variant("secondary")
+              .child("Can you review the latest draft?"),
+          ),
+        },
+        {
+          label: "Outgoing filled bubble",
+          element: asElement(
+            new Bubble()
+              .alignment("end")
+              .variant("filled")
+              .child("Yes — I’ll annotate it now."),
+          ),
+        },
+      ];
+    case "Marker":
+      return [
+        {
+          label: "Streaming status",
+          element: asElement(
+            new Marker("story-marker")
+              .variant("separator")
+              .loading(true)
+              .loading_style("shimmer")
+              .child("Generating response"),
+          ),
+        },
+      ];
+    case "Message":
+      return [
+        {
+          label: "Incoming message content",
+          element: asElement(
+            new Message().alignment("start").child("The build completed successfully."),
+          ),
+        },
+        {
+          label: "Outgoing message content",
+          element: asElement(
+            new Message().alignment("end").child("Ship it."),
+          ),
+        },
+      ];
+    case "MessageScroller": {
+      const messages = ["First message", "A longer second message", "Latest message"];
+      return [
+        {
+          label: "Virtualized transcript following its tail",
+          element: asElement(
+            new MessageScroller(
+              "story-message-scroller",
+              MessageScrollerState(messages.length),
+              (index) => div().w_full().py(8).child(messages[index]),
+            )
+              .jump_button_label("Jump to latest")
+              .h(180),
+          ),
+        },
+      ];
+    }
+    case "ShimmerText":
+      return [
+        {
+          label: "Looping theme-aware shimmer",
+          element: asElement(
+            new ShimmerText("Thinking…")
+              .id("story-shimmer")
+              .duration_ms(1600)
+              .spread(0.35),
+          ),
+        },
+        {
+          label: "Reverse one-shot shimmer",
+          element: asElement(
+            new ShimmerText("Loading context")
+              .id("story-shimmer-reverse")
+              .reverse(true)
+              .once(true),
+          ),
+        },
+      ];
     // ---------------------------------------------------------------- actions
     case "Button":
       return [
@@ -218,8 +331,8 @@ export function registeredExamples(surface) {
               asElement(
                 new DropdownButton("dd-actions", "Actions")
                   .variant("primary")
-                  .menuItem("Open", (_cx) => {})
-                  .menuItem("Duplicate", (_cx) => {}),
+                  .menu_item("Open", (_cx) => {})
+                  .menu_item("Duplicate", (_cx) => {}),
               ),
             ),
         },
@@ -233,29 +346,29 @@ export function registeredExamples(surface) {
                 new DropdownButton("dd-secondary", "Secondary")
                   .variant("secondary")
                   .size("small")
-                  .menuItem("Rename", (_cx) => {}),
+                  .menu_item("Rename", (_cx) => {}),
               ),
             )
             .child(
               asElement(
                 new DropdownButton("dd-danger", "Delete")
                   .variant("danger")
-                  .menuItem("Delete forever", (_cx) => {}),
+                  .menu_item("Delete forever", (_cx) => {}),
               ),
             )
             .child(
               asElement(
                 new DropdownButton("dd-outline", "More")
                   .outline()
-                  .menuAnchor("bottomRight")
-                  .menuItem("Export", (_cx) => {}),
+                  .menu_anchor("bottom_right")
+                  .menu_item("Export", (_cx) => {}),
               ),
             )
             .child(
               asElement(
                 new DropdownButton("dd-disabled", "Unavailable")
                   .disabled(true)
-                  .menuItem("Nothing", (_cx) => {}),
+                  .menu_item("Nothing", (_cx) => {}),
               ),
             ),
         },
@@ -285,7 +398,7 @@ export function registeredExamples(surface) {
                 new Toggle("toggle-off")
                   .label("Favorite")
                   .checked(/** @type {boolean} */ (state("toggle-off", false)))
-                  .onChange((checked, cx) => setState("toggle-off", checked, cx)),
+                  .on_change((checked, cx) => setState("toggle-off", checked, cx)),
               ),
             )
             .child(
@@ -293,7 +406,7 @@ export function registeredExamples(surface) {
                 new Toggle("toggle-on")
                   .label("Pin")
                   .checked(/** @type {boolean} */ (state("toggle-on", true)))
-                  .onChange((checked, cx) => setState("toggle-on", checked, cx)),
+                  .on_change((checked, cx) => setState("toggle-on", checked, cx)),
               ),
             ),
         },
@@ -326,7 +439,7 @@ export function registeredExamples(surface) {
             new Accordion("acc-single")
               .bordered(true)
               .multiple(false)
-              .onToggle((indices, cx) => setState("acc-single", indices, cx))
+              .on_toggle((indices, cx) => setState("acc-single", indices, cx))
               .child(
                 new AccordionItem()
                   .title(new Label("Appearance"))
@@ -346,7 +459,7 @@ export function registeredExamples(surface) {
           element: asElement(
             new Accordion("acc-multiple")
               .multiple(true)
-              .onToggle((indices, cx) => setState("acc-multiple", indices, cx))
+              .on_toggle((indices, cx) => setState("acc-multiple", indices, cx))
               .child(
                 new AccordionItem()
                   .title(new Label("Shipping"))
@@ -388,7 +501,7 @@ export function registeredExamples(surface) {
               asElement(
                 new Collapsible()
                   .open(/** @type {boolean} */ (state("collapsible", true)))
-                  .motionId("story-collapsible")
+                  .motion_id("story-collapsible")
                   .content(
                     asElement(new Text("Shipped 2 days ago · tracking 1Z999AA1.")),
                   ),
@@ -404,8 +517,8 @@ export function registeredExamples(surface) {
           label: "Editable, and disabled",
           element: v_flex()
             .gap(8)
-            .child(asElement(new Input(InputState()).ariaLabel("Project name")))
-            .child(asElement(new Input(InputState()).ariaLabel("Locked field").disabled(true))),
+            .child(asElement(new Input(InputState()).aria_label("Project name")))
+            .child(asElement(new Input(InputState()).aria_label("Locked field").disabled(true))),
         },
       ];
     case "NumberInput":
@@ -431,7 +544,7 @@ export function registeredExamples(surface) {
         {
           label: "Bordered, fixed height",
           element: asElement(
-            new Textarea(TextareaState()).ariaLabel("Notes").bordered(true).h(120),
+            new Textarea(TextareaState()).aria_label("Notes").bordered(true).h(120),
           ),
         },
       ];
@@ -447,7 +560,7 @@ export function registeredExamples(surface) {
                 new Checkbox("cb-off")
                   .label("Remember me")
                   .checked(/** @type {boolean} */ (state("cb-off", false)))
-                  .onChange((checked, cx) => setState("cb-off", checked, cx)),
+                  .on_change((checked, cx) => setState("cb-off", checked, cx)),
               ),
             )
             .child(
@@ -455,7 +568,7 @@ export function registeredExamples(surface) {
                 new Checkbox("cb-on")
                   .label("Sync devices")
                   .checked(/** @type {boolean} */ (state("cb-on", true)))
-                  .onChange((checked, cx) => setState("cb-on", checked, cx)),
+                  .on_change((checked, cx) => setState("cb-on", checked, cx)),
               ),
             )
             .child(
@@ -477,7 +590,7 @@ export function registeredExamples(surface) {
                 new Switch("sw-off")
                   .label("Notifications")
                   .checked(/** @type {boolean} */ (state("sw-off", false)))
-                  .onChange((checked, cx) => setState("sw-off", checked, cx)),
+                  .on_change((checked, cx) => setState("sw-off", checked, cx)),
               ),
             )
             .child(
@@ -485,7 +598,7 @@ export function registeredExamples(surface) {
                 new Switch("sw-on")
                   .label("Auto-update")
                   .checked(/** @type {boolean} */ (state("sw-on", true)))
-                  .onChange((checked, cx) => setState("sw-on", checked, cx)),
+                  .on_change((checked, cx) => setState("sw-on", checked, cx)),
               ),
             )
             .child(asElement(new Switch("sw-small").label("Compact").size("small"))),
@@ -497,8 +610,8 @@ export function registeredExamples(surface) {
           label: "Pick one — the group reports the new index",
           element: asElement(
             new RadioGroup("layout-density")
-              .selectedIndex(/** @type {number} */ (state("radio-group", 1)))
-              .onChange((index, cx) => setState("radio-group", index, cx))
+              .selected_index(/** @type {number} */ (state("radio-group", 1)))
+              .on_change((index, cx) => setState("radio-group", index, cx))
               .child(asElement(new Radio("comfortable").label("Comfortable")))
               .child(asElement(new Radio("compact").label("Compact")))
               .child(asElement(new Radio("dense").label("Dense"))),
@@ -515,15 +628,15 @@ export function registeredExamples(surface) {
                   .label("Subscribe")
                   .size("small")
                   .checked(/** @type {boolean} */ (state("radio-standalone", false)))
-                  .onChange((checked, cx) => setState("radio-standalone", checked, cx)),
+                  .on_change((checked, cx) => setState("radio-standalone", checked, cx)),
               ),
             )
             .child(
               asElement(
                 new Radio("radio-skipped")
                   .label("Skipped by Tab")
-                  .accessibilityLabel("Not a tab stop")
-                  .tabStop(false),
+                  .accessibility_label("Not a tab stop")
+                  .tab_stop(false),
               ),
             ),
         },
@@ -554,7 +667,7 @@ export function registeredExamples(surface) {
           element: asElement(
             new ColorPicker(ColorPickerState())
               .label("Accent color")
-              .accessibilityLabel("Choose an accent color"),
+              .accessibility_label("Choose an accent color"),
           ),
         },
       ];
@@ -573,7 +686,7 @@ export function registeredExamples(surface) {
         },
         {
           label: "Two months side by side",
-          element: asElement(new Calendar(CalendarState()).numberOfMonths(2)),
+          element: asElement(new Calendar(CalendarState()).number_of_months(2)),
         },
       ];
 
@@ -675,7 +788,7 @@ export function registeredExamples(surface) {
           element: h_flex()
             .gap(16)
             .items_center()
-            .child(asElement(new Spinner().icon("loaderCircle").color("blue-600")))
+            .child(asElement(new Spinner().icon("loader_circle").color("blue-600")))
             .child(asElement(new Spinner().ease("linear"))),
         },
       ];
@@ -729,7 +842,7 @@ export function registeredExamples(surface) {
             .gap(8)
             .items_center()
             .child(asElement(new Tag().variant("info").outline().child("Draft")))
-            .child(asElement(new Tag().variant("secondary").roundedFull().child("Beta"))),
+            .child(asElement(new Tag().variant("secondary").rounded_full().child("Beta"))),
         },
       ];
     case "Avatar":
@@ -778,14 +891,14 @@ export function registeredExamples(surface) {
           element: v_flex()
             .w_full()
             .gap(12)
-            .child(asElement(new Progress("p-25").value(25).accessibilityLabel("25 percent")))
-            .child(asElement(new Progress("p-64").value(64).accessibilityLabel("64 percent")))
-            .child(asElement(new Progress("p-100").value(100).accessibilityLabel("Complete"))),
+            .child(asElement(new Progress("p-25").value(25).accessibility_label("25 percent")))
+            .child(asElement(new Progress("p-64").value(64).accessibility_label("64 percent")))
+            .child(asElement(new Progress("p-100").value(100).accessibility_label("Complete"))),
         },
         {
           label: "Indeterminate, while work is in flight",
           element: asElement(
-            new Progress("p-loading").loading(true).accessibilityLabel("Uploading"),
+            new Progress("p-loading").loading(true).accessibility_label("Uploading"),
           ),
         },
       ];
@@ -801,7 +914,7 @@ export function registeredExamples(surface) {
                   .value(/** @type {number} */ (state("rating-5", 4)))
                   .max(5)
                   .color("amber-500")
-                  .onChange((value, cx) => setState("rating-5", value, cx)),
+                  .on_change((value, cx) => setState("rating-5", value, cx)),
               ),
             )
             .child(
@@ -809,7 +922,7 @@ export function registeredExamples(surface) {
                 new Rating("rating-10")
                   .value(/** @type {number} */ (state("rating-10", 7)))
                   .max(10)
-                  .onChange((value, cx) => setState("rating-10", value, cx)),
+                  .on_change((value, cx) => setState("rating-10", value, cx)),
               ),
             ),
         },
@@ -884,19 +997,19 @@ export function registeredExamples(surface) {
           label: "Page 2 of 5",
           element: asElement(
             new Pagination("pages")
-              .currentPage(/** @type {number} */ (state("pages", 2)))
-              .onChange((page, cx) => setState("pages", page, cx))
-              .totalPages(5)
-              .visiblePages(5),
+              .current_page(/** @type {number} */ (state("pages", 2)))
+              .on_change((page, cx) => setState("pages", page, cx))
+              .total_pages(5)
+              .visible_pages(5),
           ),
         },
         {
           label: "Compact, for a narrow toolbar",
           element: asElement(
             new Pagination("pages-compact")
-              .currentPage(/** @type {number} */ (state("pages-compact", 4)))
-              .onChange((page, cx) => setState("pages-compact", page, cx))
-              .totalPages(20)
+              .current_page(/** @type {number} */ (state("pages-compact", 4)))
+              .on_change((page, cx) => setState("pages-compact", page, cx))
+              .total_pages(20)
               .compact(),
           ),
         },
@@ -907,9 +1020,9 @@ export function registeredExamples(surface) {
           label: "Horizontal, on the second step",
           element: asElement(
             new Stepper("onboarding")
-              .selectedIndex(/** @type {number} */ (state("stepper-h", 1)))
-              .onChange((index, cx) => setState("stepper-h", index, cx))
-              .textCenter(true)
+              .selected_index(/** @type {number} */ (state("stepper-h", 1)))
+              .on_change((index, cx) => setState("stepper-h", index, cx))
+              .text_center(true)
               .child(new StepperItem().child("Account"))
               .child(new StepperItem().child("Profile"))
               .child(new StepperItem().child("Finish")),
@@ -919,8 +1032,8 @@ export function registeredExamples(surface) {
           label: "Vertical",
           element: asElement(
             new Stepper("onboarding-vertical")
-              .selectedIndex(/** @type {number} */ (state("stepper-v", 0)))
-              .onChange((index, cx) => setState("stepper-v", index, cx))
+              .selected_index(/** @type {number} */ (state("stepper-v", 0)))
+              .on_change((index, cx) => setState("stepper-v", index, cx))
               .vertical(true)
               .children(
                 [
@@ -961,8 +1074,8 @@ export function registeredExamples(surface) {
           element: asElement(
             new TabBar("profile-tabs")
               .variant("underline")
-              .selectedIndex(/** @type {number} */ (state("tabs-underline", 0)))
-              .onChange((index, cx) => setState("tabs-underline", index, cx))
+              .selected_index(/** @type {number} */ (state("tabs-underline", 0)))
+              .on_change((index, cx) => setState("tabs-underline", index, cx))
               .child(new Tab().label("Profile"))
               .child(new Tab().label("Security"))
               .child(new Tab().label("Billing")),
@@ -973,8 +1086,8 @@ export function registeredExamples(surface) {
           element: asElement(
             new TabBar("view-tabs")
               .variant("segmented")
-              .selectedIndex(/** @type {number} */ (state("tabs-segmented", 1)))
-              .onChange((index, cx) => setState("tabs-segmented", index, cx))
+              .selected_index(/** @type {number} */ (state("tabs-segmented", 1)))
+              .on_change((index, cx) => setState("tabs-segmented", index, cx))
               .child(new Tab().label("List"))
               .child(new Tab().label("Board")),
           ),
@@ -1010,13 +1123,13 @@ export function registeredExamples(surface) {
           label: "Header, body, footer and caption",
           element: asElement(
             new Table()
-              .accessibilityLabel("Team members")
+              .accessibility_label("Team members")
               .child(new TableCaption().child("Current project members"))
               .child(
                 new TableHeader().child(
                   new TableRow()
                     .child(new TableHead().child("Name"))
-                    .child(new TableHead().textRight().child("Role")),
+                    .child(new TableHead().text_right().child("Role")),
                 ),
               )
               .child(
@@ -1024,17 +1137,17 @@ export function registeredExamples(surface) {
                   .child(
                     new TableRow()
                       .child(new TableCell().child("Ada Lovelace"))
-                      .child(new TableCell().textRight().child("Owner")),
+                      .child(new TableCell().text_right().child("Owner")),
                   )
                   .child(
                     new TableRow()
                       .child(new TableCell().child("Grace Hopper"))
-                      .child(new TableCell().textRight().child("Maintainer")),
+                      .child(new TableCell().text_right().child("Maintainer")),
                   ),
               )
               .child(
                 new TableFooter().child(
-                  new TableRow().child(new TableCell().colSpan(2).child("2 members")),
+                  new TableRow().child(new TableCell().col_span(2).child("2 members")),
                 ),
               ),
           ),
@@ -1051,12 +1164,12 @@ export function registeredExamples(surface) {
                 new Field()
                   .label("Account name")
                   .required(true)
-                  .child(new Input(InputState()).ariaLabel("Account name")),
+                  .child(new Input(InputState()).aria_label("Account name")),
               )
               .child(
                 new Field()
                   .label("Region")
-                  .child(new Input(InputState()).ariaLabel("Region")),
+                  .child(new Input(InputState()).aria_label("Region")),
               ),
           ),
         },
@@ -1065,19 +1178,19 @@ export function registeredExamples(surface) {
           element: asElement(
             new Form()
               .columns(1)
-              .labelWidth(120)
+              .label_width(120)
               .size("small")
               .child(
                 new Field()
                   .label("Endpoint")
                   .description("Where requests are sent.")
-                  .child(new Input(InputState()).ariaLabel("Endpoint")),
+                  .child(new Input(InputState()).aria_label("Endpoint")),
               )
               .child(
                 new Field()
                   .label("Token")
                   .required(true)
-                  .child(new Input(InputState()).ariaLabel("Token")),
+                  .child(new Input(InputState()).aria_label("Token")),
               ),
           ),
         },
@@ -1097,7 +1210,7 @@ export function registeredExamples(surface) {
           label: "Open on first render",
           element: asElement(
             new Popover("popover-open", "Already open")
-              .defaultOpen(true)
+              .default_open(true)
               .content(asElement(new Text("Shown without a click."))),
           ),
         },
@@ -1108,11 +1221,11 @@ export function registeredExamples(surface) {
             .child(
               asElement(
                 new Popover("popover-controlled", "Controlled")
-                  .cardAnchor("topLeft")
+                  .card_anchor("top_left")
                   .appearance(true)
-                  .overlayClosable(false)
+                  .overlay_closable(false)
                   .open(/** @type {boolean} */ (state("popover-open", false)))
-                  .onOpenChange((open, cx) => setState("popover-open", open, cx))
+                  .on_open_change((open, cx) => setState("popover-open", open, cx))
                   .content(asElement(new Text("The script owns this one."))),
               ),
             )
@@ -1129,8 +1242,8 @@ export function registeredExamples(surface) {
           label: "Reveals detail after a short hover",
           element: asElement(
             new HoverCard("hover-account")
-              .triggerElement(asElement(new Button("hover-trigger").label("Account help")))
-              .openDelay(250)
+              .trigger_element(asElement(new Button("hover-trigger").label("Account help")))
+              .open_delay(250)
               .content(asElement(new Text("Your account name is visible to collaborators."))),
           ),
         },
@@ -1141,14 +1254,14 @@ export function registeredExamples(surface) {
             .child(
               asElement(
                 new HoverCard("hover-anchored")
-                  .triggerElement(
+                  .trigger_element(
                     asElement(new Button("hover-anchored-trigger").label("Storage")),
                   )
-                  .cardAnchor("topLeft")
-                  .openDelay(120)
-                  .closeDelay(600)
+                  .card_anchor("top_left")
+                  .open_delay(120)
+                  .close_delay(600)
                   .appearance(true)
-                  .onOpenChange((open, cx) => setState("hover-open", open, cx))
+                  .on_open_change((open, cx) => setState("hover-open", open, cx))
                   .content(asElement(new Text("42 GB of 100 GB used."))),
               ),
             )
@@ -1184,9 +1297,9 @@ export function registeredExamples(surface) {
               asElement(
                 new Dialog("dialog-confirm", "Confirm something", (_message, _cx) => {})
                   .title("Confirm")
-                  .onOk((cx) => setState("dialog-outcome", "ok", cx))
-                  .onCancel((cx) => setState("dialog-outcome", "cancel", cx))
-                  .onClose((cx) => setState("dialog-outcome", "closed", cx))
+                  .on_ok((cx) => setState("dialog-outcome", "ok", cx))
+                  .on_cancel((cx) => setState("dialog-outcome", "cancel", cx))
+                  .on_close((cx) => setState("dialog-outcome", "closed", cx))
                   .content(asElement(new Text("Press a button and watch the line below."))),
               ),
             )
@@ -1205,7 +1318,7 @@ export function registeredExamples(surface) {
             new AlertDialog("alert-discard", "Discard changes", (_message, _cx) => {})
               .title("Discard changes?")
               .description("Unsaved changes will be lost.")
-              .showCancel(true),
+              .show_cancel(true),
           ),
         },
       ];
@@ -1330,7 +1443,7 @@ export function registeredExamples(surface) {
             )
               .placeholder("Choose an option")
               .searchable(true)
-              .searchPlaceholder("Filter options"),
+              .search_placeholder("Filter options"),
           ),
         },
         {
@@ -1382,7 +1495,7 @@ export function registeredExamples(surface) {
             )
               .stripe(true)
               .sortable(true)
-              .columnResizable(true)
+              .column_resizable(true)
               .h(180),
           ),
         },
@@ -1401,10 +1514,10 @@ export function registeredExamples(surface) {
                 ),
             )
               .bordered(true)
-              .rowHeader(true)
-              .rowSelectable(true)
-              .columnMovable(true)
-              .scrollbarVisible(true, false)
+              .row_header(true)
+              .row_selectable(true)
+              .column_movable(true)
+              .scrollbar_visible(true, false)
               .h(150),
           ),
         },
@@ -1417,7 +1530,7 @@ export function registeredExamples(surface) {
             new Command(CommandState())
               .placeholder("Type a command")
               .bordered(true)
-              .maxHeight(200)
+              .max_height(200)
               .child(
                 asElement(
                   new CommandGroup("Files")
@@ -1445,15 +1558,15 @@ export function registeredExamples(surface) {
                   .placeholder("Type to filter")
                   .searchable(true)
                   .filterable(true)
-                  .maxHeight(140)
-                  .onQuery((query, cx) => setState("command-query", query, cx))
-                  .onSelect((section, row, cx) =>
+                  .max_height(140)
+                  .on_query((query, cx) => setState("command-query", query, cx))
+                  .on_select((section, row, cx) =>
                     setState("command-at", `${section}:${row}`, cx),
                   )
-                  .onConfirm((section, row, cx) =>
+                  .on_confirm((section, row, cx) =>
                     setState("command-ran", `${section}:${row}`, cx),
                   )
-                  .onCancel((cx) => setState("command-ran", "cancelled", cx))
+                  .on_cancel((cx) => setState("command-ran", "cancelled", cx))
                   .child(
                     asElement(
                       new CommandGroup("Files")
@@ -1519,7 +1632,7 @@ export function registeredExamples(surface) {
           element: asElement(
             new Resizable("story-split")
               .axis("horizontal")
-              .crossSize(160)
+              .cross_size(160)
               .child(asElement(new ResizablePanel().size(160).child("Navigation")))
               .child(asElement(new ResizablePanel().child("Content"))),
           ),
@@ -1531,7 +1644,7 @@ export function registeredExamples(surface) {
           label: "A vertical scroll region",
           element: asElement(
             new Scroll(ScrollbarHandle())
-              .scrollAxis("vertical")
+              .scroll_axis("vertical")
               .h(140)
               .child(
                 v_flex()
@@ -1569,7 +1682,7 @@ export function registeredExamples(surface) {
               )
               .child(
                 asElement(
-                  new Scrollbar("story-scrollbar", handle).scrollAxis("vertical").mode("always"),
+                  new Scrollbar("story-scrollbar", handle).scroll_axis("vertical").mode("always"),
                 ),
               ),
           ),
@@ -1583,7 +1696,7 @@ export function registeredExamples(surface) {
           element: asElement(
             new Settings("story-settings")
               .size("medium")
-              .sidebarWidth(200)
+              .sidebar_width(200)
               .child(
                 asElement(
                   new SettingPage("General").child(
@@ -1618,7 +1731,7 @@ export function registeredExamples(surface) {
             .child(
               asElement(
                 new Editor(EditorState("fn main() {\n    println!(\"hello\");\n}"))
-                  .ariaLabel("Source editor")
+                  .aria_label("Source editor")
                   .bordered(true)
                   .h(120),
               ),
@@ -1626,7 +1739,7 @@ export function registeredExamples(surface) {
             .child(
               asElement(
                 new Editor(EditorState("// generated, do not edit"))
-                  .ariaLabel("Generated source")
+                  .aria_label("Generated source")
                   .bordered(true)
                   .readonly(true)
                   .h(80),
@@ -1649,8 +1762,8 @@ export function registeredExamples(surface) {
               { label: "Fri", value: 54 },
             ])
               .grid(true)
-              .labelAxis(true)
-              .valueAxis(true)
+              .label_axis(true)
+              .value_axis(true)
               .h(200),
           ),
         },
@@ -1727,7 +1840,7 @@ export function registeredExamples(surface) {
           label: "Opens the platform's own menu",
           element: asElement(
             new NativeMenuTrigger("native-menu", "Native menu")
-              .onEffectError((_message, _cx) => {})
+              .on_effect_error((_message, _cx) => {})
               .child(asElement(new NativeMenuItem("Open", "open")))
               .child(asElement(new NativeMenuSeparator()))
               .child(asElement(new NativeMenuItem("Close", "close").disabled(true))),

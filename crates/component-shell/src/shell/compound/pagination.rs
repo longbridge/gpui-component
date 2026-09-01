@@ -57,7 +57,7 @@ impl ComponentMaterializer for PaginationMaterializer {
             let callback = request.resolve_callback(&argument)?;
             p = p.on_click(move |page, window, cx| {
                 callback.invoke_and_report_with(
-                    "Pagination.onChange callback failed",
+                    "Pagination.on_change callback failed",
                     &[ComponentCallbackArgument::Number(*page as f64)],
                     window,
                     cx,
@@ -114,31 +114,31 @@ pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
             .with_methods(vec![
                 crate::shell::support::disabled_method("Pagination"),
                 numeric(
-                    "currentPage",
+                    "current_page",
                     "Sets the current 1-based page.",
                     PaginationOp::Current,
                 ),
                 numeric(
-                    "totalPages",
+                    "total_pages",
                     "Sets the positive page count.",
                     PaginationOp::Total,
                 ),
                 numeric(
-                    "visiblePages",
+                    "visible_pages",
                     "Sets the maximum visible page buttons.",
                     PaginationOp::Visible,
                 ),
                 MethodDescriptor::new(
-                    "onChange",
+                    "on_change",
                     vec![ArgumentDescriptor::new(
-                        "onChange",
+                        "on_change",
                         ArgumentSchema::Callback("(page: number, cx: Context) => void"),
                     )],
                     |arguments| match arguments {
                         [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
                             PaginationOp::OnChange(argument.clone()),
                         )),
-                        _ => Err("Pagination.onChange expects one callback".into()),
+                        _ => Err("Pagination.on_change expects one callback".into()),
                     },
                 )
                 .with_documentation(
@@ -180,13 +180,13 @@ mod tests {
     #[test]
     fn positive_integer_validation() {
         assert_eq!(
-            positive(&ComponentArgument::Number(3.), "totalPages").unwrap(),
+            positive(&ComponentArgument::Number(3.), "total_pages").unwrap(),
             3
         );
-        assert!(positive(&ComponentArgument::Number(0.), "totalPages").is_err());
-        assert!(positive(&ComponentArgument::Number(1.5), "totalPages").is_err());
-        assert!(positive(&ComponentArgument::Number(usize::MAX as f64), "totalPages").is_err());
-        assert!(positive(&ComponentArgument::Number(f64::INFINITY), "totalPages").is_err());
+        assert!(positive(&ComponentArgument::Number(0.), "total_pages").is_err());
+        assert!(positive(&ComponentArgument::Number(1.5), "total_pages").is_err());
+        assert!(positive(&ComponentArgument::Number(usize::MAX as f64), "total_pages").is_err());
+        assert!(positive(&ComponentArgument::Number(f64::INFINITY), "total_pages").is_err());
     }
     #[test]
     fn id_rejects_empty_and_whitespace_only_values() {

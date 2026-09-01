@@ -33,26 +33,9 @@ pub fn components() -> Result<gpui_shell::FrozenComponentRegistry, gpui_shell::R
     registry.freeze()
 }
 
-/// Creates the application's default shell runtime with this component catalog.
-pub fn new_runtime(
-    cx: &mut gpui_shell::gpui::App,
-) -> gpui_shell::anyhow::Result<std::rc::Rc<gpui_shell::ShellRuntime>> {
-    gpui_shell::ShellRuntime::new_with_components(cx, components()?)
-}
-
 /// Creates an isolated shell runtime with this component catalog.
 pub fn new_isolated_runtime() -> gpui_shell::anyhow::Result<std::rc::Rc<gpui_shell::ShellRuntime>> {
     gpui_shell::ShellRuntime::new_isolated_with_components(components()?)
-}
-
-/// Writes declarations for the currently registered adapter catalog.
-pub fn write_type_declarations(
-    root: impl AsRef<std::path::Path>,
-) -> gpui_shell::anyhow::Result<Vec<std::path::PathBuf>> {
-    Ok(gpui_shell::write_type_declarations_with_components(
-        root.as_ref(),
-        &components()?,
-    )?)
 }
 
 /// Opens the window with `gpui_component::Root` as its root view.
@@ -106,10 +89,8 @@ impl gpui_shell::gpui::Render for CatalogHost {
     }
 }
 
-/// Registers the `gpui-component` JavaScript bindings provided by this crate.
-pub fn register(
-    registry: &mut gpui_shell::ComponentRegistry,
-) -> Result<(), gpui_shell::RegistryError> {
+/// Registers this crate's descriptors into its private catalog assembly.
+fn register(registry: &mut gpui_shell::ComponentRegistry) -> Result<(), gpui_shell::RegistryError> {
     shell::register(registry)
 }
 
@@ -346,7 +327,7 @@ mod tests {
                     "icon",
                     [gpui_shell::ArgumentDescriptor::new(
                         "icon",
-                        ArgumentSchema::Enum(&["loader", "loaderCircle"]),
+                        ArgumentSchema::Enum(&["loader", "loader_circle"]),
                     )]
                     .as_slice(),
                 ),
@@ -362,7 +343,7 @@ mod tests {
                     "ease",
                     [gpui_shell::ArgumentDescriptor::new(
                         "ease",
-                        ArgumentSchema::Enum(&["linear", "easeInOut", "easeOutQuint"]),
+                        ArgumentSchema::Enum(&["linear", "ease_in_out", "ease_out_quint"]),
                     )]
                     .as_slice(),
                 ),
@@ -408,6 +389,66 @@ mod tests {
             undocumented.is_empty(),
             "every generated TypeScript method needs documentation: {undocumented:?}"
         );
+    }
+
+    #[test]
+    fn descriptor_vocabulary_uses_snake_case_everywhere() {
+        let frozen = crate::components().unwrap();
+        let mut non_snake_case = Vec::new();
+
+        for descriptor in frozen.descriptors() {
+            for constructor in descriptor.constructors() {
+                for argument in constructor.arguments() {
+                    if argument.name().chars().any(char::is_uppercase) {
+                        non_snake_case.push(format!(
+                            "{} constructor argument `{}`",
+                            descriptor.name(),
+                            argument.name()
+                        ));
+                    }
+                }
+            }
+            for method in descriptor.methods() {
+                if method.name().chars().any(char::is_uppercase) {
+                    non_snake_case.push(format!("{}.{}", descriptor.name(), method.name()));
+                }
+                for argument in method.arguments() {
+                    if argument.name().chars().any(char::is_uppercase) {
+                        non_snake_case.push(format!(
+                            "{}.{} argument `{}`",
+                            descriptor.name(),
+                            method.name(),
+                            argument.name()
+                        ));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            non_snake_case.is_empty(),
+            "descriptor vocabulary must follow gpui-component snake_case: {non_snake_case:?}"
+        );
+    }
+
+    #[test]
+    fn main_chat_components_are_registered() {
+        let frozen = crate::components().unwrap();
+        let names = frozen
+            .descriptors()
+            .map(|descriptor| descriptor.name())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        for expected in [
+            "Attachment",
+            "Bubble",
+            "Marker",
+            "Message",
+            "MessageScroller",
+            "ShimmerText",
+        ] {
+            assert!(names.contains(expected), "missing `{expected}` descriptor");
+        }
     }
 
     #[test]

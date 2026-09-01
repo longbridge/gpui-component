@@ -102,9 +102,9 @@ import { CommandState, Command, CommandItem, CommandGroup, CommandSeparator } fr
 export default class App extends View {
  init(){this.state=CommandState();this.query="";this.confirm="none";this.actions=0;}
  render(){return div().on_action("open",(_event,cx)=>{this.actions++;cx.notify();})
-  .child(new Command(this.state).placeholder("Find command").maxHeight(240).p(2).header(div().child("Header factory")).footer(div().child("Footer factory"))
-   .onQuery((query,cx)=>{this.query=query;cx.notify();})
-   .onConfirm((section,row,cx)=>{this.confirm=`${section}:${row}`;cx.notify();})
+  .child(new Command(this.state).placeholder("Find command").max_height(240).p(2).header(div().child("Header factory")).footer(div().child("Footer factory"))
+   .on_query((query,cx)=>{this.query=query;cx.notify();})
+   .on_confirm((section,row,cx)=>{this.confirm=`${section}:${row}`;cx.notify();})
    .child(new CommandItem("Alpha").keyword("first").action("open").content(div().child("Alpha custom row")))
    .child(new CommandSeparator())
    .child(new CommandGroup("Group").child(new CommandItem("Beta").checked(true).action("open").content(div().child("Beta custom row")))))
@@ -169,7 +169,7 @@ const NATIVE_MENU_SOURCE: &str = r#"
 import { View, div } from "gpui";
 import { NativeMenuTrigger, NativeMenuItem, NativeMenuSeparator } from "gpui-component";
 export default class App extends View { init(_props,cx){this.hits=0;this.errors=0;this.focus=cx.focus_handle();this.focus.focus();} render(){return div().size_full().track_focus(this.focus).on_action("open",(_event,cx)=>{this.hits++;cx.notify();})
- .child(new NativeMenuTrigger("native","Actions").absolute().left(0).top(0).w(140).h(40).onEffectError((_message,cx)=>{this.errors+=10;cx.notify();}).onEffectError((_message,cx)=>{this.errors++;cx.notify();})
+ .child(new NativeMenuTrigger("native","Actions").absolute().left(0).top(0).w(140).h(40).on_effect_error((_message,cx)=>{this.errors+=10;cx.notify();}).on_effect_error((_message,cx)=>{this.errors++;cx.notify();})
   .child(new NativeMenuItem("Open","open")).child(new NativeMenuSeparator()).child(new NativeMenuItem("Disabled","disabled").disabled(true)))
  .child(`Menu: ${this.hits}|${this.errors}`);}}
 "#;

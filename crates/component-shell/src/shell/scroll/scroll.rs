@@ -49,7 +49,7 @@ fn axis_method() -> MethodDescriptor {
         // `horizontal | vertical` before the call can reach a registered
         // component, so `both` — which this surface does support — would be
         // refused there and never arrive.
-        "scrollAxis",
+        "scroll_axis",
         vec![ArgumentDescriptor::new(
             "axis",
             ArgumentSchema::Enum(&["vertical", "horizontal", "both"]),
@@ -219,13 +219,13 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             )
             .with_documentation("Sets the native scrollbar visibility policy."),
             MethodDescriptor::new(
-                "viewportFromLayout",
+                "viewport_from_layout",
                 vec![ArgumentDescriptor::new("enabled", ArgumentSchema::Boolean)],
                 |args| match args {
                     [ComponentArgument::Boolean(value)] => {
                         Ok(ComponentPayload::new(Op::ViewportFromLayout(*value)))
                     }
-                    _ => Err("Scrollbar.viewportFromLayout expects boolean".into()),
+                    _ => Err("Scrollbar.viewport_from_layout expects boolean".into()),
                 },
             )
             .with_documentation("Uses this element's layout bounds as the native viewport."),

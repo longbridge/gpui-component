@@ -197,7 +197,7 @@ impl ComponentMaterializer for CheckboxMaterializer {
         if let Some(callback) = change {
             component = component.on_click(move |checked, window, cx| {
                 callback.invoke_and_report_with(
-                    "Checkbox.onChange",
+                    "Checkbox.on_change",
                     &[ComponentCallbackArgument::Boolean(*checked)],
                     window,
                     cx,
@@ -236,7 +236,7 @@ impl ComponentMaterializer for SwitchMaterializer {
         if let Some(callback) = change {
             component = component.on_click(move |checked, window, cx| {
                 callback.invoke_and_report_with(
-                    "Switch.onChange",
+                    "Switch.on_change",
                     &[ComponentCallbackArgument::Boolean(*checked)],
                     window,
                     cx,
@@ -275,7 +275,7 @@ impl ComponentMaterializer for ToggleMaterializer {
         if let Some(callback) = change {
             component = component.on_click(move |checked, window, cx| {
                 callback.invoke_and_report_with(
-                    "Toggle.onChange",
+                    "Toggle.on_change",
                     &[ComponentCallbackArgument::Boolean(*checked)],
                     window,
                     cx,
@@ -333,7 +333,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             variant_method!("compact", ButtonOp::Compact, "Uses compact internal spacing."),
         ])
 .with_documentation(
-            "A stateless command button. Shell disabled, selected, children, style, and onClick operations are honored.",
+            "A stateless command button. Shell disabled, selected, children, style, and on_click operations are honored.",
         ))?;
     for (name, materializer) in [
         (

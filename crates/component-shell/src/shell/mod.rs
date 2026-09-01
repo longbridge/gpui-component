@@ -6,6 +6,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     spinner::register(registry)?;
     separator::register(registry)?;
     skeleton::register(registry)?;
+    chat::register(registry)?;
     controls::register(registry)?;
     delegate_collections::register(registry)?;
     delegate_combobox::register(registry)?;
@@ -36,6 +37,7 @@ mod typed_child;
 
 mod basic;
 mod chart;
+mod chat;
 mod collections;
 mod command;
 mod compound;

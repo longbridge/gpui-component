@@ -157,7 +157,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 ),
                 bool_method(
                     "Field",
-                    "labelIndent",
+                    "label_indent",
                     "Keeps unlabeled horizontal fields aligned with labeled fields.",
                     FieldOp::LabelIndent,
                 ),
@@ -179,13 +179,15 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Aligns the label and control within the field."),
                 MethodDescriptor::new(
-                    "colSpan",
+                    "col_span",
                     vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
                     |arguments| match arguments {
-                        [ComponentArgument::Number(value)] => positive_u16(*value, "Field.colSpan")
-                            .map(|value| ComponentPayload::new(FieldOp::ColSpan(value))),
+                        [ComponentArgument::Number(value)] => {
+                            positive_u16(*value, "Field.col_span")
+                                .map(|value| ComponentPayload::new(FieldOp::ColSpan(value)))
+                        }
                         _ => Err(
-                            "Field.colSpan expects an exactly representable positive integer"
+                            "Field.col_span expects an exactly representable positive integer"
                                 .into(),
                         ),
                     },
@@ -215,16 +217,16 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Sets the form grid's column count."),
                 MethodDescriptor::new(
-                    "labelWidth",
+                    "label_width",
                     vec![ArgumentDescriptor::new("width", ArgumentSchema::Number)],
                     |arguments| match arguments {
                         [ComponentArgument::Number(value)] => {
-                            nonnegative_f32(*value, "Form.labelWidth")
+                            nonnegative_f32(*value, "Form.label_width")
                                 .map(|value| ComponentPayload::new(FormOp::LabelWidth(value)))
                         }
-                        _ => {
-                            Err("Form.labelWidth(width) expects a nonnegative finite number".into())
-                        }
+                        _ => Err(
+                            "Form.label_width(width) expects a nonnegative finite number".into(),
+                        ),
                     },
                 )
                 .with_documentation("Sets the horizontal form label width in pixels."),
@@ -266,7 +268,7 @@ mod tests {
 
     #[test]
     fn field_span_and_label_width_reject_lossy_ranges() {
-        assert!(positive_u16(u16::MAX as f64 + 1.0, "Field.colSpan").is_err());
-        assert!(nonnegative_f32((f32::MAX as f64) * 2.0, "Form.labelWidth").is_err());
+        assert!(positive_u16(u16::MAX as f64 + 1.0, "Field.col_span").is_err());
+        assert!(nonnegative_f32((f32::MAX as f64) * 2.0, "Form.label_width").is_err());
     }
 }

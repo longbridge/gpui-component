@@ -76,7 +76,10 @@ mod tests {
                 .schema()
                 .clone()
         };
-        assert_eq!(schema_of(pagination, "currentPage"), ArgumentSchema::Number);
+        assert_eq!(
+            schema_of(pagination, "current_page"),
+            ArgumentSchema::Number
+        );
         let radio = frozen
             .descriptors()
             .find(|descriptor| descriptor.name() == "Radio")

@@ -94,14 +94,14 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     "icon",
                     vec![ArgumentDescriptor::new(
                         "icon",
-                        ArgumentSchema::Enum(&["loader", "loaderCircle"]),
+                        ArgumentSchema::Enum(&["loader", "loader_circle"]),
                     )],
                     |arguments| match arguments {
                         [ComponentArgument::Enum(icon)] => match icon.as_str() {
                             "loader" => {
                                 Ok(ComponentPayload::new(SpinnerOp::Icon(IconName::Loader)))
                             }
-                            "loaderCircle" => Ok(ComponentPayload::new(SpinnerOp::Icon(
+                            "loader_circle" => Ok(ComponentPayload::new(SpinnerOp::Icon(
                                 IconName::LoaderCircle,
                             ))),
                             _ => Err(format!("unsupported Spinner icon `{icon}`")),
@@ -125,17 +125,17 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     "ease",
                     vec![ArgumentDescriptor::new(
                         "ease",
-                        ArgumentSchema::Enum(&["linear", "easeInOut", "easeOutQuint"]),
+                        ArgumentSchema::Enum(&["linear", "ease_in_out", "ease_out_quint"]),
                     )],
                     |arguments| match arguments {
                         [ComponentArgument::Enum(ease)] => match ease.as_str() {
                             "linear" => {
                                 Ok(ComponentPayload::new(SpinnerOp::Ease(SpinnerEase::Linear)))
                             }
-                            "easeInOut" => Ok(ComponentPayload::new(SpinnerOp::Ease(
+                            "ease_in_out" => Ok(ComponentPayload::new(SpinnerOp::Ease(
                                 SpinnerEase::EaseInOut,
                             ))),
-                            "easeOutQuint" => Ok(ComponentPayload::new(SpinnerOp::Ease(
+                            "ease_out_quint" => Ok(ComponentPayload::new(SpinnerOp::Ease(
                                 SpinnerEase::EaseOutQuint,
                             ))),
                             _ => Err(format!("unsupported Spinner easing `{ease}`")),

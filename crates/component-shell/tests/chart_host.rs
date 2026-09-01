@@ -77,11 +77,11 @@ globalThis.calls = 0;
 const rows = () => { globalThis.calls++; return [{label: "Jan", value: 2}, {label: "Feb", value: 5}]; };
 export default class App extends View {
   render() { return div()
-    .child(new BarChart(rows).grid(false).valueAxis(true))
+    .child(new BarChart(rows).grid(false).value_axis(true))
     .child(new LineChart(rows).linear().dot().grid(false))
-    .child(new AreaChart(rows).stepAfter().grid(false))
-    .child(new PieChart(rows).innerRadius(8).padAngle(0.05).labels(true))
-    .child(new RadarChart(rows).dot().gridLevels(3)); }
+    .child(new AreaChart(rows).step_after().grid(false))
+    .child(new PieChart(rows).inner_radius(8).pad_angle(0.05).labels(true))
+    .child(new RadarChart(rows).dot().grid_levels(3)); }
 }
 "#;
     let (mut context, view) = mount(cx, source);

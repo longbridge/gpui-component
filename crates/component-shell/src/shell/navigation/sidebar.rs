@@ -291,19 +291,19 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             ),
             bool_method(
                 "SidebarMenuItem",
-                "defaultOpen",
+                "default_open",
                 "Sets the initial submenu disclosure state.",
                 ItemOp::DefaultOpen,
             ),
             bool_method(
                 "SidebarMenuItem",
-                "clickToOpen",
+                "click_to_open",
                 "Lets a row click open its submenu.",
                 ItemOp::ClickToOpen,
             ),
             bool_method(
                 "SidebarMenuItem",
-                "clickToToggle",
+                "click_to_toggle",
                 "Lets a row click toggle its submenu.",
                 ItemOp::ClickToToggle,
             ),

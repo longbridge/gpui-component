@@ -282,47 +282,47 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             bool_method("Chart", "grid", "Configures this chart option.", Op::Grid),
             bool_method(
                 "Chart",
-                "labelAxis",
+                "label_axis",
                 "Configures this chart option.",
                 Op::Axis,
             ),
             bool_method(
                 "Chart",
-                "valueAxis",
+                "value_axis",
                 "Configures this chart option.",
                 Op::ValueAxis,
             ),
-            positive_usize_method("tickMargin", Op::TickMargin),
+            positive_usize_method("tick_margin", Op::TickMargin),
         ],
     ))?;
     registry.register(descriptor(
         "LineChart",
         vec![
             bool_method("Chart", "grid", "Configures this chart option.", Op::Grid),
-            bool_method("Chart", "xAxis", "Configures this chart option.", Op::Axis),
-            positive_usize_method("tickMargin", Op::TickMargin),
+            bool_method("Chart", "x_axis", "Configures this chart option.", Op::Axis),
+            positive_usize_method("tick_margin", Op::TickMargin),
             flag("dot", Op::Dot),
             flag("natural", Op::Natural),
             flag("linear", Op::Linear),
-            flag("stepAfter", Op::StepAfter),
+            flag("step_after", Op::StepAfter),
         ],
     ))?;
     registry.register(descriptor(
         "AreaChart",
         vec![
             bool_method("Chart", "grid", "Configures this chart option.", Op::Grid),
-            bool_method("Chart", "xAxis", "Configures this chart option.", Op::Axis),
-            positive_usize_method("tickMargin", Op::TickMargin),
+            bool_method("Chart", "x_axis", "Configures this chart option.", Op::Axis),
+            positive_usize_method("tick_margin", Op::TickMargin),
             flag("natural", Op::Natural),
             flag("linear", Op::Linear),
-            flag("stepAfter", Op::StepAfter),
+            flag("step_after", Op::StepAfter),
         ],
     ))?;
     registry.register(descriptor(
         "PieChart",
         vec![
-            number_method("innerRadius", Op::InnerRadius),
-            number_method("padAngle", Op::PadAngle),
+            number_method("inner_radius", Op::InnerRadius),
+            number_method("pad_angle", Op::PadAngle),
             bool_method(
                 "Chart",
                 "labels",
@@ -335,7 +335,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         "RadarChart",
         vec![
             bool_method("Chart", "grid", "Configures this chart option.", Op::Grid),
-            positive_usize_method("gridLevels", Op::GridLevels),
+            positive_usize_method("grid_levels", Op::GridLevels),
             flag("dot", Op::Dot),
         ],
     ))?;

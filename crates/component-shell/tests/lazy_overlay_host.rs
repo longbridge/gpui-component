@@ -71,7 +71,7 @@ export default class LazyPopover extends View {
     return div().pt(100).child(
       new Popover("actions", "Open actions")
         .open(this.open)
-        .onOpenChange((open, cx) => { this.open = open; cx.notify(); })
+        .on_open_change((open, cx) => { this.open = open; cx.notify(); })
         .content(div().w(200).h(120)
           .on_click((_event, cx) => { this.hits += 1; cx.notify(); })
           .child(`Lazy content ${this.hits}`))
@@ -147,13 +147,13 @@ export default class LazyHoverCard extends View {
     return div().v_flex().w(400).h(400)
       .child(div().w(400).h(100))
       .child(new HoverCard("profile")
-        .triggerElement(div().w(300).h(40).child("Profile"))
+        .trigger_element(div().w(300).h(40).child("Profile"))
         .content(div().w(200).h(120)
           .on_click((_event, cx) => { this.hits += 1; cx.notify(); })
           .child(`Lazy profile ${this.hits}`))
-        .cardAnchor("topLeft")
-        .openDelay(0).closeDelay(0)
-        .onOpenChange(open => { this.open = open; }))
+        .card_anchor("top_left")
+        .open_delay(0).close_delay(0)
+        .on_open_change(open => { this.open = open; }))
       .child(`Hover:${this.open}`);
   }
 }

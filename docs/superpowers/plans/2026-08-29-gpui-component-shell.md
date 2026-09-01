@@ -14,7 +14,7 @@
 
 - The existing `gpui-shell` package and Rust crate name must not be renamed or split.
 - `gpui-shell` must not import or construct concrete `gpui-component` controls in its library implementation.
-- `gpui-shell` depends on `gpui-base` and `gpui-component` but contains no concrete gpui-component binding implementation.
+- `gpui-shell` depends on `gpui-base` and not on `gpui-component`; the adapter owns the themed dependency and every concrete themed binding.
 - `gpui-component-shell` depends on `gpui-shell`; `gpui-shell` never depends back on the adapter.
 - Base-only applications may continue using `gpui-shell`; full component applications use the adapter startup entry point.
 - Existing JavaScript constructor and builder names remain compatible; renamed forms are deprecated aliases with diagnostics.

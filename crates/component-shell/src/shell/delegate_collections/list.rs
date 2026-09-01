@@ -191,7 +191,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     ArgumentSchema::Callback("() => readonly unknown[]"),
                 ),
                 ArgumentDescriptor::new(
-                    "renderRow",
+                    "render_row",
                     ArgumentSchema::Callback("(row: unknown) => Element | null"),
                 ),
             ],

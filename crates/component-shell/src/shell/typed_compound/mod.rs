@@ -385,7 +385,7 @@ impl ComponentMaterializer for AccordionMaterializer {
                             .map(|index| ComponentCallbackArgument::Number(*index as f64))
                             .collect();
                         callback.invoke_and_report_with(
-                            "Accordion.onToggle callback failed",
+                            "Accordion.on_toggle callback failed",
                             &[ComponentCallbackArgument::Array(open)],
                             window,
                             cx,
@@ -446,7 +446,7 @@ impl ComponentMaterializer for RadioGroupMaterializer {
                     let callback = request.resolve_callback(&argument)?;
                     group.on_click(move |index, window, cx| {
                         callback.invoke_and_report_with(
-                            "RadioGroup.onChange callback failed",
+                            "RadioGroup.on_change callback failed",
                             &[ComponentCallbackArgument::Number(*index as f64)],
                             window,
                             cx,
@@ -541,7 +541,7 @@ impl ComponentMaterializer for TabBarMaterializer {
                     let callback = request.resolve_callback(&argument)?;
                     bar.on_click(move |index, window, cx| {
                         callback.invoke_and_report_with(
-                            "TabBar.onChange callback failed",
+                            "TabBar.on_change callback failed",
                             &[ComponentCallbackArgument::Number(*index as f64)],
                             window,
                             cx,
@@ -634,7 +634,7 @@ impl ComponentMaterializer for StepperMaterializer {
                     let callback = request.resolve_callback(&argument)?;
                     stepper.on_click(move |index, window, cx| {
                         callback.invoke_and_report_with(
-                            "Stepper.onChange callback failed",
+                            "Stepper.on_change callback failed",
                             &[ComponentCallbackArgument::Number(*index as f64)],
                             window,
                             cx,
@@ -670,7 +670,7 @@ fn index_callback_method<T: Send + Sync + 'static>(
     make: impl Fn(ComponentArgument) -> T + Send + Sync + 'static,
 ) -> MethodDescriptor {
     MethodDescriptor::new(
-        "onChange",
+        "on_change",
         vec![ArgumentDescriptor::new(
             "callback",
             // The runtime appends the call context to every component
@@ -690,7 +690,9 @@ fn index_callback_payload<T: Send + Sync + 'static>(
 ) -> Result<ComponentPayload, String> {
     match arguments {
         [value @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(make(value.clone()))),
-        _ => Err(format!("{component}.onChange(callback) expects a callback")),
+        _ => Err(format!(
+            "{component}.on_change(callback) expects a callback"
+        )),
     }
 }
 
@@ -746,16 +748,16 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             ),
             size_method("Accordion", AccordionOp::Size),
             MethodDescriptor::new(
-                "onToggle",
+                "on_toggle",
                 vec![ArgumentDescriptor::new(
-                    "onToggle",
+                    "on_toggle",
                     ArgumentSchema::Callback("(openIndices: number[], cx: Context) => void"),
                 )],
                 |arguments| match arguments {
                     [argument @ ComponentArgument::Callback(_)] => {
                         Ok(ComponentPayload::new(AccordionOp::OnToggle(argument.clone())))
                     }
-                    _ => Err("Accordion.onToggle expects one callback".into()),
+                    _ => Err("Accordion.on_toggle expects one callback".into()),
                 },
             )
             .with_documentation(
@@ -789,12 +791,12 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             ])
             .with_methods(vec![
                 MethodDescriptor::new(
-                    "selectedIndex",
+                    "selected_index",
                     vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
                     |arguments| {
                         index_payload(
                             arguments,
-                            "RadioGroup.selectedIndex(index)",
+                            "RadioGroup.selected_index(index)",
                             RadioGroupOp::Selected,
                         )
                     },
@@ -827,10 +829,10 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Sets the visible tab label."),
                 MethodDescriptor::new(
-                    "ariaLabel",
+                    "aria_label",
                     vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
                     |arguments| {
-                        string_payload(arguments, "Tab.ariaLabel(label)", |value| {
+                        string_payload(arguments, "Tab.aria_label(label)", |value| {
                             ComponentPayload::new(TabOp::AriaLabel(value))
                         })
                     },
@@ -867,10 +869,14 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             ])
             .with_methods(vec![
                 MethodDescriptor::new(
-                    "selectedIndex",
+                    "selected_index",
                     vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
                     |arguments| {
-                        index_payload(arguments, "TabBar.selectedIndex(index)", TabBarOp::Selected)
+                        index_payload(
+                            arguments,
+                            "TabBar.selected_index(index)",
+                            TabBarOp::Selected,
+                        )
                     },
                 )
                 .with_documentation("Controls the selected zero-based tab index."),
@@ -929,12 +935,12 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             .with_constructors(vec![id_constructor("Stepper", StepperPayload)])
             .with_methods(vec![
                 MethodDescriptor::new(
-                    "selectedIndex",
+                    "selected_index",
                     vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
                     |arguments| {
                         index_payload(
                             arguments,
-                            "Stepper.selectedIndex(index)",
+                            "Stepper.selected_index(index)",
                             StepperOp::Selected,
                         )
                     },
@@ -948,7 +954,7 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 ),
                 bool_method(
                     "Stepper",
-                    "textCenter",
+                    "text_center",
                     "Centers each step's text in horizontal layouts.",
                     StepperOp::TextCenter,
                 ),

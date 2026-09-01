@@ -59,7 +59,7 @@ impl ComponentMaterializer for PopoverMaterializer {
                     let callback = request.resolve_callback(&argument)?;
                     popover.on_open_change(move |open, window, cx| {
                         callback.invoke_and_report_with(
-                            "Popover.onOpenChange callback failed",
+                            "Popover.on_open_change callback failed",
                             &[ComponentCallbackArgument::Boolean(*open)],
                             window,
                             cx,
@@ -93,17 +93,17 @@ fn boolean_op(
 
 fn anchor_op(arguments: &[ComponentArgument]) -> Result<ComponentPayload, String> {
     let [ComponentArgument::Enum(anchor)] = arguments else {
-        return Err("Popover.cardAnchor(anchor) expects an anchor literal".into());
+        return Err("Popover.card_anchor(anchor) expects an anchor literal".into());
     };
     let anchor = match anchor.as_str() {
-        "topLeft" => Anchor::TopLeft,
-        "topCenter" => Anchor::TopCenter,
-        "topRight" => Anchor::TopRight,
-        "bottomLeft" => Anchor::BottomLeft,
-        "bottomCenter" => Anchor::BottomCenter,
-        "bottomRight" => Anchor::BottomRight,
-        "leftCenter" => Anchor::LeftCenter,
-        "rightCenter" => Anchor::RightCenter,
+        "top_left" => Anchor::TopLeft,
+        "top_center" => Anchor::TopCenter,
+        "top_right" => Anchor::TopRight,
+        "bottom_left" => Anchor::BottomLeft,
+        "bottom_center" => Anchor::BottomCenter,
+        "bottom_right" => Anchor::BottomRight,
+        "left_center" => Anchor::LeftCenter,
+        "right_center" => Anchor::RightCenter,
         _ => return Err(format!("unsupported Popover anchor `{anchor}`")),
     };
     Ok(ComponentPayload::new(PopoverOp::Anchor(anchor)))
@@ -147,33 +147,33 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 // it unreachable by any value. `HoverCard` already carries the
                 // same method under this name.
                 MethodDescriptor::new(
-                    "cardAnchor",
+                    "card_anchor",
                     vec![ArgumentDescriptor::new(
                         "anchor",
                         ArgumentSchema::Enum(&[
-                            "topLeft",
-                            "topCenter",
-                            "topRight",
-                            "bottomLeft",
-                            "bottomCenter",
-                            "bottomRight",
-                            "leftCenter",
-                            "rightCenter",
+                            "top_left",
+                            "top_center",
+                            "top_right",
+                            "bottom_left",
+                            "bottom_center",
+                            "bottom_right",
+                            "left_center",
+                            "right_center",
                         ]),
                     )],
                     anchor_op,
                 )
                 .with_documentation("Positions the popover relative to its trigger."),
-                boolean("defaultOpen", PopoverOp::DefaultOpen)
+                boolean("default_open", PopoverOp::DefaultOpen)
                     .with_documentation("Sets the initial uncontrolled open state."),
                 boolean("open", PopoverOp::Open)
                     .with_documentation("Controls whether the popover is open."),
                 boolean("appearance", PopoverOp::Appearance)
                     .with_documentation("Controls the native popover surface styling."),
-                boolean("overlayClosable", PopoverOp::OverlayClosable)
+                boolean("overlay_closable", PopoverOp::OverlayClosable)
                     .with_documentation("Controls whether pressing outside dismisses the popover."),
                 MethodDescriptor::new(
-                    "onOpenChange",
+                    "on_open_change",
                     vec![ArgumentDescriptor::new(
                         "callback",
                         ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
@@ -182,7 +182,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                         [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
                             PopoverOp::OnOpenChange(argument.clone()),
                         )),
-                        _ => Err("Popover.onOpenChange(callback) expects a callback".into()),
+                        _ => Err("Popover.on_open_change(callback) expects a callback".into()),
                     },
                 )
                 .with_documentation("Runs when pointer interaction changes the open state."),

@@ -33,9 +33,11 @@ const RUST_STORY_ORDER = [
   "AccordionStory",
   "AlertStory",
   "AlertDialogStory",
+  "AttachmentStory",
   "AvatarStory",
   "BadgeStory",
   "BreadcrumbStory",
+  "BubbleStory",
   "ButtonStory",
   "CalendarStory",
   "ChartStory",
@@ -62,6 +64,9 @@ const RUST_STORY_ORDER = [
   "LabelStory",
   "ListStory",
   "MenuStory",
+  "MarkerStory",
+  "MessageStory",
+  "MessageScrollerStory",
   "NativeMenuStory",
   "NotificationStory",
   "NumberInputStory",
@@ -77,6 +82,7 @@ const RUST_STORY_ORDER = [
   "SeparatorStory",
   "SettingsStory",
   "SheetStory",
+  "ShimmerStory",
   "SidebarStory",
   "SkeletonStory",
   "SliderStory",
@@ -143,7 +149,7 @@ export function filterCatalog(query) {
  * @property {string} rustStory Source `Story` implementation in crates/story.
  * @property {string} description
  * @property {string[]} states Examples to provide once the binding is available.
- * @property {"registered" | "deferred" | "infrastructure"} availability
+ * @property {"registered" | "infrastructure"} availability
  * @property {string} api The expected public gpui-component export.
  * @property {(cx: import("gpui").Context) => import("gpui").Element} render
  */

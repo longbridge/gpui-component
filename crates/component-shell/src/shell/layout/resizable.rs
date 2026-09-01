@@ -145,7 +145,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Sets initial panel size in pixels."),
                 MethodDescriptor::new(
-                    "sizeRange",
+                    "size_range",
                     vec![
                         ArgumentDescriptor::new("minimum", ArgumentSchema::Number),
                         ArgumentDescriptor::new("maximum", ArgumentSchema::Number),
@@ -158,11 +158,11 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                             let min = finite_positive(*min, "minimum")?;
                             let max = finite_positive(*max, "maximum")?;
                             if min > max {
-                                return Err("sizeRange minimum must not exceed maximum".into());
+                                return Err("size_range minimum must not exceed maximum".into());
                             }
                             Ok(ComponentPayload::new(PanelOp::Range(min, max)))
                         }
-                        _ => Err("ResizablePanel.sizeRange expects two numbers".into()),
+                        _ => Err("ResizablePanel.size_range expects two numbers".into()),
                     },
                 )
                 .with_documentation("Sets the inclusive resize range in pixels."),
@@ -175,7 +175,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_constructors(vec![ConstructorDescriptor::new("Resizable",vec![ArgumentDescriptor::new("id",ArgumentSchema::String)],|a|match a{[ComponentArgument::String(value)]if !value.trim().is_empty()=>Ok(ComponentPayload::new(Id(value.clone()))),_=>Err("Resizable expects a non-empty id".into())})])
 .with_methods(vec![
         MethodDescriptor::new("axis",vec![ArgumentDescriptor::new("axis",ArgumentSchema::Enum(&["horizontal","vertical"]))],|a|match a{[ComponentArgument::Enum(value)]=>match value.as_str(){"horizontal"=>Ok(ComponentPayload::new(GroupOp::Axis(false))),"vertical"=>Ok(ComponentPayload::new(GroupOp::Axis(true))),_=>Err("unsupported axis".into())},_=>Err("Resizable.axis expects an axis".into())}).with_documentation("Sets the resize axis."),
-        MethodDescriptor::new("crossSize",vec![ArgumentDescriptor::new("pixels",ArgumentSchema::Number)],|a|match a{[ComponentArgument::Number(value)]=>finite_positive(*value,"Resizable.crossSize").map(GroupOp::CrossSize).map(ComponentPayload::new),_=>Err("Resizable.crossSize expects pixels".into())}).with_documentation("Sets the cross-axis size in pixels."),
+        MethodDescriptor::new("cross_size",vec![ArgumentDescriptor::new("pixels",ArgumentSchema::Number)],|a|match a{[ComponentArgument::Number(value)]=>finite_positive(*value,"Resizable.cross_size").map(GroupOp::CrossSize).map(ComponentPayload::new),_=>Err("Resizable.cross_size expects pixels".into())}).with_documentation("Sets the cross-axis size in pixels."),
     ])
 .with_documentation("A typed native resizable group accepting only ResizablePanel children. It owns keyed state internally."))?;
     Ok(())

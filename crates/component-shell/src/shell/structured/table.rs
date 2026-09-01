@@ -223,26 +223,26 @@ fn empty_descriptor(
 fn cell_methods() -> Vec<MethodDescriptor> {
     vec![
         MethodDescriptor::new(
-            "colSpan",
+            "col_span",
             vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
             |arguments| match arguments {
                 [ComponentArgument::Number(value)] => cell_span(*value),
-                _ => Err("colSpan(span) expects a positive integer".into()),
+                _ => Err("col_span(span) expects a positive integer".into()),
             },
         )
         .with_documentation("Sets the number of columns occupied by the cell."),
-        MethodDescriptor::new("textCenter", vec![], |_| {
+        MethodDescriptor::new("text_center", vec![], |_| {
             Ok(ComponentPayload::new(CellOp::Center))
         })
         .with_documentation("Centers the cell content."),
-        MethodDescriptor::new("textRight", vec![], |_| {
+        MethodDescriptor::new("text_right", vec![], |_| {
             Ok(ComponentPayload::new(CellOp::Right))
         })
         .with_documentation("Right-aligns the cell content."),
     ]
 }
 fn cell_span(value: f64) -> Result<ComponentPayload, String> {
-    positive_usize(value, "colSpan").map(|value| ComponentPayload::new(CellOp::ColSpan(value)))
+    positive_usize(value, "col_span").map(|value| ComponentPayload::new(CellOp::ColSpan(value)))
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry.register(empty_descriptor(
@@ -278,13 +278,13 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             })])
             .with_methods(vec![
                 MethodDescriptor::new(
-                    "accessibilityLabel",
+                    "accessibility_label",
                     vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
                     |arguments| match arguments {
                         [ComponentArgument::String(value)] => Ok(ComponentPayload::new(
                             TableOp::AccessibilityLabel(value.clone()),
                         )),
-                        _ => Err("Table.accessibilityLabel(label) expects a string".into()),
+                        _ => Err("Table.accessibility_label(label) expects a string".into()),
                     },
                 )
                 .with_documentation("Sets the table's screen-reader accessible name."),

@@ -151,7 +151,7 @@ export default class Media extends View {
   init() { this.editor = EditorState("fn main() {}"); }
   render() { return div()
     .child(new Image("assets/pixel.svg").w(24).h(24))
-    .child(new Editor(this.editor).appearance(true).bordered(false).readonly(true).ariaLabel("Source").disabled(false).p(2).h(180))
+    .child(new Editor(this.editor).appearance(true).bordered(false).readonly(true).aria_label("Source").disabled(false).p(2).h(180))
     .child(new EditorProbe(this.editor)); }
 }
 "#;

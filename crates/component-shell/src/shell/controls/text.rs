@@ -188,7 +188,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         )
         .with_documentation("Sets the external URL opened when activated.")])
 .with_documentation(
-            "An external-resource link. Ordinary children, shell style, disabled state, and onClick are honored.",
+            "An external-resource link. Ordinary children, shell style, disabled state, and on_click are honored.",
         ))?;
     registry.register(
         ComponentDescriptor::new("Kbd", Arc::new(KbdMaterializer))

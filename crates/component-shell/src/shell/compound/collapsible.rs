@@ -56,13 +56,13 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 )
                 .with_documentation("Controls whether the content slot is revealed."),
                 MethodDescriptor::new(
-                    "motionId",
+                    "motion_id",
                     vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
                     |arguments| match arguments {
                         [ComponentArgument::String(value)] => Ok(ComponentPayload::new(
                             CollapsibleOp::MotionId(value.clone()),
                         )),
-                        _ => Err("Collapsible.motionId(id) expects a string".into()),
+                        _ => Err("Collapsible.motion_id(id) expects a string".into()),
                     },
                 )
                 .with_documentation("Adds stable identity for a reversible measured reveal."),

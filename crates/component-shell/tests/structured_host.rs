@@ -88,11 +88,11 @@ export default class StructuredApp extends View {
         .child(new DescriptionItem("First label").value("First value").span(1))
         .child(new DescriptionItem("Second label").value("Second value")))
       .child(new HForm()
-        .columns(2).labelWidth(120)
+        .columns(2).label_width(120)
         .child(new Field().label("Name").required(true).child(div().child("Ada")))
         .child(new Field().label("Role").child(div().child("Admin"))))
       .child(new Table()
-          .accessibilityLabel("People")
+          .accessibility_label("People")
           .size("small")
           .child(new TableCaption().child("Current people"))
           .child(new TableHeader())
@@ -127,10 +127,10 @@ export default class StructuredApp extends View {
         ".p[Number(2.0)]",
         "DescriptionItem",
         "Form",
-        ":labelWidth(registered)",
+        ":label_width(registered)",
         "Field",
         "Table",
-        ":accessibilityLabel(registered)",
+        ":accessibility_label(registered)",
         "TableHeader",
         "TableBody",
         "TableCaption",

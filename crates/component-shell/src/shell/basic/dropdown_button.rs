@@ -121,7 +121,7 @@ impl ComponentMaterializer for DropdownMaterializer {
                     menu = menu.item(PopupMenuItem::new(label.clone()).on_click(
                         move |_, window, cx| {
                             callback.invoke_and_report_with(
-                                "DropdownButton.menuItem callback failed",
+                                "DropdownButton.menu_item callback failed",
                                 &[],
                                 window,
                                 cx,
@@ -146,7 +146,7 @@ fn string_callback_item(arguments: &[ComponentArgument]) -> Result<ComponentPayl
             label: label.clone(),
             callback: callback.clone(),
         })),
-        _ => Err("DropdownButton.menuItem(label, callback) expects a string and callback".into()),
+        _ => Err("DropdownButton.menu_item(label, callback) expects a string and callback".into()),
     }
 }
 
@@ -215,25 +215,25 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             )
             .with_documentation("Sets the semantic variant of both halves."),
             MethodDescriptor::new(
-                "menuAnchor",
+                "menu_anchor",
                 vec![ArgumentDescriptor::new(
                     "anchor",
-                    ArgumentSchema::Enum(&["topRight", "bottomRight", "bottomLeft", "topLeft"]),
+                    ArgumentSchema::Enum(&["top_right", "bottom_right", "bottom_left", "top_left"]),
                 )],
                 |arguments| match arguments {
                     [ComponentArgument::Enum(value)] => match value.as_str() {
-                        "topRight" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::TopRight))),
-                        "bottomRight" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::BottomRight))),
-                        "bottomLeft" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::BottomLeft))),
-                        "topLeft" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::TopLeft))),
+                        "top_right" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::TopRight))),
+                        "bottom_right" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::BottomRight))),
+                        "bottom_left" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::BottomLeft))),
+                        "top_left" => Ok(ComponentPayload::new(DropdownOp::Anchor(Anchor::TopLeft))),
                         _ => Err(format!("unsupported DropdownButton anchor `{value}`")),
                     },
-                    _ => Err("DropdownButton.menuAnchor(anchor) expects an anchor literal".into()),
+                    _ => Err("DropdownButton.menu_anchor(anchor) expects an anchor literal".into()),
                 },
             )
             .with_documentation("Sets the popup menu anchor."),
             MethodDescriptor::new(
-                "menuItem",
+                "menu_item",
                 vec![
                     ArgumentDescriptor::new("label", ArgumentSchema::String),
                     ArgumentDescriptor::new(

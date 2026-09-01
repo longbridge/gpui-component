@@ -183,7 +183,7 @@ fn sidebar_toggle_invokes_the_registered_common_click_callback(cx: &mut TestAppC
 import { View, div } from "gpui";
 import { Sidebar, SidebarMenu, SidebarMenuItem, SidebarToggleButton } from "gpui-component";
 export default class App extends View {
-  init() { this.hits = 0; this.navDisabled = false; }
+  init() { this.hits = 0; this.nav_disabled = false; }
   render() {
     return div().w(300).h(100)
       .child(new SidebarToggleButton().w(120).h(40).on_click((_event, cx) => {
@@ -194,10 +194,10 @@ export default class App extends View {
         new SidebarMenu().child(
           new SidebarMenuItem("Disabled destination")
             .selected(true)
-            .disabled(this.navDisabled)
+            .disabled(this.nav_disabled)
             .on_click((_event, cx) => {
               this.hits += 100;
-              this.navDisabled = true;
+              this.nav_disabled = true;
               cx.notify();
             })
         )

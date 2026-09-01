@@ -169,7 +169,7 @@ impl ComponentMaterializer for CommandMaterializer {
                     let callback = request.resolve_callback(arg)?;
                     command.on_query(move |query, window, cx| {
                         callback.invoke_and_report_with(
-                            "Command.onQuery",
+                            "Command.on_query",
                             &[ComponentCallbackArgument::String(query.to_owned())],
                             window,
                             cx,
@@ -180,7 +180,7 @@ impl ComponentMaterializer for CommandMaterializer {
                     let callback = request.resolve_callback(arg)?;
                     command.on_select(move |path, window, cx| {
                         callback.invoke_and_report_with(
-                            "Command.onSelect",
+                            "Command.on_select",
                             &[
                                 ComponentCallbackArgument::Number(path.section as f64),
                                 ComponentCallbackArgument::Number(path.row as f64),
@@ -194,7 +194,7 @@ impl ComponentMaterializer for CommandMaterializer {
                     let callback = request.resolve_callback(arg)?;
                     command.on_confirm(move |path, window, cx| {
                         callback.invoke_and_report_with(
-                            "Command.onConfirm",
+                            "Command.on_confirm",
                             &[
                                 ComponentCallbackArgument::Number(path.section as f64),
                                 ComponentCallbackArgument::Number(path.row as f64),
@@ -207,7 +207,7 @@ impl ComponentMaterializer for CommandMaterializer {
                 CommandOp::OnCancel(arg) => {
                     let callback = request.resolve_callback(arg)?;
                     command.on_cancel(move |window, cx| {
-                        callback.invoke_and_report_with("Command.onCancel", &[], window, cx)
+                        callback.invoke_and_report_with("Command.on_cancel", &[], window, cx)
                     })
                 }
             }
@@ -297,8 +297,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 .with_methods(vec![
         bool_method("Command", "searchable", "Sets native Command behavior.", CommandOp::Searchable), bool_method("Command", "filterable", "Sets native Command behavior.", CommandOp::Filterable), bool_method("Command", "bordered", "Sets native Command behavior.", CommandOp::Bordered),
         MethodDescriptor::new("placeholder", vec![ArgumentDescriptor::new("placeholder", ArgumentSchema::String)], |args| match args { [ComponentArgument::String(value)] => Ok(ComponentPayload::new(CommandOp::Placeholder(value.clone()))), _ => Err("Command.placeholder expects text".into()) }).with_documentation("Sets the command search placeholder."),
-        MethodDescriptor::new("maxHeight", vec![ArgumentDescriptor::new("pixels", ArgumentSchema::Number)], |args| match args { [ComponentArgument::Number(value)] if value.is_finite() && *value > 0. && *value <= f32::MAX as f64 => Ok(ComponentPayload::new(CommandOp::MaxHeight(*value as f32))), _ => Err("Command.maxHeight expects positive finite pixels".into()) }).with_documentation("Sets the command results maximum height."),
-        callback_method("onQuery", "(query: string, cx: Context) => void", CommandOp::OnQuery), callback_method("onSelect", "(section: number, row: number, cx: Context) => void", CommandOp::OnSelect), callback_method("onConfirm", "(section: number, row: number, cx: Context) => void", CommandOp::OnConfirm), callback_method("onCancel", "(cx: Context) => void", CommandOp::OnCancel),
+        MethodDescriptor::new("max_height", vec![ArgumentDescriptor::new("pixels", ArgumentSchema::Number)], |args| match args { [ComponentArgument::Number(value)] if value.is_finite() && *value > 0. && *value <= f32::MAX as f64 => Ok(ComponentPayload::new(CommandOp::MaxHeight(*value as f32))), _ => Err("Command.max_height expects positive finite pixels".into()) }).with_documentation("Sets the command results maximum height."),
+        callback_method("on_query", "(query: string, cx: Context) => void", CommandOp::OnQuery), callback_method("on_select", "(section: number, row: number, cx: Context) => void", CommandOp::OnSelect), callback_method("on_confirm", "(section: number, row: number, cx: Context) => void", CommandOp::OnConfirm), callback_method("on_cancel", "(cx: Context) => void", CommandOp::OnCancel),
     ])
 .with_documentation("Styled retained native Command palette consuming CommandItem, CommandGroup and CommandSeparator in exact order. Named header/footer elements are repeatable lazy factories; native empty content remains unavailable because the shell has no common empty(element) named-slot route."))?;
     Ok(())
