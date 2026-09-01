@@ -28,8 +28,9 @@ enum Op {
     SearchPlaceholder(String),
     Searchable(bool),
     Disabled(bool),
+    MenuWidth(f32),
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Item {
     id: String,
     label: SharedString,
@@ -47,7 +48,7 @@ impl SearchableListItem for Item {
         self.disabled
     }
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Delegate {
     all: Vec<Item>,
     visible: Vec<Item>,
@@ -127,6 +128,7 @@ struct Callbacks {
 }
 struct Host {
     state: Entity<ComboboxState<Delegate>>,
+    rows: RefCell<Delegate>,
     callbacks: Rc<RefCell<Callbacks>>,
     _change: Subscription,
     _confirm: Subscription,
@@ -185,7 +187,7 @@ impl RenderOnce for Bound {
             cx,
             move |window, cx| {
                 let state = cx.new(|cx| {
-                    ComboboxState::new(initial, Vec::new(), window, cx)
+                    ComboboxState::new(initial.clone(), Vec::new(), window, cx)
                         .multiple(false)
                         .searchable(searchable)
                 });
@@ -218,27 +220,34 @@ impl RenderOnce for Bound {
                 );
                 Host {
                     state,
+                    rows: RefCell::new(initial),
                     callbacks,
                     _change: change,
                     _confirm: confirm,
                 }
             },
         );
-        let (state, callbacks) = {
+        let (state, callbacks, rows_changed) = {
             let host = host.read(cx);
-            (host.state.clone(), host.callbacks.clone())
+            let rows_changed = *host.rows.borrow() != next;
+            if rows_changed {
+                *host.rows.borrow_mut() = next.clone();
+            }
+            (host.state.clone(), host.callbacks.clone(), rows_changed)
         };
         *callbacks.borrow_mut() = Callbacks {
             change: self.change,
             confirm: self.confirm,
         };
-        state.update(cx, |state, cx| {
-            let selected = state.selected_value();
-            state.set_items(next, window, cx);
-            if let Some(selected) = selected {
-                state.set_selected_values(&[selected], window, cx);
-            }
-        });
+        if rows_changed {
+            state.update(cx, |state, cx| {
+                let selected = state.selected_value();
+                state.set_items(next, window, cx);
+                if let Some(selected) = selected {
+                    state.set_selected_values(&[selected], window, cx);
+                }
+            });
+        }
         let mut combobox = Combobox::new(&state);
         for op in self.ops {
             combobox = match op {
@@ -246,6 +255,7 @@ impl RenderOnce for Bound {
                 Op::SearchPlaceholder(value) => combobox.search_placeholder(value),
                 Op::Searchable(_) => combobox,
                 Op::Disabled(value) => combobox.disabled(value),
+                Op::MenuWidth(value) => combobox.menu_width(gpui::px(value)),
             };
         }
         combobox.style().refine(&self.style);
@@ -317,6 +327,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             method("search_placeholder", "Sets the text shown in the empty search field.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::SearchPlaceholder(value.clone())), _ => None }),
             method("searchable", "Shows the search field above the item list.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Searchable(*value)), _ => None }),
             method("disabled", "Disables the combobox.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
+            method("menu_width", "Sets the popup menu width in pixels.", ArgumentSchema::Number, |arg| match arg { ComponentArgument::Number(value) if value.is_finite() && *value > 0.0 && *value <= f32::MAX as f64 => Some(Op::MenuWidth(*value as f32)), _ => None }),
         ])
 .with_documentation("Native retained single-select searchable Combobox backed by immutable `{id,label,disabled?}` snapshots."))?;
     Ok(())

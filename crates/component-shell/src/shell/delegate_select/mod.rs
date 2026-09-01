@@ -27,6 +27,7 @@ struct Payload {
 #[derive(Clone)]
 enum Op {
     Placeholder(String),
+    MenuWidth(f32),
     Disabled(bool),
 }
 
@@ -208,6 +209,7 @@ impl RenderOnce for BoundSelect {
         for op in self.ops {
             select = match op {
                 Op::Placeholder(value) => select.placeholder(value),
+                Op::MenuWidth(value) => select.menu_width(gpui::px(value)),
                 Op::Disabled(value) => select.disabled(value),
             };
         }
@@ -292,6 +294,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         })])
 .with_methods(vec![
             method("placeholder", "Sets the text shown while nothing is selected.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::Placeholder(value.clone())), _ => None }),
+            method("menu_width", "Sets the popup menu width in pixels.", ArgumentSchema::Number, |arg| match arg { ComponentArgument::Number(value) if value.is_finite() && *value > 0.0 && *value <= f32::MAX as f64 => Some(Op::MenuWidth(*value as f32)), _ => None }),
             method("disabled", "Disables the select.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
         ])
 .with_documentation("Native retained single-value Select backed by immutable `{id,label,disabled?}` snapshots and a lazy row renderer."))?;

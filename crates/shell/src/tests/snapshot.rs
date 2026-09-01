@@ -55,7 +55,7 @@ export default class NativePath extends View {
       .line_to("100%", "100%")
       .close()
       .build();
-    return window.paint_path(path, Background.solid("#16a34a"))
+    return window.paint_path(path, Background.solid(`#16a34a`))
       .w(200)
       .h(80);
   }

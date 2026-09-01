@@ -39,7 +39,7 @@ function registeredPanel(story, surfaces, cx) {
     .gap(24)
     .children(
       surfaces.flatMap((surface) =>
-        registeredExamples(surface).map((example) => storySection(example, cx)),
+        registeredExamples(surface, cx).map((example) => storySection(example, cx)),
       ),
     );
 }

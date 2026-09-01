@@ -2,12 +2,7 @@
 // inventory. Constructor calls intentionally use `new`, matching the generated
 // gpui-component declarations.
 import { div } from "gpui";
-import {
-  Input as BaseInput,
-  InputState as BaseInputState,
-  h_flex,
-  v_flex,
-} from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import {
   Accordion,
   AccordionItem,
@@ -52,6 +47,7 @@ import {
   Icon,
   Image,
   InfoAlert,
+  Input,
   InputState,
   Kbd,
   Label,
@@ -186,43 +182,38 @@ const retained = (key, create) => {
  * needs a stable identity so interaction survives subsequent frames.
  */
 export function initializeRegisteredExamples() {
-  retained("input-project-name", () =>
-    BaseInputState.new({ placeholder: "Enter a project name" }),
-  );
-  retained("input-locked", () =>
-    BaseInputState.new({ placeholder: "Managed by your organization" }),
-  );
-  retained("number-input", () => InputState());
+  retained("input-project-name", () => InputState("Enter a project name"));
+  retained("input-locked", () => InputState("Managed by your organization"));
+  retained("number-input", () => InputState("Quantity", "12"));
   retained("otp-six", () => OtpState(6));
   retained("otp-four", () => OtpState(4));
-  retained("textarea-notes", () => TextareaState());
-  retained("slider-default", () => SliderState());
-  retained("slider-reverse", () => SliderState());
-  retained("slider-vertical", () => SliderState());
-  retained("slider-disabled", () => SliderState());
+  retained("textarea-notes", () =>
+    TextareaState("Ship the component gallery with verified interactive examples."),
+  );
+  retained("slider-default", () => SliderState(36));
+  retained("slider-reverse", () => SliderState(68));
+  retained("slider-vertical", () => SliderState(54));
+  retained("slider-disabled", () => SliderState(24));
   retained("color-picker", () => ColorPickerState());
   retained("date-picker", () => DatePickerState());
   retained("calendar-one", () => CalendarState());
   retained("calendar-two", () => CalendarState());
   retained("message-scroller", () => MessageScrollerState(3));
-  retained("form-account", () => BaseInputState.new({ placeholder: "Acme Cloud" }));
-  retained("form-region", () => BaseInputState.new({ placeholder: "us-east-1" }));
-  retained("form-endpoint", () =>
-    BaseInputState.new({ placeholder: "https://api.example.com" }),
-  );
-  retained("form-token", () =>
-    BaseInputState.new({ placeholder: "Paste an access token" }),
-  );
+  retained("form-account", () => InputState("Acme Cloud"));
+  retained("form-region", () => InputState("us-east-1"));
+  retained("form-endpoint", () => InputState("https://api.example.com"));
+  retained("form-token", () => InputState("Paste an access token"));
   retained("data-table-default", () => DataTableState(["name", "status"]));
   retained("data-table-striped", () => DataTableState(["name", "status"]));
   retained("command-default", () => CommandState());
   retained("command-filter", () => CommandState());
   retained("scroll-handle", () => ScrollbarHandle());
   retained("scrollbar-handle", () => ScrollbarHandle());
+  retained("scrollbar-horizontal-handle", () => ScrollbarHandle());
   retained("editor-rust", () =>
-    EditorState("fn main() {\n    println!(\"hello\");\n}"),
+    EditorState("fn main() {\n    println!(\"hello\");\n}", "rust"),
   );
-  retained("editor-readonly", () => EditorState("// generated, do not edit"));
+  retained("editor-readonly", () => EditorState("// generated, do not edit", "rust"));
 }
 
 /**
@@ -246,9 +237,10 @@ const accordionOpen = (key, fallback, index) =>
  * selected, loading — that changes how it reads.
  *
  * @param {string} surface
+ * @param {import("gpui").Context} cx
  * @returns {Array<{ label: string, description?: string, element: unknown }>}
  */
-export function registeredExamples(surface) {
+export function registeredExamples(surface, cx) {
   switch (surface) {
     case "Attachment":
       return [
@@ -700,67 +692,66 @@ export function registeredExamples(surface) {
           label: "Basic",
           description: "A trigger beside the title, with a summary that stays visible.",
           element: asElement(
-            new Collapsible()
+            v_flex()
               .w(360)
-              .gap(8)
-              .open(/** @type {boolean} */ (state("collapsible-order", true)))
-              .motion_id("story-collapsible-order")
+              .border(1)
+              .rounded(6)
               .child(
-                h_flex()
+                new Collapsible()
                   .w_full()
-                  .justify_between()
-                  .items_center()
-                  .gap(16)
-                  .child(div().text_size(13).font_semibold().child("Order #4189"))
+                  .open(/** @type {boolean} */ (state("collapsible-order", true)))
+                  .motion_id("story-collapsible-order")
                   .child(
-                    asElement(
-                      new Button("collapsible-order-trigger")
-                        .label(
-                          state("collapsible-order", true)
-                            ? "Hide details"
-                            : "Show details",
-                        )
-                        .ghost()
-                        .size("xsmall")
-                        .on_click((_event, cx) =>
-                          setState(
-                            "collapsible-order",
-                            !state("collapsible-order", true),
-                            cx,
-                          ),
+                    h_flex()
+                      .w_full()
+                      .px(12)
+                      .py(10)
+                      .justify_between()
+                      .items_center()
+                      .gap(16)
+                      .child(div().text_size(13).font_semibold().child("Order #4189"))
+                      .child(
+                        asElement(
+                          new Button("collapsible-order-trigger")
+                            .label(state("collapsible-order", true) ? "Hide details" : "Show details")
+                            .ghost()
+                            .size("xsmall")
+                            .on_click((_event, cx) =>
+                              setState("collapsible-order", !state("collapsible-order", true), cx),
+                            ),
                         ),
-                    ),
-                  ),
-              )
-              .child(
-                h_flex()
-                  .w_full()
-                  .justify_between()
-                  .items_center()
-                  .p(10)
-                  .rounded(6)
-                  .border(1)
-                  .child(div().text_size(12).child("Status"))
-                  .child(asElement(new Tag().variant("success").size("small").child("Shipped"))),
-              )
-              .content(
-                v_flex()
-                  .gap(8)
-                  .children(
-                    [
-                      ["Tracking", "1Z999AA1"],
-                      ["Carrier", "UPS Ground"],
-                      ["Delivery", "Thursday, September 3"],
-                    ].map(([title, value]) =>
-                      v_flex()
-                        .w_full()
-                        .gap(2)
-                        .p(10)
-                        .rounded(6)
-                        .border(1)
-                        .child(div().text_size(12).font_semibold().child(title))
-                        .child(div().text_size(12).child(value)),
-                    ),
+                      ),
+                  )
+                  .child(
+                    h_flex()
+                      .w_full()
+                      .justify_between()
+                      .items_center()
+                      .px(12)
+                      .py(10)
+                      .border_t(1)
+                      .child(div().text_size(12).child("Status"))
+                      .child(asElement(new Tag().variant("success").size("small").child("Shipped"))),
+                  )
+                  .content(
+                    v_flex()
+                      .border_t(1)
+                      .children(
+                        [
+                          ["Tracking", "1Z999AA1"],
+                          ["Carrier", "UPS Ground"],
+                          ["Delivery", "Thursday, September 3"],
+                        ].map(([title, value], index) =>
+                          h_flex()
+                            .w_full()
+                            .justify_between()
+                            .px(12)
+                            .py(9)
+                            .when(index > 0, (row) => row.border_t(1))
+                            .child(div().text_size(12).child(title))
+                            .child(div().text_size(12).font_semibold().child(value)),
+                        ),
+                      ),
                   ),
               ),
           ),
@@ -768,48 +759,51 @@ export function registeredExamples(surface) {
         {
           label: "Row trigger",
           description: "The whole question row is the trigger, as used by FAQ entries.",
-          element: asElement(
-            new GroupBox()
-              .variant("outline")
-              .w(360)
-              .child(
-                asElement(
-                  new Collapsible()
-                    .w_full()
-                    .open(/** @type {boolean} */ (state("collapsible-faq", false)))
-                    .motion_id("story-collapsible-faq")
-                    .child(
-                      h_flex()
-                        .id("collapsible-faq-trigger")
-                        .w_full()
-                        .justify_between()
-                        .items_center()
-                        .gap(8)
-                        .on_click((_event, cx) =>
-                          setState(
-                            "collapsible-faq",
-                            !state("collapsible-faq", false),
-                            cx,
-                          ),
-                        )
-                        .child(div().text_size(12).child("How do I reset my password?"))
-                        .child(
-                          div()
-                            .text_size(12)
-                            .child(state("collapsible-faq", false) ? "⌃" : "⌄"),
+          element: v_flex()
+            .w(360)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Collapsible()
+                  .w_full()
+                  .open(/** @type {boolean} */ (state("collapsible-faq", false)))
+                  .motion_id("story-collapsible-faq")
+                  .child(
+                    h_flex()
+                      .id("collapsible-faq-trigger")
+                      .w_full()
+                      .justify_between()
+                      .items_center()
+                      .gap(8)
+                      .px(12)
+                      .py(10)
+                      .on_click((_event, cx) =>
+                        setState("collapsible-faq", !state("collapsible-faq", false), cx),
+                      )
+                      .child(div().text_size(12).child("How do I reset my password?"))
+                      .child(
+                        asElement(
+                          new Icon(
+                            state("collapsible-faq", false)
+                              ? "icons/chevron-down.svg"
+                              : "icons/chevron-right.svg",
+                          ).size("xsmall"),
                         ),
-                    )
-                    .content(
-                      div()
-                        .pt(12)
-                        .text_size(12)
-                        .child(
-                          "Choose Forgot Password on the sign-in page and we’ll email instructions for creating a new one.",
-                        ),
-                    ),
-                ),
+                      ),
+                  )
+                  .content(
+                    div()
+                      .w_full()
+                      .border_t(1)
+                      .px(12)
+                      .py(10)
+                      .text_size(12)
+                      .child("Open Settings, choose Security, then select Reset password."),
+                  ),
               ),
-          ),
+            ),
         },
       ];
 
@@ -825,22 +819,18 @@ export function registeredExamples(surface) {
             .gap(8)
             .child(
               asElement(
-                BaseInput.new(
-                  retained("input-project-name", () =>
-                    BaseInputState.new({ placeholder: "Enter a project name" }),
-                  ),
+                new Input(
+                  retained("input-project-name", () => InputState("Enter a project name")),
                 ).w_full(),
               ),
             )
             .child(
               asElement(
-                BaseInput.new(
-                  retained("input-locked", () =>
-                    BaseInputState.new({
-                      placeholder: "Managed by your organization",
-                    }),
-                  ),
-                ).disabled(true),
+                new Input(
+                  retained("input-locked", () => InputState("Managed by your organization")),
+                )
+                  .disabled(true)
+                  .w_full(),
               ),
             ),
         },
@@ -850,10 +840,9 @@ export function registeredExamples(surface) {
         {
           label: "Stepper buttons on both ends",
           element: asElement(
-            new NumberInput(retained("number-input", () => InputState()))
+            new NumberInput(retained("number-input", () => InputState("Quantity", "12")))
               .w(240)
-              .max_w_full()
-              .placeholder("Quantity"),
+              .max_w_full(),
           ),
         },
       ];
@@ -875,7 +864,11 @@ export function registeredExamples(surface) {
         {
           label: "Bordered, fixed height",
           element: asElement(
-            new Textarea(retained("textarea-notes", () => TextareaState()))
+            new Textarea(
+              retained("textarea-notes", () =>
+                TextareaState("Ship the component gallery with verified interactive examples."),
+              ),
+            )
               .aria_label("Notes")
               .bordered(true)
               .w(520)
@@ -1015,21 +1008,21 @@ export function registeredExamples(surface) {
           element: v_flex()
             .w_full()
             .gap(16)
-            .child(asElement(new Slider(retained("slider-default", () => SliderState()))))
+            .child(asElement(new Slider(retained("slider-default", () => SliderState(36)))))
             .child(
-              asElement(new Slider(retained("slider-reverse", () => SliderState())).reverse()),
+              asElement(new Slider(retained("slider-reverse", () => SliderState(68))).reverse()),
             ),
         },
         {
           label: "Vertical",
           element: asElement(
-            new Slider(retained("slider-vertical", () => SliderState())).vertical().h(120),
+            new Slider(retained("slider-vertical", () => SliderState(54))).vertical().h(120),
           ),
         },
         {
           label: "Disabled",
           element: asElement(
-            new Slider(retained("slider-disabled", () => SliderState())).disabled(true),
+            new Slider(retained("slider-disabled", () => SliderState(24))).disabled(true),
           ),
         },
       ];
@@ -1538,10 +1531,8 @@ export function registeredExamples(surface) {
                   .label("Account name")
                   .required(true)
                   .child(
-                    BaseInput.new(
-                      retained("form-account", () =>
-                        BaseInputState.new({ placeholder: "Acme Cloud" }),
-                      ),
+                    asElement(
+                      new Input(retained("form-account", () => InputState("Acme Cloud"))).w_full(),
                     ),
                   ),
               )
@@ -1549,10 +1540,8 @@ export function registeredExamples(surface) {
                 new Field()
                   .label("Region")
                   .child(
-                    BaseInput.new(
-                      retained("form-region", () =>
-                        BaseInputState.new({ placeholder: "us-east-1" }),
-                      ),
+                    asElement(
+                      new Input(retained("form-region", () => InputState("us-east-1"))).w_full(),
                     ),
                   ),
               ),
@@ -1570,10 +1559,10 @@ export function registeredExamples(surface) {
                   .label("Endpoint")
                   .description("Where requests are sent.")
                   .child(
-                    BaseInput.new(
-                      retained("form-endpoint", () =>
-                        BaseInputState.new({ placeholder: "https://api.example.com" }),
-                      ),
+                    asElement(
+                      new Input(
+                        retained("form-endpoint", () => InputState("https://api.example.com")),
+                      ).w_full(),
                     ),
                   ),
               )
@@ -1582,10 +1571,10 @@ export function registeredExamples(surface) {
                   .label("Token")
                   .required(true)
                   .child(
-                    BaseInput.new(
-                      retained("form-token", () =>
-                        BaseInputState.new({ placeholder: "Paste an access token" }),
-                      ),
+                    asElement(
+                      new Input(
+                        retained("form-token", () => InputState("Paste an access token")),
+                      ).w_full(),
                     ),
                   ),
               ),
@@ -1788,44 +1777,51 @@ export function registeredExamples(surface) {
             )
               .w(420)
               .max_w_full()
-              .h(180),
+              .h(180)
+              .border(1)
+              .border_color(cx.theme().colors.border)
+              .rounded(6)
+              .overflow_hidden(),
           ),
         },
       ];
     case "Select":
       return [
         {
-          label: "Closed, and disabled",
-          element: h_flex()
-            .w_full()
-            .flex_wrap()
-            .gap(8)
-            .items_center()
-            .child(
-              asElement(
-                new Select(
-                  "select-region",
-                  () => [
-                    { id: "eu", label: "eu-west-1" },
-                    { id: "us", label: "us-east-1" },
-                  ],
-                  (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
-                  (_value, _cx) => {},
-                ).placeholder("Choose a region"),
-              ),
+          label: "Region",
+          description: "Choose one deployment region.",
+          element: asElement(
+            new Select(
+              "select-region",
+              () => [
+                { id: "eu", label: "eu-west-1" },
+                { id: "us", label: "us-east-1" },
+              ],
+              (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
+              (_value, _cx) => {},
             )
-            .child(
-              asElement(
-                new Select(
-                  "select-disabled",
-                  () => [],
-                  (_row) => asElement(new Text("")),
-                  (_value, _cx) => {},
-                )
-                  .placeholder("Unavailable")
-                  .disabled(true),
-              ),
-            ),
+              .placeholder("Choose a region")
+              .menu_width(320)
+              .w(320)
+              .max_w_full(),
+          ),
+        },
+        {
+          label: "Disabled",
+          description: "A configured value that cannot be changed.",
+          element: asElement(
+            new Select(
+              "select-disabled-static",
+              () => [{ id: "managed", label: "Managed by your organization" }],
+              (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
+              (_value, _cx) => {},
+            )
+              .placeholder("Managed by your organization")
+              .menu_width(320)
+              .w(320)
+              .max_w_full()
+              .disabled(true),
+          ),
         },
       ];
     case "Combobox":
@@ -1844,6 +1840,7 @@ export function registeredExamples(surface) {
               (_value, _cx) => {},
             )
               .placeholder("Choose an option")
+              .menu_width(320)
               .w(320)
               .max_w_full()
               .searchable(true)
@@ -1860,6 +1857,7 @@ export function registeredExamples(surface) {
               (_value, _cx) => {},
             )
               .placeholder("Choose an option")
+              .menu_width(320)
               .w(320)
               .max_w_full()
               .searchable(false),
@@ -1871,14 +1869,22 @@ export function registeredExamples(surface) {
         {
           label: "An expanded folder with two files",
           element: asElement(
-            new Tree("project-tree").w(420).max_w_full().child(
-              asElement(
-                new TreeItem("src", "src")
-                  .expanded(true)
-                  .child(asElement(new TreeItem("main", "main.rs")))
-                  .child(asElement(new TreeItem("lib", "lib.rs"))),
+            new Tree("project-tree")
+              .w(420)
+              .max_w_full()
+              .h(180)
+              .border(1)
+              .border_color(cx.theme().colors.border)
+              .rounded(6)
+              .overflow_hidden()
+              .child(
+                asElement(
+                  new TreeItem("src", "src")
+                    .expanded(true)
+                    .child(asElement(new TreeItem("main", "main.rs")))
+                    .child(asElement(new TreeItem("lib", "lib.rs"))),
+                ),
               ),
-            ),
           ),
         },
       ];
@@ -1993,7 +1999,8 @@ export function registeredExamples(surface) {
       ];
 
     // -------------------------------------------------------- layout & panels
-    case "Sidebar":
+    case "Sidebar": {
+      const collapsed = /** @type {boolean} */ (state("sidebar-collapsed", false));
       return [
         {
           label: "Application navigation",
@@ -2002,34 +2009,49 @@ export function registeredExamples(surface) {
           element: h_flex()
             .w_full()
             .h(340)
-            .items_start()
-            .gap(12)
+            .border(1)
+            .rounded(8)
+            .overflow_hidden()
             .child(
               asElement(
                 new Sidebar("story-sidebar")
                   .side("left")
                   .collapsible("icon")
-                  .collapsed(
-                    /** @type {boolean} */ (state("sidebar-collapsed", false)),
-                  )
+                  .collapsed(collapsed)
                   .h_full()
                   .header(
                     asElement(
                       new SidebarHeader().child(
-                        v_flex()
-                          .gap(2)
-                          .child(div().font_semibold().child("Acme Studio"))
-                          .child(div().text_size(11).child("Design workspace")),
+                        collapsed
+                          ? asElement(new Icon("icons/github.svg").size("small"))
+                          : h_flex()
+                              .gap(8)
+                              .items_center()
+                              .child(asElement(new Icon("icons/github.svg").size("small")))
+                              .child(
+                                v_flex()
+                                  .gap(2)
+                                  .child(div().font_semibold().child("Acme Studio"))
+                                  .child(div().text_size(11).child("Design workspace")),
+                              ),
                       ),
                     ),
                   )
                   .footer(
                     asElement(
                       new SidebarFooter().child(
-                        v_flex()
-                          .gap(2)
-                          .child(div().font_semibold().child("Alex Morgan"))
-                          .child(div().text_size(11).child("alex@acme.test")),
+                        collapsed
+                          ? asElement(new Icon("icons/user.svg").size("small"))
+                          : h_flex()
+                              .gap(8)
+                              .items_center()
+                              .child(asElement(new Icon("icons/user.svg").size("small")))
+                              .child(
+                                v_flex()
+                                  .gap(2)
+                                  .child(div().font_semibold().child("Alex Morgan"))
+                                  .child(div().text_size(11).child("alex@acme.test")),
+                              ),
                       ),
                     ),
                   )
@@ -2065,33 +2087,92 @@ export function registeredExamples(surface) {
               ),
             )
             .child(
-              asElement(
-                new SidebarToggleButton()
-                  .collapsed(
-                    /** @type {boolean} */ (state("sidebar-collapsed", false)),
-                  )
-                  .on_click((_event, cx) =>
-                    setState(
-                      "sidebar-collapsed",
-                      !state("sidebar-collapsed", false),
-                      cx,
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .child(
+                  h_flex()
+                    .h(44)
+                    .px(12)
+                    .gap(10)
+                    .items_center()
+                    .border_b(1)
+                    .child(
+                      asElement(
+                        new SidebarToggleButton()
+                          .collapsed(collapsed)
+                          .on_click((_event, cx) =>
+                            setState("sidebar-collapsed", !collapsed, cx),
+                          ),
+                      ),
+                    )
+                    .child(div().text_size(12).font_semibold().child("Components")),
+                )
+                .child(
+                  v_flex()
+                    .flex_1()
+                    .p(20)
+                    .gap(8)
+                    .child(div().text_size(16).font_semibold().child("Component workspace"))
+                    .child(
+                      div()
+                        .text_size(12)
+                        .child("Select a destination from the sidebar. Collapse it to keep an icon rail."),
                     ),
-                  ),
-              ),
+                ),
             ),
         },
       ];
+    }
     case "Resizable":
       return [
         {
           label: "Two panels with a draggable divider",
-          element: asElement(
-            new Resizable("story-split")
-              .axis("horizontal")
-              .cross_size(160)
-              .child(asElement(new ResizablePanel().size(160).child("Navigation")))
-              .child(asElement(new ResizablePanel().child("Content"))),
-          ),
+          element: v_flex()
+            .w_full()
+            .border(1)
+            .rounded(8)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Resizable("story-split")
+                  .axis("horizontal")
+                  .cross_size(220)
+                  .child(
+                    asElement(
+                      new ResizablePanel()
+                        .size(220)
+                        .child(
+                          v_flex()
+                            .size_full()
+                            .p(16)
+                            .gap(12)
+                            .child(div().text_size(12).font_semibold().child("PROJECT"))
+                            .child(div().text_size(12).child("src"))
+                            .child(div().pl(16).text_size(12).child("main.rs"))
+                            .child(div().pl(16).text_size(12).child("app.rs")),
+                        ),
+                    ),
+                  )
+                  .child(
+                    asElement(
+                      new ResizablePanel().child(
+                        v_flex()
+                          .size_full()
+                          .p(20)
+                          .gap(8)
+                          .child(div().text_size(15).font_semibold().child("main.rs"))
+                          .child(
+                            div()
+                              .text_size(12)
+                              .child("Drag the divider to resize the project tree."),
+                          ),
+                      ),
+                    ),
+                  ),
+              ),
+            ),
         },
       ];
     case "Scroll":
@@ -2116,32 +2197,85 @@ export function registeredExamples(surface) {
       ];
     case "Scrollbar": {
       const handle = retained("scrollbar-handle", () => ScrollbarHandle());
+      const horizontalHandle = retained("scrollbar-horizontal-handle", () => ScrollbarHandle());
       return [
         {
           label: "An always-visible scrollbar beside its region",
-          element: asElement(
-            new GroupBox()
-              .child(
-                asElement(
-                  new Scroll(handle)
-                    .h(140)
-                    .child(
-                      v_flex()
-                        .gap(8)
-                        .children(
-                          Array.from({ length: 12 }, (_unused, index) =>
-                            asElement(new Text(`Row ${index + 1}`)),
-                          ),
+          element: h_flex()
+            .w_full()
+            .h(160)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Scroll(handle)
+                  .scroll_axis("vertical")
+                  .flex_1()
+                  .min_w_0()
+                  .h_full()
+                  .p(12)
+                  .child(
+                    v_flex()
+                      .gap(8)
+                      .children(
+                        Array.from({ length: 16 }, (_unused, index) =>
+                          asElement(new Text(`Activity row ${index + 1}`)),
                         ),
-                    ),
-                ),
-              )
-              .child(
-                asElement(
-                  new Scrollbar("story-scrollbar", handle).scroll_axis("vertical").mode("always"),
-                ),
+                      ),
+                  ),
               ),
-          ),
+            )
+            .child(
+              asElement(
+                new Scrollbar("story-scrollbar", handle)
+                  .scroll_axis("vertical")
+                  .mode("always"),
+              ),
+            ),
+        },
+        {
+          label: "An always-visible horizontal scrollbar",
+          element: v_flex()
+            .w_full()
+            .h(110)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Scroll(horizontalHandle)
+                  .scroll_axis("horizontal")
+                  .w_full()
+                  .flex_1()
+                  .min_h(0)
+                  .p(12)
+                  .child(
+                    h_flex()
+                      .w(1280)
+                      .gap(12)
+                      .children(
+                        Array.from({ length: 10 }, (_unused, index) =>
+                          div()
+                            .w(112)
+                            .flex_shrink_0()
+                            .p(10)
+                            .border(1)
+                            .rounded(5)
+                            .text_size(12)
+                            .child(`Column ${index + 1}`),
+                        ),
+                      ),
+                  ),
+              ),
+            )
+            .child(
+              asElement(
+                new Scrollbar("story-scrollbar-horizontal", horizontalHandle)
+                  .scroll_axis("horizontal")
+                  .mode("always"),
+              ),
+            ),
         },
       ];
     }
@@ -2149,33 +2283,75 @@ export function registeredExamples(surface) {
       return [
         {
           label: "A page of grouped settings",
-          element: asElement(
-            new Settings("story-settings")
-              .size("medium")
-              .sidebar_width(200)
-              .child(
+          element: v_flex()
+            .w_full()
+            .h(420)
+            .child(
+              asElement(
+                new Settings("story-settings")
+                  .size("medium")
+                  .sidebar_width(220)
+                  .default_selected_page(0)
+                  .child(
                 asElement(
-                  new SettingPage("General").child(
-                    asElement(
-                      new SettingGroup()
-                        .title("Appearance")
-                        .child(
-                          asElement(
-                            new SettingItem("Theme")
-                              .description("Follows the system setting.")
-                              .content(asElement(new Text("System"))),
+                  new SettingPage("General")
+                    .default_open(true)
+                    .child(
+                      asElement(
+                        new SettingGroup()
+                          .title("Appearance")
+                          .child(
+                            asElement(
+                              new SettingItem("Theme")
+                                .description("Choose the application color scheme.")
+                                .content(
+                                  asElement(
+                                    new Button("settings-theme")
+                                      .outline()
+                                      .size("small")
+                                      .label("System"),
+                                  ),
+                                ),
                           ),
-                        )
-                        .child(
-                          asElement(
-                            new SettingItem("Density").content(asElement(new Text("Comfortable"))),
+                          )
+                          .child(
+                            asElement(
+                              new SettingItem("Compact layout")
+                                .description("Reduce spacing in navigation and lists.")
+                                .content(
+                                  asElement(
+                                    new Switch("settings-compact")
+                                      .checked(false)
+                                      .on_change((_checked, _cx) => {}),
+                                  ),
+                                ),
+                            ),
                           ),
-                        ),
+                      ),
+                    )
+                    .child(
+                      asElement(
+                        new SettingGroup()
+                          .title("Updates")
+                          .child(
+                            asElement(
+                              new SettingItem("Automatic updates")
+                                .description("Download stable releases in the background.")
+                                .content(
+                                  asElement(
+                                    new Switch("settings-updates")
+                                      .checked(true)
+                                      .on_change((_checked, _cx) => {}),
+                                  ),
+                                ),
+                            ),
+                          ),
+                      ),
                     ),
-                  ),
                 ),
+                  ),
               ),
-          ),
+            ),
         },
       ];
     case "Editor":
@@ -2183,16 +2359,18 @@ export function registeredExamples(surface) {
         {
           label: "Editable, and read-only",
           element: v_flex()
+            .w_full()
             .gap(12)
             .child(
               asElement(
                 new Editor(
                   retained("editor-rust", () =>
-                    EditorState("fn main() {\n    println!(\"hello\");\n}"),
+                    EditorState("fn main() {\n    println!(\"hello\");\n}", "rust"),
                   ),
                 )
                   .aria_label("Source editor")
                   .bordered(true)
+                  .w_full()
                   .h(120),
               ),
             )
@@ -2200,12 +2378,13 @@ export function registeredExamples(surface) {
               asElement(
                 new Editor(
                   retained("editor-readonly", () =>
-                    EditorState("// generated, do not edit"),
+                    EditorState("// generated, do not edit", "rust"),
                   ),
                 )
                   .aria_label("Generated source")
                   .bordered(true)
                   .readonly(true)
+                  .w_full()
                   .h(80),
               ),
             ),

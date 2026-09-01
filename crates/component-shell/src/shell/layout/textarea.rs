@@ -62,10 +62,28 @@ mod tests {
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry.register_state(
-        StateDescriptor::new("TextareaState", "TextareaState", vec![], |_, window, cx| {
-            Ok(Box::new(cx.new(|cx| TextareaState::new(window, cx))))
-        })
-        .with_documentation("Retained multi-line editing state owned by a mounted view."),
+        StateDescriptor::new(
+            "TextareaState",
+            "TextareaState",
+            vec![ArgumentDescriptor::new(
+                "initial_value",
+                ArgumentSchema::Optional(Box::new(ArgumentSchema::String)),
+            )],
+            |arguments, window, cx| {
+                let value = match arguments {
+                    [ComponentArgument::Optional(Some(value))] => match value.as_ref() {
+                        ComponentArgument::String(value) => value.clone(),
+                        _ => return Err("TextareaState initial_value expects text".into()),
+                    },
+                    [ComponentArgument::Optional(None)] => String::new(),
+                    _ => return Err("TextareaState expects an optional initial value".into()),
+                };
+                Ok(Box::new(cx.new(|cx| {
+                    TextareaState::new(window, cx).default_value(value)
+                })))
+            },
+        )
+        .with_documentation("Retained multi-line editing state with an optional initial value."),
     )?;
     registry.register(ComponentDescriptor::new("Textarea", Arc::new(Materializer))
 .with_constructors(vec![ConstructorDescriptor::new("Textarea", vec![ArgumentDescriptor::new("state", ArgumentSchema::Entity("TextareaState"))], |args| match args {

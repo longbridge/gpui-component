@@ -1,6 +1,7 @@
 use super::{Carrier, take};
 use super::{bool_method, require_child};
 use gpui_component::{
+    Icon, IconName, h_flex,
     list::ListItem,
     tree::{Tree, TreeItem, TreeState},
 };
@@ -133,7 +134,21 @@ impl ComponentMaterializer for TreeMaterializer {
             test_probe::row(entry.item(), selected);
             ListItem::new(entry.item().id.clone())
                 .selected(selected)
-                .child(entry.item().label.clone())
+                .w_full()
+                .px_3()
+                .pl(gpui::px(16.) * entry.depth() + gpui::px(12.))
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .child(Icon::new(if !entry.is_folder() {
+                            IconName::File
+                        } else if entry.is_expanded() {
+                            IconName::FolderOpen
+                        } else {
+                            IconName::Folder
+                        }))
+                        .child(entry.item().label.clone()),
+                )
         });
         tree.style().refine(&request.take_style());
         Ok(tree.into_any_element())

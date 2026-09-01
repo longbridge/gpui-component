@@ -33,19 +33,19 @@ export default class Counter extends View {
       .items_center()
       .gap_2()
       .p(16)
-      .bg("background")
-      .child(div().text_color("foreground").child(`Count: ${this.count}`))
+      .bg(`#ffffff`)
+      .child(div().text_color(`#111111`).child(`Count: ${this.count}`))
       .child(
         Button.new("increment")
           .px(12)
           .py(6)
           .rounded(6)
-          .bg("primary")
+          .bg(`#2563eb`)
           .on_click((event, cx) => {
             this.count += 1;
             cx.notify();
           })
-          .child(div().text_color("primary_foreground").child("Increment")),
+          .child(div().text_color(`#ffffff`).child("Increment")),
       );
   }
 }
@@ -3844,10 +3844,10 @@ import { Button } from "gpui-base";
 export default class Styled extends View {
   render(cx) {
     return div()
-      .hover((el) => el.bg("accent"))
+      .hover((el) => el.bg(`#eff6ff`))
       .child(
         Button.new("go")
-          .bg("primary")
+          .bg(`#2563eb`)
           .hover((el) => el.opacity(0.9))
           .active((el) => el.opacity(0.8))
           .child("Go"),
@@ -4195,9 +4195,9 @@ export default class Volume extends View {
               .relative()
               .w_full()
               .h(6)
-              .bg("secondary")
-              .range_style((fill) => fill.bg("primary"))
-              .child(SliderThumb.new(this.volume).size(16).bg("primary")),
+              .bg(`#e5e7eb`)
+              .range_style((fill) => fill.bg(`#2563eb`))
+              .child(SliderThumb.new(this.volume).size(16).bg(`#2563eb`)),
           ),
         ),
       );
@@ -4394,8 +4394,8 @@ export default class Code extends View {
           .flex()
           .gap(8)
           .cell_style((cell) => cell.size(40).border_1().rounded(6))
-          .cell_active_style((cell) => cell.border_color("ring"))
-          .caret_style((caret) => caret.w(2).h(18).bg("foreground")),
+          .cell_active_style((cell) => cell.border_color(`#2563eb`))
+          .caret_style((caret) => caret.w(2).h(18).bg(`#111111`)),
       );
   }
 }
@@ -4696,12 +4696,12 @@ export default class Download extends View {
         ProgressTrack.new()
           .w(200)
           .h(6)
-          .bg("secondary")
+          .bg(`#e5e7eb`)
           .child(
             ProgressIndicator.new()
               .w(`${this.percent}%`)
               .h(6)
-              .bg("primary")));
+              .bg(`#2563eb`)));
   }
 }
 
@@ -4886,7 +4886,7 @@ export default class Positions extends View {
         TableBody.new("positions-body").children(
           rows.map((cells, row) =>
             TableRow.new(`positions-row-${row}`, row + 2)
-              .hover((el) => el.bg("background"))
+              .hover((el) => el.bg(`#ffffff`))
               .on_click((_event, cx) => { this.picked = row; cx.notify(); })
               .children(
                 cells.map((value, column) =>

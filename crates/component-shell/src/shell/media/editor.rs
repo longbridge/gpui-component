@@ -53,18 +53,43 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         StateDescriptor::new(
             "EditorState",
             "EditorState",
-            vec![ArgumentDescriptor::new(
-                "initial_value",
-                ArgumentSchema::String,
-            )],
+            vec![
+                ArgumentDescriptor::new("initial_value", ArgumentSchema::String),
+                ArgumentDescriptor::new(
+                    "language",
+                    ArgumentSchema::Optional(Box::new(ArgumentSchema::Enum(&["rust", "json"]))),
+                ),
+            ],
             |args, window, cx| match args {
-                [ComponentArgument::String(value)] => Ok(Box::new(
-                    cx.new(|cx| EditorState::new(window, cx).default_value(value.clone())),
-                ) as _),
-                _ => Err("EditorState expects one initial string".into()),
+                [
+                    ComponentArgument::String(value),
+                    ComponentArgument::Optional(language),
+                ] => {
+                    let language = if let Some(language) = language {
+                        let ComponentArgument::Enum(language) = language.as_ref() else {
+                            return Err("EditorState language expects rust or json".into());
+                        };
+                        Some(language.clone())
+                    } else {
+                        None
+                    };
+                    Ok(Box::new(cx.new(|cx| {
+                        let state = EditorState::new(window, cx).default_value(value.clone());
+                        if let Some(language) = language {
+                            state.language(language)
+                        } else {
+                            state
+                        }
+                    })) as _)
+                }
+                _ => Err(
+                    "EditorState expects initial text and optional rust or json language".into(),
+                ),
             },
         )
-        .with_documentation("Retained source-editor state initialized with a local text value."),
+        .with_documentation(
+            "Retained source-editor state initialized with local text and a syntax language.",
+        ),
     )?;
     registry.register(ComponentDescriptor::new("Editor", Arc::new(Materializer))
 .with_constructors(vec![ConstructorDescriptor::new(
@@ -90,7 +115,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             ).with_documentation("Sets the editor accessibility label."),
         ])
 .with_documentation(
-            "A retained native source editor. Shell style and common disabled state are honored; children are rejected. Language providers and custom context menus are not exposed.",
+            "A retained native source editor. Shell style and common disabled state are honored; children are rejected.",
         ))?;
     Ok(())
 }

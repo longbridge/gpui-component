@@ -2,6 +2,16 @@ import { pendingStory } from "./story.js";
 
 export const stories = [
   pendingStory({
+    id: "alert-dialog",
+    title: "AlertDialog",
+    group: "Overlays",
+    rustStory: "AlertDialogStory",
+    description: "Destructive confirmation dialog.",
+    states: ["open", "cancel", "destructive action"],
+    availability: "pending",
+    api: "AlertDialog",
+  }),
+  pendingStory({
     id: "dialog",
     title: "Dialog",
     group: "Overlays",

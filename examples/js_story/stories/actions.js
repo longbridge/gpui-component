@@ -22,16 +22,6 @@ export const stories = [
     api: "Alert",
   }),
   pendingStory({
-    id: "alert-dialog",
-    title: "AlertDialog",
-    group: "Actions & disclosure",
-    rustStory: "AlertDialogStory",
-    description: "Destructive confirmation dialog.",
-    states: ["open", "cancel", "destructive action"],
-    availability: "pending",
-    api: "AlertDialog",
-  }),
-  pendingStory({
     id: "button",
     title: "Button",
     group: "Actions & disclosure",

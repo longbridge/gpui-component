@@ -726,18 +726,11 @@ fn argument_of(name: &str) -> Argument {
 fn color_types() -> String {
     let mut out = String::new();
     out.push_str("  /**\n");
-    out.push_str("   * A color: a semantic token name, or a `#rgb`, `#rrggbb` or `#rrggbbaa`\n");
-    out.push_str("   * literal. Prefer a token; a literal bypasses the theme, and a theme\n");
-    out.push_str("   * switch will not reach it.\n");
-    out.push_str("   *\n");
-    out.push_str("   * The union is closed, so a mistyped token is a compile error. A token\n");
-    out.push_str("   * name that reaches a call through a variable widens to `string` and\n");
-    out.push_str("   * has to say what it is:\n");
-    out.push_str("   *\n");
-    out.push_str("   *     /** @type {{ bg: import(\"gpui\").Color }} *\\/\n");
-    out.push_str("   *     const palette = tone === \"blocking\" ? ... : ...;\n");
+    out.push_str("   * A concrete `#rgb`, `#rrggbb`, or `#rrggbbaa` color value.\n");
+    out.push_str("   * Read semantic colors from `cx.theme().colors`; bare token names are\n");
+    out.push_str("   * intentionally not accepted.\n");
     out.push_str("   */\n");
-    out.push_str("  export type Color = import(\"gpui-base\").ColorToken | `#${string}`;\n\n");
+    out.push_str("  export type Color = `#${string}`;\n\n");
     out
 }
 
@@ -3014,9 +3007,9 @@ const BASE: &str = r#"  /** A row. */
    * Slider.new(this.volume).child(
    *   SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
    *     SliderIndicator.new(this.volume)
-   *       .relative().w_full().h(6).rounded(3).bg("secondary")
-   *       .range_style((fill) => fill.rounded(3).bg("primary"))
-   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg("primary").ml(-8)),
+   *       .relative().w_full().h(6).rounded(3).bg(`#e5e7eb`)
+   *       .range_style((fill) => fill.rounded(3).bg(`#2563eb`))
+   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg(`#2563eb`).ml(-8)),
    *   ),
    * );
    * ```
@@ -3104,9 +3097,9 @@ const BASE: &str = r#"  /** A row. */
    *   .flex().gap(8)
    *   .cell_style((cell) =>
    *     cell.size(40).flex().items_center().justify_center()
-   *       .border_1().border_color("border").rounded("md"))
-   *   .cell_active_style((cell) => cell.border_color("ring"))
-   *   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+   *       .border_1().border_color(`#d1d5db`).rounded("md"))
+   *   .cell_active_style((cell) => cell.border_color(`#2563eb`))
+   *   .caret_style((caret) => caret.w(2).h(18).bg(`#111111`))
    * ```
    *
    * Alone among the bound components, its cells are not the script's to
@@ -3936,7 +3929,7 @@ mod tests {
     }
 
     #[test]
-    fn every_color_token_is_in_the_color_union() {
+    fn colors_require_concrete_values_from_the_theme_api() {
         let declarations = base_declarations();
         for name in color_token_names() {
             assert!(
@@ -3944,10 +3937,8 @@ mod tests {
                 "`{name}` is missing from ColorToken"
             );
         }
-        assert!(
-            declarations
-                .contains("export type Color = import(\"gpui-base\").ColorToken | `#${string}`;")
-        );
+        assert!(declarations.contains("export type Color = `#${string}`;"));
+        assert!(!declarations.contains("ColorToken | `#${string}`"));
     }
 
     #[test]

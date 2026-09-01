@@ -1,6 +1,25 @@
 import { View, div } from "gpui";
 import { DockArea, dock_area, dock_content, h_flex, v_flex } from "gpui-base";
 
+const TAB_HEIGHT = 32;
+
+const dockTab = (group, panel, cx) =>
+  h_flex()
+    .id(`story-dock-tab-${panel.id}`)
+    .h(TAB_HEIGHT)
+    .px(10)
+    .items_center()
+    .border_r(1)
+    .border_color(cx.theme().colors.border)
+    .bg(panel.active ? cx.theme().colors.background : cx.theme().colors.secondary)
+    .text_color(
+      panel.active ? cx.theme().colors.foreground : cx.theme().colors.muted_foreground,
+    )
+    .text_size(12)
+    .select_tab(group, panel.index)
+    .drag_tab(group, panel.index)
+    .child(panel.name.slice(panel.name.lastIndexOf("/") + 1));
+
 class StoryDockPanel extends View {
   /** @param {{ title?: string, detail?: string }} props */
   init(props) {
@@ -80,29 +99,31 @@ export function renderDockStory(dock, cx) {
         .w_full()
         .tab_bar((group, cx) =>
           h_flex()
-            .h(34)
+            .id(`story-dock-tab-bar-${group.node}`)
+            .h(TAB_HEIGHT)
             .w_full()
-            .gap(2)
-            .px(6)
             .items_center()
-            .bg(cx.theme().colors.muted)
+            .bg(cx.theme().colors.secondary)
             .border_b(1)
             .border_color(cx.theme().colors.border)
+            .drop_tab(group)
             .children(
               group.tabs
                 .filter((panel) => panel.visible)
-                .map((panel) =>
-                  div()
-                    .id(`story-dock-tab-${panel.id}`)
-                    .px(10)
-                    .py(5)
-                    .rounded(5)
-                    .text_size(12)
-                    .bg(panel.active ? cx.theme().colors.background : cx.theme().colors.muted)
-                    .select_tab(group, panel.index)
-                    .child(panel.name.slice(panel.name.lastIndexOf("/") + 1)),
-                ),
+                .map((panel) => dockTab(group, panel, cx)),
             ),
+        )
+        .drop_indicator((drop, cx) =>
+          div()
+            .absolute()
+            .left(drop.to.x)
+            .top(drop.to.y)
+            .w(drop.to.width)
+            .h(drop.to.height)
+            .bg(cx.theme().colors.primary)
+            .opacity(0.16)
+            .border(1)
+            .border_color(cx.theme().colors.primary),
         )
         .dock((dock, cx) =>
           v_flex()

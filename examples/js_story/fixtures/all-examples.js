@@ -23,7 +23,7 @@ export default class AllRegisteredExamplesFixture extends View {
       .gap(16)
       .children(
         surfaces.flatMap((surface) =>
-          registeredExamples(surface).map((example) =>
+          registeredExamples(surface, cx).map((example) =>
             div()
               .id(`fixture-${surface}-${example.label}`)
               .w_full()

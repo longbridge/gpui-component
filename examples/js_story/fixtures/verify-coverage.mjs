@@ -234,20 +234,17 @@ for (const surface of registered) {
   if (!registeredSource.includes(`case "${surface}"`)) {
     fail(`${surface} is registered but has no public constructor example`);
   }
-  if (
-    surface !== "Input" &&
-    !registeredSource.includes(`new ${surface}(`)
-  ) {
+  if (!registeredSource.includes(`new ${surface}(`)) {
     fail(`${surface} registered constructor example does not use new`);
   }
 }
 if (
-  !registeredSource.includes("BaseInput.new(") ||
-  !registeredSource.includes('placeholder: "Enter a project name"') ||
+  !registeredSource.includes("new Input(") ||
+  !registeredSource.includes('InputState("Enter a project name")') ||
   !registeredSource.includes("initializeRegisteredExamples()") ||
   !appSource.includes("initializeRegisteredExamples();")
 ) {
-  fail("Input Story must use a retained editable base state with a visible placeholder");
+  fail("Input Story must use the styled component Input with retained state and a placeholder");
 }
 if (
   !storySource.includes('availability: "registered"') ||
@@ -290,6 +287,14 @@ if (
   fail("Sidebar must render one realistic application-navigation Story");
 }
 
+if (
+  registeredSource.includes('state("collapsible-faq", false) ? "⌃" : "⌄"') ||
+  !registeredSource.includes('"icons/chevron-down.svg"') ||
+  !registeredSource.includes('"icons/chevron-right.svg"')
+) {
+  fail("Collapsible row triggers must use real chevron icons");
+}
+
 if (registeredSource.includes('label: "Selected, unselected, and disabled"')) {
   fail("Tabs must not retain the rejected third static example");
 }
@@ -299,16 +304,31 @@ if (
   !dockSource.includes("DockArea.new") ||
   !dockSource.includes("dock_area(dock)") ||
   !dockSource.includes("dock_content()") ||
-  !dockSource.includes("tab_bar((group, cx)")
+  !dockSource.includes("tab_bar((group, cx)") ||
+  !dockSource.includes(".drag_tab(group, panel.index)") ||
+  !dockSource.includes(".drop_tab(group)") ||
+  !dockSource.includes(".drop_indicator((drop, cx)")
 ) {
-  fail("Dock route must mount a real panel, dock, and tabs example");
+  fail("Dock route must mount draggable native panels, dock, tabs, and drop feedback");
+}
+
+if (
+  !registeredSource.includes('.menu_width(320)') ||
+  !registeredSource.includes('EditorState("fn main()') ||
+  !registeredSource.includes('", "rust")') ||
+  !registeredSource.includes('new Scrollbar("story-scrollbar", handle)') ||
+  !registeredSource.includes('new Scrollbar("story-scrollbar-horizontal", horizontalHandle)') ||
+  !registeredSource.includes('.scroll_axis("horizontal")') ||
+  !registeredSource.includes('.mode("always")')
+) {
+  fail("Combobox, Editor, and Scrollbar Stories must expose their visible native behavior");
 }
 
 if (
   !appSource.includes("renderVirtualListStory(this.virtualListStory, cx)") ||
   !virtualListSource.includes("v_virtual_list(") ||
   !virtualListSource.includes("Scrollbar.vertical(\"project-list\")") ||
-  !allExamplesSource.includes("registeredExamples(surface)")
+  !allExamplesSource.includes("registeredExamples(surface, cx)")
 ) {
   fail("all Story examples, including VirtualList, must have a real materialization path");
 }

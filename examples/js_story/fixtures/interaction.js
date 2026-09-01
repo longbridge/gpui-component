@@ -11,11 +11,11 @@ export default class StoryInteractionFixture extends View {
     initializeRegisteredExamples();
   }
 
-  render() {
-    const compactSwitch = registeredExamples("Switch").find(
+  render(cx) {
+    const compactSwitch = registeredExamples("Switch", cx).find(
       (example) => example.label === "Compact",
     );
-    const defaultToggle = registeredExamples("Toggle").find(
+    const defaultToggle = registeredExamples("Toggle", cx).find(
       (example) => example.label === "Default",
     );
     return v_flex()

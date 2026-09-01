@@ -33,10 +33,10 @@
 //! ```js
 //! OtpInput.new(this.code)
 //!   .flex().gap(8)
-//!   .cell_style((cell) => cell.size(40).border_1().border_color("border").rounded("md")
+//!   .cell_style((cell) => cell.size(40).border_1().border_color(`#d1d5db`).rounded("md")
 //!                             .flex().items_center().justify_center())
-//!   .cell_active_style((cell) => cell.border_color("ring"))
-//!   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+//!   .cell_active_style((cell) => cell.border_color(`#2563eb`))
+//!   .caret_style((caret) => caret.w(2).h(18).bg(`#111111`))
 //! ```
 //!
 //! This is the arrangement `Slider` already uses for its fill: the script says

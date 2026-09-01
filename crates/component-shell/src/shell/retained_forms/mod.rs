@@ -432,10 +432,40 @@ fn component(
 /// Registers retained form states and their delegate-free controls.
 pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry.register_state(
-        StateDescriptor::new("InputState", "InputState", vec![], |_, window, cx| {
-            Ok(Box::new(cx.new(|cx| InputState::new(window, cx))))
-        })
-        .with_documentation("Retained editable text state shared by Input and NumberInput."),
+        StateDescriptor::new(
+            "InputState",
+            "InputState",
+            vec![ArgumentDescriptor::new(
+                "placeholder",
+                ArgumentSchema::Optional(Box::new(ArgumentSchema::String)),
+            ), ArgumentDescriptor::new(
+                "initial_value",
+                ArgumentSchema::Optional(Box::new(ArgumentSchema::String)),
+            )],
+            |arguments, window, cx| {
+                let optional_text = |argument: &ComponentArgument, name: &str| match argument {
+                    ComponentArgument::Optional(Some(value)) => match value.as_ref() {
+                        ComponentArgument::String(value) => Ok(value.clone()),
+                        _ => Err(format!("InputState {name} expects text")),
+                    },
+                    ComponentArgument::Optional(None) => Ok(String::new()),
+                    _ => Err(format!("InputState {name} must be optional text")),
+                };
+                let [placeholder, initial_value] = arguments else {
+                    return Err("InputState expects optional placeholder and initial value".into());
+                };
+                let placeholder = optional_text(placeholder, "placeholder")?;
+                let initial_value = optional_text(initial_value, "initial_value")?;
+                Ok(Box::new(cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .placeholder(placeholder)
+                        .default_value(initial_value)
+                })))
+            },
+        )
+        .with_documentation(
+            "Retained editable text state shared by Input and NumberInput, with optional placeholder and initial value.",
+        ),
     )?;
     registry.register_state(
         StateDescriptor::new("CalendarState", "CalendarState", vec![], |_, window, cx| {
@@ -456,10 +486,32 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
         .with_documentation("Retained fixed-length one-time-password editing state."),
     )?;
     registry.register_state(
-        StateDescriptor::new("SliderState", "SliderState", vec![], |_, _, cx| {
-            Ok(Box::new(cx.new(|_| SliderState::new())))
-        })
-        .with_documentation("Retained single-value slider state using the component defaults."),
+        StateDescriptor::new(
+            "SliderState",
+            "SliderState",
+            vec![ArgumentDescriptor::new(
+                "initial_value",
+                ArgumentSchema::Optional(Box::new(ArgumentSchema::Number)),
+            )],
+            |arguments, _, cx| {
+                let value = match arguments {
+                    [ComponentArgument::Optional(Some(value))] => match value.as_ref() {
+                        ComponentArgument::Number(value)
+                            if value.is_finite() && (0.0..=100.0).contains(value) =>
+                        {
+                            *value as f32
+                        }
+                        _ => return Err("SliderState initial_value expects 0 through 100".into()),
+                    },
+                    [ComponentArgument::Optional(None)] => 0.0,
+                    _ => return Err("SliderState expects an optional initial value".into()),
+                };
+                Ok(Box::new(
+                    cx.new(|_| SliderState::new().default_value(value)),
+                ))
+            },
+        )
+        .with_documentation("Retained single-value slider state with an optional initial value."),
     )?;
     registry.register_state(
         StateDescriptor::new(
