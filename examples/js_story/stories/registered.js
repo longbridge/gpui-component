@@ -2,7 +2,12 @@
 // inventory. Constructor calls intentionally use `new`, matching the generated
 // gpui-component declarations.
 import { div } from "gpui";
-import { h_flex, v_flex } from "gpui-base";
+import {
+  Input as BaseInput,
+  InputState as BaseInputState,
+  h_flex,
+  v_flex,
+} from "gpui-base";
 import {
   Accordion,
   AccordionItem,
@@ -47,7 +52,6 @@ import {
   Icon,
   Image,
   InfoAlert,
-  Input,
   InputState,
   Kbd,
   Label,
@@ -83,6 +87,7 @@ import {
   Scrollbar,
   ScrollbarHandle,
   Separator,
+  VerticalSeparator,
   Select,
   Sheet,
   ShimmerText,
@@ -95,6 +100,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarToggleButton,
   Skeleton,
   Slider,
   SliderState,
@@ -150,11 +156,74 @@ const demo = new Map();
 /** @param {string} key @param {unknown} fallback */
 const state = (key, fallback) => (demo.has(key) ? demo.get(key) : fallback);
 
+/** Test and diagnostic projection of the same controlled state the examples read. */
+export const demoValue = state;
+
 /** @param {string} key @param {unknown} value @param {import("gpui").Context} cx */
 const setState = (key, value, cx) => {
   demo.set(key, value);
   cx.notify();
 };
+
+/**
+ * Retained component state must survive Story re-renders. Creating these
+ * descriptor objects inside `registeredExamples` would replace the backing
+ * GPUI entity after every interaction and make editable controls appear inert.
+ *
+ * @template T
+ * @param {string} key
+ * @param {() => T} create
+ * @returns {T}
+ */
+const retained = (key, create) => {
+  if (!demo.has(key)) demo.set(key, create());
+  return /** @type {T} */ (demo.get(key));
+};
+
+/**
+ * Create state-backed Story models during the owning View's init phase.
+ * GPUI input state cannot be created from render, and every descriptor here
+ * needs a stable identity so interaction survives subsequent frames.
+ */
+export function initializeRegisteredExamples() {
+  retained("input-project-name", () =>
+    BaseInputState.new({ placeholder: "Enter a project name" }),
+  );
+  retained("input-locked", () =>
+    BaseInputState.new({ placeholder: "Managed by your organization" }),
+  );
+  retained("number-input", () => InputState());
+  retained("otp-six", () => OtpState(6));
+  retained("otp-four", () => OtpState(4));
+  retained("textarea-notes", () => TextareaState());
+  retained("slider-default", () => SliderState());
+  retained("slider-reverse", () => SliderState());
+  retained("slider-vertical", () => SliderState());
+  retained("slider-disabled", () => SliderState());
+  retained("color-picker", () => ColorPickerState());
+  retained("date-picker", () => DatePickerState());
+  retained("calendar-one", () => CalendarState());
+  retained("calendar-two", () => CalendarState());
+  retained("message-scroller", () => MessageScrollerState(3));
+  retained("form-account", () => BaseInputState.new({ placeholder: "Acme Cloud" }));
+  retained("form-region", () => BaseInputState.new({ placeholder: "us-east-1" }));
+  retained("form-endpoint", () =>
+    BaseInputState.new({ placeholder: "https://api.example.com" }),
+  );
+  retained("form-token", () =>
+    BaseInputState.new({ placeholder: "Paste an access token" }),
+  );
+  retained("data-table-default", () => DataTableState(["name", "status"]));
+  retained("data-table-striped", () => DataTableState(["name", "status"]));
+  retained("command-default", () => CommandState());
+  retained("command-filter", () => CommandState());
+  retained("scroll-handle", () => ScrollbarHandle());
+  retained("scrollbar-handle", () => ScrollbarHandle());
+  retained("editor-rust", () =>
+    EditorState("fn main() {\n    println!(\"hello\");\n}"),
+  );
+  retained("editor-readonly", () => EditorState("// generated, do not edit"));
+}
 
 /**
  * Whether an accordion section is open.
@@ -177,48 +246,129 @@ const accordionOpen = (key, fallback, index) =>
  * selected, loading — that changes how it reads.
  *
  * @param {string} surface
- * @returns {Array<{ label: string, element: unknown }>}
+ * @returns {Array<{ label: string, description?: string, element: unknown }>}
  */
 export function registeredExamples(surface) {
   switch (surface) {
     case "Attachment":
       return [
         {
-          label: "Pending upload metadata",
+          label: "File metadata",
+          description: "A compact file row combines identity, type, size, and a direct action.",
           element: asElement(
             new Attachment("story-attachment")
-              .status("pending")
-              .child("design-notes.pdf · 2.4 MB"),
+              .w(520)
+              .max_w_full()
+              .child(
+                h_flex()
+                  .w_full()
+                  .items_center()
+                  .gap(12)
+                  .child(asElement(new Icon("icons/file.svg").size("medium")))
+                  .child(
+                    v_flex()
+                      .flex_1()
+                      .gap(2)
+                      .child(div().text_size(12).font_semibold().child("quarterly-report.pdf"))
+                      .child(div().text_size(11).child("PDF · 2.4 MB")),
+                  )
+                  .child(
+                    asElement(
+                      new Button("remove-report")
+                        .ghost()
+                        .size("xsmall")
+                        .label("Remove"),
+                    ),
+                  ),
+              ),
           ),
         },
         {
-          label: "Failed upload",
+          label: "Upload states",
+          description: "Lifecycle styling remains attached to the same file composition.",
           element: asElement(
             new Attachment("story-attachment-failed")
+              .w(520)
+              .max_w_full()
               .status("failed")
-              .child("Unable to upload screenshot.png"),
+              .child(
+                h_flex()
+                  .w_full()
+                  .items_center()
+                  .gap(12)
+                  .child(asElement(new Icon("icons/file.svg").size("medium")))
+                  .child(
+                    v_flex()
+                      .flex_1()
+                      .gap(2)
+                      .child(div().text_size(12).font_semibold().child("screenshot.png"))
+                      .child(div().text_size(11).child("Upload failed · 1.8 MB")),
+                  )
+                  .child(
+                    asElement(
+                      new Button("retry-screenshot")
+                        .outline()
+                        .size("xsmall")
+                        .label("Retry"),
+                    ),
+                  ),
+              ),
           ),
         },
       ];
     case "Bubble":
       return [
         {
-          label: "Incoming secondary bubble",
-          element: asElement(
-            new Bubble()
-              .alignment("start")
-              .variant("secondary")
-              .child("Can you review the latest draft?"),
-          ),
+          label: "Alignment",
+          description: "Use the same alignment value as the containing Message row.",
+          element: v_flex()
+            .w(600)
+            .max_w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("secondary")
+                  .child("Can you review the latest draft?"),
+              ),
+            )
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("end")
+                  .variant("filled")
+                  .child("Yes — I’ll annotate it now."),
+              ),
+            ),
         },
         {
-          label: "Outgoing filled bubble",
-          element: asElement(
-            new Bubble()
-              .alignment("end")
-              .variant("filled")
-              .child("Yes — I’ll annotate it now."),
-          ),
+          label: "Variants",
+          description: "Semantic treatments preserve a consistent readable measure.",
+          element: v_flex()
+            .w(600)
+            .max_w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("outline")
+                  .child("A bordered bubble for rich content."),
+              ),
+            )
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("ghost")
+                  .child("Ghost content can use the full conversation width."),
+              ),
+            ),
         },
       ];
     case "Marker":
@@ -250,18 +400,53 @@ export function registeredExamples(surface) {
         },
       ];
     case "MessageScroller": {
-      const messages = ["First message", "A longer second message", "Latest message"];
+      const messages = [
+        {
+          alignment: "end",
+          variant: "filled",
+          body: "Can you review the component gallery before we merge?",
+        },
+        {
+          alignment: "start",
+          variant: "secondary",
+          body: "Yes. I’m checking the interactive states and making sure longer messages wrap naturally inside the transcript.",
+        },
+        {
+          alignment: "end",
+          variant: "filled",
+          body: "Perfect — I’ll wait for your notes.",
+        },
+      ];
       return [
         {
-          label: "Virtualized transcript following its tail",
+          label: "Conversation",
+          description:
+            "Virtualized Message rows follow the live edge until the reader scrolls away.",
           element: asElement(
             new MessageScroller(
               "story-message-scroller",
-              MessageScrollerState(messages.length),
-              (index) => div().w_full().py(8).child(messages[index]),
+              retained("message-scroller", () => MessageScrollerState(messages.length)),
+              (index) => {
+                const message = messages[index];
+                return div()
+                  .w_full()
+                  .py(6)
+                  .child(
+                    asElement(
+                      new Message().alignment(message.alignment).child(
+                        asElement(
+                          new Bubble()
+                            .alignment(message.alignment)
+                            .variant(message.variant)
+                            .child(message.body),
+                        ),
+                      ),
+                    ),
+                  );
+              },
             )
               .jump_button_label("Jump to latest")
-              .h(180),
+              .h(260),
           ),
         },
       ];
@@ -389,35 +574,69 @@ export function registeredExamples(surface) {
     case "Toggle":
       return [
         {
-          label: "Click to toggle",
+          label: "Default",
+          description: "Text and compact actions show an unmistakable pressed state.",
           element: h_flex()
-            .gap(8)
+            .gap(12)
             .items_center()
             .child(
               asElement(
                 new Toggle("toggle-off")
-                  .label("Favorite")
-                  .checked(/** @type {boolean} */ (state("toggle-off", false)))
-                  .on_change((checked, cx) => setState("toggle-off", checked, cx)),
+                  .label(
+                    state("toggle-preview", false)
+                      ? "Preview on"
+                      : "Preview off",
+                  )
+                  .checked(/** @type {boolean} */ (state("toggle-preview", false)))
+                  .on_change((checked, cx) => setState("toggle-preview", checked, cx)),
               ),
             )
             .child(
               asElement(
                 new Toggle("toggle-on")
-                  .label("Pin")
-                  .checked(/** @type {boolean} */ (state("toggle-on", true)))
-                  .on_change((checked, cx) => setState("toggle-on", checked, cx)),
+                  .label(state("toggle-favorite", true) ? "★ Starred" : "☆ Star")
+                  .checked(/** @type {boolean} */ (state("toggle-favorite", true)))
+                  .on_change((checked, cx) =>
+                    setState("toggle-favorite", checked, cx),
+                  ),
               ),
             ),
         },
         {
-          label: "Outlined, and at three sizes",
+          label: "Variants",
+          description: "Ghost and outline treatments suit different surfaces.",
           element: h_flex()
-            .gap(8)
+            .gap(12)
             .items_center()
-            .child(asElement(new Toggle("toggle-outline").label("Pin").outline().checked(true)))
-            .child(asElement(new Toggle("toggle-sm").label("Pin").size("small")))
-            .child(asElement(new Toggle("toggle-lg").label("Pin").size("large"))),
+            .child(
+              asElement(
+                new Toggle("toggle-ghost")
+                  .label("Preview")
+                  .checked(/** @type {boolean} */ (state("toggle-ghost", false)))
+                  .on_change((checked, cx) => setState("toggle-ghost", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Toggle("toggle-outline")
+                  .label("Pin toolbar")
+                  .outline()
+                  .checked(/** @type {boolean} */ (state("toggle-outline", true)))
+                  .on_change((checked, cx) =>
+                    setState("toggle-outline", checked, cx),
+                  ),
+              ),
+            ),
+        },
+        {
+          label: "Sizes",
+          description: "The same action at small, medium, and large density.",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(asElement(new Toggle("toggle-sm").label("Small").size("small")))
+            .child(asElement(new Toggle("toggle-md").label("Medium")))
+            .child(asElement(new Toggle("toggle-lg").label("Large").size("large"))),
         },
       ];
     case "Link":
@@ -478,35 +697,119 @@ export function registeredExamples(surface) {
     case "Collapsible":
       return [
         {
-          // `Collapsible` has no callback on purpose: it renders the panel, and
-          // the trigger is the application's own control. So the case has to
-          // supply one, which is the whole shape a reader needs to copy.
-          label: "The application owns the trigger",
-          element: v_flex()
-            .gap(12)
-            .child(
-              div()
-                .id("collapsible-trigger")
-                .px(10)
-                .py(6)
-                .rounded(6)
-                .border(1)
-                .text_size(12)
-                .on_click((_event, cx) =>
-                  setState("collapsible", !state("collapsible", true), cx),
-                )
-                .child(state("collapsible", true) ? "Hide details" : "Show details"),
-            )
-            .child(
-              asElement(
-                new Collapsible()
-                  .open(/** @type {boolean} */ (state("collapsible", true)))
-                  .motion_id("story-collapsible")
-                  .content(
-                    asElement(new Text("Shipped 2 days ago · tracking 1Z999AA1.")),
+          label: "Basic",
+          description: "A trigger beside the title, with a summary that stays visible.",
+          element: asElement(
+            new Collapsible()
+              .w(360)
+              .gap(8)
+              .open(/** @type {boolean} */ (state("collapsible-order", true)))
+              .motion_id("story-collapsible-order")
+              .child(
+                h_flex()
+                  .w_full()
+                  .justify_between()
+                  .items_center()
+                  .gap(16)
+                  .child(div().text_size(13).font_semibold().child("Order #4189"))
+                  .child(
+                    asElement(
+                      new Button("collapsible-order-trigger")
+                        .label(
+                          state("collapsible-order", true)
+                            ? "Hide details"
+                            : "Show details",
+                        )
+                        .ghost()
+                        .size("xsmall")
+                        .on_click((_event, cx) =>
+                          setState(
+                            "collapsible-order",
+                            !state("collapsible-order", true),
+                            cx,
+                          ),
+                        ),
+                    ),
+                  ),
+              )
+              .child(
+                h_flex()
+                  .w_full()
+                  .justify_between()
+                  .items_center()
+                  .p(10)
+                  .rounded(6)
+                  .border(1)
+                  .child(div().text_size(12).child("Status"))
+                  .child(asElement(new Tag().variant("success").size("small").child("Shipped"))),
+              )
+              .content(
+                v_flex()
+                  .gap(8)
+                  .children(
+                    [
+                      ["Tracking", "1Z999AA1"],
+                      ["Carrier", "UPS Ground"],
+                      ["Delivery", "Thursday, September 3"],
+                    ].map(([title, value]) =>
+                      v_flex()
+                        .w_full()
+                        .gap(2)
+                        .p(10)
+                        .rounded(6)
+                        .border(1)
+                        .child(div().text_size(12).font_semibold().child(title))
+                        .child(div().text_size(12).child(value)),
+                    ),
                   ),
               ),
-            ),
+          ),
+        },
+        {
+          label: "Row trigger",
+          description: "The whole question row is the trigger, as used by FAQ entries.",
+          element: asElement(
+            new GroupBox()
+              .variant("outline")
+              .w(360)
+              .child(
+                asElement(
+                  new Collapsible()
+                    .w_full()
+                    .open(/** @type {boolean} */ (state("collapsible-faq", false)))
+                    .motion_id("story-collapsible-faq")
+                    .child(
+                      h_flex()
+                        .id("collapsible-faq-trigger")
+                        .w_full()
+                        .justify_between()
+                        .items_center()
+                        .gap(8)
+                        .on_click((_event, cx) =>
+                          setState(
+                            "collapsible-faq",
+                            !state("collapsible-faq", false),
+                            cx,
+                          ),
+                        )
+                        .child(div().text_size(12).child("How do I reset my password?"))
+                        .child(
+                          div()
+                            .text_size(12)
+                            .child(state("collapsible-faq", false) ? "⌃" : "⌄"),
+                        ),
+                    )
+                    .content(
+                      div()
+                        .pt(12)
+                        .text_size(12)
+                        .child(
+                          "Choose Forgot Password on the sign-in page and we’ll email instructions for creating a new one.",
+                        ),
+                    ),
+                ),
+              ),
+          ),
         },
       ];
 
@@ -514,29 +817,57 @@ export function registeredExamples(surface) {
     case "Input":
       return [
         {
-          label: "Editable, and disabled",
+          label: "Text fields",
+          description: "Click the first field and type; its retained state survives redraws.",
           element: v_flex()
+            .w(420)
+            .max_w_full()
             .gap(8)
-            .child(asElement(new Input(InputState()).aria_label("Project name")))
-            .child(asElement(new Input(InputState()).aria_label("Locked field").disabled(true))),
+            .child(
+              asElement(
+                BaseInput.new(
+                  retained("input-project-name", () =>
+                    BaseInputState.new({ placeholder: "Enter a project name" }),
+                  ),
+                ).w_full(),
+              ),
+            )
+            .child(
+              asElement(
+                BaseInput.new(
+                  retained("input-locked", () =>
+                    BaseInputState.new({
+                      placeholder: "Managed by your organization",
+                    }),
+                  ),
+                ).disabled(true),
+              ),
+            ),
         },
       ];
     case "NumberInput":
       return [
         {
           label: "Stepper buttons on both ends",
-          element: asElement(new NumberInput(InputState()).placeholder("Quantity")),
+          element: asElement(
+            new NumberInput(retained("number-input", () => InputState()))
+              .w(240)
+              .max_w_full()
+              .placeholder("Quantity"),
+          ),
         },
       ];
     case "OtpInput":
       return [
         {
           label: "Six digits in two groups",
-          element: asElement(new OtpInput(OtpState(6)).groups(2)),
+          element: asElement(
+            new OtpInput(retained("otp-six", () => OtpState(6))).groups(2),
+          ),
         },
         {
           label: "Four digits, ungrouped",
-          element: asElement(new OtpInput(OtpState(4))),
+          element: asElement(new OtpInput(retained("otp-four", () => OtpState(4)))),
         },
       ];
     case "Textarea":
@@ -544,7 +875,12 @@ export function registeredExamples(surface) {
         {
           label: "Bordered, fixed height",
           element: asElement(
-            new Textarea(TextareaState()).aria_label("Notes").bordered(true).h(120),
+            new Textarea(retained("textarea-notes", () => TextareaState()))
+              .aria_label("Notes")
+              .bordered(true)
+              .w(520)
+              .max_w_full()
+              .h(120),
           ),
         },
       ];
@@ -581,7 +917,8 @@ export function registeredExamples(surface) {
     case "Switch":
       return [
         {
-          label: "Click to toggle",
+          label: "Default",
+          description: "Settings remain controlled by the application owner.",
           element: h_flex()
             .gap(16)
             .items_center()
@@ -600,8 +937,38 @@ export function registeredExamples(surface) {
                   .checked(/** @type {boolean} */ (state("sw-on", true)))
                   .on_change((checked, cx) => setState("sw-on", checked, cx)),
               ),
-            )
-            .child(asElement(new Switch("sw-small").label("Compact").size("small"))),
+            ),
+        },
+        {
+          label: "Compact",
+          description: "A small switch for dense preference rows.",
+          element: asElement(
+            new Switch("sw-compact")
+              .label(
+                state("sw-compact", false)
+                  ? "Compact controls enabled"
+                  : "Compact controls disabled",
+              )
+              .size("small")
+              .checked(/** @type {boolean} */ (state("sw-compact", false)))
+              .on_change((checked, cx) => setState("sw-compact", checked, cx)),
+          ),
+        },
+        {
+          label: "Disabled",
+          description: "Unavailable settings keep their current value visible.",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(asElement(new Switch("sw-disabled-off").label("Managed off").disabled(true)))
+            .child(
+              asElement(
+                new Switch("sw-disabled-on")
+                  .label("Managed on")
+                  .checked(true)
+                  .disabled(true),
+              ),
+            ),
         },
       ];
     case "Radio":
@@ -648,16 +1015,22 @@ export function registeredExamples(surface) {
           element: v_flex()
             .w_full()
             .gap(16)
-            .child(asElement(new Slider(SliderState())))
-            .child(asElement(new Slider(SliderState()).reverse())),
+            .child(asElement(new Slider(retained("slider-default", () => SliderState()))))
+            .child(
+              asElement(new Slider(retained("slider-reverse", () => SliderState())).reverse()),
+            ),
         },
         {
           label: "Vertical",
-          element: asElement(new Slider(SliderState()).vertical().h(120)),
+          element: asElement(
+            new Slider(retained("slider-vertical", () => SliderState())).vertical().h(120),
+          ),
         },
         {
           label: "Disabled",
-          element: asElement(new Slider(SliderState()).disabled(true)),
+          element: asElement(
+            new Slider(retained("slider-disabled", () => SliderState())).disabled(true),
+          ),
         },
       ];
     case "ColorPicker":
@@ -665,7 +1038,7 @@ export function registeredExamples(surface) {
         {
           label: "Labelled trigger",
           element: asElement(
-            new ColorPicker(ColorPickerState())
+            new ColorPicker(retained("color-picker", () => ColorPickerState()))
               .label("Accent color")
               .accessibility_label("Choose an accent color"),
           ),
@@ -675,18 +1048,24 @@ export function registeredExamples(surface) {
       return [
         {
           label: "Empty, with a placeholder",
-          element: asElement(new DatePicker(DatePickerState()).placeholder("Select a date")),
+          element: asElement(
+            new DatePicker(retained("date-picker", () => DatePickerState())).placeholder(
+              "Select a date",
+            ),
+          ),
         },
       ];
     case "Calendar":
       return [
         {
           label: "One month",
-          element: asElement(new Calendar(CalendarState())),
+          element: asElement(new Calendar(retained("calendar-one", () => CalendarState()))),
         },
         {
           label: "Two months side by side",
-          element: asElement(new Calendar(CalendarState()).number_of_months(2)),
+          element: asElement(
+            new Calendar(retained("calendar-two", () => CalendarState())).number_of_months(2),
+          ),
         },
       ];
 
@@ -967,18 +1346,20 @@ export function registeredExamples(surface) {
         },
       ];
     case "StatusBar":
-      // The descriptor documents named `left` and `right` slots, but the script
-      // surface exposes no way to fill them: `Element` offers `content`,
-      // `header`, `footer`, `panel`, `trigger`, `image` and `fallback` only.
-      // So this shows the centre region, which is all a script can reach today.
       return [
         {
-          label: "Ordinary children fill the centre region",
+          label: "Editor status",
+          description: "Repository state leads, document state trails, and sync status stays centered.",
           element: asElement(
             new StatusBar()
               .w_full()
-              .child(asElement(new Text("main")))
-              .child(asElement(new Text("2 problems"))),
+              .left_content(asElement(new Button("status-branch").ghost().size("xsmall").label("main")))
+              .left_content(asElement(new VerticalSeparator().h(14)))
+              .left_content(asElement(new Text("0 errors · 2 warnings")))
+              .child(asElement(new Text("All changes saved")))
+              .right_content(asElement(new Button("status-position").ghost().size("xsmall").label("Ln 12, Col 34")))
+              .right_content(asElement(new VerticalSeparator().h(14)))
+              .right_content(asElement(new Button("status-language").ghost().size("xsmall").label("JavaScript"))),
           ),
         },
       ];
@@ -1056,21 +1437,12 @@ export function registeredExamples(surface) {
         },
       ];
     case "Tab":
-      return [
-        {
-          label: "Selected, unselected, and disabled",
-          element: h_flex()
-            .gap(8)
-            .items_center()
-            .child(asElement(new Tab().label("Profile").selected(true)))
-            .child(asElement(new Tab().label("Security")))
-            .child(asElement(new Tab().label("Billing").disabled(true))),
-        },
-      ];
+      return [];
     case "TabBar":
       return [
         {
-          label: "Underline variant",
+          label: "Underline",
+          description: "A familiar document-settings navigation pattern.",
           element: asElement(
             new TabBar("profile-tabs")
               .variant("underline")
@@ -1082,7 +1454,8 @@ export function registeredExamples(surface) {
           ),
         },
         {
-          label: "Segmented variant",
+          label: "Segmented",
+          description: "A compact view-mode switch for closely related content.",
           element: asElement(
             new TabBar("view-tabs")
               .variant("segmented")
@@ -1164,12 +1537,24 @@ export function registeredExamples(surface) {
                 new Field()
                   .label("Account name")
                   .required(true)
-                  .child(new Input(InputState()).aria_label("Account name")),
+                  .child(
+                    BaseInput.new(
+                      retained("form-account", () =>
+                        BaseInputState.new({ placeholder: "Acme Cloud" }),
+                      ),
+                    ),
+                  ),
               )
               .child(
                 new Field()
                   .label("Region")
-                  .child(new Input(InputState()).aria_label("Region")),
+                  .child(
+                    BaseInput.new(
+                      retained("form-region", () =>
+                        BaseInputState.new({ placeholder: "us-east-1" }),
+                      ),
+                    ),
+                  ),
               ),
           ),
         },
@@ -1184,13 +1569,25 @@ export function registeredExamples(surface) {
                 new Field()
                   .label("Endpoint")
                   .description("Where requests are sent.")
-                  .child(new Input(InputState()).aria_label("Endpoint")),
+                  .child(
+                    BaseInput.new(
+                      retained("form-endpoint", () =>
+                        BaseInputState.new({ placeholder: "https://api.example.com" }),
+                      ),
+                    ),
+                  ),
               )
               .child(
                 new Field()
                   .label("Token")
                   .required(true)
-                  .child(new Input(InputState()).aria_label("Token")),
+                  .child(
+                    BaseInput.new(
+                      retained("form-token", () =>
+                        BaseInputState.new({ placeholder: "Paste an access token" }),
+                      ),
+                    ),
+                  ),
               ),
           ),
         },
@@ -1388,7 +1785,10 @@ export function registeredExamples(surface) {
                 { id: "gamma", label: "Gamma" },
               ],
               (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
-            ).h(140),
+            )
+              .w(420)
+              .max_w_full()
+              .h(180),
           ),
         },
       ];
@@ -1397,6 +1797,8 @@ export function registeredExamples(surface) {
         {
           label: "Closed, and disabled",
           element: h_flex()
+            .w_full()
+            .flex_wrap()
             .gap(8)
             .items_center()
             .child(
@@ -1442,6 +1844,8 @@ export function registeredExamples(surface) {
               (_value, _cx) => {},
             )
               .placeholder("Choose an option")
+              .w(320)
+              .max_w_full()
               .searchable(true)
               .search_placeholder("Filter options"),
           ),
@@ -1456,6 +1860,8 @@ export function registeredExamples(surface) {
               (_value, _cx) => {},
             )
               .placeholder("Choose an option")
+              .w(320)
+              .max_w_full()
               .searchable(false),
           ),
         },
@@ -1465,7 +1871,7 @@ export function registeredExamples(surface) {
         {
           label: "An expanded folder with two files",
           element: asElement(
-            new Tree("project-tree").child(
+            new Tree("project-tree").w(420).max_w_full().child(
               asElement(
                 new TreeItem("src", "src")
                   .expanded(true)
@@ -1482,7 +1888,7 @@ export function registeredExamples(surface) {
           label: "Striped rows, sortable and resizable columns",
           element: asElement(
             new DataTable(
-              DataTableState(["name", "status"]),
+              retained("data-table-default", () => DataTableState(["name", "status"])),
               () => [
                 { name: "Alpha", status: "Ready" },
                 { name: "Beta", status: "Building" },
@@ -1503,7 +1909,7 @@ export function registeredExamples(surface) {
           label: "Bordered, with a row header and selectable rows",
           element: asElement(
             new DataTable(
-              DataTableState(["name", "status"]),
+              retained("data-table-striped", () => DataTableState(["name", "status"])),
               () => [
                 { name: "Alpha", status: "Ready" },
                 { name: "Beta", status: "Building" },
@@ -1527,7 +1933,7 @@ export function registeredExamples(surface) {
         {
           label: "A filterable command palette",
           element: asElement(
-            new Command(CommandState())
+            new Command(retained("command-default", () => CommandState()))
               .placeholder("Type a command")
               .bordered(true)
               .max_height(200)
@@ -1554,7 +1960,7 @@ export function registeredExamples(surface) {
             .gap(8)
             .child(
               asElement(
-                new Command(CommandState())
+                new Command(retained("command-filter", () => CommandState()))
                   .placeholder("Type to filter")
                   .searchable(true)
                   .filterable(true)
@@ -1590,39 +1996,89 @@ export function registeredExamples(surface) {
     case "Sidebar":
       return [
         {
-          label: "Header, menu and footer",
-          element: asElement(
-            new Sidebar("story-sidebar")
-              .side("left")
-              .collapsible("icon")
-              .h(220)
-              .header(asElement(new SidebarHeader().child("Workspace")))
-              .footer(asElement(new SidebarFooter().child("Account")))
-              .child(
-                asElement(
-                  new SidebarMenu()
-                    .child(asElement(new SidebarMenuItem("Components").selected(true)))
-                    .child(asElement(new SidebarMenuItem("Settings")))
-                    .child(asElement(new SidebarMenuItem("Archived").disabled(true))),
-                ),
-              ),
-          ),
-        },
-        {
-          label: "Collapsed to icons",
-          element: asElement(
-            new Sidebar("story-sidebar-collapsed")
-              .collapsible("icon")
-              .collapsed(true)
-              .h(160)
-              .child(
-                asElement(
-                  new SidebarMenu().child(
-                    asElement(new SidebarMenuItem("Components").selected(true)),
+          label: "Application navigation",
+          description:
+            "A complete workspace sidebar with real destinations, selection, disabled state, account footer, and icon collapse.",
+          element: h_flex()
+            .w_full()
+            .h(340)
+            .items_start()
+            .gap(12)
+            .child(
+              asElement(
+                new Sidebar("story-sidebar")
+                  .side("left")
+                  .collapsible("icon")
+                  .collapsed(
+                    /** @type {boolean} */ (state("sidebar-collapsed", false)),
+                  )
+                  .h_full()
+                  .header(
+                    asElement(
+                      new SidebarHeader().child(
+                        v_flex()
+                          .gap(2)
+                          .child(div().font_semibold().child("Acme Studio"))
+                          .child(div().text_size(11).child("Design workspace")),
+                      ),
+                    ),
+                  )
+                  .footer(
+                    asElement(
+                      new SidebarFooter().child(
+                        v_flex()
+                          .gap(2)
+                          .child(div().font_semibold().child("Alex Morgan"))
+                          .child(div().text_size(11).child("alex@acme.test")),
+                      ),
+                    ),
+                  )
+                  .child(
+                    asElement(
+                      new SidebarMenu()
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Overview")
+                              .icon("home")
+                              .selected(true),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Components").icon("components"),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Settings").icon("settings"),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Archive")
+                              .icon("archive")
+                              .disabled(true),
+                          ),
+                        ),
+                    ),
                   ),
-                ),
               ),
-          ),
+            )
+            .child(
+              asElement(
+                new SidebarToggleButton()
+                  .collapsed(
+                    /** @type {boolean} */ (state("sidebar-collapsed", false)),
+                  )
+                  .on_click((_event, cx) =>
+                    setState(
+                      "sidebar-collapsed",
+                      !state("sidebar-collapsed", false),
+                      cx,
+                    ),
+                  ),
+              ),
+            ),
         },
       ];
     case "Resizable":
@@ -1643,7 +2099,7 @@ export function registeredExamples(surface) {
         {
           label: "A vertical scroll region",
           element: asElement(
-            new Scroll(ScrollbarHandle())
+            new Scroll(retained("scroll-handle", () => ScrollbarHandle()))
               .scroll_axis("vertical")
               .h(140)
               .child(
@@ -1659,7 +2115,7 @@ export function registeredExamples(surface) {
         },
       ];
     case "Scrollbar": {
-      const handle = ScrollbarHandle();
+      const handle = retained("scrollbar-handle", () => ScrollbarHandle());
       return [
         {
           label: "An always-visible scrollbar beside its region",
@@ -1730,7 +2186,11 @@ export function registeredExamples(surface) {
             .gap(12)
             .child(
               asElement(
-                new Editor(EditorState("fn main() {\n    println!(\"hello\");\n}"))
+                new Editor(
+                  retained("editor-rust", () =>
+                    EditorState("fn main() {\n    println!(\"hello\");\n}"),
+                  ),
+                )
                   .aria_label("Source editor")
                   .bordered(true)
                   .h(120),
@@ -1738,7 +2198,11 @@ export function registeredExamples(surface) {
             )
             .child(
               asElement(
-                new Editor(EditorState("// generated, do not edit"))
+                new Editor(
+                  retained("editor-readonly", () =>
+                    EditorState("// generated, do not edit"),
+                  ),
+                )
                   .aria_label("Generated source")
                   .bordered(true)
                   .readonly(true)

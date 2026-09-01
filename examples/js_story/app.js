@@ -1,17 +1,26 @@
 import { View, div } from "gpui";
 import { Input, InputState, h_flex, v_flex } from "gpui-base";
 import { catalog, filterCatalog, route } from "./catalog.js";
+import { createDockStory, renderDockStory } from "./stories/dock.js";
+import { initializeRegisteredExamples } from "./stories/registered.js";
+import {
+  createVirtualListStory,
+  renderVirtualListStory,
+} from "./stories/virtual_list.js";
 
 /** A sidebar gallery that stays entirely on the documented script surface. */
 export default class StoryGallery extends View {
   /** @param {unknown} _props @param {import("gpui").AsyncContext} _cx */
-  init(_props, _cx) {
+  init(_props, cx) {
+    initializeRegisteredExamples();
     this.search = InputState.new({ placeholder: "Search components…" });
     this.activeId = catalog[0].id;
     this.highlightedId = this.activeId;
     this.routeFocus = new Map(
-      catalog.map((story) => [story.id, _cx.focus_handle()]),
+      catalog.map((story) => [story.id, cx.focus_handle()]),
     );
+    this.dockStory = createDockStory(cx);
+    this.virtualListStory = createVirtualListStory();
     this.search.on("change", (_event, cx) => {
       this.ensureHighlighted(this.visibleRoutes());
       cx.notify();
@@ -112,7 +121,13 @@ export default class StoryGallery extends View {
                   .child(active.description),
               ),
           )
-          .child(active.render(cx)),
+          .child(
+            active.id === "dock"
+              ? renderDockStory(this.dockStory, cx)
+              : active.id === "virtual-list"
+                ? renderVirtualListStory(this.virtualListStory, cx)
+                : active.render(cx),
+          ),
       );
   }
 

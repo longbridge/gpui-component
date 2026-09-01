@@ -26,10 +26,26 @@ without matching catalog coverage and status.
 ## Registration status
 
 Registered inventory surfaces render a real public constructor and invoke a
-descriptor-backed method when that descriptor exposes one. `Breadcrumb` and
-`StatusBar` are constructor-only public descriptors. The verifier checks the
+descriptor-backed method when that descriptor exposes one. `StatusBar` exposes
+component-specific `left_content(element)` and `right_content(element)` regions instead of
+adding those names to every script element. The verifier checks the
 status projection against the inventory, so a missing binding cannot be hidden
 by an unreviewed third status.
+
+Registered routes use the same presentation hierarchy as the Rust Story app:
+each example is a titled section with an optional description and one focused
+demonstration surface. Interactive controls remain controlled by the gallery,
+and compound examples compose the public parts used in real applications.
+`Dock` and `VirtualList` are infrastructure routes with live examples. Dock
+exercises the public `gpui-base` `DockArea` subsystem with a side dock, panels,
+and a center tab group. VirtualList renders 10,000 stable rows through
+`v_virtual_list` and a paired scrollbar, while only materializing its visible
+range.
+
+Editable `Input` examples use the public `gpui-base` `InputState` created in
+the owning view's `init()` phase. This preserves the same state lifecycle and
+placeholder behavior as the Rust Story instead of recreating input state from
+render.
 
 `NativeMenuTrigger` provides the registered native-menu surface used by the
 JavaScript story under the inventory's `platform-integration` category.

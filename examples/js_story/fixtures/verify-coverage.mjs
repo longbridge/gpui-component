@@ -201,6 +201,10 @@ if (missing.length !== 0 || unknown.length !== 0) {
 const statusSource = read("examples/js_story/stories/status.js");
 const storySource = read("examples/js_story/stories/story.js");
 const registeredSource = read("examples/js_story/stories/registered.js");
+const appSource = read("examples/js_story/app.js");
+const dockSource = read("examples/js_story/stories/dock.js");
+const virtualListSource = read("examples/js_story/stories/virtual_list.js");
+const allExamplesSource = read("examples/js_story/fixtures/all-examples.js");
 const registeredBody = statusSource.match(
   /export const REGISTERED_SURFACES = \[([\s\S]*?)\];/,
 )?.[1];
@@ -230,9 +234,20 @@ for (const surface of registered) {
   if (!registeredSource.includes(`case "${surface}"`)) {
     fail(`${surface} is registered but has no public constructor example`);
   }
-  if (!registeredSource.includes(`new ${surface}(`)) {
+  if (
+    surface !== "Input" &&
+    !registeredSource.includes(`new ${surface}(`)
+  ) {
     fail(`${surface} registered constructor example does not use new`);
   }
+}
+if (
+  !registeredSource.includes("BaseInput.new(") ||
+  !registeredSource.includes('placeholder: "Enter a project name"') ||
+  !registeredSource.includes("initializeRegisteredExamples()") ||
+  !appSource.includes("initializeRegisteredExamples();")
+) {
+  fail("Input Story must use a retained editable base state with a visible placeholder");
 }
 if (
   !storySource.includes('availability: "registered"') ||
@@ -240,6 +255,69 @@ if (
   !storySource.includes('availability: "infrastructure"')
 ) {
   fail("story status rendering does not distinguish registered and infrastructure routes");
+}
+
+if (
+  storySource.includes("Registered public surface") ||
+  !storySource.includes("function storySection(example, cx)") ||
+  !storySource.includes("example.description")
+) {
+  fail("registered routes must use the shared Rust Story-style section presentation");
+}
+
+if (
+  !registeredSource.includes('label: "Default"') ||
+  !registeredSource.includes('label: "Compact"') ||
+  !registeredSource.includes('label: "Variants"') ||
+  !registeredSource.includes('label: "Sizes"')
+) {
+  fail("Switch and Toggle must expose the planned interactive Story sections");
+}
+
+if (
+  !/new Message\(\)\.alignment\(message\.alignment\)/s.test(registeredSource) ||
+  !/new Bubble\(\)[\s\S]*?\.alignment\(message\.alignment\)/s.test(registeredSource)
+) {
+  fail("MessageScroller rows must compose aligned Message and Bubble components");
+}
+
+if (
+  !registeredSource.includes('new SidebarHeader()') ||
+  !registeredSource.includes('new SidebarFooter()') ||
+  !registeredSource.includes('label: "Application navigation"') ||
+  registeredSource.includes('label: "Collapsed to icons"')
+) {
+  fail("Sidebar must render one realistic application-navigation Story");
+}
+
+if (registeredSource.includes('label: "Selected, unselected, and disabled"')) {
+  fail("Tabs must not retain the rejected third static example");
+}
+
+if (
+  !appSource.includes("createDockStory(cx)") ||
+  !dockSource.includes("DockArea.new") ||
+  !dockSource.includes("dock_area(dock)") ||
+  !dockSource.includes("dock_content()") ||
+  !dockSource.includes("tab_bar((group, cx)")
+) {
+  fail("Dock route must mount a real panel, dock, and tabs example");
+}
+
+if (
+  !appSource.includes("renderVirtualListStory(this.virtualListStory, cx)") ||
+  !virtualListSource.includes("v_virtual_list(") ||
+  !virtualListSource.includes("Scrollbar.vertical(\"project-list\")") ||
+  !allExamplesSource.includes("registeredExamples(surface)")
+) {
+  fail("all Story examples, including VirtualList, must have a real materialization path");
+}
+
+if (
+  !registeredSource.includes('.left_content(asElement(new Button("status-branch")') ||
+  !registeredSource.includes('.right_content(asElement(new Button("status-position")')
+) {
+  fail("StatusBar Story must exercise its leading and trailing regions");
 }
 
 console.log(

@@ -2,7 +2,7 @@ use super::Empty;
 use std::sync::Arc;
 
 use gpui_component::{
-    Side,
+    IconName, Side,
     sidebar::{
         Sidebar, SidebarCollapsible, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem,
         SidebarToggleButton,
@@ -26,11 +26,12 @@ enum ToggleOp {
     Collapsed(bool),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ItemOp {
     DefaultOpen(bool),
     ClickToOpen(bool),
     ClickToToggle(bool),
+    Icon(IconName),
 }
 
 #[derive(Clone, Copy)]
@@ -139,6 +140,7 @@ impl ComponentMaterializer for MenuItemMaterializer {
                 ItemOp::DefaultOpen(value) => item.default_open(*value),
                 ItemOp::ClickToOpen(value) => item.click_to_open(*value),
                 ItemOp::ClickToToggle(value) => item.click_to_toggle(*value),
+                ItemOp::Icon(value) => item.icon(value.clone()),
             };
         }
         item = item.active(request.selected()).disable(request.disabled());
@@ -313,6 +315,33 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 "Disables pointer activation.",
                 |_| Empty,
             ),
+            MethodDescriptor::new(
+                "icon",
+                vec![ArgumentDescriptor::new(
+                    "icon",
+                    ArgumentSchema::Enum(&[
+                        "home",
+                        "components",
+                        "settings",
+                        "archive",
+                        "account",
+                    ]),
+                )],
+                |arguments| match arguments {
+                    [ComponentArgument::Enum(value)] => Ok(ComponentPayload::new(ItemOp::Icon(
+                        match value.as_str() {
+                            "home" => IconName::SquareTerminal,
+                            "components" => IconName::LayoutDashboard,
+                            "settings" => IconName::Settings2,
+                            "archive" => IconName::BookOpen,
+                            "account" => IconName::User,
+                            _ => return Err(format!("unsupported SidebarMenuItem icon `{value}`")),
+                        },
+                    ))),
+                    _ => Err("SidebarMenuItem.icon expects one icon name".into()),
+                },
+            )
+            .with_documentation("Sets the navigation icon used in expanded and icon-collapse modes."),
         ])
 .with_documentation("A typed navigation row accepted by SidebarMenu. Shell style operations are unsupported because the native SidebarMenuItem is not Styled."))?;
     registry.register(
@@ -422,6 +451,30 @@ mod tests {
                 )]
             );
         }
+    }
+
+    #[test]
+    fn sidebar_menu_items_expose_a_closed_icon_vocabulary() {
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        register(&mut registry).unwrap();
+        let frozen = registry.freeze().unwrap();
+        let descriptor = frozen
+            .descriptors()
+            .find(|descriptor| descriptor.name() == "SidebarMenuItem")
+            .unwrap();
+        let icon = descriptor
+            .methods()
+            .iter()
+            .find(|method| method.name() == "icon")
+            .expect("SidebarMenuItem needs an icon method for icon-collapse mode");
+        assert_eq!(
+            icon.arguments()[0].schema(),
+            &ArgumentSchema::Enum(&["home", "components", "settings", "archive", "account"])
+        );
     }
 
     #[test]

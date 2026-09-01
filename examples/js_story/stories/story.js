@@ -32,65 +32,65 @@ export function pendingStory(story) {
 
 /** @param {StoryDefinition} story @param {string[]} surfaces @param {import("gpui").Context} cx */
 function registeredPanel(story, surfaces, cx) {
-  const colors = cx.theme().colors;
   return v_flex()
     .id(`story-${story.id}`)
     .w_full()
-    .max_w(760)
-    .gap(16)
-    .p(24)
-    .bg(colors.surface)
-    .border(1)
-    .border_color(colors.border)
-    .rounded(8)
-    .child(
-      div()
-        .text_size(18)
-        .font_semibold()
-        .text_color(colors.foreground)
-        .child("Registered public surface"),
-    )
-    .child(
-      div()
-        .text_size(13)
-        .text_color(colors.muted_foreground)
-        .child(
-          "Each case below is built from public constructors and descriptor methods.",
-        ),
-    )
+    .max_w(880)
+    .gap(24)
     .children(
       surfaces.flatMap((surface) =>
-        registeredExamples(surface).map((example) => case_(example, cx)),
+        registeredExamples(surface).map((example) => storySection(example, cx)),
       ),
     );
 }
 
 /**
- * One labelled example. The caption says what the case is showing, so a reader
- * comparing two cases can tell which knob differs without reading the source.
- * @param {{ label: string, element: unknown }} example
+ * A JavaScript counterpart to the Rust Story `section(...)` helper: one clear
+ * boundary, a title/description header, and a presentation area that lets the
+ * component remain the focal point.
+ * @param {{ label: string, description?: string, element: unknown }} example
  * @param {import("gpui").Context} cx
  */
-function case_(example, cx) {
+function storySection(example, cx) {
   const colors = cx.theme().colors;
   return v_flex()
     .w_full()
-    .gap(8)
+    .border(1)
+    .border_color(colors.border)
+    .rounded(8)
+    .overflow_hidden()
     .child(
-      div()
-        .text_size(11)
-        .font_semibold()
-        .text_color(colors.muted_foreground)
-        .child(example.label),
+      v_flex()
+        .gap(4)
+        .px(16)
+        .py(12)
+        .border_b(1)
+        .border_color(colors.border)
+        .child(
+          div()
+            .text_size(13)
+            .font_semibold()
+            .text_color(colors.foreground)
+            .child(example.label),
+        )
+        .when(Boolean(example.description), (header) =>
+          header.child(
+            div()
+              .text_size(11)
+              .text_color(colors.muted_foreground)
+              .child(example.description ?? ""),
+          ),
+        ),
     )
     .child(
       div()
         .w_full()
-        .p(16)
+        .min_h(96)
+        .p(24)
+        .flex()
+        .items_center()
+        .justify_center()
         .bg(colors.background)
-        .border(1)
-        .border_color(colors.border)
-        .rounded(6)
         .child(
           /** @type {import("gpui").Element} */ (
             /** @type {unknown} */ (example.element)

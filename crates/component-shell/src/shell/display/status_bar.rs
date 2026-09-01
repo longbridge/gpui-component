@@ -1,12 +1,18 @@
 use gpui_component::status_bar::StatusBar;
 use gpui_shell::{
-    ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, RegistryError, anyhow,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
+    ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
 };
 use std::sync::Arc;
 #[derive(Clone)]
 struct StatusBarPayload;
+#[derive(Clone)]
+enum StatusBarOp {
+    Left(ComponentArgument),
+    Right(ComponentArgument),
+}
 struct StatusBarMaterializer;
 impl StatusBarMaterializer {
     fn component(payload: &ComponentPayload) -> anyhow::Result<StatusBar> {
@@ -19,11 +25,17 @@ impl StatusBarMaterializer {
 impl ComponentMaterializer for StatusBarMaterializer {
     fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
         let mut component = Self::component(request.payload())?;
-        if let Some(left) = request.take_slot("left")? {
-            component = component.left(left)
-        }
-        if let Some(right) = request.take_slot("right")? {
-            component = component.right(right)
+        let operations = request
+            .methods()
+            .filter_map(|method| method.payload().downcast_ref::<StatusBarOp>().cloned())
+            .collect::<Vec<_>>();
+        for operation in operations {
+            component = match operation {
+                StatusBarOp::Left(argument) => component.left(request.resolve_element(&argument)?),
+                StatusBarOp::Right(argument) => {
+                    component.right(request.resolve_element(&argument)?)
+                }
+            };
         }
         component.style().refine(&request.take_style());
         component.extend(request.take_children()?);
@@ -33,7 +45,16 @@ impl ComponentMaterializer for StatusBarMaterializer {
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry.register(ComponentDescriptor::new("StatusBar", Arc::new(StatusBarMaterializer))
 .with_constructors(vec![ConstructorDescriptor::new("StatusBar",Vec::new(),|_|Ok(ComponentPayload::new(StatusBarPayload)))])
-.with_methods(Vec::new())
+.with_methods(vec![
+    MethodDescriptor::new("left_content", vec![ArgumentDescriptor::new("element", ArgumentSchema::Element)], |arguments| match arguments {
+        [argument @ ComponentArgument::Element(_)] => Ok(ComponentPayload::new(StatusBarOp::Left(argument.clone()))),
+        _ => Err("StatusBar.left_content(element) expects an element".into()),
+    }).with_documentation("Appends content to the leading region."),
+    MethodDescriptor::new("right_content", vec![ArgumentDescriptor::new("element", ArgumentSchema::Element)], |arguments| match arguments {
+        [argument @ ComponentArgument::Element(_)] => Ok(ComponentPayload::new(StatusBarOp::Right(argument.clone()))),
+        _ => Err("StatusBar.right_content(element) expects an element".into()),
+    }).with_documentation("Appends content to the trailing region."),
+])
 .with_documentation("A three-region status bar; ordinary children fill the center and named left/right slots pin content to each edge."))?;
     Ok(())
 }
