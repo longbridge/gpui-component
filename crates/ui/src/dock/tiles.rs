@@ -210,7 +210,9 @@ impl TilesRenderer for TilesSkin {
         v_flex()
             .id(("tile", tile.panel_id().as_u64()))
             .occlude()
-            .overflow_hidden()
+            // No `overflow_hidden` here: the resize handles hang past the
+            // tile's edge, and a content mask would cut their hit areas down
+            // to the sliver inside it. The panel is clipped by `panel_frame`.
             .bg(cx.theme().tokens.background)
             .border_1()
             .border_color(cx.theme().border)
@@ -263,7 +265,12 @@ impl TilesRenderer for TilesSkin {
             .pl_3()
             .pr_2()
             .when_some(title_style, |this, style| {
-                this.bg(style.background).text_color(style.foreground)
+                // The tile frame does not clip its children, so a painted
+                // title bar rounds its own top corners to stay inside the
+                // frame's.
+                this.bg(style.background)
+                    .text_color(style.foreground)
+                    .rounded_t(cx.theme().tile_radius)
             })
             .child(
                 div()
