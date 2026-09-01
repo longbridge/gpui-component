@@ -1472,11 +1472,14 @@ impl WindowSelectionState {
         // moves, so selection keeps scrolling the same related region even
         // after the anchor text has moved out of view.
         let visible_bounds = registration.registration.hitbox.content_mask.bounds;
-        // The mask can collapse to a degenerate rect when the scrollable
-        // ancestor itself gets clipped away mid-drag (e.g. scrolled out of
-        // view by this very auto scroll). There is nothing sensible left to
-        // scroll, and clamping into an empty range below panics — stop.
-        if visible_bounds.size.width < px(2.) || visible_bounds.size.height < px(2.) {
+        // Keeps the synthesized wheel event strictly inside the mask so
+        // hit-testing reaches the scrollable.
+        const EVENT_INSET: Pixels = px(1.);
+        // A mask narrower than both insets (e.g. the scrollable ancestor got
+        // clipped away mid-drag) leaves an empty clamp range below — stop.
+        if visible_bounds.size.width < EVENT_INSET * 2.
+            || visible_bounds.size.height < EVENT_INSET * 2.
+        {
             self.stop_anchor_auto_scroll(cx);
             return;
         }
@@ -1488,12 +1491,12 @@ impl WindowSelectionState {
 
         let event_position = point(
             position.x.clamp(
-                visible_bounds.left() + px(1.),
-                visible_bounds.right() - px(1.),
+                visible_bounds.left() + EVENT_INSET,
+                visible_bounds.right() - EVENT_INSET,
             ),
             position.y.clamp(
-                visible_bounds.top() + px(1.),
-                visible_bounds.bottom() - px(1.),
+                visible_bounds.top() + EVENT_INSET,
+                visible_bounds.bottom() - EVENT_INSET,
             ),
         );
         self.auto_scroll.last_drag_position = Some(event_position);
