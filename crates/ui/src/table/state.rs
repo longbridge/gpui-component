@@ -1203,10 +1203,20 @@ where
     fn drag_gap_at(&self, x: Pixels, drag_col_ix: usize) -> Option<usize> {
         let fixed_count = self.fixed_left_cols_count();
 
+        // A column can only be reordered within its own region: rendering
+        // pins the first `fixed_count` columns, so a cross-region move would
+        // change which columns are pinned without updating their `fixed`
+        // flags.
+        let drag_in_fixed = drag_col_ix < fixed_count;
+        let pointer_in_fixed = fixed_count > 0 && x < self.fixed_head_cols_bounds.right();
+        if drag_in_fixed != pointer_in_fixed {
+            return None;
+        }
+
         // Columns scrolled beneath the fixed region keep stale bounds, so
         // resolve `x` against the fixed columns alone when it falls in that
         // region, and against the visible scrollable columns otherwise.
-        let candidates = if fixed_count > 0 && x < self.fixed_head_cols_bounds.right() {
+        let candidates = if pointer_in_fixed {
             0..fixed_count
         } else {
             self.calculate_visible_leaf_col_range(fixed_count).0
