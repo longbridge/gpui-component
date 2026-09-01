@@ -210,7 +210,9 @@ impl TilesRenderer for TilesSkin {
         v_flex()
             .id(("tile", tile.panel_id().as_u64()))
             .occlude()
-            .overflow_hidden()
+            // No `overflow_hidden` here: the resize handles hang past the
+            // tile's edge, and a content mask would cut their hit areas down
+            // to the sliver inside it. The panel is clipped by `panel_frame`.
             .bg(cx.theme().tokens.background)
             .border_1()
             .border_color(cx.theme().border)
@@ -224,6 +226,15 @@ impl TilesRenderer for TilesSkin {
             // at all on a zoomed one — how a zoomed tile fills the dock is
             // this skin's decision.
             .when(tile.is_zoomed(), |this| this.size_full())
+            // One extra pixel past the stored bounds, so a snapped neighbor's
+            // border overlaps this tile's instead of stacking beside it into
+            // a double-width line. Base pins `w`/`h` to the stored bounds
+            // after this hook, so the growth rides on the min size, which
+            // wins over the pinned size and which base leaves alone.
+            .when(!tile.is_zoomed(), |this| {
+                this.min_w(tile.bounds().size.width + px(1.))
+                    .min_h(tile.bounds().size.height + px(1.))
+            })
             .on_mouse_down(MouseButton::Left, {
                 let tile = tile.clone();
                 move |_, window, cx| tile.bring_to_front(window, cx)
@@ -263,7 +274,12 @@ impl TilesRenderer for TilesSkin {
             .pl_3()
             .pr_2()
             .when_some(title_style, |this, style| {
-                this.bg(style.background).text_color(style.foreground)
+                // The tile frame does not clip its children, so a painted
+                // title bar rounds its own top corners to stay inside the
+                // frame's.
+                this.bg(style.background)
+                    .text_color(style.foreground)
+                    .rounded_t(cx.theme().tile_radius)
             })
             .child(
                 div()
