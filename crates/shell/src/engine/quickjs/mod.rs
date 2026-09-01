@@ -31,7 +31,7 @@ use rquickjs::{
     module::Declared,
     module::{Declarations, Exports, Module, ModuleDef},
 };
-use rquickjs_jit::JitRuntime;
+use rquickjs_jit::{JitConfig, JitRuntime};
 use smallvec::SmallVec;
 
 use crate::{
@@ -1476,6 +1476,7 @@ impl ShellRuntime {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JitRuntime::builder()
+            .config(shell_jit_config()?)
             .build()
             .map_err(|error| anyhow!("failed to start the JavaScript JIT runtime: {error}"))?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
@@ -4799,6 +4800,21 @@ impl ShellRuntime {
     fn push_op(&self, id: SpecId, op: SpecOp) -> Result<(), crate::spec::SpecError> {
         self.arena.borrow_mut().push_op(id, op)
     }
+}
+
+fn shell_jit_config() -> Result<JitConfig> {
+    let builder = JitConfig::builder();
+
+    // Debug builds exercise many short-lived runtimes concurrently. Keep them on
+    // the interpreter tier: native compilation currently crashes inside the JIT
+    // backend on Linux and Windows under that workload. Release builds retain the
+    // production thresholds and continue to tier hot functions up to native code.
+    #[cfg(debug_assertions)]
+    let builder = builder.call_threshold(u32::MAX).loop_threshold(u32::MAX);
+
+    builder
+        .build()
+        .map_err(|error| anyhow!("invalid JavaScript JIT configuration: {error}"))
 }
 
 /// Resolves and loads an application's own modules, and nothing else.
@@ -10995,6 +11011,14 @@ export default class BrokenChild extends View {
 
 #[cfg(test)]
 mod reserved_element_method_tests {
+    #[cfg(debug_assertions)]
+    #[test]
+    fn debug_runtimes_stay_on_the_interpreter_tier() {
+        let config = super::shell_jit_config().expect("JIT configuration");
+        assert_eq!(config.call_threshold(), u32::MAX);
+        assert_eq!(config.loop_threshold(), u32::MAX);
+    }
+
     /// `typings.rs` withholds these from a registered component that does not
     /// declare them. If the engine started accepting a fourth, the declarations
     /// would keep offering it on every component and the call would throw.
