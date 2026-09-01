@@ -226,12 +226,36 @@ through motion alone.
 - Live examples should demonstrate the documented component's real behavior
   and use the same source as its native example.
 
+## App Stories
+
+`apps.vue` lists the applications people have shipped with the library — the
+strongest available answer to "is this real?", and the reason it sits in the
+navbar rather than inside the Resources menu. Submissions come from
+[discussion #989](https://github.com/longbridge/gpui-component/discussions/989).
+
+- **The screenshots are the authors' own published GitHub URLs**, used as
+  submitted. They must not be wrapped in `.mac-window`: most already contain a
+  real titlebar, and a second set of traffic lights around one turns a real
+  screenshot into a mock. A hairline frame and one shared 16:10 crop, anchored
+  to the top, is what makes a row of them align.
+- **Order is the only ranking.** It reads as editorial judgement — how complete
+  and shipped an app is first, GitHub traction second — and is maintained by
+  hand when an entry is added.
+- **No star counts.** A hard-coded number goes stale, and resolving one
+  repository per app at build time would exhaust the unauthenticated GitHub
+  rate limit that `repo.data.js` already draws on. The facts a card does carry —
+  platforms, open source or commercial, whether it is still in development —
+  do not expire.
+- Copy for both locales lives in one `copy` object plus a per-app
+  `blurb: { en, zh }`, so an entry cannot be added in one language only.
+
 ## Files
 
 | File | Role |
 | --- | --- |
 | `.vitepress/theme/style.css` | Tokens, `.mac-window`, VitePress overrides, doc typography |
 | `index.vue` | Landing page: markup, bilingual copy, page-scoped styles |
+| `apps.vue` | App Stories page: the showcase list, bilingual copy, page-scoped styles |
 | `.vitepress/theme/index.ts` | Theme entry; injects nav controls and the example window |
 | `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages |
 | `.vitepress/config.mts` | Navigation, sidebar generation, locales |

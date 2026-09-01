@@ -736,6 +736,20 @@ impl Render for ShellRoot {
 
         div()
             .id("shell-root")
+            // The window's base text size, from the theme rather than from
+            // GPUI's default rem.
+            //
+            // Everything this root draws itself -- toasts, the sheet, the
+            // dialog scrim's chrome -- states no size of its own and inherits
+            // this one. Without it that chrome sat at GPUI's 16px default
+            // while the components an application builds set their own sizes,
+            // so a dense application drawn at 12px got 16px notifications over
+            // it. `md` is the base by the library's own convention: it is what
+            // `gpui_component::Theme` already takes its `font_size` from.
+            //
+            // The default `md` is that same 16px, so a theme that says nothing
+            // about type is drawn exactly as it was before this existed.
+            .text_size(tokens.typography.md.size)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_tab))
             .on_action(cx.listener(Self::on_action_tab_prev))
