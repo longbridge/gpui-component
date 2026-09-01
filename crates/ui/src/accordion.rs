@@ -23,7 +23,7 @@ pub struct Accordion {
     bordered: bool,
     disabled: bool,
     children: Vec<AccordionItem>,
-    on_toggle_click: Option<Arc<dyn Fn(&[usize], &mut Window, &mut App) + Send + Sync>>,
+    on_toggle_click: Option<Rc<dyn Fn(&[usize], &mut Window, &mut App)>>,
 }
 
 impl Accordion {
@@ -74,9 +74,9 @@ impl Accordion {
     /// The first argument `Vec<usize>` is the indices of the open accordions.
     pub fn on_toggle_click(
         mut self,
-        on_toggle_click: impl Fn(&[usize], &mut Window, &mut App) + Send + Sync + 'static,
+        on_toggle_click: impl Fn(&[usize], &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_toggle_click = Some(Arc::new(on_toggle_click));
+        self.on_toggle_click = Some(Rc::new(on_toggle_click));
         self
     }
 }

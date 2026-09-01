@@ -78,8 +78,8 @@ const Row = template((color, label, onPick) =>
 export default class Board extends View {
   render() {
     return v_flex()
-      .child(Row("surface", "one", () => 1))
-      .child(Row("primary", "two", () => 2));
+      .child(Row(`#f8f8f8`, "one", () => 1))
+      .child(Row(`#2563eb`, "two", () => 2));
   }
 }
 "#,
@@ -87,7 +87,7 @@ export default class Board extends View {
     .expect("the board renders");
 
     assert!(
-        tree.contains(r#".bg[Str("surface")]"#) && tree.contains(r#".bg[Str("primary")]"#),
+        tree.contains(r##".bg[Str("#f8f8f8")]"##) && tree.contains(r##".bg[Str("#2563eb")]"##),
         "each call must write its own style argument: {tree}"
     );
     assert!(
@@ -366,10 +366,10 @@ export default class Watchlist extends View {
   init() { this.tick = 0; }
 
   row(index, price) {
-    return h_flex().gap(6).py(2).px(6).rounded(4).bg("surface")
-      .child(div().w(80).text_sm().text_color("foreground").child(`SYM${index}`))
-      .child(div().w(80).text_sm().text_color("foreground").child(price))
-      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+    return h_flex().gap(6).py(2).px(6).rounded(4).bg(`#f8f8f8`)
+      .child(div().w(80).text_sm().text_color(`#111111`).child(`SYM${index}`))
+      .child(div().w(80).text_sm().text_color(`#111111`).child(price))
+      .child(div().w(60).text_sm().text_color(`#6b7280`).child("+1.42%"))
       .child(Button.new("trade").px(8).py(2).on_click(() => index).child("Trade"));
   }
 
@@ -379,7 +379,7 @@ export default class Watchlist extends View {
     for (let index = 0; index < 40; index += 1) {
       rows.push(this.row(index, (100 + index + this.tick / 100).toFixed(2)));
     }
-    return v_flex().size_full().p(12).gap(4).bg("background").children(rows);
+    return v_flex().size_full().p(12).gap(4).bg(`#ffffff`).children(rows);
   }
 }
 "#;
@@ -390,10 +390,10 @@ import { v_flex, h_flex, Button } from "gpui-base";
 const template = globalThis.__template;
 
 const Row = template((symbol, price, change, onTrade) =>
-  h_flex().gap(6).py(2).px(6).rounded(4).bg("surface")
-    .child(div().w(80).text_sm().text_color("foreground").child(symbol))
-    .child(div().w(80).text_sm().text_color("foreground").child(price))
-    .child(div().w(60).text_sm().text_color("muted_foreground").child(change))
+  h_flex().gap(6).py(2).px(6).rounded(4).bg(`#f8f8f8`)
+    .child(div().w(80).text_sm().text_color(`#111111`).child(symbol))
+    .child(div().w(80).text_sm().text_color(`#111111`).child(price))
+    .child(div().w(60).text_sm().text_color(`#6b7280`).child(change))
     .child(Button.new("trade").px(8).py(2).on_click(onTrade).child("Trade")));
 
 export default class Watchlist extends View {
@@ -410,7 +410,7 @@ export default class Watchlist extends View {
         () => index,
       ));
     }
-    return v_flex().size_full().p(12).gap(4).bg("background").children(rows);
+    return v_flex().size_full().p(12).gap(4).bg(`#ffffff`).children(rows);
   }
 }
 "#;
@@ -426,7 +426,7 @@ import { v_flex, h_flex } from "gpui-base";
 const template = globalThis.__template;
 
 const Panel = template((title, price, change) =>
-  v_flex().gap(4).p(12).bg("background")
+  v_flex().gap(4).p(12).bg(`#ffffff`)
     .child(div().text_sm().child(title))
     .child(h_flex().gap(6)
       .child(div().w(80).child(price))
@@ -500,9 +500,9 @@ import { View, div } from "gpui";
 import { v_flex, h_flex, Button } from "gpui-base";
 
 const label = (value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color("foreground").child(value);
+  div().text_size("0.6875rem").line_height(1.4).text_color(`#111111`).child(value);
 const muted = (value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color("muted_foreground").child(value);
+  div().text_size("0.6875rem").line_height(1.4).text_color(`#6b7280`).child(value);
 const cell = (width, right) => {
   const box = div().w(width).flex_none();
   return right ? box.text_right() : box;
@@ -554,9 +554,9 @@ import { v_flex, h_flex, Button } from "gpui-base";
 const template = globalThis.__template;
 
 const label = template((value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color("foreground").child(value));
+  div().text_size("0.6875rem").line_height(1.4).text_color(`#111111`).child(value));
 const muted = template((value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color("muted_foreground").child(value));
+  div().text_size("0.6875rem").line_height(1.4).text_color(`#6b7280`).child(value));
 // Not templated: `right` decides structure, so a sentinel would be read and
 // never land — the case a wrapper has to detect and fall back on.
 const cell = (width, right) => {
@@ -620,7 +620,7 @@ import { v_flex } from "gpui-base";
 const template = globalThis.__template;
 
 const Row = template((label) =>
-  div().bg("surface").hover((style) => style.bg("muted")).child(label));
+  div().bg(`#f8f8f8`).hover((style) => style.bg(`#f3f4f6`)).child(label));
 
 export default class Board extends View {
   render() { return v_flex().child(Row("one")).child(Row("two")); }
@@ -635,7 +635,7 @@ export default class Board extends View {
         "each instance needs a hover style of its own: {tree}"
     );
     assert_eq!(
-        tree.matches(r#"bg[Str("muted")]"#).count(),
+        tree.matches(r##"bg[Str("#f3f4f6")]"##).count(),
         2,
         "and each hover style needs its own declarations: {tree}"
     );

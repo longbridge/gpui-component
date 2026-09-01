@@ -281,7 +281,14 @@ impl Root {
             }
         }
 
-        Some(div().children(dialogs))
+        // Named so a test can assert the layer actually reached the screen. A
+        // dialog that opens into a root which never renders this layer looks
+        // exactly like one that does not open.
+        Some(
+            div()
+                .debug_selector(|| "dialog-layer".to_string())
+                .children(dialogs),
+        )
     }
 
     pub fn open_dialog<F>(&mut self, build: F, window: &mut Window, cx: &mut Context<'_, Root>)

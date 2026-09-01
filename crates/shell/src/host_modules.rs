@@ -759,6 +759,7 @@ pub const RESERVED_SPECIFIERS: &[&str] = &[
     // The runtime's own modules.
     "gpui",
     "gpui-base",
+    "gpui-component",
     "gpui-shell",
     "gpui-fps",
     // The Standard Runtime.

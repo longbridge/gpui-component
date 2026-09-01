@@ -55,7 +55,7 @@ export default class NativePath extends View {
       .line_to("100%", "100%")
       .close()
       .build();
-    return window.paint_path(path, Background.solid("#16a34a"))
+    return window.paint_path(path, Background.solid(`#16a34a`))
       .w(200)
       .h(80);
   }
@@ -437,6 +437,24 @@ fn a_handler_survives_the_frames_that_follow_its_render(cx: &mut TestAppContext)
         snapshot_text(&mut context, &view).contains("count: 1"),
         "the handler from the live snapshot was dropped by later frames"
     );
+}
+
+#[gpui::test]
+fn a_cloned_snapshot_retires_its_callback_generation_only_after_the_last_clone(
+    cx: &mut TestAppContext,
+) {
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+    render_once(&mut context, &view);
+    let callback = click_target(&mut context, &view);
+    let retained = context.update(|_, cx| view.read(cx).snapshot().unwrap().clone());
+
+    for _ in 0..2 {
+        view.update(&mut context, |view, cx| view.refresh(cx));
+        render_once(&mut context, &view);
+    }
+    assert!(runtime.live_callback_ids().contains(&callback));
+    drop(retained);
+    assert!(!runtime.live_callback_ids().contains(&callback));
 }
 
 #[gpui::test]
