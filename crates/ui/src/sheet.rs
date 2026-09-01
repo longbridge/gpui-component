@@ -3,8 +3,7 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, anchored, div, point, prelude::FluentBuilder as _,
-    px,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{ElementExt as _, Sheet as BaseSheet, TextSelectionScopeId, actions::Cancel};
 use schemars::JsonSchema;
@@ -135,11 +134,11 @@ impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
         let selection_scope = self.selection_scope;
-        let window_paddings = crate::window_border::window_paddings(window);
+        let frame_insets = crate::window_border::window_content_insets(window);
         let size = window.viewport_size()
             - gpui::size(
-                window_paddings.left + window_paddings.right,
-                window_paddings.top + window_paddings.bottom,
+                frame_insets.left + frame_insets.right,
+                frame_insets.top + frame_insets.bottom,
             );
         let top = cx.theme().sheet.margin_top;
         let base_size = window.text_style().font_size;
@@ -243,20 +242,17 @@ impl RenderOnce for Sheet {
             );
         let surface = surface.text_selection_scope(selection_scope);
 
-        anchored()
-            .position(point(window_paddings.left, window_paddings.top))
-            .snap_to_window()
-            .child(
-                BaseSheet::new(cx)
-                    .w(size.width)
-                    .h(size.height)
-                    .focus_handle(self.focus_handle)
-                    .overlay_interactive(self.overlay)
-                    .overlay_closable(self.overlay && self.overlay_closable)
-                    .request_close(|window, cx| window.close_sheet(cx))
-                    .on_close(move |event, window, cx| (self.on_close)(event, window, cx))
-                    .overlay(overlay)
-                    .surface(surface),
-            )
+        BaseSheet::new(cx)
+            .top(frame_insets.top)
+            .left(frame_insets.left)
+            .w(size.width)
+            .h(size.height)
+            .focus_handle(self.focus_handle)
+            .overlay_interactive(self.overlay)
+            .overlay_closable(self.overlay && self.overlay_closable)
+            .request_close(|window, cx| window.close_sheet(cx))
+            .on_close(move |event, window, cx| (self.on_close)(event, window, cx))
+            .overlay(overlay)
+            .surface(surface)
     }
 }

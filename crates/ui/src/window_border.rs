@@ -93,6 +93,34 @@ pub fn window_paddings(window: &Window) -> Edges<Pixels> {
     }
 }
 
+/// Per-side inset from the window bounds to the visible frame's content area.
+///
+/// This is [`window_paddings`] plus the frame's own border, which the window
+/// wrapper draws on every side it is not tiled against. Allows to lay an element
+/// flush against the inside of the window frame.
+pub(crate) fn window_content_insets(window: &Window) -> Edges<Pixels> {
+    let shadow_size = window.client_inset().unwrap_or(SHADOW_SIZE);
+    match window.window_decorations() {
+        Decorations::Server => Edges::all(px(0.0)),
+        Decorations::Client { tiling } => {
+            let mut insets = client_frame_insets(shadow_size, &tiling);
+            if !tiling.top {
+                insets.top += BORDER_SIZE;
+            }
+            if !tiling.bottom {
+                insets.bottom += BORDER_SIZE;
+            }
+            if !tiling.left {
+                insets.left += BORDER_SIZE;
+            }
+            if !tiling.right {
+                insets.right += BORDER_SIZE;
+            }
+            insets
+        }
+    }
+}
+
 impl ParentElement for WindowBorder {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
