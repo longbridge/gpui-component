@@ -226,6 +226,15 @@ impl TilesRenderer for TilesSkin {
             // at all on a zoomed one — how a zoomed tile fills the dock is
             // this skin's decision.
             .when(tile.is_zoomed(), |this| this.size_full())
+            // One extra pixel past the stored bounds, so a snapped neighbor's
+            // border overlaps this tile's instead of stacking beside it into
+            // a double-width line. Base pins `w`/`h` to the stored bounds
+            // after this hook, so the growth rides on the min size, which
+            // wins over the pinned size and which base leaves alone.
+            .when(!tile.is_zoomed(), |this| {
+                this.min_w(tile.bounds().size.width + px(1.))
+                    .min_h(tile.bounds().size.height + px(1.))
+            })
             .on_mouse_down(MouseButton::Left, {
                 let tile = tile.clone();
                 move |_, window, cx| tile.bring_to_front(window, cx)
