@@ -1,5 +1,5 @@
 ---
-title: Virtual List
+title: VirtualList
 description: Render a hundred thousand differently sized rows by drawing only the ones on screen.
 order: 5
 example: virtual-list

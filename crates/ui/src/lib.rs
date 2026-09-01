@@ -1,7 +1,6 @@
 use gpui::App;
 use std::ops::Deref;
 
-mod async_util;
 mod component_traits;
 mod element_ext;
 pub mod global_state;
@@ -24,9 +23,11 @@ pub(crate) mod actions {
 
 pub mod accordion;
 pub mod alert;
+pub mod attachment;
 pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
+pub mod bubble;
 pub mod button;
 pub mod chart;
 pub mod checkbox;
@@ -48,7 +49,10 @@ pub mod kbd;
 pub mod label;
 pub mod link;
 pub mod list;
+pub mod marker;
 pub mod menu;
+pub mod message;
+pub mod message_scroller;
 pub mod native_menu;
 pub mod notification;
 pub mod pagination;
@@ -70,6 +74,7 @@ pub mod select;
 pub mod separator;
 pub mod setting;
 pub mod sheet;
+pub mod shimmer;
 pub mod sidebar;
 pub mod skeleton;
 pub mod slider;
@@ -136,7 +141,6 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     menu::init(cx);
     table::init(cx);
-    text::init(cx);
     tooltip::init(cx);
 }
 

@@ -544,6 +544,10 @@ impl RenderOnce for Dialog {
                         let request_close = request_close.clone();
                         this.child(
                             div()
+                                // The backdrop covers the host, so a caller's
+                                // `absolute()` surface has a box to fill.
+                                .absolute()
+                                .inset_0()
                                 .on_any_mouse_down(move |event, window, cx| {
                                     if event.position.y < dismiss_below_y {
                                         return;
@@ -614,6 +618,58 @@ mod tests {
         assert_eq!(
             &*changes.borrow(),
             &[(true, DialogChangeReason::TriggerPress)]
+        );
+    }
+
+    /// The backdrop is the dimming surface every caller hands over as an
+    /// `absolute()` element, so it has to have the host's box to resolve
+    /// against — a collapsed wrapper leaves it zero-sized and invisible.
+    #[gpui::test]
+    fn the_backdrop_fills_the_host(cx: &mut gpui::TestAppContext) {
+        use gpui::{Bounds, canvas};
+        use std::cell::Cell;
+
+        struct Harness {
+            focus: FocusHandle,
+            bounds: Rc<Cell<Bounds<Pixels>>>,
+        }
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+                let bounds = self.bounds.clone();
+                Dialog::new(cx)
+                    .open(true)
+                    .focus_handle(self.focus.clone())
+                    .backdrop(
+                        canvas(
+                            move |bounds_of_backdrop, _, _| bounds.set(bounds_of_backdrop),
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+                    .popup(div().size(px(100.)))
+            }
+        }
+
+        cx.update(crate::init);
+        let bounds = Rc::new(Cell::new(Bounds::default()));
+        let (_, cx) = cx.add_window_view({
+            let bounds = bounds.clone();
+            move |_, cx| Harness {
+                focus: cx.focus_handle(),
+                bounds,
+            }
+        });
+        let viewport = cx.update(|window, cx| {
+            let viewport = window.viewport_size();
+            window.draw(cx).clear(cx);
+            viewport
+        });
+
+        assert_eq!(
+            bounds.get().size,
+            viewport,
+            "a zero-sized backdrop paints no overlay behind the dialog"
         );
     }
 }

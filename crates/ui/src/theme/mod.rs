@@ -243,16 +243,20 @@ impl Theme {
             cx.set_global(theme);
         }
 
-        let theme = cx.global_mut::<Theme>();
-        theme.mode = mode;
-        if mode.is_dark() {
-            theme.apply_config(&theme.dark_theme.clone());
-        } else {
-            theme.apply_config(&theme.light_theme.clone());
-        }
+        let theme = {
+            let theme = cx.global_mut::<Theme>();
+            theme.mode = mode;
+            if mode.is_dark() {
+                theme.apply_config(&theme.dark_theme.clone());
+            } else {
+                theme.apply_config(&theme.light_theme.clone());
+            }
+            theme.clone()
+        };
 
         let base_theme = theme.base_theme();
         cx.set_global(base_theme);
+        crate::text::install_text_view_defaults(&theme, cx);
 
         if let Some(window) = window {
             window.refresh();
@@ -315,8 +319,10 @@ impl Theme {
     /// onto the Base global is replaced — the same thing [`Theme::change`]
     /// does.
     pub fn sync_base(cx: &mut App) {
-        let base_theme = Theme::global(cx).base_theme();
+        let theme = Theme::global(cx).clone();
+        let base_theme = theme.base_theme();
         cx.set_global(base_theme);
+        crate::text::install_text_view_defaults(&theme, cx);
     }
 
     /// Get the input background color.
@@ -378,6 +384,7 @@ impl Theme {
             border: self.border,
             input: self.input,
             ring: self.ring,
+            selection: self.selection,
         }
     }
 
@@ -397,6 +404,24 @@ impl Theme {
         }
     }
 
+    /// Returns the next surface radius above the existing `xl` theme tier.
+    ///
+    /// Larger surface tiers derive from the same application-controlled base
+    /// radius, so adjusting or squaring the theme updates every tier together.
+    pub fn radius_2xl(&self) -> Pixels {
+        self.radius * 2.5
+    }
+
+    /// Returns the surface radius above [`Self::radius_2xl`].
+    pub fn radius_3xl(&self) -> Pixels {
+        self.radius * 3.
+    }
+
+    /// Returns the surface radius above [`Self::radius_3xl`].
+    pub fn radius_4xl(&self) -> Pixels {
+        self.radius * 3.5
+    }
+
     pub fn radius_tokens(&self) -> RadiusTokens {
         RadiusTokens {
             none: px(0.),
@@ -404,7 +429,7 @@ impl Theme {
             md: self.radius,
             lg: self.radius_lg,
             xl: self.radius * 2.,
-            full: RADIUS_FULL,
+            full: self.radius_full(),
         }
     }
 
@@ -541,6 +566,25 @@ mod semantic_token_tests {
         // just on the elements whose radius happens to come from `radius`.
         theme.radius = px(0.);
         assert_eq!(theme.radius_full(), px(0.));
+        assert_eq!(theme.radius_tokens().full, px(0.));
+    }
+
+    #[test]
+    fn larger_surface_radii_follow_the_theme_radius() {
+        let mut theme = Theme::default();
+        assert!(theme.radius_tokens().xl < theme.radius_2xl());
+        assert!(theme.radius_2xl() < theme.radius_3xl());
+        assert!(theme.radius_3xl() < theme.radius_4xl());
+
+        theme.radius = px(10.);
+        assert_eq!(theme.radius_2xl(), px(25.));
+        assert_eq!(theme.radius_3xl(), px(30.));
+        assert_eq!(theme.radius_4xl(), px(35.));
+
+        theme.radius = px(0.);
+        assert_eq!(theme.radius_2xl(), px(0.));
+        assert_eq!(theme.radius_3xl(), px(0.));
+        assert_eq!(theme.radius_4xl(), px(0.));
     }
 
     #[test]
@@ -730,5 +774,53 @@ mod base_theme_projection_tests {
         );
         assert_eq!(base.resizable.handle, Some(theme.border));
         assert_eq!(base.resizable.active_handle, Some(theme.drag_border));
+    }
+
+    #[gpui::test]
+    fn default_component_palettes_match_base_light_and_dark_tokens(cx: &mut gpui::TestAppContext) {
+        fn assert_close(left: ColorTokens, right: ColorTokens) {
+            macro_rules! color {
+                ($field:ident) => {
+                    assert!(
+                        (left.$field.h - right.$field.h).abs() < 1e-6
+                            && (left.$field.s - right.$field.s).abs() < 1e-6
+                            && (left.$field.l - right.$field.l).abs() < 1e-6
+                            && (left.$field.a - right.$field.a).abs() < 1e-6,
+                        "{} differs: {:?} != {:?}",
+                        stringify!($field),
+                        left.$field,
+                        right.$field
+                    );
+                };
+            }
+            color!(background);
+            color!(foreground);
+            color!(surface);
+            color!(surface_foreground);
+            color!(primary);
+            color!(primary_foreground);
+            color!(secondary);
+            color!(secondary_foreground);
+            color!(muted);
+            color!(muted_foreground);
+            color!(accent);
+            color!(accent_foreground);
+            color!(destructive);
+            color!(destructive_foreground);
+            color!(border);
+            color!(input);
+            color!(ring);
+            color!(selection);
+        }
+
+        cx.update(crate::init);
+        cx.update(|cx| {
+            assert_close(Theme::global(cx).color_tokens(), ColorTokens::light());
+        });
+
+        cx.update(|cx| Theme::change(ThemeMode::Dark, None, cx));
+        cx.update(|cx| {
+            assert_close(Theme::global(cx).color_tokens(), ColorTokens::dark());
+        });
     }
 }

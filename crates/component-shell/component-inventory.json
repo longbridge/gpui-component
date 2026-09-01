@@ -2097,6 +2097,78 @@
       "name": "welcome",
       "classification": "infrastructure",
       "explanation": "Story gallery landing content; it is not a gpui-component constructor."
+    },
+    {
+      "source": "ui",
+      "name": "attachment",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Attachment", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+    },
+    {
+      "source": "ui",
+      "name": "bubble",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Bubble", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+    },
+    {
+      "source": "ui",
+      "name": "marker",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Marker", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+    },
+    {
+      "source": "ui",
+      "name": "message",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Message", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+    },
+    {
+      "source": "ui",
+      "name": "message_scroller",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "MessageScroller", "category": "chat", "reason": "Added on main after this catalog was frozen; requires a dedicated retained binding." }
+    },
+    {
+      "source": "ui",
+      "name": "shimmer",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Shimmer", "category": "feedback", "reason": "Added on main after this catalog was frozen; requires a dedicated typed binding." }
+    },
+    {
+      "source": "story",
+      "name": "attachment",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Attachment", "category": "chat", "reason": "The matching component binding is deferred." }
+    },
+    {
+      "source": "story",
+      "name": "bubble",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Bubble", "category": "chat", "reason": "The matching component binding is deferred." }
+    },
+    {
+      "source": "story",
+      "name": "marker",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Marker", "category": "chat", "reason": "The matching component binding is deferred." }
+    },
+    {
+      "source": "story",
+      "name": "message",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Message", "category": "chat", "reason": "The matching component binding is deferred." }
+    },
+    {
+      "source": "story",
+      "name": "message_scroller",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "MessageScroller", "category": "chat", "reason": "The matching component binding is deferred." }
+    },
+    {
+      "source": "story",
+      "name": "shimmer",
+      "classification": "component",
+      "registration": { "status": "deferred", "target": "Shimmer", "category": "feedback", "reason": "The matching component binding is deferred." }
     }
   ]
 }

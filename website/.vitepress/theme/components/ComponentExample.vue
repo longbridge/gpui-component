@@ -13,6 +13,9 @@ import WindowZoomButton from "./WindowZoomButton.vue";
 
 const route = useRoute();
 const { frontmatter } = useData();
+const baseExampleDevVersion = import.meta.env.DEV
+    ? Date.now().toString(36)
+    : undefined;
 
 const component = computed(() => {
     if (typeof frontmatter.value.example === "string") {
@@ -69,8 +72,10 @@ const storyName = computed(() =>
 const src = computed(() => {
     if (!component.value) return undefined;
     if (kind.value === "base") {
+        const query = new URLSearchParams({ component: component.value });
+        if (baseExampleDevVersion) query.set("v", baseExampleDevVersion);
         return withBase(
-            `/examples/base/?component=${encodeURIComponent(component.value)}`,
+            `/examples/base/?${query.toString()}`,
         );
     }
 

@@ -16,7 +16,7 @@
 
 use std::{
     cell::{Cell, RefCell, RefMut},
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     path::Path,
     rc::{Rc, Weak},
 };
@@ -36,7 +36,9 @@ use smallvec::SmallVec;
 use crate::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
     ComponentCallbackValue, ComponentDataValue, ComponentPayload, FrozenComponentRegistry,
+    dependencies::{GitDependencyStore, MaterializedDependency},
     entities::{EntityHandle, EntityStore},
+    host_modules::HostValue,
     metrics::Metrics,
     policy::Policy,
     runtime::{ApplicationGeneration, CallbackArena, CallbackEntry},
@@ -1083,6 +1085,7 @@ pub(crate) mod exports {
         "InputState",
         "NumberInput",
         "Textarea",
+        "TextView",
         "TextareaState",
         "SliderState",
         "Slider",
@@ -1104,7 +1107,8 @@ pub(crate) mod exports {
     /// The performance overlay, owned by `gpui-fps`.
     pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
 
-    /// Shell-owned shared types. This module currently has no run-time values.
+    /// Shell-owned shared types. Module components are exported from their
+    /// host modules rather than through a public generic dispatcher.
     pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
 
@@ -1328,6 +1332,7 @@ pub struct ShellRuntime {
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
     app_modules: AppModules,
+    dependency_store: GitDependencyStore,
     next_application_generation: Cell<u64>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
@@ -1440,10 +1445,33 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
-        Self::new_isolated_with_components(FrozenComponentRegistry::default())
+        Self::new_isolated_with_components_and_dependency_store(
+            FrozenComponentRegistry::default(),
+            GitDependencyStore::for_user()?,
+        )
     }
 
     pub fn new_isolated_with_components(components: FrozenComponentRegistry) -> Result<Rc<Self>> {
+        Self::new_isolated_with_components_and_dependency_store(
+            components,
+            GitDependencyStore::for_user()?,
+        )
+    }
+
+    #[cfg(test)]
+    fn new_isolated_with_dependency_store(
+        dependency_store: GitDependencyStore,
+    ) -> Result<Rc<Self>> {
+        Self::new_isolated_with_components_and_dependency_store(
+            FrozenComponentRegistry::default(),
+            dependency_store,
+        )
+    }
+
+    fn new_isolated_with_components_and_dependency_store(
+        components: FrozenComponentRegistry,
+        dependency_store: GitDependencyStore,
+    ) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
@@ -1512,6 +1540,7 @@ impl ShellRuntime {
             test_http_client: RefCell::new(None),
             context,
             app_modules,
+            dependency_store,
             next_application_generation: Cell::new(1),
             js_runtime,
         });
@@ -1942,9 +1971,31 @@ impl ShellRuntime {
             );
         }
 
+        let dependencies = if root.join(crate::plugin::MANIFEST_FILE).is_file() {
+            let manifest = crate::plugin::PluginManifest::read(&root)?;
+            let dependencies = self.dependency_store.materialize_all(&manifest)?;
+            // Beside the declarations, and for the same reason: the process
+            // that will resolve these imports is the one that tells an editor
+            // where they are, so a package cannot be typed against a checkout
+            // this load is not going to use. Best-effort, like the
+            // declarations — a read-only directory is not a reason to refuse to
+            // run.
+            if let Err(error) = self.dependency_store.link_for_editor(&root, &dependencies) {
+                tracing::debug!(
+                    "could not link dependencies for an editor in {}: {error:#}",
+                    root.display()
+                );
+            }
+            dependencies
+        } else {
+            BTreeMap::new()
+        };
+
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
-        let module_lease = self.app_modules.register(root.clone());
+        let module_lease = self
+            .app_modules
+            .register_with_dependencies(root.clone(), dependencies);
         let generation = module_lease.generation();
         let application = ApplicationGeneration::new(self.next_application_generation.get());
         self.next_application_generation.set(
@@ -3481,12 +3532,7 @@ impl ShellRuntime {
             let payload = Object::new(ctx.clone())?;
             payload.set("click_count", click_count)?;
 
-            let flags = Object::new(ctx.clone())?;
-            flags.set("shift", modifiers.shift)?;
-            flags.set("control", modifiers.control)?;
-            flags.set("alt", modifiers.alt)?;
-            flags.set("platform", modifiers.platform)?;
-            payload.set("modifiers", flags)?;
+            payload.set("modifiers", modifiers_object(&ctx, modifiers)?)?;
 
             handler.call::<_, ()>((
                 payload,
@@ -3787,12 +3833,7 @@ impl ShellRuntime {
             event_bounds.set("width", f32::from(bounds.size.width))?;
             event_bounds.set("height", f32::from(bounds.size.height))?;
             payload.set("bounds", event_bounds)?;
-            let modifiers = Object::new(ctx.clone())?;
-            modifiers.set("shift", event.modifiers.shift)?;
-            modifiers.set("control", event.modifiers.control)?;
-            modifiers.set("alt", event.modifiers.alt)?;
-            modifiers.set("platform", event.modifiers.platform)?;
-            payload.set("modifiers", modifiers)?;
+            payload.set("modifiers", modifiers_object(&ctx, event.modifiers)?)?;
             handler.call::<_, ()>((
                 payload,
                 context_object(ctx, ContextBinding::Call(generation))?,
@@ -3975,48 +4016,16 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let Some(entry) = self.callbacks.borrow().get(id) else {
-            return;
-        };
-        if entry
-            .application
-            .as_ref()
-            .is_some_and(|application| !application.is_active())
-        {
-            return;
-        }
-        let Some(view) = entry.live_view() else {
-            return;
-        };
-        let policy = view
-            .as_ref()
-            .map(|view| view.read(cx).policy())
-            .unwrap_or_else(crate::policy::default);
-        let (_guard, generation) = scope::enter_with_application(
-            self,
-            window,
-            cx,
-            ScopePhase::Event,
-            view,
-            policy,
-            entry.application.clone(),
-        );
-        let result = self.with_js(|ctx| {
-            let handler = entry.value.clone().restore(ctx)?;
+        let modifiers = event.modifiers;
+        let capslock = event.capslock;
+        self.dispatch_simple_event(id, "modifiers changed", window, cx, move |ctx| {
             let payload = Object::new(ctx.clone())?;
-            payload.set("modifiers", modifiers_object(&ctx, event.modifiers)?)?;
-            let capslock = Object::new(ctx.clone())?;
-            capslock.set("on", event.capslock.on)?;
-            payload.set("capslock", capslock)?;
-            handler.call::<_, ()>((
-                payload,
-                context_object(ctx, ContextBinding::Call(generation))?,
-            ))
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            let capslock_object = Object::new(ctx.clone())?;
+            capslock_object.set("on", capslock.on)?;
+            payload.set("capslock", capslock_object)?;
+            Ok(payload)
         });
-        if let Err(error) = result {
-            tracing::error!("error in modifiers-changed handler: {error}");
-        }
-        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Delivers one key press or release to a script handler.
@@ -4144,6 +4153,54 @@ impl ShellRuntime {
 
         if let Err(error) = result {
             tracing::error!("error in change handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    pub(crate) fn dispatch_host_event(
+        self: &Rc<Self>,
+        id: CallbackId,
+        payload: HostValue,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("host component callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = host_modules::into_js(ctx, payload)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in host component handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -4807,6 +4864,7 @@ struct AppModules {
 struct ApplicationModules {
     root: std::path::PathBuf,
     generation: u32,
+    dependencies: BTreeMap<String, MaterializedDependency>,
 }
 
 #[derive(Clone)]
@@ -4833,12 +4891,22 @@ impl Drop for ApplicationModuleRegistration {
 }
 
 impl AppModules {
+    #[cfg(test)]
     fn register(&self, root: std::path::PathBuf) -> ApplicationModuleLease {
+        self.register_with_dependencies(root, BTreeMap::new())
+    }
+
+    fn register_with_dependencies(
+        &self,
+        root: std::path::PathBuf,
+        dependencies: BTreeMap<String, MaterializedDependency>,
+    ) -> ApplicationModuleLease {
         let generation = self.next_generation.get().wrapping_add(1);
         self.next_generation.set(generation);
         self.applications.borrow_mut().push(ApplicationModules {
             root: root.clone(),
             generation,
+            dependencies,
         });
         ApplicationModuleLease(Rc::new(ApplicationModuleRegistration {
             applications: self.applications.clone(),
@@ -4859,7 +4927,12 @@ impl AppModules {
             .borrow()
             .iter()
             .filter(|application| {
-                application.generation == generation && base.starts_with(&application.root)
+                application.generation == generation
+                    && (base.starts_with(&application.root)
+                        || application
+                            .dependencies
+                            .values()
+                            .any(|dependency| base.starts_with(&dependency.root)))
             })
             .max_by_key(|application| application.root.components().count())
             .cloned()
@@ -4879,17 +4952,42 @@ impl AppModules {
         application: &ApplicationModules,
         base: &str,
         name: &str,
-    ) -> Option<std::path::PathBuf> {
-        let start = if name.starts_with('.') {
-            Path::new(Self::untag(base)).parent()?.to_path_buf()
+    ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        let base_path = Path::new(Self::untag(base));
+        let importing_dependency = application
+            .dependencies
+            .values()
+            .find(|dependency| base_path.starts_with(&dependency.root));
+        let (joined, boundary) = if name.starts_with('.') {
+            let boundary = importing_dependency
+                .map(|dependency| dependency.root.clone())
+                .unwrap_or_else(|| application.root.clone());
+            (base_path.parent()?.join(name), boundary)
+        } else if let Some((dependency_name, dependency)) = application
+            .dependencies
+            .iter()
+            .filter(|(dependency_name, _)| {
+                name == dependency_name.as_str()
+                    || name
+                        .strip_prefix(dependency_name.as_str())
+                        .is_some_and(|tail| tail.starts_with('/'))
+            })
+            .max_by_key(|(dependency_name, _)| dependency_name.len())
+        {
+            if name == dependency_name {
+                return Some((dependency.entry.clone(), dependency.root.clone()));
+            }
+            let subpath = name.strip_prefix(dependency_name)?.strip_prefix('/')?;
+            (dependency.root.join(subpath), dependency.root.clone())
+        } else if importing_dependency.is_some() {
+            return None;
         } else {
-            application.root.clone()
+            (application.root.join(name), application.root.clone())
         };
 
-        let joined = start.join(name);
         for candidate in [joined.clone(), joined.with_extension("js")] {
             if candidate.is_file() {
-                return candidate.canonicalize().ok();
+                return candidate.canonicalize().ok().map(|path| (path, boundary));
             }
         }
         None
@@ -4910,7 +5008,7 @@ impl Resolver for AppModules {
                 &format!("cannot identify the application importing `{name}` from `{base}`"),
             ));
         };
-        let Some(path) = self.candidate(&application, base, name) else {
+        let Some((path, boundary)) = self.candidate(&application, base, name) else {
             // A bare specifier reached the last resolver in the chain, so it is
             // neither a built-in nor a file. Saying which built-ins this
             // runtime does have is the difference between "you typed it wrong"
@@ -4934,12 +5032,12 @@ impl Resolver for AppModules {
             ));
         };
 
-        if !path.starts_with(&application.root) {
+        if !path.starts_with(&boundary) {
             return Err(Exception::throw_message(
                 ctx,
                 &format!(
                     "module `{name}` resolves outside the application directory `{}`",
-                    application.root.display()
+                    boundary.display()
                 ),
             ));
         }
@@ -6280,6 +6378,14 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
+    component: (module, name) => ({
+      new: (id, props) => {
+        if (typeof id !== "string" || id.length === 0) {
+          throw new TypeError("a component needs a non-empty string id");
+        }
+        return element(__component(String(module), String(name), id, props ?? {}));
+      },
+    }),
     __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
@@ -6417,6 +6523,10 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    TextView: {
+      html: (id, text) => element(__text_view(String(id), String(text), "html")),
+      markdown: (id, text) => element(__text_view(String(id), String(text), "markdown")),
+    },
     CalendarState: { new: () => calendarState(__calendar_state_new()) },
     SliderState: {
       new: (options) => {
@@ -6534,6 +6644,7 @@ impl ShellRuntime {
             let mut behavior_count = 0;
             for (index, name) in [
                 "on_click",
+                "on_link_click",
                 "on_mouse_move",
                 "on_hover",
                 "on_key_down",
@@ -6554,6 +6665,8 @@ impl ShellRuntime {
                 "on_dismiss",
                 "on_step",
                 "disabled",
+                "selectable",
+                "scrollable",
                 "selected",
                 "checked",
                 "accessibility_label",
@@ -6612,7 +6725,47 @@ impl ShellRuntime {
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
+            let component_runtime = runtime.clone();
+            globals.set(
+                "__component",
+                Func::from(move |ctx: Ctx<'_>, module: String, name: String, id: String, props: host_modules::Argument| -> JsResult<SpecId> {
+                    let props = props.0;
+                    if id.is_empty() {
+                        return Err(Exception::throw_type(&ctx, "a component needs a non-empty string id"));
+                    }
+                    let registry = crate::host_modules::modules();
+                    registry
+                        .get(&module)
+                        .and_then(|found| found.resolve_component(&name))
+                        .map_err(|error| Exception::throw_message(&ctx, error.message()))?;
+                    Ok(upgrade(&component_runtime, &ctx)?.push_node(Component::Module(
+                        crate::spec::ModuleComponentSpec {
+                            module: module.into(),
+                            component: name.into(),
+                            id: id.into(),
+                            props,
+                            policy: crate::scope::policy(),
+                        },
+                    )))
+                }),
+            )?;
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
+            let text_view_runtime = runtime.clone();
+            globals.set(
+                "__text_view",
+                Func::from(move |ctx: Ctx<'_>, id: String, text: String, format: String| -> JsResult<SpecId> {
+                    let format = match format.as_str() {
+                        "html" => crate::spec::TextViewFormat::Html,
+                        "markdown" => crate::spec::TextViewFormat::Markdown,
+                        _ => return Err(Exception::throw_type(&ctx, "TextView format must be html or markdown")),
+                    };
+                    Ok(upgrade(&text_view_runtime, &ctx)?.push_node(Component::TextView {
+                        id: id.into(),
+                        text: text.into(),
+                        format,
+                    }))
+                }),
+            )?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
             text_constructor(
@@ -7441,6 +7594,7 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "on_click"
+            | "on_link_click"
             | "on_resize"
             | "on_change"
             | "on_open_change"
@@ -7496,6 +7650,8 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "disabled"
+            | "selectable"
+            | "scrollable"
             | "selected"
             | "checked"
             | "accessibility_label"
@@ -7547,6 +7703,8 @@ impl ShellRuntime {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
+                    "selectable" => "selectable",
+                    "scrollable" => "scrollable",
                     "selected" => "selected",
                     "checked" => "checked",
                     "tooltip" => "tooltip",
@@ -9245,6 +9403,7 @@ fn instantiate_template_binding(
 fn callback_op_name(method: &str) -> Option<&'static str> {
     Some(match method {
         "on_click" => "on_click",
+        "on_link_click" => "on_link_click",
         "on_mouse_move" => "on_mouse_move",
         "on_hover" => "on_hover",
         "on_key_down" => "on_key_down",
@@ -9460,6 +9619,9 @@ mod keystroke_tests {
 #[cfg(test)]
 mod module_lifecycle_tests {
     use super::{AppModules, ShellRuntime};
+    use crate::dependencies::{GitDependencyStore, MaterializedDependency};
+    use std::collections::BTreeMap;
+    use std::process::Command;
 
     #[test]
     fn registrations_for_the_same_root_are_generation_scoped_and_leased() {
@@ -9570,6 +9732,187 @@ mod module_lifecycle_tests {
             .load_app(&root, "main.js")
             .expect_err("missing import must reject the load");
         assert_eq!(runtime.app_modules.registration_count(), 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_bare_dependency_import_loads_its_entry_and_relative_modules() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-third-party-module-{}",
+            std::process::id()
+        ));
+        let application = root.join("application");
+        let dependency = root.join("dependency");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&dependency).expect("dependency directory");
+        std::fs::write(
+            dependency.join("index.js"),
+            "export { label } from './theme.js';",
+        )
+        .expect("dependency entry");
+        std::fs::write(
+            dependency.join("theme.js"),
+            "export const label = 'third party'; export const tone = 'dark';",
+        )
+        .expect("dependency relative module");
+
+        let application = application.canonicalize().expect("application root");
+        let dependency = dependency.canonicalize().expect("dependency root");
+        let mut dependencies = BTreeMap::new();
+        dependencies.insert(
+            "omarchy-ui".to_owned(),
+            MaterializedDependency {
+                entry: dependency.join("index.js"),
+                root: dependency,
+            },
+        );
+        let lease = runtime
+            .app_modules
+            .register_with_dependencies(application.clone(), dependencies);
+        let generation = lease.generation();
+        let view_type = runtime
+            .load_source_with_lease(
+                &format!("{}/main.js?v={generation}", application.display()),
+                "import { label } from 'omarchy-ui'; import { tone } from 'omarchy-ui/theme.js'; export default class Panel { static label() { return `${label}:${tone}`; } }",
+                Some(lease),
+                None,
+            )
+            .expect("third-party module graph");
+
+        let label = runtime
+            .with_js(|ctx| {
+                let class = view_type.value.clone().restore(ctx)?;
+                let label: rquickjs::Function = class.get("label")?;
+                label.call::<_, String>(())
+            })
+            .expect("dependency export");
+        assert_eq!(label, "third party:dark");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_dependency_relative_import_cannot_escape_its_checkout() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-third-party-escape-{}",
+            std::process::id()
+        ));
+        let application = root.join("application");
+        let dependency = root.join("dependency");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&dependency).expect("dependency directory");
+        std::fs::write(root.join("secret.js"), "export const secret = true;")
+            .expect("outside module");
+        std::fs::write(
+            dependency.join("index.js"),
+            "export { secret } from '../secret.js';",
+        )
+        .expect("dependency entry");
+
+        let application = application.canonicalize().expect("application root");
+        let dependency = dependency.canonicalize().expect("dependency root");
+        let mut dependencies = BTreeMap::new();
+        dependencies.insert(
+            "third-party".to_owned(),
+            MaterializedDependency {
+                entry: dependency.join("index.js"),
+                root: dependency,
+            },
+        );
+        let lease = runtime
+            .app_modules
+            .register_with_dependencies(application.clone(), dependencies);
+        let generation = lease.generation();
+        let error = runtime
+            .load_source_with_lease(
+                &format!("{}/main.js?v={generation}", application.display()),
+                "import 'third-party'; export default class Panel {}",
+                Some(lease),
+                None,
+            )
+            .expect_err("dependency traversal must be refused");
+
+        assert!(error.to_string().contains("outside"), "{error:#}");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loading_an_application_fetches_its_manifest_git_dependencies() {
+        let root =
+            std::env::temp_dir().join(format!("gpui-shell-fetch-module-{}", std::process::id()));
+        let application = root.join("application");
+        let remote = root.join("remote");
+        let cache = root.join("cache");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&application).expect("application directory");
+        std::fs::create_dir_all(&remote).expect("remote directory");
+        let git = |arguments: &[&str]| {
+            let output = Command::new("git")
+                .args(arguments)
+                .current_dir(&remote)
+                .output()
+                .expect("git fixture command");
+            assert!(
+                output.status.success(),
+                "git {} failed: {}",
+                arguments.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--initial-branch=main"]);
+        git(&["config", "user.name", "gpui-shell test"]);
+        git(&["config", "user.email", "gpui-shell@example.invalid"]);
+        std::fs::create_dir_all(remote.join("dist")).expect("dependency dist directory");
+        std::fs::write(
+            remote.join("dist/public.js"),
+            "export const label = 'downloaded from package main';",
+        )
+        .expect("dependency source");
+        std::fs::write(
+            remote.join("package.json"),
+            r#"{ "main": "dist/public.js" }"#,
+        )
+        .expect("dependency package manifest");
+        git(&["add", "."]);
+        git(&["commit", "-m", "dependency"]);
+
+        std::fs::write(
+            application.join(crate::plugin::MANIFEST_FILE),
+            format!(
+                r#"{{
+                    "id": "com.example.fetch",
+                    "name": "Fetch",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(&format!("file://{}#main", remote.display()))
+                    .expect("remote URL")
+            ),
+        )
+        .expect("application manifest");
+        std::fs::write(
+            application.join("main.js"),
+            "import { label } from 'omarchy-ui'; export default class Panel { static label() { return label; } }",
+        )
+        .expect("application source");
+
+        let runtime =
+            ShellRuntime::new_isolated_with_dependency_store(GitDependencyStore::new(cache))
+                .expect("runtime");
+        let view_type = runtime
+            .load_app(&application, "main.js")
+            .expect("application load");
+        let label = runtime
+            .with_js(|ctx| {
+                let class = view_type.value.clone().restore(ctx)?;
+                let label: rquickjs::Function = class.get("label")?;
+                label.call::<_, String>(())
+            })
+            .expect("dependency export");
+        assert_eq!(label, "downloaded from package main");
         let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -13,8 +13,7 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme,
-    global_state::UiGlobalState,
+    GlobalState, TextSelection,
     input::Selection,
     text::TextViewMultiClickKind,
     text::node::LinkMark,
@@ -98,7 +97,7 @@ impl Inline {
     fn paint_selected_bounds(&self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         window.paint_quad(gpui::PaintQuad {
             bounds,
-            background: cx.theme().blue.alpha(0.01).into(),
+            background: gpui::hsla(0.58, 0.85, 0.62, 0.01).into(),
             corner_radii: Corners::default(),
             border_color: gpui::transparent_black(),
             border_style: BorderStyle::default(),
@@ -113,7 +112,7 @@ impl Inline {
         window: &mut Window,
         cx: &mut App,
     ) -> (bool, bool, Option<Selection>) {
-        let Some(text_view_state) = UiGlobalState::global(cx).text_view_state() else {
+        let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
             return (false, false, None);
         };
 
@@ -260,7 +259,7 @@ impl Inline {
         text_layout: &TextLayout,
         bounds: &Bounds<Pixels>,
         window: &mut Window,
-        cx: &mut App,
+        color: gpui::Hsla,
     ) {
         let mut start = selection.start;
         let mut end = selection.end;
@@ -282,7 +281,7 @@ impl Inline {
                     point(end_position.x, end_position.y + line_height),
                 ),
                 px(0.),
-                cx.theme().selection,
+                color,
                 Edges::default(),
                 gpui::transparent_black(),
                 BorderStyle::default(),
@@ -294,7 +293,7 @@ impl Inline {
                     point(bounds.right(), start_position.y + line_height),
                 ),
                 px(0.),
-                cx.theme().selection,
+                color,
                 Edges::default(),
                 gpui::transparent_black(),
                 BorderStyle::default(),
@@ -307,7 +306,7 @@ impl Inline {
                         point(bounds.right(), end_position.y),
                     ),
                     px(0.),
-                    cx.theme().selection,
+                    color,
                     Edges::default(),
                     gpui::transparent_black(),
                     BorderStyle::default(),
@@ -320,7 +319,7 @@ impl Inline {
                     point(end_position.x, end_position.y + line_height),
                 ),
                 px(0.),
-                cx.theme().selection,
+                color,
                 Edges::default(),
                 gpui::transparent_black(),
                 BorderStyle::default(),
@@ -395,7 +394,7 @@ impl Element for Inline {
         // `max_lines` can snap its clip to a whole-line boundary. The state
         // stack only holds an entry during prepaint when that view set
         // `max_lines`, so this is a no-op otherwise.
-        if let Some(text_view_state) = UiGlobalState::global(cx).text_view_state().cloned() {
+        if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
             let state = text_view_state.read(cx);
             if state.max_lines.is_some()
                 && let Ok(mut line_spans) = state.line_spans.lock()
@@ -449,11 +448,15 @@ impl Element for Inline {
         }
 
         if let Some(selection) = &state.selection {
-            Self::paint_selection(selection, &text_layout, &bounds, window, cx);
+            let color = GlobalState::global(cx)
+                .text_view_state()
+                .map(|state| state.read(cx).text_view_style.selection())
+                .unwrap_or_else(|| crate::Theme::global(cx).tokens.colors.selection);
+            Self::paint_selection(selection, &text_layout, &bounds, window, color);
         }
 
         if is_selectable {
-            if let Some(text_view_state) = UiGlobalState::global(cx).text_view_state().cloned() {
+            if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
                 let text_bounds = self.text_line_bounds(
                     &text_layout,
                     text_layout.line_height(),
@@ -469,7 +472,7 @@ impl Element for Inline {
                 let text_layout = text_layout.clone();
                 let inline_state = self.state.clone();
                 let text = self.text.clone();
-                let text_view_state = UiGlobalState::global(cx).text_view_state().cloned();
+                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
                 move |event: &MouseDownEvent, phase, window, cx| {
                     if !phase.bubble()
                         || !hitbox.is_hovered(window)
@@ -498,7 +501,7 @@ impl Element for Inline {
 
                     // This renderer owns multi-click selection. Prevent the
                     // window selection layer from handling the same press.
-                    gpui_base::GlobalState::suppress_text_selection(cx);
+                    GlobalState::suppress_text_selection(cx);
 
                     if let Ok(mut inline_state) = inline_state.lock() {
                         inline_state.selection = Some(range.into());
@@ -544,7 +547,7 @@ impl Element for Inline {
                 let links = self.links.clone();
                 let text_layout = text_layout.clone();
                 let hitbox = hitbox.clone();
-                let text_view_state = UiGlobalState::global(cx).text_view_state().cloned();
+                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
                 let link_click_handler = self.link_click_handler.clone();
 
                 move |event: &MouseUpEvent, phase, window, cx| {
@@ -561,7 +564,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
-                        gpui_base::TextSelection::end(window, cx);
+                        TextSelection::end(window, cx);
                         cx.stop_propagation();
                         let click = ClickEvent::Mouse(MouseClickEvent {
                             down: MouseDownEvent {

@@ -207,7 +207,6 @@ impl ParsedDocument {
         };
 
         let blocks = &self.blocks;
-
         if list_state.item_count() != blocks.len() {
             list_state.reset(blocks.len());
         }

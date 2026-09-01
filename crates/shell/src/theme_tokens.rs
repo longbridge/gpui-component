@@ -69,6 +69,7 @@ pub(crate) const COLOR_TOKEN_NAMES: &[&str] = &[
     "border",
     "input",
     "ring",
+    "selection",
 ];
 
 pub(crate) const SPACING_TOKEN_NAMES: &[&str] = &["xxs", "xs", "sm", "md", "lg", "xl", "xxl"];
@@ -103,6 +104,7 @@ fn resolve_color(colors: &ColorTokens, name: &str) -> Option<Hsla> {
         "border" => colors.border,
         "input" => colors.input,
         "ring" => colors.ring,
+        "selection" => colors.selection,
         _ => return None,
     })
 }

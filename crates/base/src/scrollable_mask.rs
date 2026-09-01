@@ -10,8 +10,15 @@ use gpui::{
 };
 use gpui::{Corners, Pixels};
 
-use super::scrollable::caller_id;
-use crate::{AxisExt, OngoingScrollExt as _, StyledExt as _};
+use crate::{AxisExt, OngoingScrollExt as _, ScrollbarHandle, StyledExt as _};
+
+/// Default element id for a mask: the call site, so two masks built in
+/// different places never share their per-gesture axis lock.
+#[inline]
+#[track_caller]
+fn caller_id() -> ElementId {
+    ElementId::CodeLocation(*std::panic::Location::caller())
+}
 
 /// A horizontal scroll viewport that only consumes horizontal wheel deltas.
 ///
@@ -66,17 +73,17 @@ pub(crate) fn horizontal_scroll_area(
 /// `overscroll-behavior: auto` chaining), while a horizontal mask keeps
 /// consuming it — a bubbled horizontal delta would get mapped onto a
 /// vertical-only ancestor by gpui's own wheel listener (see #2468).
-pub struct ScrollableMask {
+pub struct ScrollableMask<H: ScrollbarHandle + Clone = ScrollHandle> {
     axis: Axis,
     id: ElementId,
-    scroll_handle: ScrollHandle,
+    scroll_handle: H,
     debug: Option<Hsla>,
 }
 
-impl ScrollableMask {
+impl<H: ScrollbarHandle + Clone> ScrollableMask<H> {
     /// Create a new scrollable mask element.
     #[track_caller]
-    pub fn new(axis: Axis, scroll_handle: &ScrollHandle) -> Self {
+    pub fn new(axis: Axis, scroll_handle: &H) -> Self {
         Self {
             scroll_handle: scroll_handle.clone(),
             axis,
@@ -102,7 +109,7 @@ impl ScrollableMask {
     }
 }
 
-impl IntoElement for ScrollableMask {
+impl<H: ScrollbarHandle + Clone> IntoElement for ScrollableMask<H> {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -110,7 +117,7 @@ impl IntoElement for ScrollableMask {
     }
 }
 
-impl Element for ScrollableMask {
+impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
     type RequestLayoutState = ();
     type PrepaintState = Hitbox;
 
@@ -252,7 +259,11 @@ impl Element for ScrollableMask {
                         // pushes the shared offset beyond the edge unclamped
                         // (the div only clamps on prepaint), and that
                         // transient overscroll would read as "room to scroll".
-                        let axis_max = scroll_handle.max_offset().y.max(px(0.));
+                        // `ScrollbarHandle` has no `max_offset`; recover it from
+                        // the definition `content_size = viewport + max_offset`.
+                        let axis_max = (scroll_handle.content_size().height
+                            - scroll_handle.viewport_bounds().size.height)
+                            .max(px(0.));
                         let current = offset.y.clamp(-axis_max, px(0.));
                         let new_offset = (current + delta.y).clamp(-axis_max, px(0.));
                         if new_offset == current {
@@ -429,6 +440,102 @@ mod tests {
         assert_eq!(scroll_handle.offset().x, px(0.));
         let scroll_top = list_state.logical_scroll_top();
         assert_ne!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));
+    }
+
+    /// A `MessageScroller`-shaped nesting: a `gpui::list` with a vertical
+    /// mask bound to its `ListState`, inside an ancestor vertical scroller.
+    struct ListWithVerticalMaskTest {
+        outer_handle: ScrollHandle,
+        list_state: ListState,
+    }
+
+    impl Render for ListWithVerticalMaskTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("outer")
+                .w(px(100.))
+                .h(px(100.))
+                .overflow_y_scroll()
+                .track_scroll(&self.outer_handle)
+                .child(
+                    div().w_full().h(px(400.)).child(
+                        div()
+                            .relative()
+                            .w_full()
+                            .h(px(80.))
+                            .overflow_hidden()
+                            .child(
+                                list(self.list_state.clone(), |_, _, _| {
+                                    div().w_full().h(px(40.)).into_any_element()
+                                })
+                                .w_full()
+                                .h_full(),
+                            )
+                            .child(ScrollableMask::new(Axis::Vertical, &self.list_state)),
+                    ),
+                )
+        }
+    }
+
+    fn setup_vertical_mask_test<'a>(
+        cx: &'a mut TestAppContext,
+        outer_handle: &ScrollHandle,
+        list_state: &ListState,
+    ) -> &'a mut VisualTestContext {
+        let (_, cx) = cx.add_window_view({
+            let outer_handle = outer_handle.clone();
+            let list_state = list_state.clone();
+            move |_, _| ListWithVerticalMaskTest {
+                outer_handle: outer_handle.clone(),
+                list_state: list_state.clone(),
+            }
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+        cx
+    }
+
+    #[gpui::test]
+    fn vertical_mask_contains_wheel_inside_the_list(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        // A large overdraw measures every row up front, so the mask sees the
+        // full content height.
+        let list_state = ListState::new(10, ListAlignment::Top, px(1000.));
+        let cx = setup_vertical_mask_test(cx, &outer_handle, &list_state);
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        // The inner list consumes the wheel; the ancestor must not move.
+        assert_eq!(list_state.scroll_px_offset_for_scrollbar().y, px(-40.));
+        assert_eq!(outer_handle.offset().y, px(0.));
+    }
+
+    #[gpui::test]
+    fn vertical_mask_chains_to_the_ancestor_at_the_edge(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        let list_state = ListState::new(10, ListAlignment::Top, px(1000.));
+        // Start the inner list at its bottom edge (400 - 80 = 320).
+        list_state.scroll_to(gpui::ListOffset {
+            item_ix: 8,
+            offset_in_item: px(0.),
+        });
+        let cx = setup_vertical_mask_test(cx, &outer_handle, &list_state);
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        // At the edge the mask lets the event bubble to the ancestor.
+        assert_eq!(list_state.scroll_px_offset_for_scrollbar().y, px(-320.));
+        assert_eq!(outer_handle.offset().y, px(-40.));
     }
 
     #[gpui::test]

@@ -1,14 +1,14 @@
 ---
 title: API 参考
 description: 脚本能 import 或触及的每个名字——四个内置模块、cx 与 window 全局对象，以及那些不是样式的元素方法。
-order: 9
+order: 10
 ---
 
 # API Reference
 
 脚本接口的一份清单：有什么，以及它来自哪个模块。其余页面解释每样东西为什么是这个样子——这一页是用来查名字的。
 
-权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。
+权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。manifest 声明的 Git 依赖同样不在这一页：它们由同一次刷新链接进 `node_modules`，名字、签名与文档都来自 package 自身。见[依赖](./dependencies.md)。
 
 ## 模块
 

@@ -106,7 +106,7 @@ The palette defines seventeen tokens:
 | Surfaces | `surface`, `surface_foreground` |
 | Emphasis | `primary`, `primary_foreground`, `secondary`, `secondary_foreground` |
 | Recessive | `muted`, `muted_foreground` |
-| Highlight | `accent`, `accent_foreground` |
+| Highlight | `accent`, `accent_foreground`, `selection` |
 | Danger | `destructive`, `destructive_foreground` |
 | Chrome | `border`, `input`, `ring` |
 
