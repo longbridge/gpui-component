@@ -174,7 +174,7 @@ impl RenderOnce for ResizablePanelGroup {
             )
             .on_prepaint({
                 let state = state.clone();
-                move |bounds, _, cx| {
+                move |bounds, window, cx| {
                     state.update(cx, |state, cx| {
                         let size_changed =
                             state.bounds.size.along(self.axis) != bounds.size.along(self.axis);
@@ -183,6 +183,13 @@ impl RenderOnce for ResizablePanelGroup {
 
                         if size_changed {
                             state.adjust_to_container_size(cx);
+                            // Size adjustment happens after this frame's layout has
+                            // already been computed. A refresh requested during the
+                            // draw can be coalesced into that same draw, so defer it
+                            // until the current effect cycle has completed. Otherwise
+                            // the settling frame can remain pending until pointer input
+                            // triggers a repaint, making the divider jump on hover.
+                            window.defer(cx, |window, _| window.refresh());
                         }
                     })
                 }

@@ -400,11 +400,60 @@ mod tests {
 
     use gpui::{
         AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers, MouseButton,
-        ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext, Window, div,
-        point, px, size,
+        ParentElement as _, Pixels, Render, Styled as _, TestAppContext, VisualTestContext, Window,
+        div, point, px, size,
     };
 
     use super::{ResizableState, h_resizable, resizable_panel};
+
+    struct MixedSizingHarness {
+        width: Pixels,
+    }
+
+    impl Render for MixedSizingHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(self.width).h(px(100.)).child(
+                h_resizable("mixed-sizing")
+                    .child(
+                        resizable_panel()
+                            .size(px(240.))
+                            .child(div().size_full().debug_selector(|| "fixed-sidebar".into())),
+                    )
+                    .child(
+                        resizable_panel().child(
+                            div()
+                                .size_full()
+                                .debug_selector(|| "flexible-content".into()),
+                        ),
+                    ),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn mixed_sizing_is_stable_between_resize_and_followup_frame(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| MixedSizingHarness { width: px(800.) });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        let before = cx.debug_bounds("fixed-sidebar").unwrap().size.width;
+
+        view.update(cx, |view, cx| {
+            view.width = px(1200.);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let settled_frame = cx.debug_bounds("fixed-sidebar").unwrap().size.width;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let followup_frame = cx.debug_bounds("fixed-sidebar").unwrap().size.width;
+
+        // Resizable panels preserve their proportional sizing across a
+        // container resize; the important invariant is that applying the
+        // state on the follow-up frame does not move the divider again.
+        assert_ne!(settled_frame, before);
+        assert_eq!(followup_frame, settled_frame);
+    }
 
     struct ResizableHarness {
         state: gpui::Entity<ResizableState>,
