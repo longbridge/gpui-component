@@ -25,12 +25,13 @@ use anyhow::{Context as _, Result, anyhow};
 use gpui::{App, AppContext as _, ClickEvent, Entity, Global, Subscription, WeakEntity, Window};
 use rquickjs::{
     Array, Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object,
-    Persistent, Result as JsResult, Runtime as JsRuntime, Value,
+    Persistent, Result as JsResult, Value,
     function::{Args as JsArgs, Func, Opt, This},
     loader::{BuiltinResolver, ImportAttributes, Loader, ModuleLoader, Resolver},
     module::Declared,
     module::{Declarations, Exports, Module, ModuleDef},
 };
+use rquickjs_jit::JitRuntime;
 use smallvec::SmallVec;
 
 use crate::{
@@ -1336,7 +1337,7 @@ pub struct ShellRuntime {
     next_application_generation: Cell<u64>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
-    js_runtime: JsRuntime,
+    js_runtime: JitRuntime,
 }
 
 impl Drop for ShellRuntime {
@@ -1474,7 +1475,9 @@ impl ShellRuntime {
     ) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
-        let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
+        let js_runtime = JitRuntime::builder()
+            .build()
+            .map_err(|error| anyhow!("failed to start the JavaScript JIT runtime: {error}"))?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
