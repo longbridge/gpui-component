@@ -267,20 +267,6 @@ const apps = [
         },
     },
     {
-        id: "volt",
-        name: "Volt",
-        category: "work",
-        platforms: ["macOS", "Windows", "Linux"],
-        site: null,
-        source: "https://github.com/TheRedXD/Volt",
-        image: "https://raw.githubusercontent.com/TheRedXD/Volt/master/images/volt-preview-7.png",
-        building: true,
-        blurb: {
-            en: "An open-source digital audio workstation with audio playback, waveform rendering, playlist navigation and an early mixing pipeline.",
-            zh: "开源数字音频工作站，具备音频播放、波形渲染、播放列表导航与早期的混音管线。",
-        },
-    },
-    {
         id: "cadence",
         name: "Cadence",
         category: "work",
@@ -409,6 +395,20 @@ const apps = [
         blurb: {
             en: "A fast, monochrome, keyboard-driven file manager with tabbed and split workspaces and rich previews for images, PDFs, code and archives.",
             zh: "快速的单色键盘驱动文件管理器，支持标签与分屏工作区，并为图片、PDF、代码与压缩包提供丰富预览。",
+        },
+    },
+    {
+        id: "orrery",
+        name: "Orrery",
+        category: "dev",
+        platforms: ["Linux"],
+        site: "https://hankanman.github.io/Orrery/",
+        source: "https://github.com/Hankanman/Orrery",
+        image: "https://github.com/user-attachments/assets/ca69a657-8d13-416d-aa8f-ea15e12f4b90",
+        building: true,
+        blurb: {
+            en: "A command center for every git repository in your dev directories: live status in one dense grid, host enrichment, on-device AI summaries, and one-click launch into an IDE or terminal agent.",
+            zh: "面向 Git 仓库的指挥中心，把开发目录里的每个仓库汇总成一张高密度网格：实时状态、托管平台信息、本地 AI 摘要，一键在 IDE 或终端 Agent 中打开。",
         },
     },
     {
