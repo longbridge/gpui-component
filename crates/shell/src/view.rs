@@ -57,6 +57,14 @@ pub struct ScriptView {
     previous: Option<RenderSnapshot>,
     /// Set when script-visible state may have changed, cleared by the rebuild.
     dirty: bool,
+    /// Set by `refresh`, which has already notified every cached subtree for
+    /// the frame the rebuild will land in; cleared by the rebuild. A rebuild
+    /// that finds it clear reached the draw some other way — the theme sync,
+    /// a hot reload — and notifies the subtrees itself, a frame late.
+    caches_notified: bool,
+    /// Learned on the first render. `Drop` needs it to release the caches,
+    /// and a view has no other way to know its own entity.
+    entity_id: Option<EntityId>,
     /// Set when the script-visible handle has been released. GPUI may retain
     /// the entity for an older frame, but it must never rebuild after release.
     retired: bool,
@@ -122,6 +130,8 @@ impl ScriptView {
             current: None,
             previous: None,
             dirty: true,
+            caches_notified: false,
+            entity_id: None,
             retired: false,
             policy,
             theme: None,
@@ -158,6 +168,13 @@ impl ScriptView {
     /// cheap to find for the same reason.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.invalidate();
+        // Outside any draw, so these land in the same frame as the view's own
+        // notify. A notify from inside a draw would land in the next one, and
+        // the subtree would draw a description the view has already replaced.
+        for cache in self.runtime.subtree_caches().entities(cx.entity_id()) {
+            cache.update(cx, |_, cx| cx.notify());
+        }
+        self.caches_notified = true;
         cx.notify();
     }
 
@@ -212,6 +229,16 @@ impl ScriptView {
         !self.retired && self.dirty
     }
 
+    /// Whether the published description marks any `.cached()` element.
+    /// `ShellRoot` reads this every frame: gpui's view cache is one level
+    /// deep, so a view with cached subtrees is mounted uncached and the
+    /// subtrees carry the cache instead.
+    pub fn caches_subtrees(&self) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.cached_keys().is_empty())
+    }
+
     /// Makes a retained entity inert before its store handle is removed.
     /// A rendered GPUI frame may still retain the entity after script release.
     pub(crate) fn retire(&mut self) {
@@ -259,14 +286,36 @@ impl ScriptView {
                 // before last: dropping it releases its callbacks.
                 self.previous = self.current.replace(snapshot);
                 self.error = None;
+
+                let view_id = cx.entity_id();
+                if let Some(current) = self.current.as_ref() {
+                    self.runtime
+                        .subtree_caches()
+                        .retain(view_id, current.cached_keys());
+                }
+                if !self.caches_notified {
+                    // The theme sync or a hot reload rebuilt from inside the
+                    // draw. gpui takes dirty views before a draw starts, so
+                    // these show the new description one frame late.
+                    for cache in self.runtime.subtree_caches().entities(view_id) {
+                        cache.update(cx, |_, cx| cx.notify());
+                    }
+                }
+                self.caches_notified = false;
             }
-            Err(error) => self.error = Some(error.to_string()),
+            Err(error) => {
+                self.error = Some(error.to_string());
+                self.caches_notified = false;
+            }
         }
     }
 }
 
 impl Drop for ScriptView {
     fn drop(&mut self) {
+        if let Some(entity_id) = self.entity_id {
+            self.runtime.subtree_caches().remove_view(entity_id);
+        }
         match self.ownership {
             ViewOwnership::Root => {
                 if let Some(application) = self.object.application_generation() {
@@ -289,6 +338,7 @@ impl Render for ScriptView {
         if self.retired {
             return div().into_any_element();
         }
+        self.entity_id = Some(cx.entity_id());
         let theme = crate::theme_tokens::sync(cx);
         if self.theme.as_ref() != Some(&theme) {
             self.theme = Some(theme);

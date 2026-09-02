@@ -933,3 +933,202 @@ fn a_cached_element_is_mounted_once_per_view_render(cx: &mut TestAppContext) {
     );
     assert_eq!(metrics.materializations(), 1);
 }
+
+#[gpui::test]
+fn a_script_rebuild_reaches_every_cached_subtree_in_the_same_frame(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    mount(&mut context, &view);
+    let callback = click_target(&mut context, &view);
+    let before = runtime.metrics().read();
+
+    // `dispatch_change` runs the handler, whose `cx.notify()` goes through
+    // `ScriptView::refresh` outside any draw — the path a real event takes.
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw_frame(&mut context);
+
+    let after = runtime.metrics().read().since(&before);
+    assert_eq!(after.script_renders(), 1);
+    assert_eq!(
+        after.subtree_rebuilds(),
+        2,
+        "both cached subtrees must draw the new description in the frame that rebuilt it"
+    );
+    let caches = runtime.subtree_caches().entities(view.entity_id());
+    assert_eq!(caches.len(), 2);
+    let described = context.update(|_, cx| {
+        caches
+            .iter()
+            .map(|cache| {
+                let cache = cache.read(cx);
+                view.read(cx)
+                    .snapshot()
+                    .expect("published")
+                    .arena()
+                    .debug_tree(cache.root())
+            })
+            .collect::<Vec<_>>()
+    });
+    assert!(
+        described.iter().any(|tree| tree.contains("left, expanded")),
+        "the left subtree must point at the rebuilt description: {described:?}"
+    );
+
+    // The frame after: nothing changed, nothing rebuilds.
+    let settled = runtime.metrics().read();
+    draw_frame(&mut context);
+    let quiet = runtime.metrics().read().since(&settled);
+    assert_eq!(quiet.subtree_rebuilds(), 0);
+    assert_eq!(quiet.subtree_mounts(), 2);
+}
+
+#[gpui::test]
+fn a_cached_subtree_that_leaves_the_description_is_dropped(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
+
+export default class Optional extends View {
+  init() { this.shown = true; }
+  render(cx) {
+    return v_flex()
+      .size_full()
+      .child(
+        Checkbox.new("toggle").on_change((shown, cx) => {
+          this.shown = shown;
+          cx.notify();
+        }),
+      )
+      .when(this.shown, (el) =>
+        el.child(div().id("optional").size_full().cached().child("optional")),
+      );
+  }
+}
+"#;
+    let (runtime, mut context, view) = script_view(cx, source);
+    mount(&mut context, &view);
+    assert_eq!(runtime.subtree_caches().entities(view.entity_id()).len(), 1);
+
+    let callback = click_target(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, false, window, cx));
+    draw_frame(&mut context);
+
+    assert!(
+        runtime
+            .subtree_caches()
+            .entities(view.entity_id())
+            .is_empty(),
+        "an id the new description no longer marks must release its entity"
+    );
+}
+
+#[gpui::test]
+fn dropping_a_view_drops_its_cached_subtrees(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    // Not `mount`: mounting under `Host` gives the window root its own
+    // permanent clone of `view`, so the entity this test drops would never
+    // reach a zero refcount. `render_once` draws through a temporary closure
+    // that does not outlive the call, which is what lets `drop(view)` below
+    // be the entity's last strong reference.
+    render_once(&mut context, &view);
+    let view_id = view.entity_id();
+    assert_eq!(runtime.subtree_caches().entities(view_id).len(), 2);
+
+    drop(view);
+    // Released entities are dropped when the app next flushes its effects,
+    // which any update does.
+    context.update(|_, _| ());
+
+    assert!(
+        runtime.subtree_caches().entities(view_id).is_empty(),
+        "a dropped view must not leave its caches in the runtime"
+    );
+}
+
+#[gpui::test]
+fn a_rebuild_from_inside_the_draw_reaches_cached_subtrees_a_frame_later(cx: &mut TestAppContext) {
+    // `replace_object` is the hot-reload path: it marks the view dirty without
+    // notifying, so the rebuild happens inside the next draw, where a notify
+    // cannot reach the frame being drawn. The subtrees follow one frame later.
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    mount(&mut context, &view);
+
+    let reloaded =
+        TWO_CACHED_PANELS.replace("this.label = \"left\";", "this.label = \"reloaded\";");
+    let view_type = runtime
+        .load_source("panels-reloaded", &reloaded)
+        .expect("load");
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    view.update(&mut context, |view, _| view.replace_object(object));
+
+    let before = runtime.metrics().read();
+    draw_frame(&mut context);
+    let rebuilt = runtime.metrics().read().since(&before);
+    assert_eq!(
+        rebuilt.script_renders(),
+        1,
+        "the reload rebuilt inside this draw"
+    );
+    assert_eq!(
+        rebuilt.subtree_rebuilds(),
+        0,
+        "a notify from inside the draw lands in the next frame, not this one"
+    );
+
+    draw_frame(&mut context);
+    let following = runtime.metrics().read().since(&before);
+    assert_eq!(
+        following.subtree_rebuilds(),
+        2,
+        "the frame after shows the reloaded description in every cached subtree"
+    );
+}
+
+#[gpui::test]
+fn an_animation_in_a_cached_subtree_rebuilds_only_that_subtree(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    mount(&mut context, &view);
+    draw_frame(&mut context);
+    let callback = click_target(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw_frame(&mut context);
+
+    let before = runtime.metrics().read();
+    let mut native_frames = 0;
+    let frames = 30;
+    for _ in 0..frames {
+        context
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(2));
+        // Not followed by `draw_frame`: in test builds, `App::flush_effects`
+        // draws every dirty window once its pending effects drain (see
+        // `flush_effects` in gpui's `app.rs`), and the callback this runs
+        // dirties the window via `cx.notify`. That auto-draw *is* the frame
+        // this loop is driving; an explicit `draw_frame` here would be a
+        // second, redundant real draw of the same animation frame and would
+        // double every per-draw count below.
+        native_frames += context.update(|window, cx| window.simulate_next_frame(cx));
+    }
+    let during = runtime.metrics().read().since(&before);
+
+    assert!(
+        native_frames > 1,
+        "the width transition must request native frames"
+    );
+    assert_eq!(
+        during.script_renders(),
+        0,
+        "animation frames never enter the VM"
+    );
+    assert_eq!(
+        during.subtree_mounts(),
+        2 * frames,
+        "the view's own materialization mounts both subtrees every frame"
+    );
+    assert_eq!(
+        during.subtree_rebuilds(),
+        frames,
+        "only the subtree the transition lives in rebuilds; the other is reused"
+    );
+}

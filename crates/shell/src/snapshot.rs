@@ -48,7 +48,13 @@
 //! repaints through script. [`crate::materialize`] states the exception in
 //! full, along with the three things that confine it.
 
-use std::rc::{Rc, Weak};
+use std::{
+    cell::OnceCell,
+    collections::HashSet,
+    rc::{Rc, Weak},
+};
+
+use gpui::SharedString;
 
 use crate::{
     engine::ShellRuntime,
@@ -75,6 +81,7 @@ struct SnapshotInner {
     runtime: Weak<ShellRuntime>,
     application: Option<Rc<crate::runtime::ApplicationGeneration>>,
     view: Option<gpui::WeakEntity<crate::ScriptView>>,
+    cached_keys: OnceCell<HashSet<SharedString>>,
 }
 
 impl RenderSnapshot {
@@ -94,6 +101,7 @@ impl RenderSnapshot {
                 runtime: Rc::downgrade(runtime),
                 application,
                 view,
+                cached_keys: OnceCell::new(),
             }),
         }
     }
@@ -118,6 +126,13 @@ impl RenderSnapshot {
 
     pub(crate) fn arena(&self) -> &SpecArena {
         &self.inner.arena
+    }
+
+    /// The ids of the `.cached()` elements in this description, computed once.
+    pub(crate) fn cached_keys(&self) -> &HashSet<SharedString> {
+        self.inner
+            .cached_keys
+            .get_or_init(|| self.inner.arena.cached_keys(self.inner.root))
     }
 
     /// The shape of this description, with its values left out.

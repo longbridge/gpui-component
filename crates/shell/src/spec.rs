@@ -1024,6 +1024,39 @@ impl SpecArena {
         self.nodes.get(id as usize)
     }
 
+    /// The script ids of every `.cached()` element reachable from `root`.
+    /// An element that asked for a cache without an id is not listed: it is
+    /// drawn plain, and has no entity to keep.
+    pub(crate) fn cached_keys(&self, root: SpecId) -> HashSet<SharedString> {
+        let mut keys = HashSet::new();
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let Some(node) = self.node(id) else { continue };
+            let mut cached = false;
+            let mut key = None;
+            for op in node.ops() {
+                match op {
+                    SpecOp::Method("cached", _) => cached = true,
+                    SpecOp::Method("id", args) => {
+                        key = args
+                            .first()
+                            .and_then(|value| value.as_str().ok())
+                            .map(SharedString::from);
+                    }
+                    SpecOp::StateStyle(_, detached) | SpecOp::Slot(_, detached) => {
+                        stack.push(*detached);
+                    }
+                    _ => {}
+                }
+            }
+            if cached && let Some(key) = key {
+                keys.insert(key);
+            }
+            stack.extend(node.children().iter().copied());
+        }
+        keys
+    }
+
     pub fn push_op(&mut self, id: SpecId, op: SpecOp) -> Result<(), SpecError> {
         self.check_live(id)?;
         // After the check, not before: a rejected call records nothing, so it
