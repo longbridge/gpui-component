@@ -1,62 +1,83 @@
 ---
-title: History
-description: A linear history with a cursor — undo and redo, back and forward, or a most-recent-first list — for any item a model wants to remember.
+title: History and Undo History
+description: Browser-style navigation trails and grouped undo/redo transactions for application state.
 order: 7
 ---
 
-# History
+# History and Undo History
 
-`History<I>` is a list of items with a cursor. `push` adds an item at the cursor, `undo` steps the cursor back and returns what it stepped over, `redo` steps it forward again. Pushing after an undo starts a new branch: the items ahead of the cursor are dropped, as a browser drops its forward pages when a new page is opened.
+`History<T>` and `UndoHistory<T>` keep two different kinds of application state. Both are independent of GPUI and leave applying a returned value to the caller, but their operations intentionally have different meanings:
 
-It holds no GPUI state and knows nothing about what the items mean. That is the point: the same type is an undo manager, a navigation trail, and a recent list, depending only on what you push into it.
+- `History<T>` is a browser-style linear trail of locations, with back and forward navigation.
+- `UndoHistory<T>` records changes as undo transactions, including changes grouped into one user action.
 
 ## Import
 
 ```rust
-use gpui_base::{History, HistoryItem};
+use gpui_base::{History, UndoHistory};
 ```
 
-An item is anything `Clone + PartialEq` that can carry a version number:
+## `History`: a navigation trail
+
+Push every location the user visits. The current entry is the last value in the trail. For example, after visiting `A -> B -> C`, `C` is current and going back returns the new current entry, `B`:
 
 ```rust
-#[derive(Clone, PartialEq)]
-struct Visit {
-    symbol: String,
-    version: usize,
-}
+let mut history = History::new();
+history.push("A");
+history.push("B");
+history.push("C");
 
-impl HistoryItem for Visit {
-    fn version(&self) -> usize { self.version }
-    fn set_version(&mut self, version: usize) { self.version = version; }
-}
+assert_eq!(history.back(), Some("B"));
+assert_eq!(history.current(), Some(&"B"));
 ```
 
-The version is stamped by `push`. Items pushed within one grouping interval share a version and come back from `undo` together, so a drag that emits many small changes is undone as one step.
+`back()` never moves past the root entry; it returns `None` there. `forward()` restores the nearest entry that was left behind. Pushing a new entry after going back drops that forward branch, just as a browser does after opening a new page.
 
-## Where it fits
-
-**Undo and redo of changes.** Push each change; `undo` returns the changes to revert, `redo` the changes to reapply. The dock's tiles canvas records bounds changes this way, grouped by a short interval so one drag is one step. Use `start_grouping` and `end_grouping` when the boundary is known rather than timed.
-
-**Back and forward through locations.** Push each place the user arrives at; `undo` is back and `redo` is forward, and `current()` is where they are. A place can stop being valid — its tab was closed — so `retain` prunes both sides of the cursor. A place recorded before it finished loading is corrected in place with `replace_current`, which keeps the version and the length, as a browser's `replaceState` does. [Nav Stack](./primitives/nav-stack.md) is built on this: its pages are the items, `pop` is `undo`, and `forward` is `redo`.
-
-**A most-recent-first list.** With `unique()` a pushed item that is already present moves to the front instead of appearing twice, and `max_undos` caps the length. The stocks a user opened, the files they touched, the commands they ran: push on every use and read `undos()` back to front.
-
-## API
+`entries()` iterates from the root to the current entry. With the full `A -> B -> C` trail, it yields `A`, `B`, then `C`; `entries().rev()` yields `C`, `B`, then `A`. `forward_entries()` iterates from the nearest forward entry to the furthest. Use `retain` to remove invalid locations, `replace_current` to update the current location in place, and `remove_current` to remove it without discarding the forward branch.
 
 | Method | Does |
 | --- | --- |
-| `new()` | An empty history. `max_undos` defaults to 1000. |
-| `max_undos(n)`, `unique()`, `group_interval(d)` | Builders: cap the length, keep one copy of each item, group pushes closer than `d` into one step. |
-| `push(item)` | Records `item` at the cursor and drops everything ahead of it. |
-| `undo()`, `redo()` | Step the cursor and return the items stepped over, newest first; `None` at either end. |
-| `current()` | The item at the cursor. |
-| `replace_current(item)` | Overwrites the item at the cursor, keeping its version. Pushes when empty. |
-| `retain(keep)` | Drops the items `keep` rejects, on both sides of the cursor. |
-| `undos()`, `redos()` | The items behind and ahead of the cursor, oldest first. |
-| `start_grouping()`, `end_grouping()` | Hold the version so the pushes in between undo as one step. |
-| `set_ignoring(bool)`, `is_ignoring()` | A flag for the caller to skip recording while replaying its own history. |
-| `clear()` | Empties both sides. |
+| `new()` | Creates an empty trail. `max_entries` defaults to 1000. |
+| `max_entries(n)` | Caps the retained trail entries. |
+| `push(entry)` | Makes `entry` current and drops the forward branch. |
+| `back()`, `forward()` | Move through the trail and return the resulting current entry. |
+| `current()` | Returns the current entry. |
+| `can_back()`, `can_forward()` | Report whether movement in that direction is available. |
+| `entries()`, `forward_entries()` | Iterate the current trail and forward branch in navigation order. |
+| `replace_current(entry)`, `remove_current()` | Update or remove the current entry. |
+| `retain(keep)`, `clear()` | Remove rejected entries from both sides, or empty the trail. |
 
-## Notes
+## `UndoHistory`: grouped undo and redo
 
-`History` never mutates your model. It hands back items and the caller applies them, which is why the same type serves changes that must be reverted and places that must be revisited. Decide what an item is before deciding whether to group or dedupe: a change wants grouping, a place wants neither, a recent list wants `unique`.
+Push a value for each change your application must reverse. To make a drag one undoable action, explicitly group all of its updates. `undo()` returns the group's changes newest first so the most recent change is reverted first; `redo()` returns the same group oldest first so it is applied in its original order:
+
+```rust
+let mut history = UndoHistory::new();
+history.start_grouping();
+history.push("move from x=0 to x=10");
+history.push("move from x=10 to x=20");
+history.end_grouping();
+
+assert_eq!(
+    history.undo(),
+    Some(vec!["move from x=10 to x=20", "move from x=0 to x=10"]),
+);
+assert_eq!(
+    history.redo(),
+    Some(vec!["move from x=0 to x=10", "move from x=10 to x=20"]),
+);
+```
+
+For changes whose boundary is not explicit, `group_interval` combines consecutive pushes close enough in time. A new push clears redo transactions. While replaying changes, use `set_ignoring(true)` to prevent the replay itself from being recorded.
+
+| Method | Does |
+| --- | --- |
+| `new()` | Creates an empty undo history. `max_undos` defaults to 1000. |
+| `max_undos(n)` | Caps the retained undo transactions. |
+| `group_interval(duration)` | Groups consecutive nearby pushes into one transaction. |
+| `start_grouping()`, `end_grouping()` | Explicitly delimit one transaction. |
+| `push(change)` | Records a change in the current or a new transaction and clears redo. |
+| `undo()`, `redo()` | Return the latest transaction newest-first for undo, oldest-first for redo. |
+| `can_undo()`, `can_redo()` | Report whether a transaction is available. |
+| `set_ignoring(bool)`, `is_ignoring()` | Control whether pushes are recorded. |
+| `clear()` | Empties undo and redo transactions. |
