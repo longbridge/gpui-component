@@ -384,28 +384,8 @@ fn element_ext_is_available_from_base_and_the_legacy_root() {
 
 #[test]
 fn legacy_history_path_reexports_the_base_type() {
-    #[derive(Clone, PartialEq)]
-    struct Item {
-        version: usize,
-    }
-
-    impl gpui_base::HistoryItem for Item {
-        fn version(&self) -> usize {
-            self.version
-        }
-
-        fn set_version(&mut self, version: usize) {
-            self.version = version;
-        }
-    }
-
-    fn through_legacy_path(
-        history: gpui_base::History<Item>,
-    ) -> gpui_component::history::History<Item> {
-        history
-    }
-
-    let _ = through_legacy_path(gpui_base::History::new());
+    let _: gpui_component::history::History<u8> = gpui_base::History::new();
+    let _: gpui_component::history::UndoHistory<u8> = gpui_base::UndoHistory::new();
 }
 
 #[test]

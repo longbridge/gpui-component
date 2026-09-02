@@ -8,8 +8,6 @@
 
 use gpui::{Bounds, EntityId, Pixels, Point, Size, px, size};
 
-use crate::history::HistoryItem;
-
 /// A tile smaller than this on either axis cannot be usefully manipulated.
 /// This is behavior, not presentation: it bounds what resize/drag arithmetic
 /// will produce.
@@ -33,7 +31,6 @@ pub struct TileChange {
     tile_id: EntityId,
     old_bounds: Option<Bounds<Pixels>>,
     new_bounds: Option<Bounds<Pixels>>,
-    version: usize,
 }
 
 impl TileChange {
@@ -47,7 +44,6 @@ impl TileChange {
             tile_id,
             old_bounds: Some(old_bounds),
             new_bounds: Some(new_bounds),
-            version: 0,
         }
     }
 
@@ -61,16 +57,6 @@ impl TileChange {
 
     pub fn new_bounds(&self) -> Option<Bounds<Pixels>> {
         self.new_bounds
-    }
-}
-
-impl HistoryItem for TileChange {
-    fn version(&self) -> usize {
-        self.version
-    }
-
-    fn set_version(&mut self, version: usize) {
-        self.version = version;
     }
 }
 

@@ -104,7 +104,7 @@ pub use focus_trap::FocusTrapElement;
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
 pub use global_state::{DeferredPopover, GlobalState};
-pub use history::{History, HistoryItem};
+pub use history::History;
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
 pub use input::{Editor, Input, InputBase, InputStyles, Textarea};
