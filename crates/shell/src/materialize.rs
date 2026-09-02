@@ -783,26 +783,32 @@ fn materialize_node_inner(
             let (_, inner) = crate::subtree_cache::split_layout_properties(&refinement);
             refinement = inner;
         } else {
-            match (
+            // Only the element the description names as this id's owner mounts
+            // the subtree. An id used twice would otherwise hand two elements
+            // one entity, and nested it would reach for the entity gpui has
+            // leased to render its own ancestor. The repeat is reported once
+            // per snapshot, by the pass that found it; here it just draws
+            // plain, as does a `.cached()` with no id at all.
+            //
+            // A description with no owning view — a virtual list's row batch,
+            // a dock chrome spec — has no entity to hang a cache on either.
+            let owned = |key: &SharedString| {
+                snapshot.is_some_and(|snapshot| snapshot.cached_nodes().owns(key, id))
+            };
+            if let (Some(key), Some(view)) = (
                 behavior.key.clone(),
                 snapshot.and_then(RenderSnapshot::view),
-            ) {
-                (Some(key), Some(view)) => {
-                    return cached_subtree(
-                        runtime,
-                        snapshot.expect("a view implies a snapshot"),
-                        id,
-                        key,
-                        view,
-                        &refinement,
-                        cx,
-                    );
-                }
-                (None, _) => warn_cached_without_id(&component),
-                // A description with no owning view — a virtual list's row
-                // batch, a dock chrome spec — has no entity to hang a cache
-                // on, and draws plain.
-                (Some(_), None) => {}
+            ) && owned(&key)
+            {
+                return cached_subtree(
+                    runtime,
+                    snapshot.expect("a view implies a snapshot"),
+                    id,
+                    key,
+                    view,
+                    &refinement,
+                    cx,
+                );
             }
         }
     }
@@ -2309,17 +2315,6 @@ fn warn_ignored_key(behavior: &Behavior, component: &str) {
              passed to {component}.new(...)"
         );
     }
-}
-
-/// `.cached()` needs `.id()`: the id is what keeps one entity, and the
-/// element state inside it, across frames. Without it the element is drawn
-/// as if the call were not there.
-fn warn_cached_without_id(component: &Component) {
-    tracing::warn!(
-        "cached() on a {} needs id(): the id is the subtree's identity across frames, so \
-         the element is drawn uncached",
-        component.name()
-    );
 }
 
 /// Mounts a `.cached()` node as its own gpui cached view.

@@ -13,7 +13,10 @@
 //! frame that materializes the snapshot, which is what keeps repainting off the
 //! VM.
 
-use std::{collections::HashSet, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use gpui::SharedString;
 use smallvec::SmallVec;
@@ -944,6 +947,62 @@ pub struct SpecArena {
     structure: u64,
 }
 
+/// What one pass over a description found out about its `.cached()` elements.
+///
+/// Computed once per [`RenderSnapshot`](crate::snapshot::RenderSnapshot) and
+/// read by everything that has to agree about them: the view reconciling its
+/// registry, the root deciding whether to keep its own cache, and
+/// materialization deciding which element mounts a subtree.
+#[derive(Default, Debug)]
+pub(crate) struct CachedNodes {
+    /// Which node owns each script id.
+    ///
+    /// A `.cached()` element mounts a subtree only when it is this one. Two
+    /// elements sharing an id would otherwise share one `SubtreeCache` — which
+    /// draws whichever of them described itself last — under one
+    /// `ElementId::View`, whose prepaint and paint ranges they would overwrite
+    /// in turn. Nested, the inner one would reach for the entity gpui has
+    /// already leased to render the outer one, and panic on the double lease.
+    owners: HashMap<SharedString, SpecId>,
+    /// The ids more than one `.cached()` element claimed, first seen first.
+    duplicates: Vec<SharedString>,
+    /// The component names of the `.cached()` elements with no id. They have
+    /// no identity to keep across frames, so they are drawn plain.
+    id_less: Vec<&'static str>,
+}
+
+impl CachedNodes {
+    /// Whether this description marks no cached subtree at all — the question
+    /// `ShellRoot` asks before mounting the view through gpui's own cache.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.owners.is_empty()
+    }
+
+    /// Whether `id` is the element that mounts `key`'s subtree.
+    pub(crate) fn owns(&self, key: &SharedString, id: SpecId) -> bool {
+        self.owners.get(key) == Some(&id)
+    }
+
+    /// Whether any element in this description mounts `key`'s subtree.
+    pub(crate) fn holds(&self, key: &SharedString) -> bool {
+        self.owners.contains_key(key)
+    }
+
+    pub(crate) fn duplicates(&self) -> &[SharedString] {
+        &self.duplicates
+    }
+
+    pub(crate) fn id_less(&self) -> &[&'static str] {
+        &self.id_less
+    }
+}
+
+/// A flag method's argument, read the way `apply_behavior` reads it: absent
+/// means the script wrote the bare call and meant `true`.
+fn flag_argument(args: &[Bridged]) -> bool {
+    args.first().map(Bridged::is_truthy).unwrap_or(true)
+}
+
 impl SpecArena {
     pub fn new() -> Self {
         Self::default()
@@ -1030,27 +1089,44 @@ impl SpecArena {
         self.nodes.get(id as usize)
     }
 
-    /// The script ids of every `.cached()` element reachable from `root`.
-    /// An element that asked for a cache without an id is not listed: it is
-    /// drawn plain, and has no entity to keep.
+    /// Everything one pass over this description learned about its
+    /// `.cached()` elements — which node owns each id, which ids were claimed
+    /// twice, and which asked for a cache without an id at all.
+    ///
+    /// Walked in document order, so "the first element with this id" is the
+    /// one the reader would call first, and an ancestor always beats a
+    /// descendant carrying the same id.
+    ///
     /// Element arguments are walked beside `root` because a registered
     /// component's element argument is materialized from this arena with this
     /// snapshot, so a `.cached()` inside one is mounted as a subtree of the
-    /// same view. It is listed even when the component holding it is never
-    /// attached to the tree: over-listing costs an id nothing is mounted at,
-    /// while missing one drops the entity — and every transition, scroll
-    /// offset and hover state in it — on every rebuild.
-    pub(crate) fn cached_keys(&self, root: SpecId) -> HashSet<SharedString> {
-        let mut keys = HashSet::new();
-        let mut stack = vec![root];
-        stack.extend(self.element_arguments.iter().copied());
+    /// same view. Such an argument is listed even when the component holding
+    /// it is never attached to the tree: over-listing costs an id nothing is
+    /// mounted at, while missing one drops the entity — and every transition,
+    /// scroll offset and hover state in it — on every rebuild.
+    pub(crate) fn cached_nodes(&self, root: SpecId) -> CachedNodes {
+        let mut found = CachedNodes::default();
+        let mut stack: Vec<SpecId> = self
+            .element_arguments
+            .iter()
+            .rev()
+            .copied()
+            .chain(std::iter::once(root))
+            .collect();
+        // Reused across nodes so the walk allocates once rather than per node.
+        let mut next = Vec::new();
         while let Some(id) = stack.pop() {
             let Some(node) = self.node(id) else { continue };
             let mut cached = false;
             let mut key = None;
+            next.clear();
             for op in node.ops() {
                 match op {
-                    SpecOp::Method("cached", _) => cached = true,
+                    // `.cached(false)` is the same "not this one" a script
+                    // writes for every other flag method, and `apply_behavior`
+                    // reads it that way. The two must agree, or the view would
+                    // keep an entity for a subtree it never mounts.
+                    SpecOp::Method("cached", args) => cached = flag_argument(args),
                     SpecOp::Method("id", args) => {
                         key = args
                             .first()
@@ -1058,17 +1134,33 @@ impl SpecArena {
                             .map(SharedString::from);
                     }
                     SpecOp::StateStyle(_, detached) | SpecOp::Slot(_, detached) => {
-                        stack.push(*detached);
+                        next.push(*detached);
                     }
                     _ => {}
                 }
             }
-            if cached && let Some(key) = key {
-                keys.insert(key);
+            if cached {
+                match key {
+                    Some(key) => {
+                        if let Some(owner) = found.owners.get(&key) {
+                            if *owner != id && !found.duplicates.contains(&key) {
+                                found.duplicates.push(key);
+                            }
+                        } else {
+                            found.owners.insert(key, id);
+                        }
+                    }
+                    None => {
+                        if let Some(component) = node.component() {
+                            found.id_less.push(component.name());
+                        }
+                    }
+                }
             }
-            stack.extend(node.children().iter().copied());
+            next.extend(node.children().iter().copied());
+            stack.extend(next.iter().rev().copied());
         }
-        keys
+        found
     }
 
     pub fn push_op(&mut self, id: SpecId, op: SpecOp) -> Result<(), SpecError> {

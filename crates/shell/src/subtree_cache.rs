@@ -5,7 +5,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     rc::{Rc, Weak},
 };
 
@@ -15,8 +15,10 @@ use gpui::{
 };
 
 use crate::{
-    engine::ShellRuntime, materialize::materialize_subtree_cached, snapshot::RenderSnapshot,
-    spec::SpecId,
+    engine::ShellRuntime,
+    materialize::materialize_subtree_cached,
+    snapshot::RenderSnapshot,
+    spec::{CachedNodes, SpecId},
 };
 
 /// The entity behind one `.cached()` element.
@@ -98,11 +100,12 @@ impl SubtreeCaches {
             .unwrap_or_default()
     }
 
-    /// Drops every cache of `view` whose id is not in `keys`.
-    pub(crate) fn retain(&self, view: EntityId, keys: &HashSet<SharedString>) {
+    /// Drops every cache of `view` whose id the new description no longer
+    /// marks.
+    pub(crate) fn retain(&self, view: EntityId, cached: &CachedNodes) {
         let mut by_view = self.by_view.borrow_mut();
         if let Some(caches) = by_view.get_mut(&view) {
-            caches.retain(|key, _| keys.contains(key));
+            caches.retain(|key, _| cached.holds(key));
             if caches.is_empty() {
                 by_view.remove(&view);
             }

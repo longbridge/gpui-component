@@ -19,8 +19,8 @@ use crate::{
     spec::{CallbackId, SpecOp},
 };
 use gpui::{
-    AppContext as _, Entity, IntoElement as _, ParentElement as _, Styled as _, TestAppContext,
-    VisualTestContext,
+    AppContext as _, Entity, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    TestAppContext, VisualTestContext,
 };
 
 const TOGGLE: &str = r#"
@@ -913,6 +913,28 @@ export default class Plain extends View {
         snapshot_text(&mut context, &view).contains("no id here"),
         "the element still has to be described and drawn"
     );
+
+    // Named once for the description rather than once for every frame that
+    // draws it: this is the list the warning is read off.
+    context.update(|_, cx| {
+        assert_eq!(
+            view.read(cx)
+                .snapshot()
+                .expect("published")
+                .cached_nodes()
+                .id_less(),
+            ["div"],
+            "the report names the component that asked for a cache it cannot have"
+        );
+    });
+    let before = runtime.metrics().read();
+    draw_frame(&mut context);
+    draw_frame(&mut context);
+    assert_eq!(
+        runtime.metrics().read().since(&before).script_renders(),
+        0,
+        "the frames that redraw it do not rebuild the description, so nothing recomputes the list"
+    );
 }
 
 #[gpui::test]
@@ -1277,9 +1299,8 @@ export default class Wrapped extends View {
         let view = view.read(cx);
         let snapshot = view.snapshot().expect("published");
         assert!(
-            snapshot.cached_keys().contains("argument"),
-            "a .cached() held as an element argument is still one of this view's subtrees: {:?}",
-            snapshot.cached_keys()
+            snapshot.cached_nodes().holds(&"argument".into()),
+            "a .cached() held as an element argument is still one of this view's subtrees"
         );
         assert!(
             view.caches_subtrees(),
@@ -1302,5 +1323,143 @@ export default class Wrapped extends View {
         before,
         "an id the description still marks keeps its entity, and with it every \
          transition, scroll offset and hover state inside the subtree"
+    );
+}
+
+/// The ids this description marks `.cached()` more than once.
+fn duplicate_ids(snapshot: &RenderSnapshot) -> Vec<&str> {
+    snapshot
+        .cached_nodes()
+        .duplicates()
+        .iter()
+        .map(SharedString::as_ref)
+        .collect()
+}
+
+const DUPLICATE_SIBLINGS: &str = r#"
+import { View } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
+
+export default class Twins extends View {
+  render() {
+    return h_flex()
+      .size_full()
+      .child(v_flex().id("panel").flex_1().min_h(0).cached().child("first"))
+      .child(v_flex().id("panel").flex_1().min_h(0).cached().child("second"));
+  }
+}
+"#;
+
+const DUPLICATE_NESTED: &str = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Nested extends View {
+  render() {
+    return v_flex()
+      .size_full()
+      .child(
+        v_flex()
+          .id("panel")
+          .size_full()
+          .cached()
+          .child("outer")
+          .child(v_flex().id("panel").size_full().cached().child("inner")),
+      );
+  }
+}
+"#;
+
+#[gpui::test]
+fn two_cached_elements_sharing_an_id_mount_one_subtree(cx: &mut TestAppContext) {
+    // One id, one entity. Mounting both would give them one `SubtreeCache`
+    // between them — last `describe` wins, so both would draw the second
+    // subtree — and one `ElementId::View`, so they would overwrite each
+    // other's prepaint and paint ranges. The second is drawn plain instead.
+    let (runtime, mut context, view) = script_view(cx, DUPLICATE_SIBLINGS);
+    mount(&mut context, &view);
+
+    context.update(|_, cx| {
+        let view = view.read(cx);
+        let snapshot = view.snapshot().expect("published");
+        assert_eq!(
+            duplicate_ids(snapshot),
+            ["panel"],
+            "the repeated id is reported, once for the snapshot"
+        );
+    });
+    assert_eq!(
+        runtime.subtree_caches().entities(view.entity_id()).len(),
+        1,
+        "one id is one entity, however many elements claim it"
+    );
+    assert_eq!(runtime.metrics().read().subtree_mounts(), 1);
+    let text = snapshot_text(&mut context, &view);
+    assert!(text.contains("first") && text.contains("second"), "{text}");
+}
+
+#[gpui::test]
+fn a_cached_element_nested_under_its_own_id_is_drawn_plain(cx: &mut TestAppContext) {
+    // The shape that used to panic: the inner element resolves to the entity
+    // gpui has already leased to render the outer one, and `describe` would
+    // borrow it a second time.
+    let (runtime, mut context, view) = script_view(cx, DUPLICATE_NESTED);
+    mount(&mut context, &view);
+    draw_frame(&mut context);
+
+    context.update(|_, cx| {
+        assert_eq!(
+            duplicate_ids(view.read(cx).snapshot().expect("published")),
+            ["panel"]
+        );
+    });
+    assert_eq!(
+        runtime.subtree_caches().entities(view.entity_id()).len(),
+        1,
+        "the outer element keeps the id; the inner one is drawn plain"
+    );
+    let text = snapshot_text(&mut context, &view);
+    assert!(text.contains("outer") && text.contains("inner"), "{text}");
+}
+
+#[gpui::test]
+fn cached_false_marks_no_subtree(cx: &mut TestAppContext) {
+    // `.cached(false)` is what a script writes to turn the call off for one
+    // branch. The pass that lists the keys has to read the flag exactly as
+    // `apply_behavior` does, or the view would keep an entity — and mount its
+    // root uncached — for a subtree nothing ever mounts.
+    let source = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Off extends View {
+  render() {
+    return v_flex().id("panel").size_full().cached(false).child("plain");
+  }
+}
+"#;
+    let (runtime, mut context, view) = script_view(cx, source);
+    mount(&mut context, &view);
+
+    context.update(|_, cx| {
+        let view = view.read(cx);
+        assert!(
+            view.snapshot()
+                .expect("published")
+                .cached_nodes()
+                .is_empty(),
+            "cached(false) marks nothing"
+        );
+        assert!(
+            !view.caches_subtrees(),
+            "so the root keeps its own cache, as it does for a view with no markers"
+        );
+    });
+    assert_eq!(runtime.metrics().read().subtree_mounts(), 0);
+    assert!(
+        runtime
+            .subtree_caches()
+            .entities(view.entity_id())
+            .is_empty()
     );
 }

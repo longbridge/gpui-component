@@ -237,7 +237,7 @@ impl ScriptView {
     pub fn caches_subtrees(&self) -> bool {
         self.current
             .as_ref()
-            .is_some_and(|snapshot| !snapshot.cached_keys().is_empty())
+            .is_some_and(|snapshot| !snapshot.cached_nodes().is_empty())
     }
 
     /// Makes a retained entity inert before its store handle is removed.
@@ -292,7 +292,7 @@ impl ScriptView {
                 if let Some(current) = self.current.as_ref() {
                     self.runtime
                         .subtree_caches()
-                        .retain(view_id, current.cached_keys());
+                        .retain(view_id, current.cached_nodes());
                 }
                 if !self.caches_notified {
                     // The theme sync or a hot reload rebuilt from inside the

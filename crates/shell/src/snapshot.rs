@@ -50,15 +50,12 @@
 
 use std::{
     cell::OnceCell,
-    collections::HashSet,
     rc::{Rc, Weak},
 };
 
-use gpui::SharedString;
-
 use crate::{
     engine::ShellRuntime,
-    spec::{SpecArena, SpecId, StructureFingerprint},
+    spec::{CachedNodes, SpecArena, SpecId, StructureFingerprint},
 };
 
 /// One frozen description of a script view's interface.
@@ -81,7 +78,7 @@ struct SnapshotInner {
     runtime: Weak<ShellRuntime>,
     application: Option<Rc<crate::runtime::ApplicationGeneration>>,
     view: Option<gpui::WeakEntity<crate::ScriptView>>,
-    cached_keys: OnceCell<HashSet<SharedString>>,
+    cached: OnceCell<CachedNodes>,
 }
 
 impl RenderSnapshot {
@@ -101,7 +98,7 @@ impl RenderSnapshot {
                 runtime: Rc::downgrade(runtime),
                 application,
                 view,
-                cached_keys: OnceCell::new(),
+                cached: OnceCell::new(),
             }),
         }
     }
@@ -128,11 +125,33 @@ impl RenderSnapshot {
         &self.inner.arena
     }
 
-    /// The ids of the `.cached()` elements in this description, computed once.
-    pub(crate) fn cached_keys(&self) -> &HashSet<SharedString> {
-        self.inner
-            .cached_keys
-            .get_or_init(|| self.inner.arena.cached_keys(self.inner.root))
+    /// What this description says about its `.cached()` elements, computed
+    /// once and read by everything that has to agree about them.
+    ///
+    /// The two ways a script can ask for a cache it cannot have are reported
+    /// here, from inside the one pass, rather than from materialization: a
+    /// description is materialized on every frame it survives, and a warning
+    /// that repeats sixty times a second is a warning nobody reads. This runs
+    /// once per published snapshot instead — the view fills the cell as soon
+    /// as it publishes one.
+    pub(crate) fn cached_nodes(&self) -> &CachedNodes {
+        self.inner.cached.get_or_init(|| {
+            let found = self.inner.arena.cached_nodes(self.inner.root);
+            for key in found.duplicates() {
+                tracing::warn!(
+                    "id(\"{key}\") marks more than one cached() element in this render: an id \
+                     is one subtree's identity across frames, so the first element keeps it and \
+                     the rest are drawn uncached"
+                );
+            }
+            for component in found.id_less() {
+                tracing::warn!(
+                    "cached() on a {component} needs id(): the id is the subtree's identity \
+                     across frames, so the element is drawn uncached"
+                );
+            }
+            found
+        })
     }
 
     /// The shape of this description, with its values left out.
