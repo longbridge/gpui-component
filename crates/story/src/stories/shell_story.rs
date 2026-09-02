@@ -614,8 +614,8 @@ pub struct ShellStory {
     /// Held rather than detached, so the assignment below drops the previous
     /// one: Reload script mounts a new view, and a detached watcher would go on
     /// polling for the view it was started for.
-    script_watch: Option<Watcher>,
-    motion_watch: Option<Watcher>,
+    _script_watch: Option<Watcher>,
+    _motion_watch: Option<Watcher>,
     /// The last load failure, kept visible instead of thrown away — a story
     /// that silently shows the previous script after a syntax error is worse
     /// than one that says what broke.
@@ -690,8 +690,8 @@ impl ShellStory {
             script: None,
             motion_root: None,
             motion: None,
-            script_watch: None,
-            motion_watch: None,
+            _script_watch: None,
+            _motion_watch: None,
             script_error: None,
             motion_error: None,
             feed: Feed::Idle,
@@ -852,7 +852,7 @@ impl ShellStory {
 
                 #[cfg(debug_assertions)]
                 {
-                    self.script_watch = runtime.watch(&root, window, cx).ok();
+                    self._script_watch = runtime.watch(&root, window, cx).ok();
                 }
                 Ok((root, view))
             });
@@ -890,7 +890,7 @@ impl ShellStory {
 
                 #[cfg(debug_assertions)]
                 {
-                    self.motion_watch = runtime.watch(&root, window, cx).ok();
+                    self._motion_watch = runtime.watch(&root, window, cx).ok();
                 }
                 Ok((root, view))
             });
