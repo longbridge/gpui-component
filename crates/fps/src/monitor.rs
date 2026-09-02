@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use instant::Instant;
+use web_time::Instant;
 
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
