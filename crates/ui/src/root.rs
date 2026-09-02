@@ -281,7 +281,14 @@ impl Root {
             }
         }
 
-        Some(div().children(dialogs))
+        // Named so a test can assert the layer actually reached the screen. A
+        // dialog that opens into a root which never renders this layer looks
+        // exactly like one that does not open.
+        Some(
+            div()
+                .debug_selector(|| "dialog-layer".to_string())
+                .children(dialogs),
+        )
     }
 
     pub fn open_dialog<F>(&mut self, build: F, window: &mut Window, cx: &mut Context<'_, Root>)
@@ -570,10 +577,6 @@ impl Styled for Root {
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
-        if !cx.has_global::<crate::global_state::UiGlobalState>() {
-            crate::global_state::init(cx);
-        }
-        crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
         let active_scope = self.active_text_selection_scope();
         TextSelection::activate_scope(active_scope, window, cx);
 

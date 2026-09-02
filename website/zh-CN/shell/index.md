@@ -198,6 +198,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | [State and Views](./state.md) | `init` / `render`、`cx.notify()`、留存状态、异步 |
 | [Overlays](./overlays.md) | dialog、sheet、toast，以及 phase 规则 |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`、默认拒绝、文件、存储、进程与网络 API |
+| [依赖](./dependencies.md) | shell package：什么样的仓库算一个，manifest 如何命名与钉住它，以及编辑器拿到的类型 |
 | [Hosting](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
 | [HostModule](./host-module.md) | 把 Host 自己的 Rust 借给脚本，以及那条纯数据边界 |
 | [Dock 与面板](./dock.md) | 把脚本 View 变成可停靠面板、为它绘制 chrome，以及重启后什么会留下 |

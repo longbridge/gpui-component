@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::ElementExt as _;
     use crate::global_state::GlobalState;
     use crate::{
         Placement, Root,
@@ -13,7 +14,7 @@ mod tests {
         div, point, px,
     };
     use gpui_base::{
-        ElementExt as _, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+        TextSelection, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
         TextSelectionScopeId,
     };
     use std::cell::Cell;
@@ -233,7 +234,7 @@ mod tests {
         });
         let (bounds, list_state) = content.read_with(cx, |content, cx| {
             let state = content.text_view.read(cx);
-            (state.bounds(), state.list_state.clone())
+            (state.bounds(), state.list_state().clone())
         });
         let top_plain = point(px(1.), bounds.origin.y - px(20.));
         let bottom_plain = point(px(1.), bounds.bottom() + px(20.));
@@ -470,7 +471,7 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let selected = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
         assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
     }
 
@@ -519,7 +520,7 @@ mod tests {
         );
 
         cx.update(|window, cx| {
-            gpui_base::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             let _ = window.draw(cx);
         });
 
@@ -549,7 +550,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
     }
@@ -602,18 +603,18 @@ mod tests {
 
             assert_eq!(
                 crate::WindowExt::selected_text(window, cx),
-                gpui_base::TextSelection::selected_text(window, cx)
+                TextSelection::selected_text(window, cx)
             );
             assert_eq!(
                 crate::WindowExt::has_text_selection(window, cx),
-                gpui_base::TextSelection::has_selection(window, cx)
+                TextSelection::has_selection(window, cx)
             );
 
             crate::WindowExt::clear_text_selection(window, cx);
-            assert!(!gpui_base::TextSelection::has_selection(window, cx));
+            assert!(!TextSelection::has_selection(window, cx));
 
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             assert!(!crate::WindowExt::has_text_selection(window, cx));
         });
     }
@@ -676,15 +677,15 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::TextSelection::clear(window, cx);
+            TextSelection::clear(window, cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
         });
         cx.run_until_parked();
 
         let (has_selection, selected) = cx.update(|window, cx| {
             (
-                gpui_base::TextSelection::has_selection(window, cx),
-                gpui_base::TextSelection::selected_text(window, cx),
+                TextSelection::has_selection(window, cx),
+                TextSelection::selected_text(window, cx),
             )
         });
         assert!(has_selection);
@@ -696,6 +697,10 @@ mod tests {
     /// scrolling with the wheel and releasing at the bottom leaves every block
     /// in between unpainted — copying used to drop all of them.
     struct ScrollableTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
+    struct AutoScrollTextViewTest {
         text_view: Entity<TextViewState>,
     }
 
@@ -731,6 +736,108 @@ mod tests {
                 ),
             )
         }
+    }
+
+    impl Render for AutoScrollTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div()
+                    .debug_selector(|| "scrollable-text-view".into())
+                    .h(px(300.))
+                    .overflow_hidden()
+                    .child(
+                        TextView::new(&self.text_view)
+                            .flex_none()
+                            .px_5()
+                            .selectable(true)
+                            .scrollable(true),
+                    ),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn compatibility_text_view_drag_selection_auto_scrolls_both_directions(
+        cx: &mut TestAppContext,
+    ) {
+        use gpui::ListOffset;
+
+        let source = (0..100)
+            .map(|ix| format!("Paragraph {ix} with enough text to select"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| AutoScrollTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let view = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<AutoScrollTextViewTest>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let bounds = cx
+            .debug_bounds("scrollable-text-view")
+            .expect("scrollable TextView bounds");
+        let before = view.read_with(cx, |view, cx| {
+            let state = view.text_view.read(cx);
+            let offset = state.list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        let start = point(bounds.left() + px(30.), bounds.top() + px(30.));
+        let edge = point(bounds.left() + px(60.), bounds.bottom() - px(2.));
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(edge, Some(MouseButton::Left), Modifiers::default());
+        cx.executor().advance_clock(Duration::from_millis(64));
+        cx.run_until_parked();
+
+        let after = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::default());
+        assert_ne!(
+            before, after,
+            "dragging at the viewport edge must auto-scroll"
+        );
+
+        let list_state =
+            view.read_with(cx, |view, cx| view.text_view.read(cx).list_state().clone());
+        list_state.scroll_to(ListOffset {
+            item_ix: 99,
+            offset_in_item: px(0.),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let before_up = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        let start = point(bounds.left() + px(30.), bounds.bottom() - px(30.));
+        let edge = point(bounds.left() + px(60.), bounds.top() + px(2.));
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(edge, Some(MouseButton::Left), Modifiers::default());
+        cx.executor().advance_clock(Duration::from_millis(64));
+        cx.run_until_parked();
+        let after_up = view.read_with(cx, |view, cx| {
+            let offset = view.text_view.read(cx).list_state().logical_scroll_top();
+            (offset.item_ix, offset.offset_in_item)
+        });
+        cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::default());
+        assert_ne!(
+            before_up, after_up,
+            "dragging at the top viewport edge must auto-scroll upward"
+        );
     }
 
     impl Render for PaddedScrollableTextViewTest {
@@ -782,7 +889,7 @@ mod tests {
             MouseButton::Left,
             Modifiers::default(),
         );
-        let list_state = text_view.read_with(cx, |state, _| state.list_state.clone());
+        let list_state = text_view.read_with(cx, |state, _| state.list_state().clone());
         list_state.scroll_to(ListOffset {
             item_ix: BLOCKS - 1,
             offset_in_item: px(0.),
@@ -1012,7 +1119,8 @@ mod tests {
             MouseButton::Left,
             Modifiers::default(),
         );
-        let list_state = view.read_with(cx, |view, cx| view.text_view.read(cx).list_state.clone());
+        let list_state =
+            view.read_with(cx, |view, cx| view.text_view.read(cx).list_state().clone());
         list_state.scroll_to(ListOffset {
             item_ix: BLOCKS - 1,
             offset_in_item: px(0.),
@@ -1194,7 +1302,7 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx))
+        cx.update(|window, cx| TextSelection::selected_text(window, cx))
     }
 
     fn click(
@@ -1309,8 +1417,8 @@ mod tests {
         let (first_selecting, second_selecting) = cx.update(|_, cx| {
             let chat = chat.read(cx);
             (
-                chat.first.read(cx).is_selecting,
-                chat.second.read(cx).is_selecting,
+                chat.first.read(cx).is_selecting(),
+                chat.second.read(cx).is_selecting(),
             )
         });
         assert!(!first_selecting);
@@ -1328,7 +1436,7 @@ mod tests {
             chat.read(cx)
                 .second
                 .read(cx)
-                .focus_handle
+                .focus_handle()
                 .is_focused(window)
         });
         assert!(

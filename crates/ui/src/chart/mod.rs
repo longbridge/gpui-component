@@ -14,6 +14,8 @@ pub use pie_chart::PieChart;
 pub use radar_chart::{RadarChart, RadarLabel};
 pub use sankey_chart::{SankeyChart, SankeyLabel};
 
+use std::hash::Hash;
+
 use gpui::{Hsla, SharedString, TextAlign};
 
 use crate::plot::{
@@ -71,7 +73,7 @@ pub(crate) fn build_band_labels<T, X>(
     color: Hsla,
 ) -> Vec<AxisText>
 where
-    X: PartialEq + Into<SharedString>,
+    X: Eq + Hash + Into<SharedString>,
 {
     data.iter()
         .enumerate()

@@ -24,6 +24,7 @@ const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
 const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
 const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(382.);
+const NOTIFICATION_ADVANCE_INTERVAL: Duration = Duration::from_millis(50);
 struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -694,32 +695,51 @@ pub struct NotificationList {
     pub(crate) notifications: ToastManager<NotificationId, Entity<Notification>>,
     stacks: Vec<(Anchor, AnchorStack)>,
     focus_handle: FocusHandle,
+    /// Whether the lifecycle clock is running. The loop clears it as it exits.
+    is_advancing: bool,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
 impl NotificationList {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let view = cx.entity().downgrade();
-        cx.spawn_in(window, async move |_, cx| {
+    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self {
+            notifications: ToastManager::new(ToastMotion::sonner()),
+            stacks: Vec::new(),
+            focus_handle: cx.focus_handle().tab_stop(true),
+            is_advancing: false,
+            _subscriptions: HashMap::new(),
+        }
+    }
+
+    /// Tick the toast lifecycle until the last notification is unmounted.
+    ///
+    /// It advances the transition phases and samples the pause input (stack
+    /// expansion) that reaches the list through no event.
+    /// With nothing mounted there is nothing to do, so an idle window arms no
+    /// timer.
+    fn start_advancing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_advancing {
+            return;
+        }
+        self.is_advancing = true;
+        // Detached rather than kept as a `Task`: the loop ends itself, and a
+        // handle on the list would have to be dropped from inside its own future.
+        cx.spawn_in(window, async move |view, cx| {
             loop {
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(NOTIFICATION_ADVANCE_INTERVAL)
                     .await;
-                if view
-                    .update_in(cx, |view, window, cx| view.advance(window, cx))
-                    .is_err()
-                {
+                let running = view.update_in(cx, |view, window, cx| {
+                    view.advance(window, cx);
+                    view.is_advancing = !view.notifications.is_empty();
+                    view.is_advancing
+                });
+                if !matches!(running, Ok(true)) {
                     break;
                 }
             }
         })
         .detach();
-        Self {
-            notifications: ToastManager::new(ToastMotion::sonner()),
-            stacks: Vec::new(),
-            focus_handle: cx.focus_handle().tab_stop(true),
-            _subscriptions: HashMap::new(),
-        }
     }
 
     fn is_expanded(&self) -> bool {
@@ -822,6 +842,7 @@ impl NotificationList {
             },
             cx.background_executor().now(),
         );
+        self.start_advancing(window, cx);
         cx.notify();
     }
 
@@ -851,10 +872,9 @@ impl NotificationList {
     }
 
     fn advance(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let changes = self.notifications.advance(
-            cx.background_executor().now(),
-            self.is_expanded() || !window.is_window_active(),
-        );
+        let changes = self
+            .notifications
+            .advance(cx.background_executor().now(), self.is_expanded());
         for id in changes.presented {
             if let Some(note) = self.notifications.get(&id) {
                 note.update(cx, |note, cx| note.complete_enter(cx));
@@ -1241,9 +1261,84 @@ mod tests {
     }
 
     #[gpui::test]
-    fn focus_and_inactive_window_pause_autohide_and_present_phase_is_projected(
-        cx: &mut TestAppContext,
-    ) {
+    fn lifecycle_clock_runs_only_while_a_notification_is_mounted(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        // A list that has never shown anything arms no timer.
+        cx.background_executor.advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("tick").id::<FooKind>(), window, cx);
+        });
+        assert!(list.read_with(cx, |list, _| list.is_advancing));
+
+        // Autohide expiry plus the exit transition stops the clock with it.
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_secs(5));
+        cx.run_until_parked();
+        flush_dismiss(cx);
+        assert!(ids(&list, cx).is_empty());
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
+
+        // A later notification restarts it.
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("again").id::<BarKind>(), window, cx);
+        });
+        assert!(list.read_with(cx, |list, _| list.is_advancing));
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_secs(5));
+        cx.run_until_parked();
+        flush_dismiss(cx);
+        assert!(ids(&list, cx).is_empty());
+        assert!(!list.read_with(cx, |list, _| list.is_advancing));
+    }
+
+    #[gpui::test]
+    fn inactive_window_does_not_pause_autohide(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        let list = root.read_with(cx, |root, _| root.list.clone());
+        list.update_in(cx, |list, window, cx| {
+            assert!(!window.is_window_active());
+            list.push(Notification::info("background").id::<FooKind>(), window, cx);
+        });
+
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION);
+        cx.run_until_parked();
+        let note = list.read_with(cx, |list, _| {
+            list.notifications
+                .get(&NotificationId::from(TypeId::of::<FooKind>()))
+                .unwrap()
+                .clone()
+        });
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        cx.background_executor
+            .advance_clock(Duration::from_secs(5) + Duration::from_millis(50));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Ending
+        );
+    }
+
+    #[gpui::test]
+    fn focus_pauses_autohide_and_present_phase_is_projected(cx: &mut TestAppContext) {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
@@ -1268,16 +1363,8 @@ mod tests {
             ToastTransitionStatus::Present
         );
 
-        cx.background_executor.advance_clock(Duration::from_secs(5));
-        cx.run_until_parked();
-        assert_eq!(
-            note.read_with(cx, |note, _| note.transition_status),
-            ToastTransitionStatus::Present
-        );
-
         let list_focus = list.read_with(cx, |list, _| list.focus_handle.clone());
         cx.update(|window, cx| {
-            window.activate_window();
             list_focus.focus(window, cx);
             window.draw(cx).clear(cx);
         });

@@ -8,8 +8,9 @@
 //! answerable **before** the plugin's code runs.
 //!
 //! That is the whole reason a manifest exists, and it is why the manifest has
-//! six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
-//! and `capabilities`. `version`, `shell-version`, and `capabilities` are
+//! seven recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+//! `dependencies`, and `capabilities`. `version`, `shell-version`,
+//! `dependencies`, and `capabilities` are
 //! optional. Commands, panels, keybindings, settings and themes are
 //! registered from script instead of being declared here a second time —
 //! *capabilities are permission, contributions are behavior*. A permission has
@@ -82,7 +83,164 @@ pub struct PluginManifest {
     version: String,
     shell_version: String,
     entry: String,
+    dependencies: BTreeMap<String, GitDependency>,
     capabilities: CapabilitiesFile,
+}
+
+/// One JavaScript package fetched from Git before an application starts.
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[serde(try_from = "GitDependencyFile")]
+#[schemars(with = "GitDependencyFile")]
+pub struct GitDependency {
+    git: String,
+    branch: Option<String>,
+    tag: Option<String>,
+    entry: String,
+    reference: Option<String>,
+    package_entry: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(untagged)]
+enum GitDependencyFile {
+    Shorthand(String),
+    Object(GitDependencyObject),
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GitDependencyObject {
+    git: String,
+    #[serde(default)]
+    branch: Option<String>,
+    #[serde(default)]
+    tag: Option<String>,
+    #[serde(default = "default_dependency_entry")]
+    entry: String,
+}
+
+fn default_dependency_entry() -> String {
+    "index.js".to_owned()
+}
+
+impl TryFrom<GitDependencyFile> for GitDependency {
+    type Error = String;
+
+    fn try_from(value: GitDependencyFile) -> Result<Self, Self::Error> {
+        match value {
+            GitDependencyFile::Object(object) => Ok(Self {
+                git: object.git,
+                branch: object.branch,
+                tag: object.tag,
+                entry: object.entry,
+                reference: None,
+                package_entry: false,
+            }),
+            GitDependencyFile::Shorthand(source) => {
+                let (git, reference) = parse_git_dependency_string(&source)?;
+                Ok(Self {
+                    git,
+                    branch: None,
+                    tag: None,
+                    entry: default_dependency_entry(),
+                    reference,
+                    package_entry: true,
+                })
+            }
+        }
+    }
+}
+
+fn parse_git_dependency_string(source: &str) -> Result<(String, Option<String>), String> {
+    if source.trim() != source || source.is_empty() || source.matches('#').count() > 1 {
+        return Err(
+            "a string dependency must be a Git URL or GitHub owner/repository with one optional #Git ref"
+                .to_owned(),
+        );
+    }
+    let (remote, fragment) = match source.split_once('#') {
+        Some((_remote, "")) => {
+            return Err("a string dependency #Git ref must not be empty".to_owned());
+        }
+        Some((remote, reference)) => (remote, Some(reference)),
+        None => (source, None),
+    };
+    if let Some(reference) = fragment
+        && !valid_git_ref_name(reference)
+    {
+        return Err(format!(
+            "string dependency selector `{reference}` is not a valid Git ref"
+        ));
+    }
+
+    if remote.contains("://") || looks_like_scp_git_url(remote) {
+        if remote.chars().any(char::is_whitespace)
+            || remote.ends_with("://")
+            || remote.starts_with("://")
+        {
+            return Err("a string dependency must contain a valid Git URL".to_owned());
+        }
+        return Ok((remote.to_owned(), fragment.map(str::to_owned)));
+    }
+
+    let mut components = remote.split('/');
+    let owner = components.next().unwrap_or_default();
+    let repository = components.next().unwrap_or_default();
+    if components.next().is_some()
+        || !valid_github_component(owner)
+        || !valid_github_component(repository)
+    {
+        return Err(
+            "GitHub shorthand must contain exactly owner/repository plus an optional #Git ref"
+                .to_owned(),
+        );
+    }
+    Ok((
+        format!("https://github.com/{owner}/{repository}"),
+        Some(fragment.unwrap_or("main").to_owned()),
+    ))
+}
+
+fn looks_like_scp_git_url(remote: &str) -> bool {
+    let Some((authority, path)) = remote.split_once(':') else {
+        return false;
+    };
+    authority.contains('@') && !authority.contains('/') && path.contains('/') && !path.is_empty()
+}
+
+fn valid_github_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && component
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+}
+
+impl GitDependency {
+    pub fn git(&self) -> &str {
+        &self.git
+    }
+
+    pub fn branch(&self) -> Option<&str> {
+        self.branch.as_deref()
+    }
+
+    pub fn tag(&self) -> Option<&str> {
+        self.tag.as_deref()
+    }
+
+    pub fn entry(&self) -> &str {
+        &self.entry
+    }
+
+    pub(crate) fn reference(&self) -> Option<&str> {
+        self.reference.as_deref()
+    }
+
+    pub(crate) fn uses_package_entry(&self) -> bool {
+        self.package_entry
+    }
 }
 
 impl PluginManifest {
@@ -156,6 +314,12 @@ impl PluginManifest {
         };
         let entry = string_field(&fields, "entry")?;
         validate_entry(&entry)?;
+        let dependencies = match fields.get("dependencies") {
+            None | Some(serde_json::Value::Null) => BTreeMap::new(),
+            Some(value) => serde_json::from_value::<BTreeMap<String, GitDependency>>(value.clone())
+                .map_err(|error| ManifestProblem::Dependencies(error.to_string()))?,
+        };
+        validate_dependencies(&dependencies)?;
 
         // An omitted `capabilities` has the one permission default that cannot
         // be an accident: absent means the empty grant
@@ -176,6 +340,7 @@ impl PluginManifest {
             version,
             shell_version,
             entry,
+            dependencies,
             capabilities,
         })
     }
@@ -209,6 +374,11 @@ impl PluginManifest {
         &self.entry
     }
 
+    /// Git-backed packages available to JavaScript as bare module imports.
+    pub fn dependencies(&self) -> &BTreeMap<String, GitDependency> {
+        &self.dependencies
+    }
+
     /// The grant this manifest asks for, resolved against the two directories
     /// only the host knows.
     ///
@@ -225,14 +395,93 @@ impl PluginManifest {
     }
 }
 
-const FIELDS: [&str; 6] = [
+const FIELDS: [&str; 7] = [
     "id",
     "name",
     "version",
     "shell-version",
     "entry",
+    "dependencies",
     "capabilities",
 ];
+
+fn validate_dependencies(
+    dependencies: &BTreeMap<String, GitDependency>,
+) -> Result<(), ManifestProblem> {
+    for (name, dependency) in dependencies {
+        if name.is_empty()
+            || name.starts_with(['.', '/'])
+            || name.contains(['\\', ':'])
+            || name.split('/').any(|part| part.is_empty() || part == "..")
+        {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` is not a valid bare module name"
+            )));
+        }
+        if crate::host_modules::RESERVED_SPECIFIERS.contains(&name.as_str()) {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` is reserved by gpui-shell and cannot name a Git dependency"
+            )));
+        }
+        if dependency.git.trim().is_empty() {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}.git` must not be empty"
+            )));
+        }
+        if dependency.uses_package_entry() {
+            if let Some(reference) = dependency.reference()
+                && !valid_git_ref_name(reference)
+            {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` selector `{reference}` is not a valid Git ref"
+                )));
+            }
+            continue;
+        }
+        let reference = match (&dependency.branch, &dependency.tag) {
+            (Some(branch), None) if !branch.trim().is_empty() => branch,
+            (None, Some(tag)) if !tag.trim().is_empty() => tag,
+            (Some(_), Some(_)) => {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` must select either `branch` or `tag`, not both"
+                )));
+            }
+            _ => {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` must select one non-empty `branch` or `tag`"
+                )));
+            }
+        };
+        if !valid_git_ref_name(reference) {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` selector `{reference}` is not a valid Git ref name"
+            )));
+        }
+        validate_entry(&dependency.entry).map_err(|_| {
+            ManifestProblem::Dependencies(format!(
+                "`{name}.entry` must be a path inside the Git repository"
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn valid_git_ref_name(reference: &str) -> bool {
+    reference != "@"
+        && !reference.starts_with(['.', '/'])
+        && !reference.ends_with(['.', '/'])
+        && !reference.contains("..")
+        && !reference.contains("@{")
+        && !reference.contains("//")
+        && !reference.chars().any(|character| {
+            character.is_control()
+                || character.is_whitespace()
+                || matches!(character, '~' | '^' | ':' | '?' | '*' | '[' | '\\')
+        })
+        && reference.split('/').all(|component| {
+            !component.is_empty() && !component.starts_with('.') && !component.ends_with(".lock")
+        })
+}
 
 fn string_field(
     fields: &serde_json::Map<String, serde_json::Value>,
@@ -403,6 +652,9 @@ struct ManifestFile {
     shell_version: Option<String>,
     /// The module evaluated at load, relative to the plugin directory.
     entry: String,
+    /// Git-backed packages imported by their map key from JavaScript.
+    #[serde(default)]
+    dependencies: BTreeMap<String, GitDependency>,
     /// What the plugin is allowed to do. Absent means nothing but its own
     /// storage — see [`CapabilitiesFile::storage`].
     #[serde(default)]
@@ -773,6 +1025,7 @@ pub enum ManifestProblem {
         placeholder: String,
     },
     Capabilities(String),
+    Dependencies(String),
 }
 
 /// What each field is for, in one line, appended to the error that reports it
@@ -867,6 +1120,10 @@ impl std::fmt::Display for ManifestProblem {
             ManifestProblem::Capabilities(error) => write!(
                 f,
                 "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), storage, clipboard (read, write) and process (exit)"
+            ),
+            ManifestProblem::Dependencies(error) => write!(
+                f,
+                "invalid `dependencies`: {error}. Use a GitHub owner/repository shorthand or full Git URL with an optional #ref, or an object with a Git URL, exactly one non-empty `branch` or `tag`, and an optional repository-relative `entry`"
             ),
         }
     }
@@ -1903,6 +2160,248 @@ mod tests {
     }
 
     #[test]
+    fn a_manifest_accepts_the_omarchy_ui_https_remote_without_dot_git() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/huacnlee/omarchy-ui",
+                    "branch": "main"
+                }
+            }
+        }"#;
+
+        let manifest =
+            PluginManifest::parse(source).expect("a branch-pinned Git dependency should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+        assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
+        assert_eq!(dependency.branch(), Some("main"));
+        assert_eq!(dependency.tag(), None);
+        assert_eq!(dependency.entry(), "index.js");
+    }
+
+    #[test]
+    fn a_manifest_accepts_git_dependency_strings() {
+        for (source, expected_git, expected_reference) in [
+            (
+                "https://github.com/huacnlee/omarchy-ui#main",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("main"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#v1.2.0",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("v1.2.0"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("0123456789abcdef0123456789abcdef01234567"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui",
+                "https://github.com/huacnlee/omarchy-ui",
+                None,
+            ),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("a Git dependency string should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), expected_git);
+            assert_eq!(dependency.reference(), expected_reference);
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn github_shorthand_expands_to_an_https_remote_and_defaults_to_main() {
+        for (source, expected_reference) in [
+            ("huacnlee/omarchy-ui", "main"),
+            ("huacnlee/omarchy-ui#stable", "stable"),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("strict GitHub shorthand should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
+            assert_eq!(dependency.reference(), Some(expected_reference));
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn malformed_or_ambiguous_git_dependency_strings_are_rejected() {
+        for source in [
+            "huacnlee",
+            "/omarchy-ui",
+            "huacnlee/",
+            "huacnlee/omarchy-ui/extra",
+            "huacnlee//omarchy-ui",
+            "huacnlee/omarchy-ui#",
+            "https://github.com/huacnlee/omarchy-ui#",
+            "not a git dependency",
+        ] {
+            let error = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect_err("malformed string syntax must not select an unintended repository");
+
+            assert!(
+                error.to_string().contains("Git URL")
+                    || error.to_string().contains("owner/repository")
+                    || error.to_string().contains("Git ref"),
+                "`{source}` produced an unclear error: {error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn object_git_dependencies_keep_their_explicit_selector_and_entry_contract() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/huacnlee/omarchy-ui",
+                    "tag": "v1.2.0",
+                    "entry": "src/public.js"
+                }
+            }
+        }"#;
+
+        let manifest = PluginManifest::parse(source).expect("the legacy object form should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+
+        assert_eq!(dependency.branch(), None);
+        assert_eq!(dependency.tag(), Some("v1.2.0"));
+        assert_eq!(dependency.entry(), "src/public.js");
+        assert!(!dependency.uses_package_entry());
+    }
+
+    #[test]
+    fn a_manifest_accepts_a_git_dependency_pinned_to_a_tag() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "ssh://git@example.com/omarchy-ui.git",
+                    "tag": "v1.2.0",
+                    "entry": "src/public.js"
+                }
+            }
+        }"#;
+
+        let manifest =
+            PluginManifest::parse(source).expect("a tag-pinned Git dependency should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+        assert_eq!(dependency.branch(), None);
+        assert_eq!(dependency.tag(), Some("v1.2.0"));
+        assert_eq!(dependency.entry(), "src/public.js");
+    }
+
+    #[test]
+    fn a_git_dependency_cannot_select_a_branch_and_a_tag() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "branch": "main",
+                    "tag": "v1.2.0"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the ref is ambiguous");
+        assert!(error.to_string().contains("either `branch` or `tag`"));
+    }
+
+    #[test]
+    fn a_git_dependency_entry_cannot_escape_its_checkout() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "tag": "v1.2.0",
+                    "entry": "../private.js"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the entry escapes the checkout");
+        assert!(error.to_string().contains("path inside the Git repository"));
+    }
+
+    #[test]
+    fn a_git_dependency_cannot_use_a_runtime_module_name() {
+        let source = r#"{
+            "id": "com.example.shadow",
+            "name": "Shadow",
+            "entry": "main.js",
+            "dependencies": {
+                "gpui": {
+                    "git": "https://github.com/example/not-gpui.git",
+                    "branch": "main"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the dependency is unreachable");
+        assert!(error.to_string().contains("reserved by gpui-shell"));
+    }
+
+    #[test]
+    fn a_git_dependency_rejects_refspec_syntax_in_a_branch() {
+        let source = r#"{
+            "id": "com.example.refspec",
+            "name": "Refspec",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "branch": "main:refs/heads/injected"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("a selector is not a refspec");
+        assert!(error.to_string().contains("valid Git ref name"));
+    }
+
+    #[test]
     fn shell_version_is_declared_in_the_manifest_before_script_runs() {
         let manifest = PluginManifest::parse(VALID)
             .expect("the runtime version belongs in inert manifest metadata");
@@ -2333,6 +2832,7 @@ mod tests {
             parsed.shell_version
         );
         assert_eq!(described.entry, parsed.entry);
+        assert_eq!(described.dependencies, parsed.dependencies);
         assert_eq!(described.capabilities, parsed.capabilities);
     }
 

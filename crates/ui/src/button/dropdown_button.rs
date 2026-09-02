@@ -11,11 +11,15 @@ use crate::{
 
 use super::{Button, ButtonVariant, ButtonVariants};
 
+/// Group name shared by both halves, so hovering one can style the other.
+const HALVES_GROUP: &str = "dropdown-button";
+
 /// A split button: an action button with an attached menu trigger.
 ///
-/// The two halves stay visually joined, except for a `ghost` button that is not
-/// selected — a toolbar reads better when an idle ghost pair looks like two
-/// separate buttons.
+/// The two halves stay visually joined. A `ghost` split is transparent at
+/// rest; hovering either half surfaces the whole control with the hovered half
+/// emphasized, and it stays surfaced while the menu is open, so the pair reads
+/// as one control rather than two buttons.
 ///
 #[derive(IntoElement)]
 pub struct DropdownButton {
@@ -142,7 +146,7 @@ impl Selectable for DropdownButton {
 }
 
 impl RenderOnce for DropdownButton {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         debug_assert!(
             self.button.is_some() || self.menu.is_some(),
             "a DropdownButton needs a `button`, a `dropdown_menu`, or both"
@@ -151,11 +155,16 @@ impl RenderOnce for DropdownButton {
         let variant = self.effective_variant();
         let size = self.effective_size();
         let selected = self.selected || self.button.as_ref().is_some_and(Selectable::is_selected);
+        // Only a ghost split has no surface at rest, so only it needs hovering
+        // one half to reveal the other, and the action half to stay revealed
+        // while the menu holds the trigger pressed.
         let is_ghost = variant.is_ghost();
-        let attached = !(is_ghost && !selected);
+        let menu_open = window.use_keyed_state(self.id.clone(), cx, |_, _| false);
+        let is_menu_open = *menu_open.read(cx);
 
         div()
             .id(self.id)
+            .when(is_ghost, |this| this.group(HALVES_GROUP))
             .h_flex()
             .refine_style(&self.style)
             .when_some(self.button, |this, button| {
@@ -164,16 +173,20 @@ impl RenderOnce for DropdownButton {
                     button
                         .border_corners(Corners {
                             top_left: true,
-                            top_right: !attached,
+                            top_right: false,
                             bottom_left: true,
-                            bottom_right: !attached,
+                            bottom_right: false,
                         })
                         .border_edges(Edges::all(true))
                         .selected(selected)
                         .disabled(disabled)
                         .when(self.outline, |this| this.outline())
                         .with_size(size)
-                        .with_variant(variant),
+                        .with_variant(variant)
+                        .when(is_ghost, |this| {
+                            this.hover_group(HALVES_GROUP)
+                                .hover_group_held(is_menu_open)
+                        }),
                 )
             })
             .when_some(self.menu, |this, menu| {
@@ -181,13 +194,13 @@ impl RenderOnce for DropdownButton {
                     Button::new("popup")
                         .dropdown_caret(true)
                         .border_corners(Corners {
-                            top_left: !attached,
+                            top_left: false,
                             top_right: true,
-                            bottom_left: !attached,
+                            bottom_left: false,
                             bottom_right: true,
                         })
                         .border_edges(Edges {
-                            left: !attached,
+                            left: false,
                             top: true,
                             right: true,
                             bottom: true,
@@ -197,7 +210,14 @@ impl RenderOnce for DropdownButton {
                         .when(self.outline, |this| this.outline())
                         .with_size(size)
                         .with_variant(variant)
-                        .dropdown_menu_with_anchor(self.anchor, menu),
+                        .when(is_ghost, |this| this.hover_group(HALVES_GROUP))
+                        .dropdown_menu_with_anchor(self.anchor, menu)
+                        .on_open_change(move |open, _, cx| {
+                            menu_open.update(cx, |state, cx| {
+                                *state = *open;
+                                cx.notify();
+                            })
+                        }),
                 )
             })
     }

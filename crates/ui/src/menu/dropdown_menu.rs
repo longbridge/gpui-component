@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    Anchor, Context, DismissEvent, ElementId, Entity, Focusable, InteractiveElement, IntoElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    Anchor, App, Context, DismissEvent, ElementId, Entity, Focusable, InteractiveElement,
+    IntoElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, prelude::FluentBuilder,
 };
 
 use crate::{Selectable, button::Button, menu::PopupMenu, popover::Popover};
@@ -39,6 +39,7 @@ pub struct DropdownMenuPopover<T: Selectable + IntoElement + 'static> {
     anchor: Anchor,
     trigger: T,
     builder: Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>,
+    on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
 impl<T> DropdownMenuPopover<T>
@@ -57,6 +58,7 @@ where
             anchor: anchor.into(),
             trigger,
             builder: Rc::new(builder),
+            on_open_change: None,
         }
     }
 
@@ -71,6 +73,17 @@ where
         self.style = style;
         self
     }
+
+    /// Add a callback to be called when the menu opens or closes.
+    ///
+    /// The `&bool` parameter is the **new open state**.
+    pub fn on_open_change(
+        mut self,
+        callback: impl Fn(&bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_open_change = Some(Rc::new(callback));
+        self
+    }
 }
 
 #[derive(Default)]
@@ -82,7 +95,7 @@ impl<T> RenderOnce for DropdownMenuPopover<T>
 where
     T: Selectable + IntoElement + 'static,
 {
-    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let builder = self.builder.clone();
         let menu_state =
             window.use_keyed_state(self.id.clone(), cx, |_, _| DropdownMenuState::default());
@@ -93,6 +106,9 @@ where
             .trigger(self.trigger)
             .trigger_style(self.style)
             .anchor(self.anchor)
+            .when_some(self.on_open_change, |this, callback| {
+                this.on_open_change(move |open, window, cx| callback(open, window, cx))
+            })
             .content(move |_, window, cx| {
                 // Here is special logic to only create the PopupMenu once and reuse it.
                 // Because this `content` will called in every time render, so we need to store the menu

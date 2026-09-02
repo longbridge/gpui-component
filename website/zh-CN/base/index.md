@@ -26,4 +26,4 @@ order: 1
 
 ## 开始使用
 
-动画系统已有完整中文文档和可运行示例，请阅读[动画与动效](./motion.md)。其余 Base 页面会继续沿用同一中英文目录结构。
+从[入门指南](./getting-started.md)开始，使用 [TextView](./text-view.md) 渲染可选择的 Markdown 与 HTML，或阅读[文本选择](./text-selection.md)为自定义 renderer 接入窗口级选择。每个页面都提供 Rust 代码和可运行的 WASM 示例。

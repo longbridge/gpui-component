@@ -74,7 +74,7 @@ impl Render for Example {
                         )
                         .child(
                             html(self.input_state.read(cx).value())
-                                .p_5()
+                                .px_5()
                                 .scrollable(true)
                                 .selectable(true)
                                 .selection_format(self.selection_format)

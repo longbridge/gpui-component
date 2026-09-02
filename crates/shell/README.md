@@ -173,7 +173,7 @@ import { fps_monitor } from "gpui-fps";
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `value` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
-| `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
+| `fps_monitor()` | function | The native `gpui-fps` performance HUD; passive by default, with `.continuous(true)` for a sustained-frame test |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
@@ -234,7 +234,7 @@ semantic token name — `background`, `foreground`, `surface`,
 `surface_foreground`, `primary`, `primary_foreground`, `secondary`,
 `secondary_foreground`, `muted`, `muted_foreground`, `accent`,
 `accent_foreground`, `destructive`, `destructive_foreground`, `border`, `input`,
-`ring` — or a `#rrggbb` literal. Passing values from
+`ring`, `selection` — or a `#rrggbb` literal. Passing values from
 `cx.theme().colors` is preferred. Semantic token name strings remain
 accepted for compatibility; a literal bypasses the theme.
 
@@ -303,6 +303,9 @@ grant the CLI installs in `gpui-shell.json`:
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -320,6 +323,50 @@ grant the CLI installs in `gpui-shell.json`:
   }
 }
 ```
+
+Git dependencies are fetched before the entry module is evaluated. Import the
+map key as a bare module:
+
+```js
+import { label, style } from "omarchy-ui";
+```
+
+A string value may be strict GitHub shorthand (`"owner/repository"` or
+`"owner/repository#ref"`) or a full Git URL
+(`"https://github.com/owner/repository#ref"`). GitHub shorthand without a
+fragment selects `main`; a full URL without one selects the remote's HEAD. A
+fragment may name a branch, tag, or commit-ish such as a commit ID. Moving
+references are fetched on every application load, while a commit ID keeps
+selecting the same commit.
+
+For string dependencies, gpui-shell reads the root `package.json` after the
+immutable checkout is ready. A string `main` selects the package entry; a
+missing file or missing `main` defaults to `index.js`. Malformed metadata, a
+non-string `main`, or an entry that is missing, not a file, or escapes the
+checkout fails the application load before its JavaScript entry executes.
+
+The legacy object form remains supported without changes. It requires exactly
+one explicit `branch` or `tag`, and its repository-relative `entry` still
+defaults to `index.js`:
+
+```json
+{
+  "omarchy-ui": {
+    "git": "https://github.com/huacnlee/omarchy-ui",
+    "tag": "v1.2.0",
+    "entry": "src/public.js"
+  }
+}
+```
+
+Dependencies live below `~/.gpui-shell/cache/dependencies/`. A per-remote lock
+serializes updates to the local mirror; immutable commit-addressed checkouts
+keep concurrent launches and older hot-reload generations isolated. The exact
+fragment-free URL is the cache and remote identity. Its raw configured origin
+is verified even when Git's `url.*.insteadOf` changes the effective fetch URL.
+Git commands are non-interactive and bounded to 30 seconds. Relative imports
+inside a package remain confined to its checkout. Fetching requires `git` on
+the host and happens before script capabilities apply.
 
 `network.hosts` grants the host to HTTP, raw TCP, and WebSocket clients;
 `network.http` narrows HTTP to a scheme, effective port, listed methods and
@@ -426,6 +473,35 @@ so an import says which layer a script depends on.
 
 Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
 
+### Dependencies an editor can see
+
+The declarations describe the runtime. A Git dependency the manifest declares is
+the rest of what a script imports, and an editor answers `import { style } from
+"omarchy-ui"` by walking `node_modules` up from the importing file — it knows
+nothing about `gpui-shell.json`. Left alone, a correct import is underlined as a
+module it cannot find, and every name behind it has no type, no parameter hints
+and no documentation.
+
+So the same invocations link each materialized checkout into the application's
+`node_modules` under the name the manifest gave it, and scaffold a
+`jsconfig.json` when the directory has neither that nor a `tsconfig.json`. The
+editor reads the same files the runtime is about to execute, so a package's own
+JSDoc is what it shows and cannot drift from what runs.
+
+Only entries gpui-shell wrote are ever replaced or removed — a symlink into its
+dependency cache, or a directory carrying its marker file — so an installed
+package of the same name is left alone, and a link whose dependency the manifest
+no longer declares goes away. Where the platform refuses a symlink, such as an
+unprivileged Windows process, a small package that re-exports the checkout is
+written instead: a bare import types the same way, and a package-subpath import
+stays unresolved.
+
+The directory is called `node_modules` because that is the one place every
+editor looks — no package manager is involved and nothing comes from a
+registry. It also buys quiet: TypeScript treats what it resolves there as an
+external library, so a dependency's own implicit-`any` diagnostics stay out of
+your build. Ignore it, the way `gpui.d.ts` is ignored.
+
 The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
 name the dispatcher accepts.
@@ -470,8 +546,10 @@ A directory that refuses the write is logged, never fatal.
 
 Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
 beside its own example and story scripts — a committed copy could only ever be
-the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
-that turns checking on.
+the stale one. What *is* committed is the part that has no machine in it: a
+`jsconfig.json` that turns checking on. An application that has none is given
+one on its first launch, in the shape `examples/js_todolist/jsconfig.json`
+uses; from then on it belongs to whoever edits it and is never rewritten.
 
 The header names the gpui-shell version that generated it. Application/runtime
 compatibility is declared separately by `shell-version` in `gpui-shell.json`

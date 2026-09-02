@@ -109,6 +109,11 @@ Notification::new()
     .autohide(true) // default
 ```
 
+The countdown pauses while the pointer is over the notifications or one of them
+has keyboard focus, and resumes when the pointer leaves or focus moves on. It
+keeps running while the window is inactive, so a message that must not be missed
+should disable auto-hide or use system delivery.
+
 ### With Action Button
 
 ```rust

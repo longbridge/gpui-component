@@ -57,6 +57,9 @@ llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb
 chrono = "0.4.38"
 cap-std = "4.0.3"
 async-channel = "2.5"
+fs2 = "0.4"
+sha2 = "0.10"
+wait-timeout = "0.2"
 reqwest = { workspace = true, features = ["blocking"], optional = true }
 tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots", "url"], optional = true }
 

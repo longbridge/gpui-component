@@ -44,6 +44,17 @@ export default class Toggle extends View {
 
 const ENTRY: &str = "toggle.js";
 
+const FPS_MONITOR: &str = r#"
+import { View, div } from "gpui";
+import { fps_monitor } from "gpui-fps";
+
+export default class Monitor extends View {
+  render() {
+    return div().relative().size_full().child(fps_monitor());
+  }
+}
+"#;
+
 const PATH: &str = r##"
 import { div, View, PathBuilder, Background } from "gpui";
 
@@ -55,7 +66,7 @@ export default class NativePath extends View {
       .line_to("100%", "100%")
       .close()
       .build();
-    return window.paint_path(path, Background.solid("#16a34a"))
+    return window.paint_path(path, Background.solid(`#16a34a`))
       .w(200)
       .h(80);
   }
@@ -198,6 +209,85 @@ fn repeated_gpui_renders_do_not_re_enter_the_script(cx: &mut TestAppContext) {
         runtime.metrics().read().script_renders(),
         1,
         "a clean view was materialized 65 times and must have entered the VM once"
+    );
+}
+
+#[gpui::test]
+fn shell_root_reuses_a_clean_views_materialized_subtree(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+    context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let first = runtime.metrics().read();
+    let started = std::time::Instant::now();
+    for _ in 0..64 {
+        context.update(|window, cx| window.draw(cx).clear(cx));
+    }
+    let elapsed = started.elapsed();
+
+    let clean = runtime.metrics().read().since(&first);
+    eprintln!(
+        "clean_frames=64 elapsed={elapsed:?} materializations={} materialize_time={:?}",
+        clean.materializations(),
+        clean.materialize_time(),
+    );
+    assert_eq!(clean.script_renders(), 0);
+    assert_eq!(
+        clean.materializations(),
+        0,
+        "64 clean window frames must reuse the subtree produced by the first materialization"
+    );
+
+    view.update(&mut context, |view, cx| view.refresh(cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let refreshed = runtime.metrics().read().since(&first);
+    assert_eq!(refreshed.script_renders(), 1);
+    assert_eq!(
+        refreshed.materializations(),
+        1,
+        "refreshing the script view must invalidate and replace the cached subtree once"
+    );
+}
+
+#[gpui::test]
+fn shell_fps_monitor_does_not_drive_the_window_unless_requested(cx: &mut TestAppContext) {
+    let (_runtime, mut context, view) = script_view(cx, FPS_MONITOR);
+    context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let requested = context.update(|window, cx| window.simulate_next_frame(cx));
+
+    assert_eq!(
+        requested, 0,
+        "the diagnostic HUD must observe application frames rather than create a redraw loop"
+    );
+}
+
+#[gpui::test]
+fn shell_fps_monitor_can_explicitly_drive_a_sustained_frame_test(cx: &mut TestAppContext) {
+    let source = FPS_MONITOR.replace("fps_monitor()", "fps_monitor().continuous(true)");
+    let (_runtime, mut context, view) = script_view(cx, &source);
+    context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let requested = context.update(|window, cx| window.simulate_next_frame(cx));
+
+    assert!(
+        requested > 0,
+        "continuous(true) must remain an explicit sustained-frame diagnostic mode"
     );
 }
 
@@ -440,6 +530,24 @@ fn a_handler_survives_the_frames_that_follow_its_render(cx: &mut TestAppContext)
 }
 
 #[gpui::test]
+fn a_cloned_snapshot_retires_its_callback_generation_only_after_the_last_clone(
+    cx: &mut TestAppContext,
+) {
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+    render_once(&mut context, &view);
+    let callback = click_target(&mut context, &view);
+    let retained = context.update(|_, cx| view.read(cx).snapshot().unwrap().clone());
+
+    for _ in 0..2 {
+        view.update(&mut context, |view, cx| view.refresh(cx));
+        render_once(&mut context, &view);
+    }
+    assert!(runtime.live_callback_ids().contains(&callback));
+    drop(retained);
+    assert!(!runtime.live_callback_ids().contains(&callback));
+}
+
+#[gpui::test]
 fn a_failed_render_still_draws_the_interface_under_it(cx: &mut TestAppContext) {
     let (runtime, mut context, view) = script_view(cx, FLAKY);
 
@@ -574,6 +682,25 @@ fn a_palette_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
         runtime.metrics().read().script_renders(),
         2,
         "a palette change must reach script views"
+    );
+}
+
+#[gpui::test]
+fn an_appearance_only_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+
+    render_once(&mut context, &view);
+    assert_eq!(runtime.metrics().read().script_renders(), 1);
+
+    context.update(|_, cx| {
+        gpui_base::Theme::global_mut(cx).appearance = gpui_base::ThemeAppearance::Dark;
+    });
+    render_once(&mut context, &view);
+
+    assert_eq!(
+        runtime.metrics().read().script_renders(),
+        2,
+        "appearance is part of cx.theme(), so changing it must invalidate script views"
     );
 }
 

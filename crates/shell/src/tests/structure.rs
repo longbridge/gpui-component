@@ -132,10 +132,10 @@ export default class Watchlist extends View {
       .py(2)
       .px(6)
       .rounded(4)
-      .bg("surface")
-      .child(div().w(80).text_sm().text_color("foreground").child(`SYM${index}`))
-      .child(div().w(80).text_sm().text_color("foreground").child(price))
-      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+      .bg(`#f8f8f8`)
+      .child(div().w(80).text_sm().text_color(`#111111`).child(`SYM${index}`))
+      .child(div().w(80).text_sm().text_color(`#111111`).child(price))
+      .child(div().w(60).text_sm().text_color(`#6b7280`).child("+1.42%"))
       .child(Button.new(`trade-${index}`).px(8).py(2).on_click(() => index).child("Trade"));
   }
 
@@ -145,7 +145,7 @@ export default class Watchlist extends View {
     for (let index = 0; index < this.rows; index += 1) {
       rows.push(this.row(index));
     }
-    return v_flex().size_full().p(12).gap(4).bg("background").children(rows);
+    return v_flex().size_full().p(12).gap(4).bg(`#ffffff`).children(rows);
   }
 }
 "#;
@@ -171,10 +171,10 @@ export default class Watchlist extends View {
       .py(2)
       .px(6)
       .rounded(4)
-      .bg("surface")
-      .child(div().w(80).text_sm().text_color("foreground").child(`SYM${index}`))
-      .child(div().w(80).text_sm().text_color("foreground").child(price))
-      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+      .bg(`#f8f8f8`)
+      .child(div().w(80).text_sm().text_color(`#111111`).child(`SYM${index}`))
+      .child(div().w(80).text_sm().text_color(`#111111`).child(price))
+      .child(div().w(60).text_sm().text_color(`#6b7280`).child("+1.42%"))
       .child(Button.new(`trade-${index}`).px(8).py(2).child("Trade"));
   }
 
@@ -184,7 +184,7 @@ export default class Watchlist extends View {
     for (let index = 0; index < this.rows; index += 1) {
       rows.push(this.row(index));
     }
-    return v_flex().size_full().p(12).gap(4).bg("background").children(rows);
+    return v_flex().size_full().p(12).gap(4).bg(`#ffffff`).children(rows);
   }
 }
 "#;
@@ -505,10 +505,10 @@ export default class Row extends View {
       .py(2)
       .px(6)
       .rounded(4)
-      .bg("surface")
-      .child(div().w(80).text_sm().text_color("foreground").child("SYM0"))
-      .child(div().w(80).text_sm().text_color("foreground").child(price))
-      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+      .bg(`#f8f8f8`)
+      .child(div().w(80).text_sm().text_color(`#111111`).child("SYM0"))
+      .child(div().w(80).text_sm().text_color(`#111111`).child(price))
+      .child(div().w(60).text_sm().text_color(`#6b7280`).child("+1.42%"))
       .child(Button.new("trade-0").px(8).py(2).on_click(() => 0).child("Trade"));
   }
 }

@@ -1,7 +1,7 @@
 ---
 title: HostModule
 description: Host 如何把自己的 Rust 借给脚本——注册、脚本侧的 import、纯数据边界，以及 Host function 运行时受到的约束。
-order: 11
+order: 12
 ---
 
 # HostModule

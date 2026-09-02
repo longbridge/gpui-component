@@ -18,11 +18,12 @@ use gpui::{
     AnyElement, App, BorderStyle, Bounds, ClipboardItem, Corners, Edges, Element, ElementId,
     Entity, GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, IntoElement,
     LayoutId, PaintQuad, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement,
-    Styled, StyledText, WeakEntity, Window, div, px, relative, rems, rgb, transparent_black,
+    Styled, StyledText, WeakEntity, Window, div, px, relative, rems, transparent_black,
 };
-use gpui_base::{Button, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun};
+use gpui_base::{
+    Button, ColorTokens, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+};
 
-use crate::theme_tokens::token_color;
 use crate::{spec::CallbackId, view::ScriptView};
 
 /// Where an application's data lives, given who it is.
@@ -302,6 +303,18 @@ impl<T> Default for CallbackArena<T> {
 }
 
 impl<T: Clone> CallbackArena<T> {
+    pub(crate) fn checkpoint(&self) -> usize {
+        self.building
+            .as_ref()
+            .map_or(0, |(_, entries)| entries.len())
+    }
+
+    pub(crate) fn rollback_to(&mut self, checkpoint: usize) {
+        if let Some((_, entries)) = self.building.as_mut() {
+            entries.truncate(checkpoint);
+        }
+    }
+
     /// Opens a generation. Any generation left open by an earlier failed build
     /// is discarded rather than committed.
     pub(crate) fn begin(&mut self) -> u64 {
@@ -489,11 +502,12 @@ pub fn clear_exit_handler() {
 /// interface underneath is one render behind, which the banner says out loud
 /// rather than leaving the reader to discover.
 pub fn error_banner(message: &str, window: &mut Window, cx: &mut App) -> AnyElement {
-    let surface = token("surface", rgb(0x171d26).into());
-    let foreground = token("foreground", rgb(0xe6ebf2).into());
-    let muted = token("muted_foreground", rgb(0x93a1b3).into());
-    let border = token("border", rgb(0x2a3240).into());
-    let accent = token("destructive", rgb(0xd05050).into());
+    let defaults = ColorTokens::default();
+    let surface = token("surface", defaults.surface);
+    let foreground = token("foreground", defaults.foreground);
+    let muted = token("muted_foreground", defaults.muted_foreground);
+    let border = token("border", defaults.border);
+    let accent = token("destructive", defaults.destructive);
 
     let copied =
         window.use_keyed_state(SharedString::from("shell-banner-copied"), cx, |_, _| false);
@@ -613,30 +627,13 @@ pub fn failure_surface(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    // Only when the palette can actually tell ink from paper. This surface is
-    // shown when an application did not load, and an application is now where
-    // the palette comes from -- so the usual case for this screen is a `Theme`
-    // global that exists and is entirely `SemanticThemeTokens::default()`,
-    // whose colours are all zero. `token` answers `Some` for that, because a
-    // theme *is* installed, which left the literals below unreachable exactly
-    // when they were the only thing that could be read: a load failure painted
-    // black on black is a blank window, and the message it was trying to show
-    // is the one that says why.
-    let usable = token_color("background") != token_color("foreground");
-    let token = |name: &str, fallback: Hsla| {
-        if usable {
-            token_color(name).unwrap_or(fallback)
-        } else {
-            fallback
-        }
-    };
-
-    let background = token("background", rgb(0x11161d).into());
-    let surface = token("surface", rgb(0x171d26).into());
-    let foreground = token("foreground", rgb(0xe6ebf2).into());
-    let muted = token("muted_foreground", rgb(0x93a1b3).into());
-    let border = token("border", rgb(0x2a3240).into());
-    let accent = token("destructive", rgb(0xd05050).into());
+    let defaults = ColorTokens::default();
+    let background = token("background", defaults.background);
+    let surface = token("surface", defaults.surface);
+    let foreground = token("foreground", defaults.foreground);
+    let muted = token("muted_foreground", defaults.muted_foreground);
+    let border = token("border", defaults.border);
+    let accent = token("destructive", defaults.destructive);
 
     let copied =
         window.use_keyed_state(SharedString::from("shell-failure-copied"), cx, |_, _| false);
@@ -843,7 +840,7 @@ fn paint_selection(layout: &gpui::TextLayout, range: Range<usize>, window: &mut 
             Point::new(end.x, end.y + line_height),
         ));
     }
-    let color = token("primary", rgb(0x4d8cff).into()).opacity(0.28);
+    let color = token("primary", ColorTokens::default().primary).opacity(0.28);
     for bounds in quads {
         window.paint_quad(PaintQuad {
             bounds,
