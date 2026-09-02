@@ -6759,6 +6759,7 @@ impl ShellRuntime {
                 "default_open",
                 "overlay_closable",
                 "continuous",
+                "cached",
                 "with_item_to_measure_index",
             ]
             .into_iter()
@@ -7761,6 +7762,7 @@ impl ShellRuntime {
             | "overlay_closable"
             | "anchor"
             | "continuous"
+            | "cached"
             | "frame_budget"
             | "mouse_button"
             | "open_delay"
@@ -7814,6 +7816,7 @@ impl ShellRuntime {
                     "overlay_closable" => "overlay_closable",
                     "anchor" => "anchor",
                     "continuous" => "continuous",
+                    "cached" => "cached",
                     "frame_budget" => "frame_budget",
                     "mouse_button" => "mouse_button",
                     "open_delay" => "open_delay",

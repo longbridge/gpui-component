@@ -1816,6 +1816,16 @@ const ELEMENT_METHODS: &str = r#"    /**
     continuous(value: boolean): Element;
     /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
     frame_budget(milliseconds: number): Element;
+    /**
+     * Keeps this element and its subtree as a GPUI cached view of their own.
+     * A frame that changes something inside — a transition, a spring —
+     * rebuilds this subtree and nothing around it; a frame that changes
+     * something elsewhere reuses it as drawn. Needs `.id()`, and a size the
+     * parent decides (`size_full`, explicit `w`/`h`, or `flex_1` under a flex
+     * parent): a cached subtree is laid out from that size, never measured
+     * from its contents. Without an id it is drawn uncached and reported.
+     */
+    cached(): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
     mouse_button(value: MouseButton): Element;
     /**
@@ -3902,6 +3912,7 @@ mod tests {
         "anchor",
         "continuous",
         "frame_budget",
+        "cached",
         "mouse_button",
         "open_delay",
         "close_delay",
@@ -4684,6 +4695,15 @@ mod tests {
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
+    }
+
+    #[test]
+    fn a_cached_subtree_is_declared_as_a_nullary_element_method() {
+        let declarations = base_declarations();
+        assert!(
+            declarations.contains("\n    cached(): Element;\n"),
+            "cached() is not declared on Element"
+        );
     }
 
     #[test]

@@ -3977,6 +3977,42 @@ export default class Motion extends View {
 }
 
 #[gpui::test]
+fn cached_is_recorded_on_the_element_that_asked_for_it(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class Boxed extends View {
+  render() {
+    return div().id("box").size_full().cached().child("inside");
+  }
+}
+"#;
+
+    let view_type = runtime.load_source("boxed", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    assert!(
+        tree.contains(":cached[]"),
+        "cached() was not recorded on the element: {tree}"
+    );
+}
+
+#[gpui::test]
 fn native_overflow_scroll_behaviors_survive_script_render_and_materialize(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 

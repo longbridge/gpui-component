@@ -507,6 +507,10 @@ struct Behavior {
     anchor: Option<gpui::Anchor>,
     continuous: Option<bool>,
     frame_budget: Option<Duration>,
+    /// `.cached()`: this element and its subtree are rendered by a
+    /// [`SubtreeCache`](crate::subtree_cache::SubtreeCache) of their own, so
+    /// gpui can reuse them across frames that changed nothing inside.
+    cached: bool,
     /// The pointer button that opens a `Popover`.
     mouse_button: Option<MouseButton>,
     /// The label a hover shows over this element. A string rather than an
@@ -3117,6 +3121,7 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .and_then(|value| anchor_from_name(value));
         }
         "continuous" => behavior.continuous = Some(flag.unwrap_or(true)),
+        "cached" => behavior.cached = flag.unwrap_or(true),
         "frame_budget" => behavior.frame_budget = milliseconds(args),
         "mouse_button" => {
             behavior.mouse_button =
