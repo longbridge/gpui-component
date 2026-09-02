@@ -3675,11 +3675,11 @@ name = "gpui-fps"
 version = "0.1.0"
 dependencies = [
  "gpui",
- "instant",
  "libc",
  "objc2-core-foundation",
  "objc2-io-kit",
  "sysinfo 0.37.2",
+ "web-time",
  "windows 0.58.0",
 ]
 

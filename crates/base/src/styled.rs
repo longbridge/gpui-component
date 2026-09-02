@@ -145,7 +145,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     fn debug_blue(self) -> Self {
-        if cfg!(debug_assertions) {centred
+        if cfg!(debug_assertions) {
             self.border_1().border_color(hsl(217.2, 91.2, 59.8))
         } else {
             self

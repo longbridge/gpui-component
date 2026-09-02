@@ -37,6 +37,7 @@ mod list_settings;
 mod macos_accessibility;
 mod measure;
 pub mod motion;
+mod nav_stack;
 mod number_input;
 mod otp_input;
 mod pagination;
@@ -121,6 +122,7 @@ pub use motion::{
     Spring, SpringError, Stagger, StaggerOrigin, StepPosition, Timing, TimingSample, Transition,
     TransitionId, animate_keyframes, spring, transition, transition_with_status,
 };
+pub use nav_stack::{NavMotion, NavOperation, NavPage, NavStack, NavStackEvent, NavStackState};
 pub use number_input::{
     Decrement, Increment, NumberInput, NumberInputEvent, NumberInputText, NumberStep, StepAction,
     step_value,

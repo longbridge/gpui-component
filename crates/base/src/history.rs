@@ -8,16 +8,18 @@ pub trait HistoryItem: Clone + PartialEq {
     fn set_version(&mut self, version: usize);
 }
 
-/// The History is used to keep track of changes to a model and to allow undo and redo operations.
+/// A linear history of items with a cursor: what came before can be taken
+/// back with `undo`, and taken back again with `redo`.
 ///
-/// This is now used in Input for undo/redo operations. You can also use this in
-/// your own models to keep track of changes, for example to track the tab
-/// history for prev/next features.
+/// The items are whatever a model wants to remember. `TilesState` records
+/// tile bounds changes, so `undo` reverts a drag. A workspace can record the
+/// locations it visits, so `undo` is back and `redo` is forward. With
+/// [`unique`](Self::unique) and a cap, a history is a most-recent-first list
+/// — the stocks a user opened, say — where `push` moves a revisited item to
+/// the front.
 ///
-/// ## Use cases
-///
-/// - Undo/redo operations in Input
-/// - Tracking tab history for prev/next features
+/// Pushing after an undo starts a new branch: the undone items are dropped,
+/// as a browser drops its forward pages when a new page is opened.
 #[derive(Debug)]
 pub struct History<I: HistoryItem> {
     undos: Vec<I>,
@@ -104,9 +106,10 @@ where
         self.ignore = ignoring;
     }
 
-    /// Push a new change to the history.
+    /// Pushes an item, dropping anything that had been undone.
     pub fn push(&mut self, item: I) {
         let version = self.inc_version();
+        self.redos.clear();
 
         if self.undos.len() >= self.max_undos {
             self.undos.remove(0);
@@ -114,12 +117,37 @@ where
 
         if self.unique {
             self.undos.retain(|c| *c != item);
-            self.redos.retain(|c| *c != item);
         }
 
         let mut item = item;
         item.set_version(version);
         self.undos.push(item);
+    }
+
+    /// The most recent item, the one `undo` would take back.
+    pub fn current(&self) -> Option<&I> {
+        self.undos.last()
+    }
+
+    /// Replaces the most recent item in place, keeping its version, so the
+    /// history does not grow: a location that was recorded before it had
+    /// finished loading is corrected rather than followed by a duplicate.
+    /// Pushes when there is nothing to replace.
+    pub fn replace_current(&mut self, mut item: I) {
+        match self.undos.last_mut() {
+            Some(current) => {
+                item.set_version(current.version());
+                *current = item;
+            }
+            None => self.push(item),
+        }
+    }
+
+    /// Keeps only the items `keep` accepts, on both sides of the cursor. Use
+    /// it when items can stop being valid — a location whose tab was closed.
+    pub fn retain(&mut self, mut keep: impl FnMut(&I) -> bool) {
+        self.undos.retain(&mut keep);
+        self.redos.retain(&mut keep);
     }
 
     /// Get the undo stack.
@@ -237,17 +265,8 @@ mod tests {
 
         history.push(5.into());
 
-        let changes = history.redo().unwrap();
-        assert_eq!(changes[0].tab_index, 2);
-
-        let changes = history.redo().unwrap();
-        assert_eq!(changes[0].tab_index, 1);
-
-        let changes = history.undo().unwrap();
-        assert_eq!(changes[0].tab_index, 1);
-
-        let changes = history.undo().unwrap();
-        assert_eq!(changes[0].tab_index, 2);
+        // A push after undo starts a new branch; 2 and 1 are gone.
+        assert!(history.redo().is_none());
 
         let changes = history.undo().unwrap();
         assert_eq!(changes[0].tab_index, 5);
@@ -283,31 +302,75 @@ mod tests {
         assert_eq!(changes[0].tab_index, 1);
 
         assert_eq!(history.redos().len(), 1);
-        // Push duplicate, should be ignored
+        // A revisit moves the item to the front and drops the undone branch
         history.push(2.into());
 
         assert_eq!(history.undos().len(), 2);
-        assert_eq!(history.redos().len(), 1);
-
-        // Redo the last undone change
-        let changes = history.redo().unwrap();
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].tab_index, 1);
+        assert_eq!(history.undos().last().unwrap().tab_index, 2);
+        assert!(history.redos().is_empty());
+        assert!(history.redo().is_none());
 
         // Push another item
         history.push(3.into());
 
         // Check the version and undo stack
         assert_eq!(history.version(), 7);
-        assert_eq!(history.undos().len(), 4);
+        assert_eq!(history.undos().len(), 3);
 
         // Undo all changes
-        for _ in 0..4 {
+        for _ in 0..3 {
             history.undo();
         }
 
         // Check the undo stack is empty and redo stack has all changes
         assert_eq!(history.undos().len(), 0);
-        assert_eq!(history.redos().len(), 4);
+        assert_eq!(history.redos().len(), 3);
+    }
+
+    #[test]
+    fn revisits_keep_every_step_without_unique() {
+        let mut history: History<TabIndex> = History::new();
+        history.push(0.into());
+        history.push(1.into());
+        history.push(0.into());
+
+        assert_eq!(history.undos().len(), 3);
+        assert_eq!(history.undo().unwrap()[0].tab_index, 0);
+        assert_eq!(history.undo().unwrap()[0].tab_index, 1);
+        assert_eq!(history.current().map(|item| item.tab_index), Some(0));
+        assert!(history.undo().is_some());
+        assert!(history.undo().is_none());
+    }
+
+    #[test]
+    fn replace_current_keeps_the_version_and_the_length() {
+        let mut history: History<TabIndex> = History::new();
+        history.replace_current(7.into());
+        assert_eq!(history.undos().len(), 1);
+
+        history.push(1.into());
+        let version = history.current().unwrap().version;
+        history.replace_current(2.into());
+
+        assert_eq!(history.undos().len(), 2);
+        let current = history.current().unwrap();
+        assert_eq!(current.tab_index, 2);
+        assert_eq!(current.version, version);
+    }
+
+    #[test]
+    fn retain_prunes_both_sides_of_the_cursor() {
+        let mut history: History<TabIndex> = History::new();
+        for tab in [0, 1, 2, 3] {
+            history.push(tab.into());
+        }
+        history.undo();
+        history.undo();
+
+        history.retain(|item| item.tab_index % 2 == 0);
+
+        assert_eq!(history.current().map(|item| item.tab_index), Some(0));
+        assert_eq!(history.redos().len(), 1);
+        assert_eq!(history.redo().unwrap()[0].tab_index, 2);
     }
 }
