@@ -3420,6 +3420,14 @@ property landed. `.transition("width")` on a `.cached()` element therefore
 animates a width inside a box whose width has already jumped. Animate
 properties inside the box, and put layout motion on a child or on the parent.
 
+**A `.cached()` inside a dialog or a sheet is drawn plain.** An overlay has no
+view handle for a script to notify, so `ShellRoot` rebuilds its script view on
+every root render — from inside the draw, where a notify cannot reach the frame
+being drawn. A subtree there would need a frame scheduled for it on every
+frame, which is a loop that never settles, so overlay-mounted views are barred
+from keeping subtrees (`SubtreeCaches::disable_view`). Nothing is lost: the
+root was already materializing the overlay every frame.
+
 **A `.cached()` inside a dock panel costs the split and saves nothing.** The
 dock's tab panel mounts every panel `.cached(absolute().size_full())`
 unconditionally, and gpui's cache is one level deep: a subtree that dirties

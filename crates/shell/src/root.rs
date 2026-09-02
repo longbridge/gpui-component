@@ -416,6 +416,7 @@ impl ShellRoot {
             return;
         }
 
+        disable_subtree_caches(&content, cx);
         let focus_handle = cx.focus_handle();
         let restore_focus = window.focused(cx).map(|handle| handle.downgrade());
         focus_handle.focus(window, cx);
@@ -489,6 +490,7 @@ impl ShellRoot {
             return;
         }
 
+        disable_subtree_caches(&content, cx);
         let focus_handle = cx.focus_handle();
         let restore_focus = self
             .sheet
@@ -1141,6 +1143,27 @@ fn install_key_bindings(cx: &mut App) {
 /// script rather than from the cache.
 ///
 /// A non-script overlay owns its own state and is left alone.
+/// Bars an overlay's script view from keeping cached subtrees.
+///
+/// `rebuild_script_overlay` below rebuilds it on every root render, from
+/// inside the draw. A rebuild a view could not announce is answered by
+/// scheduling the next frame for its cached subtrees, so an overlay holding
+/// one would schedule a frame on every frame, for as long as it stayed open.
+/// A `.cached()` element inside a dialog or a sheet is drawn plain instead:
+/// the root was already paying for that materialization every frame, and the
+/// marker was buying nothing. §20.4 of `docs/gpui-shell.md` says so.
+///
+/// Called from `open_dialog_with` and `open_sheet` rather than from the
+/// engine's overlay path, because these two are the funnel every overlay
+/// passes through — a host mounting a `ScriptView` as a dialog from Rust
+/// reaches them too.
+fn disable_subtree_caches(content: &AnyView, cx: &mut App) {
+    if let Ok(view) = content.clone().downcast::<ScriptView>() {
+        let runtime = view.read(cx).runtime();
+        runtime.subtree_caches().disable_view(view.entity_id());
+    }
+}
+
 fn rebuild_script_overlay(content: &AnyView, cx: &mut App) {
     if let Ok(view) = content.clone().downcast::<ScriptView>() {
         view.update(cx, |view, _| view.invalidate());

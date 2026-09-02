@@ -795,7 +795,10 @@ fn materialize_node_inner(
             // plain, as does a `.cached()` with no id at all.
             //
             // A description with no owning view — a virtual list's row batch,
-            // a dock chrome spec — has no entity to hang a cache on either.
+            // a dock chrome spec — has no entity to hang a cache on either,
+            // and neither does a view an overlay mounts: a dialog is rebuilt
+            // from inside every draw, so it is barred from keeping subtrees
+            // (`SubtreeCaches::disable_view`).
             let owned = |key: &SharedString| {
                 snapshot.is_some_and(|snapshot| snapshot.cached_nodes().owns(key, id))
             };
@@ -803,6 +806,7 @@ fn materialize_node_inner(
                 behavior.key.clone(),
                 snapshot.and_then(RenderSnapshot::view),
             ) && owned(&key)
+                && !runtime.subtree_caches().is_disabled(view.entity_id())
             {
                 return cached_subtree(
                     runtime,

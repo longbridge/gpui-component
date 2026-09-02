@@ -5,7 +5,7 @@
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::{Rc, Weak},
 };
 
@@ -73,6 +73,9 @@ impl Render for SubtreeCache {
 #[derive(Default)]
 pub(crate) struct SubtreeCaches {
     by_view: RefCell<HashMap<EntityId, HashMap<SharedString, Entity<SubtreeCache>>>>,
+    /// Views that may not have cached subtrees at all. See
+    /// [`SubtreeCaches::disable_view`].
+    disabled: RefCell<HashSet<EntityId>>,
 }
 
 impl SubtreeCaches {
@@ -129,6 +132,34 @@ impl SubtreeCaches {
 
     pub(crate) fn remove_view(&self, view: EntityId) {
         self.by_view.borrow_mut().remove(&view);
+        // Also the exclusion: gpui hands out entity ids from a free list, so
+        // the next view to take this slot must start from a clean answer.
+        self.disabled.borrow_mut().remove(&view);
+    }
+
+    /// Bars `view` from ever mounting a cached subtree.
+    ///
+    /// One caller: an overlay. `ShellRoot::rebuild_script_overlay` invalidates
+    /// a dialog's or sheet's script view on every root render, because the
+    /// root holds no handle a script could notify and following moved state as
+    /// it draws is the only arrangement an overlay has. That rebuild therefore
+    /// always runs inside a draw, where a notify cannot reach the frame being
+    /// drawn — so `ScriptView::rebuild` answers it by scheduling the next
+    /// frame for its subtrees, and an overlay would schedule one on every
+    /// frame for as long as it stayed open. A `.cached()` element inside an
+    /// overlay is drawn plain instead, which costs a dialog-sized
+    /// materialization the root was already paying for.
+    ///
+    /// Kept here rather than on the view so materialization, which cannot
+    /// borrow the view it is rendering, can ask with the runtime it already
+    /// holds.
+    pub(crate) fn disable_view(&self, view: EntityId) {
+        self.by_view.borrow_mut().remove(&view);
+        self.disabled.borrow_mut().insert(view);
+    }
+
+    pub(crate) fn is_disabled(&self, view: EntityId) -> bool {
+        self.disabled.borrow().contains(&view)
     }
 }
 

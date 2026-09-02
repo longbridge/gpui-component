@@ -1628,3 +1628,60 @@ fn a_scrollbar_outside_a_cached_subtree_does_not_reach_the_area_inside(cx: &mut 
         "without the marker the same shapes pair: {uncached:?}"
     );
 }
+
+const CACHED_DIALOG: &str = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Body extends View {
+  render() {
+    return v_flex().id("body").size_full().cached().child("dialog body");
+  }
+}
+"#;
+
+#[gpui::test]
+fn an_overlay_view_keeps_no_cached_subtrees(cx: &mut TestAppContext) {
+    // A dialog's script view is rebuilt by `rebuild_script_overlay` on every
+    // root render, from inside the draw: the root holds no handle it could
+    // notify, so following moved state as it draws is the only arrangement an
+    // overlay has. A rebuild it could not announce answers by scheduling the
+    // next frame for its subtrees — which, once a frame, is a frame loop that
+    // never settles. Overlays keep no subtree caches at all instead.
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+    let root = context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+    let dialog = another_view(&mut context, &runtime, CACHED_DIALOG);
+    context.update(|window, cx| {
+        root.update(cx, |root, cx| {
+            root.open_dialog(dialog.clone().into(), window, cx)
+        })
+    });
+    draw_frame(&mut context);
+    draw_frame(&mut context);
+
+    assert!(
+        runtime.subtree_caches().is_disabled(dialog.entity_id()),
+        "opening the dialog barred its view from keeping subtrees"
+    );
+    assert!(
+        runtime
+            .subtree_caches()
+            .entities(dialog.entity_id())
+            .is_empty(),
+        "a .cached() element inside a dialog is drawn plain"
+    );
+    assert_eq!(
+        runtime.metrics().read().subtree_mounts(),
+        0,
+        "and is never mounted as a cached subtree"
+    );
+    assert_eq!(
+        context.update(|window, cx| window.simulate_next_frame(cx)),
+        0,
+        "an open dialog must not leave a frame outstanding on every draw"
+    );
+}
