@@ -78,6 +78,8 @@ impl Element for CarouselScrollMask {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.position = Position::Absolute;
+        style.inset.top = gpui::px(0.).into();
+        style.inset.left = gpui::px(0.).into();
         style.size.width = relative(1.).into();
         style.size.height = relative(1.).into();
         (window.request_layout(style, None, cx), ())
@@ -123,7 +125,7 @@ impl Element for CarouselScrollMask {
             window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                 if phase.capture()
                     && event.button == MouseButton::Left
-                    && hitbox_id.is_hovered(window)
+                    && hitbox_id.should_handle_scroll(window)
                 {
                     let started =
                         pointer_state.update(cx, |state, cx| state.begin_drag(event.position, cx));
@@ -255,4 +257,162 @@ impl Element for CarouselScrollMask {
 #[track_caller]
 fn caller_id() -> ElementId {
     ElementId::CodeLocation(*Location::caller())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{
+        AppContext as _, Axis, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
+        MouseButton, ParentElement as _, Render, ScrollDelta, ScrollHandle, ScrollWheelEvent,
+        StatefulInteractiveElement as _, Styled as _, TestAppContext, VisualTestContext, Window,
+        div, point, px,
+    };
+
+    use crate::{
+        button::Button,
+        carousel::{Carousel, CarouselContent, CarouselItem, CarouselState},
+    };
+
+    struct ButtonDragHarness {
+        state: Entity<CarouselState>,
+        clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for ButtonDragHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.clicks.clone();
+            Carousel::new("button-drag-carousel", &self.state)
+                .w(px(100.))
+                .h(px(40.))
+                .child(
+                    CarouselContent::new(&self.state)
+                        .h(px(40.))
+                        .child(
+                            CarouselItem::new("button-slide", 0, &self.state)
+                                .h(px(40.))
+                                .child(
+                                    Button::new("slide-button")
+                                        .w_full()
+                                        .h(px(40.))
+                                        .on_click(move |_, _, _| clicks.set(clicks.get() + 1)),
+                                ),
+                        )
+                        .child(
+                            CarouselItem::new("plain-slide", 1, &self.state)
+                                .h(px(40.))
+                                .child("Second"),
+                        ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn dragging_over_child_button_suppresses_click_without_leaving_it_pending(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2)));
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            let clicks = clicks.clone();
+            move |_, _| ButtonDragHarness { state, clicks }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(clicks.get(), 1);
+        clicks.set(0);
+
+        cx.simulate_mouse_down(
+            point(px(30.), px(10.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        assert!(state.read_with(cx, |state, _| state.is_interacting()));
+        cx.simulate_mouse_move(
+            point(px(10.), px(10.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        assert!(state.read_with(cx, |state, _| state.is_pointer_drag_locked()));
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        assert_eq!(clicks.get(), 0);
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(clicks.get(), 1);
+    }
+
+    struct NestedVerticalCarouselHarness {
+        state: Entity<CarouselState>,
+        outer_handle: ScrollHandle,
+    }
+
+    impl Render for NestedVerticalCarouselHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("outer-scroll")
+                .w(px(100.))
+                .h(px(100.))
+                .overflow_y_scroll()
+                .track_scroll(&self.outer_handle)
+                .child(
+                    Carousel::new("vertical-carousel", &self.state)
+                        .w(px(100.))
+                        .h(px(60.))
+                        .child(
+                            CarouselContent::new(&self.state)
+                                .h_full()
+                                .children((0..2).map(|index| {
+                                    CarouselItem::new(("vertical-slide", index), index, &self.state)
+                                        .child(index.to_string())
+                                })),
+                        ),
+                )
+                .child(div().w_full().h(px(400.)))
+        }
+    }
+
+    #[gpui::test]
+    fn vertical_carousel_hands_scroll_to_parent_at_edge(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| {
+            cx.new(|_| {
+                CarouselState::new(2)
+                    .with_axis(Axis::Vertical)
+                    .with_selected_index(1)
+            })
+        });
+        let outer_handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            let outer_handle = outer_handle.clone();
+            move |_, _| NestedVerticalCarouselHarness {
+                state,
+                outer_handle,
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(20.), px(20.)),
+            delta: ScrollDelta::Lines(point(0., -1.)),
+            ..Default::default()
+        });
+
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(1)
+        );
+        assert!(outer_handle.offset().y < px(0.));
+    }
 }

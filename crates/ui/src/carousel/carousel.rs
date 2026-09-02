@@ -1,4 +1,4 @@
-use std::{panic::Location, sync::Arc, time::Duration};
+use std::{panic::Location, sync::Arc};
 
 use gpui::{
     AnyElement, App, Axis, Bounds, Element, ElementId, Entity, GlobalElementId, InspectorElementId,
@@ -6,7 +6,7 @@ use gpui::{
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window,
     div, prelude::FluentBuilder as _, px,
 };
-use gpui_base::{Spring, spring};
+use gpui_base::spring;
 use rust_i18n::t;
 
 use super::{CONTEXT, scroll_mask::CarouselScrollMask, state::CarouselState};
@@ -16,9 +16,8 @@ use crate::{
     actions::{SelectDown, SelectFirst, SelectLast, SelectLeft, SelectRight, SelectUp},
     button::Button,
     icon::IconName,
+    theme::ActiveTheme as _,
 };
-
-const SNAP_SPRING: Spring = Spring::new(Duration::from_millis(250)).with_epsilon(0.5);
 
 /// A composable carousel root.
 ///
@@ -30,6 +29,7 @@ pub struct Carousel {
     state: Entity<CarouselState>,
     style: StyleRefinement,
     accessibility_label: SharedString,
+    focus_ring_enabled: bool,
     children: Vec<AnyElement>,
 }
 
@@ -45,6 +45,7 @@ impl Carousel {
             state: state.clone(),
             style: StyleRefinement::default(),
             accessibility_label: t!("Carousel.label").into(),
+            focus_ring_enabled: true,
             children: Vec::new(),
         }
     }
@@ -68,6 +69,17 @@ impl Styled for Carousel {
     }
 }
 
+impl crate::FocusableExt for Carousel {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
+    }
+}
+
 impl RenderOnce for Carousel {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let observed_state = self.state.clone();
@@ -78,13 +90,16 @@ impl RenderOnce for Carousel {
                 _subscription: cx.observe(&observed_state, |_, _, cx| cx.notify()),
             },
         );
-        let axis = self.state.read(cx).axis();
+        let snapshot = self.state.read(cx);
+        let axis = snapshot.axis();
+        let viewport_size = snapshot.viewport_size();
         let focus_handle = window
             .use_keyed_state(("carousel-focus", self.state.entity_id()), cx, |_, cx| {
                 cx.focus_handle()
             })
             .read(cx)
             .clone();
+        let focus_visible = focus_handle.is_focused(window) && self.focus_ring_enabled;
         let previous_state = self.state.clone();
         let next_state = self.state.clone();
         let first_state = self.state.clone();
@@ -140,6 +155,22 @@ impl RenderOnce for Carousel {
                 }),
             )
             .children(self.children)
+            .when(focus_visible, |this| {
+                this.when_some(viewport_size, |this, size| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .w(size.width)
+                            .h(size.height)
+                            .border_1()
+                            .border_color(cx.theme().transparent)
+                            .rounded(cx.theme().radius)
+                            .focus_ring_style(window, cx),
+                    )
+                })
+            })
             .refine_style(&self.style)
     }
 }
@@ -322,13 +353,14 @@ impl RenderOnce for CarouselContent {
                 .unwrap_or(current)
         };
         let target = if interacting { current } else { target };
+        let snap_spring = cx.theme().motion_tokens().spring_move.with_epsilon(0.5);
         let animated = spring(
             (
                 ("carousel-content", entity_id),
                 SharedString::from(format!("offset-{motion_revision}-{geometry_revision}")),
             ),
             target.as_f32(),
-            SNAP_SPRING.with_travel(!interacting),
+            snap_spring.with_travel(!interacting),
             window,
             cx,
         );
@@ -636,6 +668,7 @@ fn carousel_control(
 ) -> impl IntoElement {
     let snapshot = state.read(cx);
     let axis = snapshot.axis();
+    let viewport_size = snapshot.viewport_size();
     let disabled = if next {
         !snapshot.has_next()
     } else {
@@ -654,40 +687,50 @@ fn carousel_control(
         name.into(),
     );
 
-    Button::new(id)
-        .outline()
-        .with_size(size)
-        .when(!has_custom_content, |this| this.icon(icon))
-        .accessibility_label(label.clone())
-        .tooltip(label)
-        .disabled(disabled)
+    div()
         .absolute()
-        .rounded_full_style(cx)
-        .when(axis.is_horizontal() && !next, |this| {
-            this.right_full().mr_4().top_0().bottom_0().my_auto()
+        .top_0()
+        .left_0()
+        .when_some(viewport_size, |this, size| {
+            this.w(size.width).h(size.height)
         })
-        .when(axis.is_horizontal() && next, |this| {
-            this.left_full().ml_4().top_0().bottom_0().my_auto()
-        })
-        .when(axis.is_vertical() && !next, |this| {
-            this.bottom_full().mb_4().left_0().right_0().mx_auto()
-        })
-        .when(axis.is_vertical() && next, |this| {
-            this.top_full().mt_4().left_0().right_0().mx_auto()
-        })
-        .when(!disabled, |this| {
-            this.on_click(move |_, _, cx| {
-                state.update(cx, |state, cx| {
-                    if next {
-                        state.select_next(cx);
-                    } else {
-                        state.select_previous(cx);
-                    }
-                });
-            })
-        })
-        .children(children)
-        .refine_style(&style)
+        .when(viewport_size.is_none(), |this| this.right_0().bottom_0())
+        .child(
+            Button::new(id)
+                .outline()
+                .with_size(size)
+                .when(!has_custom_content, |this| this.icon(icon))
+                .accessibility_label(label.clone())
+                .tooltip(label)
+                .disabled(disabled)
+                .absolute()
+                .rounded_full_style(cx)
+                .when(axis.is_horizontal() && !next, |this| {
+                    this.right_full().mr_4().top_0().bottom_0().my_auto()
+                })
+                .when(axis.is_horizontal() && next, |this| {
+                    this.left_full().ml_4().top_0().bottom_0().my_auto()
+                })
+                .when(axis.is_vertical() && !next, |this| {
+                    this.bottom_full().mb_4().left_0().right_0().mx_auto()
+                })
+                .when(axis.is_vertical() && next, |this| {
+                    this.top_full().mt_4().left_0().right_0().mx_auto()
+                })
+                .when(!disabled, |this| {
+                    this.on_click(move |_, _, cx| {
+                        state.update(cx, |state, cx| {
+                            if next {
+                                state.select_next(cx);
+                            } else {
+                                state.select_previous(cx);
+                            }
+                        });
+                    })
+                })
+                .children(children)
+                .refine_style(&style),
+        )
 }
 
 /// A composable container for Carousel pagination items.
@@ -860,7 +903,8 @@ fn snap_offset(handle: &gpui::ScrollHandle, axis: Axis, index: usize) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{AppContext as _, point};
+    use gpui::{AppContext as _, Context, Render, point};
+    use gpui_base::FocusableExt as _;
 
     #[test]
     fn axis_helpers_only_change_the_requested_coordinate() {
@@ -885,6 +929,87 @@ mod tests {
                 .size,
             Size::Small
         );
+    }
+
+    #[gpui::test]
+    fn carousel_focus_ring_is_configurable(cx: &mut gpui::TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2)));
+
+        assert!(Carousel::new("carousel", &state).is_focus_ring_enabled());
+        assert!(
+            !Carousel::new("carousel", &state)
+                .focus_ring(false)
+                .is_focus_ring_enabled()
+        );
+    }
+
+    struct KeyboardHarness {
+        state: Entity<CarouselState>,
+    }
+
+    impl Render for KeyboardHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().tab_group().child(
+                Carousel::new("carousel", &self.state)
+                    .w(px(100.))
+                    .h(px(100.))
+                    .child(
+                        CarouselContent::new(&self.state)
+                            .h(px(100.))
+                            .children((0..3).map(|index| {
+                                CarouselItem::new(("carousel-item", index), index, &self.state)
+                                    .child(index.to_string())
+                            })),
+                    ),
+            )
+        }
+    }
+
+    fn assert_contextual_navigation_keys(cx: &mut gpui::TestAppContext, axis: Axis) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(3).with_axis(axis)));
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| KeyboardHarness { state }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.update(|window, cx| window.focus_next(cx));
+        let (primary, secondary) = if axis.is_horizontal() {
+            ("right", "down")
+        } else {
+            ("down", "right")
+        };
+        cx.simulate_keystrokes(primary);
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(1)
+        );
+        cx.simulate_keystrokes(secondary);
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(1)
+        );
+        cx.simulate_keystrokes("end");
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(2)
+        );
+        cx.simulate_keystrokes("home");
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(0)
+        );
+    }
+
+    #[gpui::test]
+    fn horizontal_carousel_dispatches_contextual_navigation_keys(cx: &mut gpui::TestAppContext) {
+        assert_contextual_navigation_keys(cx, Axis::Horizontal);
+    }
+
+    #[gpui::test]
+    fn vertical_carousel_dispatches_contextual_navigation_keys(cx: &mut gpui::TestAppContext) {
+        assert_contextual_navigation_keys(cx, Axis::Vertical);
     }
 
     #[gpui::test]

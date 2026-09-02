@@ -329,6 +329,10 @@ impl CarouselState {
         self.motion_revision
     }
 
+    pub(super) fn viewport_size(&self) -> Option<gpui::Size<Pixels>> {
+        self.geometry.viewport.map(|viewport| viewport.size)
+    }
+
     /// Records the viewport and item bounds used for gesture snapping.
     #[cfg(test)]
     fn set_geometry(&mut self, viewport: Bounds<Pixels>, items: Vec<Bounds<Pixels>>) {
@@ -573,7 +577,7 @@ impl CarouselState {
         if matches!(phase, TouchPhase::Started | TouchPhase::Moved) {
             self.schedule_scroll_settle(cx);
         }
-        moved || self.looping
+        moved || self.runtime_looping()
     }
 
     /// Finishes a precise trackpad gesture.  Cancelled gestures restore the
@@ -643,7 +647,7 @@ impl CarouselState {
     }
 
     fn is_loop_wrap(&self, current: usize, next: usize) -> bool {
-        self.looping
+        self.runtime_looping()
             && self.item_count > 1
             && ((current == 0 && next + 1 == self.item_count)
                 || (current + 1 == self.item_count && next == 0))
@@ -659,7 +663,7 @@ impl CarouselState {
     /// track, while allowing navigation from a controlled duplicate index to
     /// skip back over that group.
     fn navigation_index(&self, current: usize, next: bool) -> Option<usize> {
-        if self.looping || !self.geometry_is_ready() {
+        if self.runtime_looping() || !self.geometry_is_ready() {
             return self.logical_navigation_index(current, next);
         }
 
@@ -684,14 +688,14 @@ impl CarouselState {
         if next {
             if current + 1 < self.item_count {
                 Some(current + 1)
-            } else if self.looping && self.item_count > 1 {
+            } else if self.runtime_looping() && self.item_count > 1 {
                 Some(0)
             } else {
                 None
             }
         } else if current > 0 {
             Some(current - 1)
-        } else if self.looping && self.item_count > 1 {
+        } else if self.runtime_looping() && self.item_count > 1 {
             Some(self.item_count - 1)
         } else {
             None
@@ -700,6 +704,10 @@ impl CarouselState {
 
     fn geometry_is_ready(&self) -> bool {
         self.geometry.viewport.is_some() && self.geometry.items.len() == self.item_count
+    }
+
+    fn runtime_looping(&self) -> bool {
+        self.looping && (!self.geometry_is_ready() || self.loop_layout.is_some())
     }
 
     fn adjacent_loop_target(&self, current: usize, next: usize) -> Option<Point<Pixels>> {
@@ -961,7 +969,7 @@ impl CarouselState {
         cx: &mut Context<Self>,
     ) -> bool {
         let current_offset = self.scroll_handle.offset();
-        let selected = if self.looping {
+        let selected = if self.runtime_looping() {
             self.loop_boundary_index(start_index, total_delta)
                 .or_else(|| self.nearest_index(current_offset))
         } else {
@@ -1769,6 +1777,12 @@ mod tests {
 
         assert_eq!(state.loop_runway(), None);
         assert_eq!(state.loop_item_offset(0), Point::default());
+        assert!(!state.has_previous());
+        assert!(!state.has_next());
+
+        state.selected_index = Some(1);
+        assert!(!state.has_previous());
+        assert!(!state.has_next());
     }
 
     #[test]
