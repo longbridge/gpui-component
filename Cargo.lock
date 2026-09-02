@@ -7701,7 +7701,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=97c217f1421f7c9fa983ad10d0ca5d93b044f92c#97c217f1421f7c9fa983ad10d0ca5d93b044f92c"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=57bed117044bb43ec293b3628591a97ab76bdb3f#57bed117044bb43ec293b3628591a97ab76bdb3f"
 dependencies = [
  "either",
  "indexmap",
@@ -7712,7 +7712,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-core"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=97c217f1421f7c9fa983ad10d0ca5d93b044f92c#97c217f1421f7c9fa983ad10d0ca5d93b044f92c"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=57bed117044bb43ec293b3628591a97ab76bdb3f#57bed117044bb43ec293b3628591a97ab76bdb3f"
 dependencies = [
  "async-lock",
  "bytes",
@@ -7730,7 +7730,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-macro"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=97c217f1421f7c9fa983ad10d0ca5d93b044f92c#97c217f1421f7c9fa983ad10d0ca5d93b044f92c"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=57bed117044bb43ec293b3628591a97ab76bdb3f#57bed117044bb43ec293b3628591a97ab76bdb3f"
 dependencies = [
  "convert_case 0.11.0",
  "fnv",
@@ -7748,7 +7748,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-runtime"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=97c217f1421f7c9fa983ad10d0ca5d93b044f92c#97c217f1421f7c9fa983ad10d0ca5d93b044f92c"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=57bed117044bb43ec293b3628591a97ab76bdb3f#57bed117044bb43ec293b3628591a97ab76bdb3f"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -7770,7 +7770,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-sys"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=97c217f1421f7c9fa983ad10d0ca5d93b044f92c#97c217f1421f7c9fa983ad10d0ca5d93b044f92c"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=57bed117044bb43ec293b3628591a97ab76bdb3f#57bed117044bb43ec293b3628591a97ab76bdb3f"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
