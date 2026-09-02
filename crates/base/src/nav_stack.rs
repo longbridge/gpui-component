@@ -65,9 +65,9 @@ struct Transit {
 ///
 /// This is SwiftUI's `NavigationStack`, Qt's `StackView` and WinUI's
 /// `Frame`: navigation between pages. Underneath it is a [`History`] of
-/// views — the stack is the undo side, and a popped page waits on the redo
-/// side until a push discards it, which is what WinUI's `BackStack` and
-/// `ForwardStack` do.
+/// views from the root through the current page. A popped page becomes a
+/// forward entry until a push discards that forward branch, which is what
+/// WinUI's `BackStack` and `ForwardStack` do.
 ///
 /// The stack owns which view is current and the lifecycle of a change: after
 /// a push, pop or replace, the outgoing view stays mounted until the

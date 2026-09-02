@@ -6,7 +6,7 @@ order: 16
 
 # Nav Stack
 
-后进先出的视图栈，同一时刻只显示一个：把新视图 push 到当前视图之上，pop 回到下面那个，或 replace 掉栈顶。它对应 SwiftUI 的 `NavigationStack`、Qt 的 `StackView` 和 WinUI 的 `Frame`。底层是一份视图的 [History](../history.md)：栈是 undo 侧，pop 掉的页面停在 redo 侧，直到下一次 push 才丢弃，所以 `forward` 能像 WinUI 的 `GoForward` 一样把它带回来。
+后进先出的视图栈，同一时刻只显示一个：把新视图 push 到当前视图之上，pop 回到下面那个，或 replace 掉栈顶。它对应 SwiftUI 的 `NavigationStack`、Qt 的 `StackView` 和 WinUI 的 `Frame`。底层是一份视图的 [History](../history.md)，活动条目从根页面排列到当前页面。pop 掉的页面会成为前进条目，直到下一次 push 丢弃这条前进分支，所以 `forward` 能像 WinUI 的 `GoForward` 一样把它带回来。
 
 和所有 GPUI Base 原语一样，Nav Stack 只提供行为和语义结构，不规定产品视觉语言。页面是你创建的视图，页面之间怎么切换由你的 item renderer 决定。
 

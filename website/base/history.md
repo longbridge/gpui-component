@@ -31,14 +31,14 @@ assert_eq!(history.back(), Some("B"));
 assert_eq!(history.current(), Some(&"B"));
 ```
 
-`back()` never moves past the root entry; it returns `None` there. `forward()` restores the nearest entry that was left behind. Pushing a new entry after going back drops that forward branch, just as a browser does after opening a new page.
+`back()` never moves past the root entry; it returns `None` there. `forward()` restores the nearest entry that was left behind. Pushing a new entry after going back drops that forward branch, just as a browser does after opening a new page. `max_entries` bounds the root-to-current entries: lowering it removes the oldest active entries immediately, and moving forward at the limit removes the oldest active entry before restoring the next one.
 
 `entries()` iterates from the root to the current entry. With the full `A -> B -> C` trail, it yields `A`, `B`, then `C`; `entries().rev()` yields `C`, `B`, then `A`. `forward_entries()` iterates from the nearest forward entry to the furthest. Use `retain` to remove invalid locations, `replace_current` to update the current location in place, and `remove_current` to remove it without discarding the forward branch.
 
 | Method | Does |
 | --- | --- |
 | `new()` | Creates an empty trail. `max_entries` defaults to 1000. |
-| `max_entries(n)` | Caps the retained trail entries. |
+| `max_entries(n)` | Caps root-to-current entries and immediately removes the oldest excess entries. |
 | `push(entry)` | Makes `entry` current and drops the forward branch. |
 | `back()`, `forward()` | Move through the trail and return the resulting current entry. |
 | `current()` | Returns the current entry. |
@@ -68,12 +68,12 @@ assert_eq!(
 );
 ```
 
-For changes whose boundary is not explicit, `group_interval` combines consecutive pushes close enough in time. A new push clears redo transactions. While replaying changes, use `set_ignoring(true)` to prevent the replay itself from being recorded.
+For changes whose boundary is not explicit, `group_interval` combines consecutive pushes close enough in time. A successful undo or redo ends that timed grouping window, so the next push starts a new transaction. Explicit grouping is separate: while it is active, a push still appends to the current transaction, including after an undo. A new push clears redo transactions. While replaying changes, use `set_ignoring(true)` to prevent the replay itself from being recorded.
 
 | Method | Does |
 | --- | --- |
 | `new()` | Creates an empty undo history. `max_undos` defaults to 1000. |
-| `max_undos(n)` | Caps the retained undo transactions. |
+| `max_undos(n)` | Caps undo transactions and immediately removes the oldest excess transactions. Redo preserves this cap. |
 | `group_interval(duration)` | Groups consecutive nearby pushes into one transaction. |
 | `start_grouping()`, `end_grouping()` | Make subsequent pushes append to the current transaction; ending grouping stops that explicit append behavior. On an empty history, as in the example above, the first push starts the transaction. |
 | `push(change)` | Records a change in the current or a new transaction and clears redo. |

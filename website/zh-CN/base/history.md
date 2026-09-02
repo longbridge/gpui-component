@@ -31,14 +31,14 @@ assert_eq!(history.back(), Some("B"));
 assert_eq!(history.current(), Some(&"B"));
 ```
 
-`back()` 不会越过根条目，到根时返回 `None`。`forward()` 会恢复最近一个此前离开的条目。后退后再 push 新条目会丢弃前进分支，和浏览器打开新页面时的行为相同。
+`back()` 不会越过根条目，到根时返回 `None`。`forward()` 会恢复最近一个此前离开的条目。后退后再 push 新条目会丢弃前进分支，和浏览器打开新页面时的行为相同。`max_entries` 限制从根到当前的活动条目：降低上限会立即删除最旧的多余活动条目；达到上限时前进，会先删除最旧的活动条目，再恢复下一个条目。
 
 `entries()` 按从根到当前条目的顺序迭代。完整的 `A -> B -> C` 轨迹会依次得到 `A`、`B`、`C`；`entries().rev()` 则得到 `C`、`B`、`A`。`forward_entries()` 从最近的前进条目到最远的前进条目迭代。用 `retain` 删除已失效的位置，用 `replace_current` 原地更新当前的位置，用 `remove_current` 删除当前条目而不丢弃前进分支。
 
 | 方法 | 作用 |
 | --- | --- |
 | `new()` | 创建空轨迹。`max_entries` 默认是 1000。 |
-| `max_entries(n)` | 限制保留的轨迹条目数。 |
+| `max_entries(n)` | 限制从根到当前的条目数，并立即删除最旧的多余条目。 |
 | `push(entry)` | 让 `entry` 成为当前条目，并丢弃前进分支。 |
 | `back()`、`forward()` | 在轨迹中移动，返回移动后的当前条目。 |
 | `current()` | 返回当前条目。 |
@@ -68,12 +68,12 @@ assert_eq!(
 );
 ```
 
-对于边界不明确的改动，`group_interval` 会把时间间隔足够短的连续 push 合成一个事务。新的 push 会清空 redo 事务。回放改动时，用 `set_ignoring(true)` 防止回放本身被再次记录。
+对于边界不明确的改动，`group_interval` 会把时间间隔足够短的连续 push 合成一个事务。成功 undo 或 redo 会结束这段定时分组窗口，下一次 push 会创建新事务。显式分组与此独立：只要显式分组仍在进行，push 就会继续追加到当前事务，包括刚完成 undo 之后。新的 push 会清空 redo 事务。回放改动时，用 `set_ignoring(true)` 防止回放本身被再次记录。
 
 | 方法 | 作用 |
 | --- | --- |
 | `new()` | 创建空 undo 历史。`max_undos` 默认是 1000。 |
-| `max_undos(n)` | 限制保留的 undo 事务数。 |
+| `max_undos(n)` | 限制 undo 事务数并立即删除最旧的多余事务；redo 也会遵守该上限。 |
 | `group_interval(duration)` | 将相隔很近的连续 push 合并为一个事务。 |
 | `start_grouping()`、`end_grouping()` | 让后续 push 追加到当前事务；结束分组会停止这种显式追加行为。和上例一样，空历史中的第一个 push 会创建该事务。 |
 | `push(change)` | 在当前或一个新事务中记录改动，并清空 redo。 |

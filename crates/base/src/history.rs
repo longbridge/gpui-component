@@ -20,9 +20,12 @@ impl<T> History<T> {
         }
     }
 
-    /// Sets the maximum number of entries to keep, defaults to 1000.
+    /// Sets the maximum number of root-to-current entries to keep, defaults to 1000.
+    ///
+    /// Lowering the limit immediately removes the oldest entries.
     pub fn max_entries(mut self, max_entries: usize) -> Self {
         self.max_entries = max_entries;
+        self.enforce_max_entries();
         self
     }
 
@@ -32,10 +35,8 @@ impl<T> History<T> {
         if self.max_entries == 0 {
             return;
         }
-        if self.entries.len() >= self.max_entries {
-            self.entries.remove(0);
-        }
         self.entries.push(entry);
+        self.enforce_max_entries();
     }
 
     /// Returns the current entry.
@@ -83,8 +84,12 @@ impl<T> History<T> {
     where
         T: Clone,
     {
+        if self.max_entries == 0 {
+            return None;
+        }
         let entry = self.forward_entries.pop()?;
         self.entries.push(entry);
+        self.enforce_max_entries();
         self.current().cloned()
     }
 
@@ -108,6 +113,13 @@ impl<T> History<T> {
     pub fn clear(&mut self) {
         self.entries.clear();
         self.forward_entries.clear();
+    }
+
+    fn enforce_max_entries(&mut self) {
+        let excess = self.entries.len().saturating_sub(self.max_entries);
+        if excess > 0 {
+            self.entries.drain(..excess);
+        }
     }
 }
 
@@ -176,6 +188,22 @@ mod tests {
 
         assert_eq!(history.entries().copied().collect::<Vec<_>>(), [2, 3]);
         assert_eq!(history.back(), Some(2));
+        assert_eq!(history.back(), None);
+    }
+
+    #[test]
+    fn lowering_max_entries_truncates_populated_entries_and_caps_forward_restores() {
+        let mut history = History::new();
+        history.push(1);
+        history.push(2);
+        history.push(3);
+        assert_eq!(history.back(), Some(2));
+
+        history = history.max_entries(1);
+
+        assert_eq!(history.entries().copied().collect::<Vec<_>>(), [2]);
+        assert_eq!(history.forward(), Some(3));
+        assert_eq!(history.entries().copied().collect::<Vec<_>>(), [3]);
         assert_eq!(history.back(), None);
     }
 

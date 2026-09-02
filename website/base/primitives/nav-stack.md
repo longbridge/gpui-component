@@ -6,7 +6,7 @@ order: 16
 
 # Nav Stack
 
-A last-in-first-out stack of views, one visible at a time: push a view over the current one, pop back to the one below, or replace the top. It is SwiftUI's `NavigationStack`, Qt's `StackView`, and WinUI's `Frame`. Underneath it is a [History](../history.md) of views: the stack is the undo side, and a popped page waits on the redo side until the next push discards it, so `forward` brings it back the way WinUI's `GoForward` does.
+A last-in-first-out stack of views, one visible at a time: push a view over the current one, pop back to the one below, or replace the top. It is SwiftUI's `NavigationStack`, Qt's `StackView`, and WinUI's `Frame`. Underneath it is a [History](../history.md) whose active entries run from the root through the current page. A popped page becomes a forward entry until the next push discards that forward branch, so `forward` brings it back the way WinUI's `GoForward` does.
 
 Like every `gpui-base` primitive, Nav Stack supplies behavior and semantic structure without imposing a product visual language. The pages are views you create, and how a change between them moves is decided by your item renderer.
 
