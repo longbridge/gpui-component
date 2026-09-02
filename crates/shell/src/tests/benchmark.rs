@@ -25,7 +25,10 @@
 use std::{ops::Deref, time::Instant};
 
 use crate::{RenderSnapshot, ScriptView, ShellRuntime, materialize::materialize};
-use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
+use gpui::{
+    AppContext as _, Entity, IntoElement as _, ParentElement as _, Styled as _, TestAppContext,
+    VisualTestContext,
+};
 
 /// Rows and columns chosen to land near the doc's "typical panel" figure:
 /// 40 rows x 5 cells plus wrappers is ~250 nodes, each carrying 8-12 ops.
@@ -543,4 +546,164 @@ fn time_stage(runtime: &std::rc::Rc<ShellRuntime>, call: &str) -> std::time::Dur
         runtime.reset_arena_for_benchmark();
     }
     best
+}
+
+// --- What one animating panel costs among five cached ones ------------------
+//
+// `draw` above is `VisualTestContext::draw`: it lays out and paints one
+// element by hand and ends with `window.refresh()`, so it never runs
+// `Window::draw` and gpui's cached-view bookkeeping never happens. A
+// `SubtreeCache` can only be exercised by a real window draw, so this
+// benchmark mounts the script view under an uncached `Host` root and drives
+// every frame with `draw_frame` instead.
+
+struct Host(Entity<ScriptView>);
+
+impl gpui::Render for Host {
+    fn render(
+        &mut self,
+        _: &mut gpui::Window,
+        _: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        gpui::div().size_full().child(self.0.clone())
+    }
+}
+
+/// Makes `view` the window's content under an uncached `Host` root.
+fn mount(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+    let view = view.clone();
+    context.update(|window, cx| window.replace_root(cx, |_, _| Host(view)));
+}
+
+/// One real window frame: `Window::draw`, with gpui's cached-view
+/// bookkeeping, which `render_once` (an element drawn by hand) skips.
+fn draw_frame(context: &mut VisualTestContext) {
+    context.update(|window, cx| window.draw(cx).clear(cx));
+}
+
+const PANELS: usize = 5;
+
+const PANELS_TEMPLATE: &str = r#"
+import { View, div } from "gpui";
+import { v_flex, h_flex, Checkbox } from "gpui-base";
+
+export default class Panels extends View {
+  init() {
+    this.rows = __ROWS__;
+    this.columns = __COLUMNS__;
+    this.expanded = false;
+  }
+  cell(panel, row, column) {
+    return div().w(60).h(20).px(4).text_sm().child(`${panel}:${row}:${column}`);
+  }
+  panel(panel) {
+    const rows = [];
+    for (let row = 0; row < this.rows; row += 1) {
+      const cells = [];
+      for (let column = 0; column < this.columns; column += 1) {
+        cells.push(this.cell(panel, row, column));
+      }
+      rows.push(h_flex().gap(4).children(cells));
+    }
+    const body = v_flex().id(`panel-${panel}`).flex_1().min_h(0).cached().children(rows);
+    if (panel === 0) {
+      body.child(
+        div()
+          .id("bar")
+          .w(this.expanded ? 240 : 40)
+          .h(6)
+          .transition("width", { duration: 200 }),
+      );
+    }
+    return body;
+  }
+  render(cx) {
+    const panels = [];
+    for (let panel = 0; panel < __PANELS__; panel += 1) {
+      panels.push(this.panel(panel));
+    }
+    return h_flex()
+      .size_full()
+      .children(panels)
+      .child(
+        Checkbox.new("expand").on_change((expanded, cx) => {
+          this.expanded = expanded;
+          cx.notify();
+        }),
+      );
+  }
+}
+"#;
+
+#[gpui::test]
+fn animating_one_of_five_cached_panels_costs_one_panel(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = PANELS_TEMPLATE
+        .replace("__ROWS__", "40")
+        .replace("__COLUMNS__", "2")
+        .replace("__PANELS__", &PANELS.to_string());
+    let view_type = runtime.load_source("panels.js", &source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context.update(|window, cx| {
+        let object = runtime
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        cx.new(|_| ScriptView::new(runtime.clone(), object))
+    });
+
+    mount(&mut context, &view);
+    draw_frame(&mut context);
+    let callback = context.update(|_, cx| {
+        let snapshot = view.read(cx).snapshot().expect("published").clone();
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .flat_map(|node| node.ops())
+            .find_map(|op| match op {
+                crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                _ => None,
+            })
+            .expect("the checkbox registers on_change")
+    });
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw_frame(&mut context);
+
+    let before = runtime.metrics().read();
+    let started = Instant::now();
+    for _ in 0..ITERATIONS {
+        context
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(2));
+        // Not followed by `draw_frame`: in test builds, `App::flush_effects`
+        // draws every dirty window once its pending effects drain, and the
+        // callback this runs dirties the window via `cx.notify`. That
+        // auto-draw *is* the frame this loop is driving; an explicit
+        // `draw_frame` here would be a second, redundant real draw of the
+        // same animation frame and would double every per-draw count below.
+        context.update(|window, cx| window.simulate_next_frame(cx));
+    }
+    let per_frame = started.elapsed() / ITERATIONS as u32;
+    let during = runtime.metrics().read().since(&before);
+
+    println!(
+        "\n[E] one animating panel of {PANELS}: {ITERATIONS} frames — {:.3} ms per frame, \
+         {} subtree rebuilds, {} subtree reuses, {} script renders\n",
+        per_frame.as_secs_f64() * 1000.0,
+        during.subtree_rebuilds(),
+        during.subtree_reuses(),
+        during.script_renders(),
+    );
+
+    assert_eq!(during.script_renders(), 0);
+    assert_eq!(
+        during.subtree_rebuilds(),
+        ITERATIONS as u64,
+        "one panel animates, so one subtree rebuilds per frame"
+    );
+    assert_eq!(
+        during.subtree_reuses(),
+        (PANELS as u64 - 1) * ITERATIONS as u64
+    );
 }
