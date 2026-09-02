@@ -1449,6 +1449,21 @@ impl ShellRuntime {
         Self::new_isolated_with_components_and_dependency_store(
             FrozenComponentRegistry::default(),
             GitDependencyStore::for_user()?,
+            shell_jit_config()?,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_isolated_interpreter() -> Result<Rc<Self>> {
+        let config = JitConfig::builder()
+            .call_threshold(u32::MAX)
+            .loop_threshold(u32::MAX)
+            .build()
+            .map_err(|error| anyhow!("invalid interpreter-only JIT configuration: {error}"))?;
+        Self::new_isolated_with_components_and_dependency_store(
+            FrozenComponentRegistry::default(),
+            GitDependencyStore::for_user()?,
+            config,
         )
     }
 
@@ -1456,6 +1471,7 @@ impl ShellRuntime {
         Self::new_isolated_with_components_and_dependency_store(
             components,
             GitDependencyStore::for_user()?,
+            shell_jit_config()?,
         )
     }
 
@@ -1466,17 +1482,19 @@ impl ShellRuntime {
         Self::new_isolated_with_components_and_dependency_store(
             FrozenComponentRegistry::default(),
             dependency_store,
+            shell_jit_config()?,
         )
     }
 
     fn new_isolated_with_components_and_dependency_store(
         components: FrozenComponentRegistry,
         dependency_store: GitDependencyStore,
+        jit_config: JitConfig,
     ) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JitRuntime::builder()
-            .config(shell_jit_config()?)
+            .config(jit_config)
             .build()
             .map_err(|error| anyhow!("failed to start the JavaScript JIT runtime: {error}"))?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
@@ -1851,6 +1869,13 @@ impl ShellRuntime {
     #[cfg(test)]
     pub(crate) fn reset_arena_for_benchmark(&self) {
         self.arena.borrow_mut().reset();
+    }
+
+    /// Returns JIT diagnostic counters for the real-process acceptance
+    /// benchmark.
+    #[cfg(test)]
+    pub(crate) fn jit_metrics_for_benchmark(&self) -> rquickjs_jit::JitMetrics {
+        self.js_runtime.metrics()
     }
 
     /// A reading of the two counters, taken now.

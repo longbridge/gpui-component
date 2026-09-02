@@ -152,6 +152,11 @@ cap-std = { opt-level = 3 }
 # `rquickjs`. Route those dependencies through a source-compatible facade so
 # the shell and LLRT share the exact same quickjs-jit types and VM.
 rquickjs = { path = "crates/rquickjs-compat" }
+quickjs-jit = { git = "https://github.com/longbridge/quickjs-jit", rev = "29d66efd0fcd050ad1275016b3032d586a341ec1" }
+quickjs-jit-core = { git = "https://github.com/longbridge/quickjs-jit", rev = "29d66efd0fcd050ad1275016b3032d586a341ec1" }
+quickjs-jit-macro = { git = "https://github.com/longbridge/quickjs-jit", rev = "29d66efd0fcd050ad1275016b3032d586a341ec1" }
+quickjs-jit-runtime = { git = "https://github.com/longbridge/quickjs-jit", rev = "29d66efd0fcd050ad1275016b3032d586a341ec1" }
+quickjs-jit-sys = { git = "https://github.com/longbridge/quickjs-jit", rev = "29d66efd0fcd050ad1275016b3032d586a341ec1" }
 
 [workspace.metadata.typos]
 files.extend-exclude = ["**/fixtures/*"]

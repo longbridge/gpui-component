@@ -90,6 +90,32 @@ export default class Grid extends View {
 }
 "#;
 
+#[cfg(not(debug_assertions))]
+const COMPUTE_TEMPLATE: &str = r#"
+import { View, div } from "gpui";
+
+function layoutKernel(batches, seed) {
+  let checksum = seed;
+  for (let batch = 0; batch < batches; batch += 1) {
+    let a = 0;
+    let b = 1;
+    for (let i = 0; i < 40; i += 1) {
+      const next = a + b;
+      a = b;
+      b = next;
+    }
+    checksum = b;
+  }
+  return checksum;
+}
+
+export default class NumericLayout extends View {
+  render(cx) {
+    return div().child(`layout:${layoutKernel(2000, 0)}`);
+  }
+}
+"#;
+
 const _: () = assert!(ROWS > 0 && COLUMNS > 0);
 
 fn source(rows: usize, columns: usize) -> String {
@@ -135,11 +161,100 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
         per_build.as_nanos() as usize / ops.max(1),
     );
 
+    let jit = runtime.jit_metrics_for_benchmark();
+    println!(
+        "[A/JIT] enabled={} queued={} failures={} unsupported={} tier1_rejections={} \
+         resource_limits={} cancelled={} panics={} invalid_artifacts={} install_failures={} \
+         installed={} native_entries={} pending_jobs={}",
+        jit.native_enabled(),
+        jit.queued,
+        jit.compile_failures,
+        jit.unsupported_opcode_failures,
+        jit.tier1_rejections,
+        jit.resource_limit_failures,
+        jit.cancelled_compilations,
+        jit.compiler_panics,
+        jit.invalid_artifacts,
+        jit.install_failures,
+        jit.installed,
+        jit.native_entries,
+        jit.pending_worker_jobs,
+    );
+    let categorized_failures = jit
+        .unsupported_opcode_failures
+        .saturating_add(jit.tier1_rejections)
+        .saturating_add(jit.resource_limit_failures)
+        .saturating_add(jit.cancelled_compilations)
+        .saturating_add(jit.compiler_panics)
+        .saturating_add(jit.invalid_artifacts)
+        .saturating_add(jit.install_failures);
+    assert!(
+        jit.compile_failures == 0 || categorized_failures > 0,
+        "aggregate JIT failures had no diagnostic category: {jit:?}"
+    );
+
     // A smoke bound, not the real gate: the doc's 1.5 ms budget is for a
     // release build, and this assertion has to hold in debug too.
     assert!(
         per_build.as_millis() < 200,
         "describing {nodes} nodes took {per_build:?}, which is far outside any budget"
+    );
+}
+
+#[gpui::test]
+#[cfg(not(debug_assertions))]
+fn numeric_layout_installs_and_enters_native_code(cx: &mut TestAppContext) {
+    let (runtime, mut context, object) = runtime_with_source(cx, COMPUTE_TEMPLATE, false);
+    let mut tree = String::new();
+    let mut automatic_renders = 0;
+
+    for _ in 0..1_000 {
+        let snapshot = context.update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("numeric render")
+        });
+        tree = snapshot.debug_tree();
+        automatic_renders += 1;
+        if runtime.jit_metrics_for_benchmark().native_entries > 0 {
+            break;
+        }
+    }
+
+    let (interpreter, mut interpreter_context, interpreter_object) =
+        runtime_with_source(cx, COMPUTE_TEMPLATE, true);
+    let mut interpreted_tree = String::new();
+    for _ in 0..automatic_renders {
+        interpreted_tree = interpreter_context
+            .update(|window, cx| {
+                interpreter
+                    .build_snapshot(
+                        &interpreter_object,
+                        None,
+                        crate::policy::default(),
+                        window,
+                        cx,
+                    )
+                    .expect("interpreter numeric render")
+            })
+            .debug_tree();
+    }
+
+    let jit = runtime.jit_metrics_for_benchmark();
+    println!("\n[N/JIT] {jit:#?}");
+    assert_eq!(tree, interpreted_tree);
+    assert_eq!(
+        runtime.read_metrics().script_renders(),
+        interpreter.read_metrics().script_renders()
+    );
+    assert!(tree.contains("layout:165580141"), "{tree}");
+    assert!(
+        jit.installed > 0,
+        "numeric layout installed no artifact: {jit:?}"
+    );
+    assert!(
+        jit.native_entries > 0,
+        "numeric layout never entered native code: {jit:?}"
     );
 }
 
@@ -325,14 +440,28 @@ fn grid(
     VisualTestContext,
     crate::engine::ViewObject,
 ) {
+    runtime_with_source(cx, &source(rows, columns), false)
+}
+
+fn runtime_with_source(
+    cx: &mut TestAppContext,
+    source: &str,
+    interpreter: bool,
+) -> (
+    std::rc::Rc<ShellRuntime>,
+    VisualTestContext,
+    crate::engine::ViewObject,
+) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let runtime = if interpreter {
+        ShellRuntime::new_isolated_interpreter().expect("interpreter runtime")
+    } else {
+        ShellRuntime::new_isolated().expect("automatic JIT runtime")
+    };
     cx.update(|cx| runtime.set_global(cx));
 
-    let view_type = runtime
-        .load_source("grid", &source(rows, columns))
-        .expect("load");
+    let view_type = runtime.load_source("benchmark-view", source).expect("load");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);

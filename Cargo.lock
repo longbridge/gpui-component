@@ -7700,9 +7700,8 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0121b4126097ef775b072908b796b8ed49e833a0f538261e45745d454a3a4d"
+version = "0.12.5"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=29d66efd0fcd050ad1275016b3032d586a341ec1#29d66efd0fcd050ad1275016b3032d586a341ec1"
 dependencies = [
  "either",
  "indexmap",
@@ -7712,9 +7711,8 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-core"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89c1506dcc05dfb0cd829307c862cc01e288a2547d0c930ff0f5cf711244e8a7"
+version = "0.12.5"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=29d66efd0fcd050ad1275016b3032d586a341ec1#29d66efd0fcd050ad1275016b3032d586a341ec1"
 dependencies = [
  "async-lock",
  "bytes",
@@ -7731,9 +7729,8 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-macro"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d75791c68333ce296643dabfc9b6c97fff7257d3395f7b92cdfef25ee6ef46f"
+version = "0.12.5"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=29d66efd0fcd050ad1275016b3032d586a341ec1#29d66efd0fcd050ad1275016b3032d586a341ec1"
 dependencies = [
  "convert_case 0.11.0",
  "fnv",
@@ -7750,9 +7747,8 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-runtime"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ec3b83d7fc220d2cacc3380db73ff4f1ea2c5039d450041212a6d5e87e6f89c"
+version = "0.12.5"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=29d66efd0fcd050ad1275016b3032d586a341ec1#29d66efd0fcd050ad1275016b3032d586a341ec1"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -7773,9 +7769,8 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-sys"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "941b0d1cd92be3b47f6c2022a1ce96d2afa208a0b7e9d5852cb82707bcfd0edb"
+version = "0.12.5"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=29d66efd0fcd050ad1275016b3032d586a341ec1#29d66efd0fcd050ad1275016b3032d586a341ec1"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
