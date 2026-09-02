@@ -324,6 +324,19 @@ Async work 从 event、lifecycle hook 或具名 method 启动，不能作为 `re
 
 ## 布局、测量与滚动
 
+`h_flex` 会让子元素在交叉轴上居中；`v_flex` 保持 flexbox 的默认值 `stretch`。这与 Zed 的 `h_flex` 一致，
+也是一排控件想要的效果，所以图标加文字的一行什么都不用写。但一排等高的列不是这样：直接放进 `h_flex` 的列不会
+填满行的高度，比行更高的列会被居中，于是它的顶部（通常是 header）被裁到窗口之外，而列附近的代码看不出原因。
+子元素是列的一行，请显式写 `items_stretch()`：
+
+```rust
+h_flex()
+    .items_stretch()
+    .size_full()
+    .child(sidebar)
+    .child(content)
+```
+
 大多数 UI 使用 GPUI layout，不应自行 measurement。Measurement 是 popup、virtualization、editor、resize handle、chart 等依赖 resolved geometry 行为的深层工具。
 
 - measurement 与 geometry 放在拥有行为的层；

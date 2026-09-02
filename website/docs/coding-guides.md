@@ -510,6 +510,22 @@ or identity and reject stale work rather than applying it to new state.
 
 ## Layout, measurement, and scrolling
 
+`h_flex` centres its children on the cross axis; `v_flex` leaves flexbox's
+default, `stretch`. This matches Zed's `h_flex`, and it is what a row of
+controls wants, so a row of icon and label says nothing. It is not what a row
+of full-height columns wants: a column placed in a bare `h_flex` does not fill
+the row's height, so a column taller than the row is centred and its top —
+commonly a header — is clipped off the top of the window, with nothing near the
+column to say why. A row whose children are columns says `items_stretch()`:
+
+```rust
+h_flex()
+    .items_stretch()
+    .size_full()
+    .child(sidebar)
+    .child(content)
+```
+
 Most UI should use GPUI layout rather than measuring itself. Measurement is a
 deep behavior tool for popups, virtualization, editors, resize handles, charts,
 and similar components whose correctness depends on resolved geometry.
