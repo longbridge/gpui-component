@@ -152,11 +152,11 @@ cap-std = { opt-level = 3 }
 # `rquickjs`. Route those dependencies through a source-compatible facade so
 # the shell and LLRT share the exact same quickjs-jit types and VM.
 rquickjs = { path = "crates/rquickjs-compat" }
-quickjs-jit = { git = "https://github.com/longbridge/quickjs-jit", rev = "1f12263e6917ad147efdf010045f0b9bf1ddcec5" }
-quickjs-jit-core = { git = "https://github.com/longbridge/quickjs-jit", rev = "1f12263e6917ad147efdf010045f0b9bf1ddcec5" }
-quickjs-jit-macro = { git = "https://github.com/longbridge/quickjs-jit", rev = "1f12263e6917ad147efdf010045f0b9bf1ddcec5" }
-quickjs-jit-runtime = { git = "https://github.com/longbridge/quickjs-jit", rev = "1f12263e6917ad147efdf010045f0b9bf1ddcec5" }
-quickjs-jit-sys = { git = "https://github.com/longbridge/quickjs-jit", rev = "1f12263e6917ad147efdf010045f0b9bf1ddcec5" }
+quickjs-jit = { git = "https://github.com/longbridge/quickjs-jit", rev = "97c217f1421f7c9fa983ad10d0ca5d93b044f92c" }
+quickjs-jit-core = { git = "https://github.com/longbridge/quickjs-jit", rev = "97c217f1421f7c9fa983ad10d0ca5d93b044f92c" }
+quickjs-jit-macro = { git = "https://github.com/longbridge/quickjs-jit", rev = "97c217f1421f7c9fa983ad10d0ca5d93b044f92c" }
+quickjs-jit-runtime = { git = "https://github.com/longbridge/quickjs-jit", rev = "97c217f1421f7c9fa983ad10d0ca5d93b044f92c" }
+quickjs-jit-sys = { git = "https://github.com/longbridge/quickjs-jit", rev = "97c217f1421f7c9fa983ad10d0ca5d93b044f92c" }
 
 [workspace.metadata.typos]
 files.extend-exclude = ["**/fixtures/*"]
