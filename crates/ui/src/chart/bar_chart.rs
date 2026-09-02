@@ -1,4 +1,4 @@
-use std::{ops::RangeInclusive, rc::Rc};
+use std::{hash::Hash, ops::RangeInclusive, rc::Rc};
 
 use gpui::{
     AnyElement, App, Background, Bounds, Corners, ElementId, Hsla, IntoElement, LinearColorStop,
@@ -31,7 +31,7 @@ const VALUE_AXIS_GAP: f32 = 32.;
 pub struct BarChart<T, B, V>
 where
     T: 'static,
-    B: PartialEq + Into<SharedString> + 'static,
+    B: Eq + Hash + Into<SharedString> + 'static,
     V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     data: Vec<T>,
@@ -55,7 +55,7 @@ where
 
 impl<T, B, V> BarChart<T, B, V>
 where
-    B: PartialEq + Into<SharedString> + 'static,
+    B: Eq + Hash + Into<SharedString> + 'static,
     V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     pub fn new<I>(data: I) -> Self
@@ -323,7 +323,7 @@ where
 
 impl<T, B, V> Plot for BarChart<T, B, V>
 where
-    B: PartialEq + Into<SharedString> + 'static,
+    B: Eq + Hash + Into<SharedString> + 'static,
     V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {

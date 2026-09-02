@@ -1,14 +1,14 @@
 ---
 title: API Reference
 description: Every name a script can import or reach — the four built-in modules, the cx and window globals, and the element methods that are not styles.
-order: 9
+order: 10
 ---
 
 # API Reference
 
 An inventory of the script surface: what exists, and which module it comes from. The other pages explain why each thing works the way it does — this one is for looking a name up.
 
-The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's HostModule registrations. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it.
+The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's HostModule registrations. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it. The manifest's Git dependencies are not listed here either: they are linked into `node_modules` by the same refresh, and their names, signatures and documentation come from the packages themselves. See [Dependencies](./dependencies.md).
 
 ## The modules
 

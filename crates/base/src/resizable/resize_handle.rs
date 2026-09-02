@@ -205,6 +205,10 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
                         })
                         .unwrap_or_else(|| {
                             div()
+                                // The handle's border box is HANDLE_SIZE wide but
+                                // padded by HANDLE_PADDING, so its content area is
+                                // zero and a shrinkable child collapses with it.
+                                .flex_none()
                                 .bg(bg_color)
                                 .group_hover("handle", |this| this.bg(bg_color))
                                 .when(axis.is_horizontal(), |this| this.h_full().w(HANDLE_SIZE))

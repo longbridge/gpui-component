@@ -35,6 +35,7 @@ use crate::materialize::{
     Behavior, Children, SlotSpecs, StateStyles, materialize_children, resolve_slot, take_slot_spec,
     warn_unhonoured_a11y,
 };
+use crate::snapshot::RenderSnapshot;
 use crate::spec::{Component, SpecArena, SpecId};
 
 /// The accordion root: a group holding items, and nothing else.
@@ -55,6 +56,7 @@ pub(in crate::materialize) fn accordion(
 #[allow(clippy::too_many_arguments)]
 pub(in crate::materialize) fn accordion_item(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     inherited: gpui::Hsla,
     refinement: StyleRefinement,
@@ -95,11 +97,14 @@ pub(in crate::materialize) fn accordion_item(
         .open(open)
         .disabled(behavior.disabled)
         .when_some(
-            header.map(|slot| accordion_header(runtime, arena, slot, inherited, window, cx)),
+            header.map(|slot| {
+                accordion_header(runtime, snapshot, arena, slot, inherited, window, cx)
+            }),
             AccordionItem::header,
         )
         .when_some(
-            panel.map(|slot| accordion_panel(runtime, arena, slot, inherited, window, cx)),
+            panel
+                .map(|slot| accordion_panel(runtime, snapshot, arena, slot, inherited, window, cx)),
             AccordionItem::panel,
         );
     element.style().refine(&refinement);
@@ -110,6 +115,7 @@ pub(in crate::materialize) fn accordion_item(
 /// The heading, rebuilt around the trigger in its own slot.
 fn accordion_header(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     slot: SpecId,
     inherited: gpui::Hsla,
@@ -130,7 +136,7 @@ fn accordion_header(
     let (refinement, behavior, mut slots) =
         resolve_slot(arena, slot, "AccordionHeader", window, cx);
     let trigger = take_slot_spec(&mut slots, "trigger")
-        .map(|slot| accordion_trigger(runtime, arena, slot, inherited, window, cx))
+        .map(|slot| accordion_trigger(runtime, snapshot, arena, slot, inherited, window, cx))
         // `AccordionHeader::new` takes a trigger and there is no way not to
         // give it one, so a header built without one gets an empty button
         // rather than the whole item disappearing.
@@ -146,7 +152,7 @@ fn accordion_header(
     }
     header.style().refine(&refinement);
     header.extend(materialize_children(
-        runtime, arena, slot, inherited, window, cx,
+        runtime, snapshot, arena, slot, inherited, window, cx,
     ));
     header
 }
@@ -154,6 +160,7 @@ fn accordion_header(
 /// The button, rebuilt with the handler that asks for the other state.
 fn accordion_trigger(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     slot: SpecId,
     inherited: gpui::Hsla,
@@ -194,7 +201,7 @@ fn accordion_trigger(
     }
     trigger.style().refine(&refinement);
     trigger.extend(materialize_children(
-        runtime, arena, slot, inherited, window, cx,
+        runtime, snapshot, arena, slot, inherited, window, cx,
     ));
     trigger
 }
@@ -202,6 +209,7 @@ fn accordion_trigger(
 /// The region, rebuilt from its description.
 fn accordion_panel(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     slot: SpecId,
     inherited: gpui::Hsla,
@@ -232,7 +240,7 @@ fn accordion_panel(
     }
     panel.style().refine(&refinement);
     panel.extend(materialize_children(
-        runtime, arena, slot, inherited, window, cx,
+        runtime, snapshot, arena, slot, inherited, window, cx,
     ));
     panel
 }

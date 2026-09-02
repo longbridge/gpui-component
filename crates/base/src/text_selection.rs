@@ -7,9 +7,10 @@ use std::{
 
 use gpui::{
     App, AppContext as _, Bounds, Context, Element, ElementId, Entity, EntityId, EventEmitter,
-    Global, GlobalElementId, Half, Hitbox, InspectorElementId, IntoElement, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollWheelEvent, SharedString,
-    Style, Subscription, TextLayout, WeakEntity, Window,
+    Global, GlobalElementId, Half, Hitbox, InputEvent as _, InspectorElementId, IntoElement,
+    LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    ScrollDelta, ScrollWheelEvent, SharedString, Style, Subscription, TextLayout, WeakEntity,
+    Window, point, px,
 };
 
 use crate::text_boundary::{line_range_at, word_range_at};
@@ -832,6 +833,7 @@ struct WindowSelectionState {
     frame_generation: u64,
     finish_frame_scheduled: bool,
     mouse_down_prepared: bool,
+    auto_scroll: AutoScroll,
 }
 
 impl WindowSelectionState {
@@ -1132,8 +1134,16 @@ impl WindowSelectionState {
         self.begin_impl(position, extend, true, Some(window), cx);
     }
 
-    fn update_in_window(&mut self, position: Point<Pixels>, window: &Window, cx: &mut App) {
-        self.update_in_window_with_active_drag(position, cx.has_active_drag(), window, cx);
+    fn update_in_window(
+        &mut self,
+        position: Point<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !cx.has_active_drag() {
+            self.update_impl(position, Some(window), cx);
+            self.update_auto_scroll(position, Some(window), cx);
+        }
     }
 
     fn select_at(
@@ -1188,6 +1198,7 @@ impl WindowSelectionState {
         self.publish_snapshots(cx);
     }
 
+    #[cfg(test)]
     fn update_in_window_with_active_drag(
         &mut self,
         position: Point<Pixels>,
@@ -1249,7 +1260,9 @@ impl WindowSelectionState {
         let endpoint = self.endpoint(position, window, cx);
         self.did_hit_text |= endpoint.inside_text;
         self.cursor = Some(endpoint);
-        self.update_anchor_auto_scroll(position, cx);
+        if window.is_none() {
+            self.update_participant_auto_scroll(position, cx);
+        }
         self.publish_snapshots(cx);
     }
 
@@ -1439,7 +1452,75 @@ impl WindowSelectionState {
             || id == cursor
     }
 
-    fn update_anchor_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
+    fn update_auto_scroll(
+        &mut self,
+        position: Point<Pixels>,
+        window: Option<&Window>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(anchor) = self.anchor.as_ref().filter(|anchor| anchor.inside) else {
+            return;
+        };
+        let Some(participant) = anchor.participant.as_ref().and_then(WeakEntity::upgrade) else {
+            return;
+        };
+        let Some(registration) = self.participants.get(&participant.entity_id()) else {
+            return;
+        };
+        // The content mask is the nearest clipping viewport established by a
+        // scrollable ancestor. It remains stable as the participant itself
+        // moves, so selection keeps scrolling the same related region even
+        // after the anchor text has moved out of view.
+        let visible_bounds = registration.registration.hitbox.content_mask.bounds;
+        // Keeps the synthesized wheel event hit-testing inside the mask.
+        const HIT_TEST_INSET: Pixels = px(1.);
+        // A collapsed mask leaves an empty clamp range below — stop.
+        if visible_bounds.size.width < HIT_TEST_INSET * 2.
+            || visible_bounds.size.height < HIT_TEST_INSET * 2.
+        {
+            self.stop_anchor_auto_scroll(cx);
+            return;
+        }
+        let delta = AutoScroll::compute_delta(position.y, visible_bounds);
+        let Some(window) = window else {
+            participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
+            return;
+        };
+
+        let event_position = point(
+            position.x.clamp(
+                visible_bounds.left() + HIT_TEST_INSET,
+                visible_bounds.right() - HIT_TEST_INSET,
+            ),
+            position.y.clamp(
+                visible_bounds.top() + HIT_TEST_INSET,
+                visible_bounds.bottom() - HIT_TEST_INSET,
+            ),
+        );
+        self.auto_scroll.last_drag_position = Some(event_position);
+        let window = window.window_handle();
+        self.auto_scroll.set(delta, cx, move |delta, state, cx| {
+            let Some(position) = state.auto_scroll.last_drag_position else {
+                return;
+            };
+            let window = window;
+            cx.defer(move |cx| {
+                _ = window.update(cx, |_, window, cx| {
+                    window.dispatch_event(
+                        ScrollWheelEvent {
+                            position,
+                            delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                            ..Default::default()
+                        }
+                        .to_platform_input(),
+                        cx,
+                    );
+                });
+            });
+        });
+    }
+
+    fn update_participant_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
         let Some(anchor) = self.anchor.as_ref().filter(|anchor| anchor.inside) else {
             return;
         };
@@ -1453,7 +1534,8 @@ impl WindowSelectionState {
         participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
     }
 
-    fn stop_anchor_auto_scroll(&self, cx: &mut App) {
+    fn stop_anchor_auto_scroll(&mut self, cx: &mut App) {
+        self.auto_scroll.stop();
         let Some(participant) = self
             .anchor
             .as_ref()
@@ -1735,6 +1817,13 @@ impl Element for TextSelectionLayer {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        // Automatic participant order is paint order within this frame. Keep
+        // this lifecycle in base so base-only applications do not need a
+        // separate root component to reset it. Otherwise, registering the
+        // first of two selected TextViews temporarily reverses their order
+        // against the previous frame and alternates coverage forever.
+        GlobalState::init(cx);
+        GlobalState::global_mut(cx).begin_selection_frame();
         TextSelectionLayerPrepaintState(retain_text_selection_state(global_id, window, cx))
     }
 
@@ -1777,7 +1866,7 @@ fn retain_text_selection_state(
 fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Window, cx: &mut App) {
     if state.update(cx, |state, _| state.schedule_finish_frame()) {
         let state = state.downgrade();
-        window.on_next_frame(move |_, cx| {
+        window.defer(cx, move |_, cx| {
             let Some(state) = state.upgrade() else {
                 return;
             };
@@ -3016,6 +3105,45 @@ mod tests {
     }
 
     #[gpui::test]
+    fn drag_auto_scroll_stops_when_the_content_mask_collapses(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, cx| WindowSelectionView {
+            selection: TextSelectionHandle::new("unused", cx),
+        });
+        window
+            .update(cx, |_, window, cx| {
+                let state = cx.new(|_| WindowSelectionState::default());
+                let participant = FakeParticipant::new("participant", cx);
+                state.update(cx, |state, cx| {
+                    participant.register(state, 0., TextSelectionScopeId::default(), 0, cx);
+                    state.begin(point(px(1.), px(1.)), false, cx);
+                });
+                // The scrollable ancestor got clipped away mid-drag, so the
+                // refreshed registration carries a collapsed content mask.
+                let collapsed = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(0.)));
+                state.update(cx, |state, cx| {
+                    state.register_participant(
+                        participant.selection.clone(),
+                        TextSelectionRegistration::new(
+                            Hitbox {
+                                id: HitboxId::placeholder(),
+                                bounds: collapsed,
+                                content_mask: ContentMask { bounds: collapsed },
+                                behavior: HitboxBehavior::Normal,
+                            },
+                            collapsed,
+                        )
+                        .with_text_bounds(vec![collapsed]),
+                        cx,
+                    );
+                    state.update_in_window(point(px(1.), px(50.)), window, cx);
+                    assert!(!state.auto_scroll.is_active());
+                    assert!(state.auto_scroll.last_drag_position.is_none());
+                });
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
     fn proxy_endpoints_break_equal_position_ties_by_document_order(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let mut selection_state = WindowSelectionState::default();
@@ -3207,7 +3335,6 @@ mod tests {
         let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
         cx.update(|window, cx| {
             let _ = window.draw(cx);
-            assert!(window.simulate_next_frame(cx) > 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert!(live_text_selection_state(window, cx).is_some());

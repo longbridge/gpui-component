@@ -535,10 +535,22 @@ measured correction as a raw `px(...)` nudge. Trace the mismatch to duplicated
 padding, nested insets, border ownership, font metrics, or rounding, then fix
 the structural owner.
 
+`h_flex()` and `v_flex()` are not mirror images: `h_flex()` centers its
+children on the cross axis, `v_flex()` leaves them stretching. A column placed
+in a row therefore takes its content's height, not the row's, and a column
+taller than the row is centered — its header is pushed off the top edge and
+clipped. Give a full-height column `h_full()`, or give the row `items_start()`
+or `items_stretch()`, whenever the child owns a header, a footer, or a scroll
+region that must resolve against the row's height.
+
 Every scrollable region must have one owner. In flex layouts, apply
 `min_w_0()` or `min_h_0()` to the flexible child that is allowed to shrink.
-Avoid accidental nested scrolling; route wheel input to the intended axis and
-preserve platform/wasm differences when an API is not portable.
+A flex item only drops its content-based automatic minimum size when its own
+overflow is not visible, so an ordinary flexible child refuses to shrink around
+long content until you say so. `Scrollable` handles this for its own wrapper,
+but a plain `div` between it and the flex container still needs the minimum
+released. Avoid accidental nested scrolling; route wheel input to the intended
+axis and preserve platform/wasm differences when an API is not portable.
 
 Attach `Scrollable` to the element that owns the full panel, editor, or window
 viewport so its scrollbar resolves against the region edge. Put content inset

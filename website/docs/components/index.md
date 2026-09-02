@@ -10,8 +10,10 @@ collapsed: false
 
 - [Accordion](accordion) - Collapsible content panels
 - [Alert](alert) - Alert messages with different variants
+- [Attachment](attachment) - File and media attachment surfaces
 - [Avatar](avatar) - User avatars with fallback text
 - [Badge](badge) - Count badges and indicators
+- [Bubble](bubble) - Chat message surface with alignment and reactions
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
 - [Collapsible](collapsible) - Expandable/collapsible content
@@ -20,6 +22,9 @@ collapsed: false
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
+- [Marker](marker) - Conversation status and separator marker
+- [Message](message) - Composable chat message structure
+- [MessageScroller](message-scroller) - Tail-following virtualized message list
 - [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options

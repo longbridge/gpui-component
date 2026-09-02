@@ -181,8 +181,7 @@ impl ScriptView {
     /// it means the script threw and the failure was recorded here. A test that
     /// finds `snapshot()` empty should report this rather than the absence,
     /// because the absence is the symptom and this is the cause.
-    #[cfg(test)]
-    pub(crate) fn build_error(&self) -> Option<&str> {
+    pub fn build_error(&self) -> Option<&str> {
         self.error.as_deref()
     }
 

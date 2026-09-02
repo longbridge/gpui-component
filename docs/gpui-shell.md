@@ -62,7 +62,7 @@ a scripting language while keeping Rust and the GPU on the render path.
 ### 1.1 Standard Runtime installation and removal
 
 The Standard Runtime is built into `gpui-shell`; a script application does not
-install LLRT, Node.js, npm packages, or a second VM. A Rust host enables it by
+install LLRT, Node.js, external package tooling, or a second VM. A Rust host enables it by
 depending on and initializing GPUI Shell:
 
 ```toml
@@ -91,8 +91,8 @@ import { connect } from "net";
 ```
 
 There are deliberately no `node:` aliases and no claim of Node.js
-compatibility. Unknown bare imports remain errors; npm/package resolution is
-not installed.
+compatibility. Unknown bare imports remain errors; only built-in modules and
+manifest-declared Git dependencies are resolved.
 
 | Surface | Implementation and authority |
 | --- | --- |
@@ -147,7 +147,7 @@ is the best-covered language in public training data, and its type declarations
 (§14.4) are a format both editors and models already read.
 
 The same coverage is also a liability: a model writing for this runtime will
-reach for `document`, full browser `fetch`, `require("fs")`, npm packages, and
+reach for `document`, full browser `fetch`, `require("fs")`, ecosystem packages, and
 `setTimeout`. Only the documented Standard Runtime subset exists. §19.1 answers
 unsupported callable globals with named stubs and rejects unknown modules,
 rather than silently pretending broad compatibility.
@@ -198,7 +198,7 @@ Seven things are deliberately absent, and will stay absent:
    `dlopen`ed native code inside the process defeats the sandbox outright.
 6. **`gpui-base` is not modified.** Everything lives in `crates/shell`.
 7. **There is no Node.js or browser compatibility layer.** There is no DOM,
-   CommonJS `require`, Node module resolution, npm, or `node:` namespace. The
+   CommonJS `require`, general Node module resolution, or `node:` namespace. The
    Standard Runtime deliberately exposes selected bare modules plus a
    WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
    compatibility. The shell's narrow `window` and `process` globals expose only
@@ -1413,9 +1413,10 @@ available to a script; the script re-derives them with `when`.
 
 ### 10.5 Input events
 
-`on_key_down`, `on_key_up`, `on_mouse_down(button, …)`, `on_mouse_up`,
-`on_mouse_down_out` and `on_scroll_wheel` are GPUI's own `InteractiveElement`
-builders, installed together by `materialize::with_input_handlers`.
+`on_key_down`, `on_key_up`, `on_modifiers_changed`,
+`on_mouse_down(button, …)`, `on_mouse_up`, `on_mouse_down_out` and
+`on_scroll_wheel` are GPUI's own `InteractiveElement` builders, installed
+together by `materialize::with_input_handlers`.
 
 ```js
 div()
@@ -1427,6 +1428,23 @@ div()
     }
   });
 ```
+
+Modifier-only presses and releases use GPUI's native event rather than a
+synthetic key event:
+
+```js
+div()
+  .track_focus(this.handle)
+  .on_modifiers_changed((event, cx) => {
+    this.primaryModifierDown = event.modifiers.control;
+    this.capslockOn = event.capslock.on;
+    cx.notify();
+  });
+```
+
+The event preserves GPUI's `ModifiersChangedEvent` shape. Its `modifiers`
+object contains `shift`, `control`, `alt`, `platform`, and `function`; its
+`capslock` object contains `on`. Like key events, it travels the focus path.
 
 **Where they are installed.** `div`, `h_flex`, `v_flex`, `Button`, `Link`,
 `Checkbox`, `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. Every other
@@ -1980,14 +1998,18 @@ part that belongs in Rust (§3). An editor should be exposed through a narrow
 "here is the text, here is the language, here is the read-only flag" interface
 instead.
 
-### 14.3 There is no binding table
+### 14.3 The binding table, for registered components only
 
-The design called for bindings declared as data in `crates/shell/src/bindings/`
-and expanded by a macro. It does not exist. Component methods are matched by name
-in each engine's `apply`, and the behavior name list is a literal array in
-`install_globals`. With ten components that is smaller than the macro would be;
-it will not stay that way, and the argument for a table — one source of truth for
-the runtime registry, the declarations, and the documentation — is unchanged.
+The design called for bindings declared as data and expanded by a macro. For
+the built-in `gpui-base` components it still does not exist: their methods are
+matched by name in each engine's `apply`, and the behavior name list is a
+literal array in `install_globals`.
+
+For registered components it does exist, and it is the descriptor
+(§14.7). One `MethodDescriptor` is the runtime's validator, the generated
+TypeScript, and the documentation — one source of truth read three times,
+which is exactly what the table was for. The built-in surface is the part
+still waiting to move onto it.
 
 The style surface already works the way the whole binding layer should: it is a
 table, it is generated, and nothing about it is written by hand.
@@ -2059,10 +2081,11 @@ The remaining limitation is structural: without the component binding table of
 added to the declarations. A check that every `MODULE_EXPORTS` name appears in
 the output would close that gap.
 
-### 14.6 A `gpui-component` module, later
+### 14.6 A `gpui-component` module
 
-The natural second step is a `gpui-component` binding as a _second registry_
-sharing the same render protocol, call scope, event model, and arena:
+The second step was a `gpui-component` binding as a _second registry_ sharing
+the same render protocol, call scope, event model, and arena. It is built;
+§14.7 describes the registry it is built on.
 
 ```js
 import { text } from "gpui";
@@ -2070,16 +2093,127 @@ import { v_flex } from "gpui-base"; // base: the script owns presentation
 import { Button } from "gpui-component"; // product visuals, ready-made
 ```
 
-Four points decide it now rather than then. The protocol is one thing and the
-registries are two, which is exactly what separating the render protocol from
-component bindings bought. The crate dependency stays optional, behind a feature
-or in its own crate, so not enabling it keeps `gpui-component` out of the tree.
-The two module names must be distinct from the start, because both export
-`Button` with overlapping method names and different semantics, and in JavaScript
-they can be imported into the same file — the module name is the only thing that
-can distinguish them. And migration is then a change of import rather than a
-rewrite: the functions that build the interface change, the business logic and
-the state do not.
+Four points decided it then, and all four held. The protocol is one thing and
+the registries are two, which is exactly what separating the render protocol
+from component bindings bought. The crate dependency stays out of the runtime
+entirely: it lives in `crates/component-shell`, so linking `gpui-shell` alone
+keeps `gpui-component` out of the tree. The two module names are distinct,
+because both export `Button` with overlapping method names and different
+semantics, and in JavaScript they can be imported into the same file — the
+module name is the only thing that can distinguish them. And migration is a
+change of import rather than a rewrite: the functions that build the interface
+change, the business logic and the state do not.
+
+### 14.7 The component registry
+
+§14.6 described a second registry as the natural next step. It exists.
+`crates/component-shell` registers the `gpui-component` catalog against a
+registry API that `crates/shell` owns and that names no component. The
+dependency runs one way and only one way: the adapter uses both the runtime and
+the component library, and the runtime uses neither. `gpui_shell::init`
+installs the base layer; `gpui_component_shell::init` installs the catalog and
+then the runtime. A host that wants the protocol without the catalog links
+`gpui-shell` alone and gets an empty registry, which declares no module at all.
+
+**A registry is built, then frozen.** `ComponentRegistry::new(api_version,
+module_specifier)` opens one; `register` and `register_state` add to it;
+`freeze` consumes it and returns a `FrozenComponentRegistry`, which is cheap to
+clone and shared by every runtime built from it. `freeze` takes `self` so that
+"a frozen catalog cannot be registered into" is a fact about the type rather
+than a flag checked at run time.
+
+The specifier is the adapter's to choose. The runtime holds no opinion about
+which component library it is carrying, so the module name a script imports
+from is data on the registry, not a literal in the engine.
+`DEFAULT_COMPONENT_MODULE` is `"gpui-component"`, which is what the shipped
+adapter picks. A registry may not claim one of the runtime's own module names —
+those resolve first, so the catalog would be unreachable rather than overriding.
+
+**Descriptors are built, not written as literals.** `ComponentDescriptor::new`
+takes the component's name and its materializer; `with_constructors`,
+`with_methods`, and `with_documentation` fill in the rest. The fields are
+private for the reason §7 of the coding guides gives: a descriptor crosses the
+seam between the runtime and an adapter, and a later field must be an added
+`with_` method rather than a break in every adapter that registers anything.
+
+Every method must carry documentation. `register` refuses one that does not,
+rather than filling in a default sentence, because a default would make the
+published `gpui.d.ts` look documented without anyone having described it.
+
+**Arguments are schemas, and the schema is the validator.** An
+`ArgumentDescriptor` pairs a name with an `ArgumentSchema` — string, number,
+boolean, element, an entity of a named kind, a callback with a TypeScript
+signature, an enum of literals, an array, or an optional. The engine validates
+a script's call against that schema before the adapter sees it, and
+`typings.rs` emits the matching TypeScript from the same value. A registered
+method's declared type and its enforced type cannot drift, because they are one
+value read twice.
+
+**Recording and materializing are separate.** A method call from script is
+*recorded*: the descriptor's recorder decodes the validated arguments once, into
+an adapter-owned `ComponentPayload`, which is stored on the node. Materializing
+then downcasts that payload. Nothing matches on a method name per frame; the
+string comparison happens once, when the script calls, not once per render.
+
+**`MaterializeRequest` is the whole of what an adapter is handed.** It carries
+the constructor payload, the recorded methods, the node's style, its children,
+its named slots, and the common behavior the shell resolved (`disabled`,
+`selected`, `on_click`). Each part is *taken*, and a part left untaken is
+reported when the request drops — a slot an adapter never read is an element
+the script wrote and nobody rendered, which is worth a line in the log.
+
+Children come in two mutually exclusive lanes. `take_children` returns
+already-materialized `AnyElement`s, which is what an ordinary container wants.
+`take_typed_children` returns opaque tokens instead, for a component whose Rust
+builder needs the concrete child value rather than an element; the adapter asks
+which component each token is and materializes it by hand. Mixing the lanes is
+an adapter bug and is reported as an error, not answered with an empty list.
+
+Slots come in two representations, also exclusive. `take_slot` returns the
+element eagerly. `take_slot_factory` returns a repeatable
+`ComponentElementFactory` for a slot that a deferred GPUI callback — a popover's
+content, a tooltip — has to build later, possibly more than once. A factory
+leases its snapshot, so a deferred build cannot retain an arena that has already
+been cleared, and it is created only when an adapter asks for one by name.
+`take_slot` distinguishes absence from failure: `Ok(None)` means the script
+wrote no such slot, and a slot that exists but cannot be built is an error,
+because collapsing the two would let a script's element disappear with no
+diagnostic at all.
+
+**Retained state.** `register_state` publishes a factory that runs on the
+application thread and returns an adapter-owned value — a native `Entity`, an
+input state, anything that must survive between renders. Script receives an
+opaque frozen object; the registry's generated module maps it back to a handle
+through a `WeakMap` it alone holds. Because retained state travels as an
+ordinary object, the way elements and entities already do, the handle carries a
+proof the module stamps on it. The proof comes from `RandomState`'s OS-seeded
+keys: anything a script can observe — a process id, a clock, a counter — would
+be reconstructible, and a forged handle would reach another application's state.
+Retained values are owned by the application generation that created them and
+are released with it.
+
+**Effects.** Some native surfaces change state that outlives the render asking
+for it: an application menu bar, a window title. `MaterializeRequest::app_effects`
+returns a keyed capability — `replace(key, revision, …)` installs, returns a
+cleanup, and reinstalls only when the revision changes. Effects belong to the
+application generation that installed them and are torn down when it retires,
+not when the window closes: keys are scoped per generation, so a reload cannot
+replace the previous generation's install, and waiting for the root view would
+leave a reloading application accumulating one install per reload. A revision
+should be a hash of what the effect renders, never `Debug` output, whose format
+is explicitly not stable to key on.
+
+`ComponentWindowEffects` is the shorter-lived counterpart: a transaction within
+one event, where `run_once(key, …)` is idempotent for the length of that event
+and no longer.
+
+**What is registered, and what is not.** `component-inventory.json` lists every
+public `crates/ui` module and every Story, and a test fails if that list drifts
+from the public exports. Each entry is either registered — naming its
+descriptor, its exports, and any companion parts — or explicitly deferred with a
+reason. That file is the single answer to "why is X not bound"; a prose list
+beside the source would be a second answer, and the one nothing checks.
+
 
 ---
 
@@ -2748,8 +2882,8 @@ does, because the shape is what the design is about.
 
 ### 18.1 The manifest
 
-Six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`, and
-`capabilities`. Only `id`, `name`, and `entry` are required. An omitted
+Seven recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+`dependencies`, and `capabilities`. Only `id`, `name`, and `entry` are required. An omitted
 `version` is reported as `unknown`; an omitted `shell-version` accepts the
 current runtime; omitted `capabilities` grants nothing. The file is
 `gpui-shell.json` — the name makes the owning runtime explicit.
@@ -2761,6 +2895,9 @@ current runtime; omitted `capabilities` grants nothing. The file is
   "version": "1.2.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui#main"
+  },
   "capabilities": {
     "fs": {
       "read": ["${pluginDir}", "${dataDir}"],
@@ -2782,6 +2919,37 @@ current runtime; omitted `capabilities` grants nothing. The file is
   }
 }
 ```
+
+`dependencies` maps a bare JavaScript module name to gpui-shell Git dependency
+syntax. A string may be strict GitHub shorthand (`owner/repository` or
+`owner/repository#ref`) or a full Git URL with optional `#ref`. GitHub shorthand
+without a fragment selects `main`; a full URL without one selects the remote's
+HEAD. A ref may name a branch, tag, or commit-ish such as a commit ID. Branches,
+tags, and remote HEAD are fetched and resolved on each load; a commit ID keeps
+selecting that exact commit.
+
+Once the immutable checkout exists, gpui-shell reads its root `package.json`.
+A string `main` selects the entry; if the file or field is absent, `index.js` is
+used. Invalid JSON, a non-string `main`, or a path that is missing, not a file,
+or outside the checkout fails the load before application code executes.
+
+The original object form remains supported unchanged. It requires exactly one
+explicit `branch` or `tag`, and its optional repository-relative `entry`
+defaults to `index.js`. Existing manifests need no migration. Authors choosing
+the string form publish their entry through `package.json` `main` or root
+`index.js`.
+
+Before linking the application module graph, the host fetches each repository
+into `~/.gpui-shell/cache/dependencies/`. A per-remote lock serializes local
+mirror updates; the fetched commit is atomically published as an immutable,
+commit-addressed checkout and registered with the application's module
+generation. The exact fragment-free URL is the remote and cache identity. The
+raw configured origin is verified, while Git's `url.*.insteadOf` rules may
+still choose the effective fetch URL. Git is non-interactive and each command
+has a 30-second timeout. Relative imports from dependency code remain inside
+its checkout, and runtime or Standard Runtime module names cannot be shadowed.
+This host-side acquisition step requires `git`; it does not grant the fetched
+script any network capability.
 
 `network.hosts` is the backwards-compatible broad grant: every supported
 network API may reach that host. Use `network.http` when a plugin only needs
@@ -4070,7 +4238,7 @@ number must mean the same capabilities and the same behavior under either engine
 No packaging or distribution format exists. The intended one is the simplest
 thing that works — a `.tar.zst` plus an `index.json`, hosted on any static file
 server or git repository, installed by URL with a signature and checksum check,
-carrying pure script source with no build output and no `node_modules`. Building
+carrying pure script source with no generated dependency tree. Building
 a registry service before the plugin count justifies one would be pure
 liability.
 
@@ -4085,7 +4253,7 @@ reopened without new information.
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A second engine (LuaJIT and similar)**               | Removed rather than carried. A fallback nobody exercises rots, and this one had: no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. The seam it justified is kept, because it is what makes the rest of the crate name no VM |
 | **The WASM component model**                           | Every call crosses a serialization boundary, which is the worst possible fit for high-frequency fine-grained UI calls. Heavy toolchain, poor debugging                                                                                                                                     |
-| **Embedding Node.js or Deno**                          | The process model and the size do not match an in-process, main-thread, embedded runtime. Bringing npm in brings native dependencies and a supply chain with it. VS Code's approach requires a separate extension process to work at all                                                   |
+| **Embedding Node.js or Deno**                          | The process model, native dependency surface, and size do not match an in-process, main-thread, embedded runtime. VS Code's approach requires a separate extension process to work at all                                                                                                                       |
 | **A pure-Rust scripting language** (Rhai, Steel, Koto) | Almost no ecosystem, a new language for every author, and a thin corpus — which is disqualifying for generated interfaces                                                                                                                                                                  |
 | **Rust dylib plugins**                                 | No stable ABI, no sandbox, and the compile cost remains, so it solves none of §2.1                                                                                                                                                                                                         |
 | **Rust hot reload**                                    | Solves only the compile time. It does not address plugin distribution or third-party extension, and state preservation is fragile                                                                                                                                                          |

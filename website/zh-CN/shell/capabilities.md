@@ -65,7 +65,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## Manifest
 
-目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
+目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据、Git 依赖与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry`、`dependencies` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
 
 ```json
 {
@@ -74,6 +74,9 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   "version": "1.0.0",
   "shell-version": "0.1.0",
   "entry": "main.js",
+  "dependencies": {
+    "omarchy-ui": "huacnlee/omarchy-ui"
+  },
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
@@ -86,6 +89,13 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   }
 }
 ```
+
+`dependencies` 把裸模块名映射到一个 JavaScript package，gpui-shell 会在 entry
+module 运行之前从 Git 抓取它——`import { Title } from "omarchy-ui"`。字符串形式
+接受严格的 GitHub 简写或完整 Git URL，可带可选的 `#ref`；显式指定 `branch` 或
+`tag` 的 object 形式同样保持支持。每次加载还会把 package 链接到编辑器能找到的
+位置，于是这条 import 会带上 package 自己的类型与文档。版本选择、package entry、
+缓存，以及编辑器看见的东西，详见[依赖](./dependencies.md)。
 
 这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 

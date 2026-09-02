@@ -34,7 +34,7 @@ The library also exposes `Easing`, `Discrete`, `MotionTransform`, and `MotionRev
 
 Use `transition` for a value moving toward a target over a known duration. Every independently animated value needs a stable ID.
 
-```rust,ignore
+```rust
 let opacity = transition(
     ("save-dialog", "opacity"),
     if open { 1.0 } else { 0.0 },
@@ -52,7 +52,7 @@ Retargeting starts at the currently sampled value. Direct reversal shortens the 
 
 Use `spring` when the target may change while moving. It preserves both position and velocity, which makes it suitable for selection indicators and settling spatial values.
 
-```rust,ignore
+```rust
 let x = spring(
     "selected-indicator",
     selected_x,
@@ -70,7 +70,7 @@ Do not make a pointer-controlled value chase the pointer through a spring. Set `
 
 `Keyframes` describes validated value stops. `Timing` uses absolute elapsed time and supports signed delays, finite or infinite iterations, and normal, reverse, or alternating playback.
 
-```rust,ignore
+```rust
 let frames = Keyframes::try_new([
     Keyframe::new(0.0, 0.25),
     Keyframe::new(0.45, 1.0).ease(Easing::EaseOut),
@@ -97,7 +97,7 @@ Offsets must start at `0`, end at `1`, and be monotonic. Use `Discrete` when a v
 
 `Stagger` calculates a delay for an index from the first, last, center, or a chosen origin. It does not allocate a schedule or own list identity:
 
-```rust,ignore
+```rust
 let stagger = Stagger::new(Duration::from_millis(80), StaggerOrigin::First);
 let delay = stagger.delay(index, item_count);
 ```

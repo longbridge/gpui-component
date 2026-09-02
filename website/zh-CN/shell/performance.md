@@ -1,7 +1,7 @@
 ---
 title: 性能
 description: 当帧率不再是变量之后，JavaScript 真正的开销——失效频率乘以描述规模、每个 View 各自的 Snapshot，以及 FPS 分辨不出来的那两类问题。
-order: 13
+order: 14
 ---
 
 # Performance

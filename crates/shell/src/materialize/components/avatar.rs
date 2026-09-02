@@ -32,12 +32,14 @@ use crate::ShellRuntime;
 use crate::materialize::{
     Behavior, Children, SlotSpecs, StateStyles, resolve_slot, take_slot_spec, warn_unhonoured_a11y,
 };
+use crate::snapshot::RenderSnapshot;
 use crate::spec::{Component, SpecArena, SpecId};
 
 /// The avatar root.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::materialize) fn avatar(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     inherited: gpui::Hsla,
     refinement: StyleRefinement,
@@ -78,7 +80,8 @@ pub(in crate::materialize) fn avatar(
             Avatar::image,
         )
         .when_some(
-            fallback.map(|slot| avatar_fallback(runtime, arena, slot, inherited, window, cx)),
+            fallback
+                .map(|slot| avatar_fallback(runtime, snapshot, arena, slot, inherited, window, cx)),
             Avatar::fallback,
         );
     element.style().refine(&refinement);
@@ -124,6 +127,7 @@ fn avatar_image(
 /// The fallback slot, rebuilt as the concrete type `Avatar::fallback` takes.
 fn avatar_fallback(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     slot: SpecId,
     inherited: gpui::Hsla,
@@ -144,7 +148,7 @@ fn avatar_fallback(
     let (refinement, _, _) = resolve_slot(arena, slot, "AvatarFallback", window, cx);
     fallback.style().refine(&refinement);
     fallback.extend(crate::materialize::materialize_children(
-        runtime, arena, slot, inherited, window, cx,
+        runtime, snapshot, arena, slot, inherited, window, cx,
     ));
     fallback
 }

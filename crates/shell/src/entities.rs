@@ -255,6 +255,20 @@ pub(crate) struct EntityCheckpoint {
 }
 
 impl EntityStore {
+    pub(crate) fn kind(&self, handle: EntityHandle) -> Option<&'static str> {
+        match self.record(handle)? {
+            Record::View { .. } => Some("View"),
+            Record::Input { .. } => Some("InputState"),
+            Record::Textarea { .. } => Some("TextareaState"),
+            Record::Calendar { .. } => Some("CalendarState"),
+            Record::Slider { .. } => Some("SliderState"),
+            Record::Otp { .. } => Some("OtpState"),
+            Record::Focus { .. } => Some("FocusHandle"),
+            Record::Dock { .. } => Some("DockArea"),
+            Record::VirtualScroll { .. } => Some("VirtualListScrollHandle"),
+        }
+    }
+
     /// Creates a store with a process-unique JavaScript-safe namespace.
     ///
     /// Exhaustion is reported instead of wrapping: reusing a namespace could
@@ -297,9 +311,9 @@ impl EntityStore {
     /// Creates an input state and returns its handle.
     ///
     /// The editor style is installed here rather than left to the caller because
-    /// `InputEditorStyle::default()` is entirely transparent: an input built
-    /// without one renders invisible text, which is a failure no script author
-    /// could diagnose. The shell owns the default palette, so it owns this too.
+    /// `InputEditorStyle::default()` leaves its colors unset so Base can resolve
+    /// them from the active palette at paint time. `gpui-base` installs a
+    /// readable light palette by default, and embedders can replace it.
     pub fn create_input(
         &mut self,
         placeholder: Option<String>,

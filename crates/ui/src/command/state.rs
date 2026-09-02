@@ -181,9 +181,11 @@ impl CommandState {
         });
 
         if let Some(matched_ix) = preserved_selection {
+            // Preserving the selection is not a navigation: the model
+            // reinstalls on every host re-render, so scrolling here would
+            // move the list one frame after a hover selection.
             self.selected_index = Some(matched_ix);
             self.preserve_no_selection = false;
-            self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
         } else if self.preserve_no_selection {
             self.selected_index = None;
             self.pending_scroll = None;
@@ -495,6 +497,9 @@ impl CommandState {
         self.model.on_select.clone().zip(index)
     }
 
+    /// Highlight an item without scrolling it into view. Hover goes through
+    /// here, and revealing a half-clipped edge row would slide the next row
+    /// under the resting cursor, hover-selecting and scrolling in a loop.
     fn select(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_index == Some(matched_ix) {
             return;
@@ -503,7 +508,6 @@ impl CommandState {
         let previous_index = self.selected_index();
         self.selected_index = Some(matched_ix);
         self.preserve_no_selection = false;
-        self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
 
         if let Some((on_select, index)) = self.on_select_if_changed(previous_index) {
             window.defer(cx, move |window, cx| on_select(index, window, cx));
@@ -532,7 +536,10 @@ impl CommandState {
             }
         }
 
-        if let Some(next) = enabled {
+        if let Some(next) = enabled
+            && self.selected_index != Some(next)
+        {
+            self.pending_scroll = self.matched.get(next).map(|matched| matched.row_ix);
             self.select(next, window, cx);
         }
     }
@@ -2445,6 +2452,39 @@ mod tests {
         assert!(
             state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y) < px(0.),
             "selecting the last row should have scrolled the list",
+        );
+    }
+
+    #[gpui::test]
+    fn a_reinstalled_model_does_not_scroll_a_preserved_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
+                    .items((0..50).map(|ix| CommandItem::new().label(format!("Item {ix}"))))
+            }),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        // Hover selection does not scroll, and the host re-render it notifies
+        // reinstalls the model with the selection preserved. That reinstall
+        // must not scroll either, or the hover still moves the list one frame
+        // later.
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.select(10, window, cx));
+        });
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        assert_eq!(
+            state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y),
+            px(0.),
+            "reinstalling the model must keep the scroll position",
         );
     }
 }

@@ -446,7 +446,7 @@ impl MotionExample {
 
 impl Render for MotionExample {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        activate_palette(window);
+        activate_palette(window, cx);
         let entity = cx.entity().downgrade();
         let content = match self.demo {
             Demo::SlidingTime => self.sliding_time(window, cx).into_any_element(),

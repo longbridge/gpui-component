@@ -336,7 +336,9 @@ Alignment invariant 应通过构造保证，而不是事后校正：sibling regi
 
 精度评审要测量 resolved result，但不能把测得的差值写成 raw `px(...)` 微调。应继续追踪到重复 padding、nested inset、border ownership、font metric 或 rounding，并修复结构 owner。
 
-每个 scrollable region 只有一个 owner。Flex layout 中，可收缩 child 使用 `min_w_0()` /`min_h_0()`。避免意外 nested scroll；wheel input 应进入目标 axis，并在 API 不可移植时保留 platform/wasm 差异。
+`h_flex()` 与 `v_flex()` 并不对称：`h_flex()` 会把 child 在 cross axis 上居中，`v_flex()` 则保持拉伸。因此 row 里的 column 拿到的是自身内容高度，而不是 row 的高度；内容比 row 高时会被居中，header 被挤出上边缘并裁掉。只要 child 拥有 header、footer 或需要按 row 高度解析的 scroll region，就给这个 column 加 `h_full()`，或给 row 加 `items_start()` / `items_stretch()`。
+
+每个 scrollable region 只有一个 owner。Flex layout 中，可收缩 child 使用 `min_w_0()` /`min_h_0()`。Flex item 只有在自身 overflow 不是 visible 时才会放弃基于内容的 automatic minimum size，所以普通的可伸缩 child 在被明确要求之前不会围绕长内容收缩。`Scrollable` 已经为自己的 wrapper 处理了这一点，但夹在它与 flex container 之间的普通 `div` 仍需自行释放该最小值。避免意外 nested scroll；wheel input 应进入目标 axis，并在 API 不可移植时保留 platform/wasm 差异。
 
 `Scrollable` 应附着在拥有完整面板、编辑器或窗口 viewport 的 element 上，使滚动条解析到区域边缘。内容内边距放在 scroll owner 内部，不能用带内边距的容器包住 scroll owner。滚动条悬在内容与面板边界中间，通常说明 scroll owner 错误或内边距放错了层。
 

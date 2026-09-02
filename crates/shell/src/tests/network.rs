@@ -691,6 +691,12 @@ fn websocket_reads_and_writes_text_and_binary_messages(cx: &mut TestAppContext) 
     let listener = TcpListener::bind("127.0.0.1:0").expect("WebSocket listener");
     let address = listener.local_addr().expect("listener address");
     let (progress, progress_receiver) = mpsc::channel();
+    // Closing rejects a read that has not completed yet, so the server waits to
+    // be told the client has the messages instead of closing straight after
+    // sending them. Without this the test is a race the client loses whenever
+    // the runner is slow enough, and the symptom — a rejected read — looks like
+    // a product failure rather than a starved thread.
+    let (may_close, close_permission) = mpsc::channel::<()>();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("WebSocket connection");
         let mut socket = tungstenite::accept(stream).expect("WebSocket handshake");
@@ -710,6 +716,7 @@ fn websocket_reads_and_writes_text_and_binary_messages(cx: &mut TestAppContext) 
             .send(Message::Binary(vec![4, 5, 6].into()))
             .expect("server binary");
         let _ = progress.send(());
+        let _ = close_permission.recv_timeout(Duration::from_secs(10));
         socket.close(None).expect("server close");
         socket.flush().expect("flush server close");
     });
@@ -732,14 +739,25 @@ fn websocket_reads_and_writes_text_and_binary_messages(cx: &mut TestAppContext) 
             Err(error) => panic!("server messages after second client write: {error}"),
         }
     }
-    let _ = server.join().expect("WebSocket server");
-    for _ in 0..4 {
+    // Poll for the messages rather than pumping a fixed number of times: how
+    // many turns the client needs is the runner's business, not this test's.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let rendered = loop {
+        draw(&mut context, &view);
+        let rendered = snapshot(&mut context, &view);
+        if rendered.contains("server text|true|4,5,6") {
+            break rendered;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for the server messages: {rendered}"
+        );
         thread::sleep(Duration::from_millis(10));
         context.executor().advance_clock(Duration::from_millis(10));
         context.run_until_parked();
-    }
-    draw(&mut context, &view);
-    let rendered = snapshot(&mut context, &view);
+    };
+    let _ = may_close.send(());
+    let _ = server.join().expect("WebSocket server");
     assert!(rendered.contains("server text|true|4,5,6"), "{rendered}");
 }
 

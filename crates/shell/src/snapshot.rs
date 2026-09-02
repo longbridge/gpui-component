@@ -60,7 +60,12 @@ use crate::{
 /// Built by the engine and read by the native materializer; nothing mutates one
 /// after it is published. A replacement is built beside it and swapped in whole,
 /// so a script render that fails leaves the previous snapshot untouched.
+#[derive(Clone)]
 pub struct RenderSnapshot {
+    inner: Rc<SnapshotInner>,
+}
+
+struct SnapshotInner {
     /// Identifies the callbacks registered while this snapshot was built.
     generation: u64,
     root: SpecId,
@@ -68,6 +73,8 @@ pub struct RenderSnapshot {
     /// Weak so a snapshot never keeps the VM alive; a snapshot outliving its
     /// runtime has nothing to retire, and says so by failing to upgrade.
     runtime: Weak<ShellRuntime>,
+    application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+    view: Option<gpui::WeakEntity<crate::ScriptView>>,
 }
 
 impl RenderSnapshot {
@@ -76,21 +83,36 @@ impl RenderSnapshot {
         generation: u64,
         root: SpecId,
         arena: SpecArena,
+        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+        view: Option<gpui::WeakEntity<crate::ScriptView>>,
     ) -> Self {
         Self {
-            generation,
-            root,
-            arena,
-            runtime: Rc::downgrade(runtime),
+            inner: Rc::new(SnapshotInner {
+                generation,
+                root,
+                arena,
+                runtime: Rc::downgrade(runtime),
+                application,
+                view,
+            }),
         }
     }
 
+    pub(crate) fn application_owner(
+        &self,
+    ) -> Option<(
+        Rc<crate::runtime::ApplicationGeneration>,
+        gpui::WeakEntity<crate::ScriptView>,
+    )> {
+        Some((self.inner.application.clone()?, self.inner.view.clone()?))
+    }
+
     pub(crate) fn root(&self) -> SpecId {
-        self.root
+        self.inner.root
     }
 
     pub(crate) fn arena(&self) -> &SpecArena {
-        &self.arena
+        &self.inner.arena
     }
 
     /// The shape of this description, with its values left out.
@@ -100,29 +122,33 @@ impl RenderSnapshot {
     /// [`StructureFingerprint`] for what that measurement is for and what it
     /// deliberately does not prove.
     pub(crate) fn structure(&self) -> StructureFingerprint {
-        self.arena.structure()
+        self.inner.arena.structure()
     }
 
     /// The description as text. Rendering never needs a GPU to be verified, and
     /// reading a published snapshot never needs the VM.
     pub fn debug_tree(&self) -> String {
-        self.arena.debug_tree(self.root)
+        self.inner.arena.debug_tree(self.inner.root)
     }
 
     /// How many nodes the script described. Used by benchmarks to report cost
     /// per node rather than per view.
     pub fn len(&self) -> usize {
-        self.arena.len()
+        self.inner.arena.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.arena.is_empty()
+        self.inner.arena.is_empty()
+    }
+
+    pub(crate) fn belongs_to(&self, runtime: &Rc<ShellRuntime>) -> bool {
+        self.inner.runtime.ptr_eq(&Rc::downgrade(runtime))
     }
 }
 
 /// Retiring on drop is what keeps callback lifetime tied to snapshot lifetime
 /// rather than to a frame or to a global render counter.
-impl Drop for RenderSnapshot {
+impl Drop for SnapshotInner {
     fn drop(&mut self) {
         if let Some(runtime) = self.runtime.upgrade() {
             runtime.retire_callbacks(self.generation);

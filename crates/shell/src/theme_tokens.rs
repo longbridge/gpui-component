@@ -3,7 +3,9 @@
 use std::cell::RefCell;
 
 use gpui::{App, Hsla, Pixels};
-use gpui_base::{ColorTokens, RadiusTokens, SemanticThemeTokens, SpacingTokens, Theme};
+use gpui_base::{
+    ColorTokens, RadiusTokens, SemanticThemeTokens, SpacingTokens, Theme, TypographyTokens,
+};
 
 use crate::scope::with_current_app;
 
@@ -51,6 +53,17 @@ pub(crate) fn token_radius(name: &str) -> Option<Pixels> {
     with_tokens(|tokens| resolve_radius(&tokens.radius, name)).flatten()
 }
 
+/// The whole type scale, rather than one entry by name.
+///
+/// The colour, spacing and radius lookups above answer one token at a time
+/// because a description names them one at a time -- `bg("surface")`. Nothing
+/// names a text style that way: the scale is read whole, to be reported back
+/// to a script, and six lookups that each clone two font families to return
+/// one of them would cost more than the copy this makes.
+pub(crate) fn typography_tokens() -> Option<TypographyTokens> {
+    with_tokens(|tokens| tokens.typography.clone())
+}
+
 pub(crate) const COLOR_TOKEN_NAMES: &[&str] = &[
     "background",
     "foreground",
@@ -69,6 +82,7 @@ pub(crate) const COLOR_TOKEN_NAMES: &[&str] = &[
     "border",
     "input",
     "ring",
+    "selection",
 ];
 
 pub(crate) const SPACING_TOKEN_NAMES: &[&str] = &["xxs", "xs", "sm", "md", "lg", "xl", "xxl"];
@@ -103,6 +117,7 @@ fn resolve_color(colors: &ColorTokens, name: &str) -> Option<Hsla> {
         "border" => colors.border,
         "input" => colors.input,
         "ring" => colors.ring,
+        "selection" => colors.selection,
         _ => return None,
     })
 }

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use gpui::{Rgba, Window, WindowAppearance};
+use gpui::{App, Rgba, Window, WindowAppearance};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ExamplePalette {
@@ -88,8 +88,37 @@ thread_local! {
     static ACTIVE: Cell<ExamplePalette> = const { Cell::new(ExamplePalette::for_dark(false)) };
 }
 
-pub fn activate(window: &Window) {
-    ACTIVE.set(ExamplePalette::from_window(window));
+pub fn activate(window: &Window, cx: &mut App) {
+    let palette = ExamplePalette::from_window(window);
+    ACTIVE.set(palette);
+    apply_base_theme(palette, cx);
+}
+
+fn apply_base_theme(palette: ExamplePalette, cx: &mut App) {
+    let dark = palette == ExamplePalette::for_dark(true);
+    let theme = gpui_base::Theme::global_mut(cx);
+    theme.appearance = if dark {
+        gpui_base::ThemeAppearance::Dark
+    } else {
+        gpui_base::ThemeAppearance::Light
+    };
+
+    let colors = &mut theme.tokens.colors;
+    colors.background = gpui::rgb(palette.canvas).into();
+    colors.foreground = gpui::rgb(palette.foreground).into();
+    colors.surface = gpui::rgb(palette.surface).into();
+    colors.surface_foreground = gpui::rgb(palette.foreground).into();
+    colors.primary = gpui::rgb(palette.accent).into();
+    colors.primary_foreground = gpui::rgb(palette.accent_foreground).into();
+    colors.secondary = gpui::rgb(palette.elevated).into();
+    colors.secondary_foreground = gpui::rgb(palette.foreground).into();
+    colors.muted = gpui::rgb(palette.elevated).into();
+    colors.muted_foreground = gpui::rgb(palette.muted_foreground).into();
+    colors.accent = gpui::rgb(palette.hover).into();
+    colors.accent_foreground = gpui::rgb(palette.foreground).into();
+    colors.border = gpui::rgb(palette.border).into();
+    colors.input = gpui::rgb(palette.border).into();
+    colors.ring = gpui::rgb(palette.accent).into();
 }
 
 pub fn example_rgb(color: u32) -> Rgba {
@@ -119,5 +148,17 @@ mod tests {
         assert_eq!(dark.resolve(0xffffff), 0x171717);
         assert_eq!(dark.resolve(0x171717), 0xffffff);
         assert_eq!(dark.resolve(0x2563eb), 0x2563eb);
+    }
+
+    #[gpui::test]
+    fn dark_palette_projects_dark_base_theme(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| apply_base_theme(ExamplePalette::for_dark(true), cx));
+
+        cx.update(|cx| {
+            let theme = gpui_base::Theme::global(cx);
+            assert_eq!(theme.appearance, gpui_base::ThemeAppearance::Dark);
+            assert_eq!(theme.tokens.colors.foreground, gpui::rgb(0xffffff).into());
+            assert_eq!(theme.tokens.colors.border, gpui::rgb(0x404040).into());
+        });
     }
 }
