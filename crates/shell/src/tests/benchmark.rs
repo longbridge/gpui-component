@@ -161,6 +161,38 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
         per_build.as_nanos() as usize / ops.max(1),
     );
 
+    let automatic_tree = context
+        .update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("automatic parity render")
+        })
+        .debug_tree();
+    let automatic_renders = runtime.read_metrics().script_renders();
+    let (interpreter, mut interpreter_context, interpreter_object) =
+        runtime_with_source(cx, &source(ROWS, COLUMNS), true);
+    let mut interpreted_tree = String::new();
+    for _ in 0..automatic_renders {
+        interpreted_tree = interpreter_context
+            .update(|window, cx| {
+                interpreter
+                    .build_snapshot(
+                        &interpreter_object,
+                        None,
+                        crate::policy::default(),
+                        window,
+                        cx,
+                    )
+                    .expect("interpreter parity render")
+            })
+            .debug_tree();
+    }
+    assert_eq!(automatic_tree, interpreted_tree);
+    assert_eq!(
+        automatic_renders,
+        interpreter.read_metrics().script_renders()
+    );
+
     let jit = runtime.jit_metrics_for_benchmark();
     println!(
         "[A/JIT] enabled={} queued={} failures={} unsupported={} tier1_rejections={} \
