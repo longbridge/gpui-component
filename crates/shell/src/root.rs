@@ -476,10 +476,7 @@ impl ShellRoot {
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(TOAST_TICK).await;
-                if this
-                    .update_in(cx, |this, window, cx| this.advance_toasts(window, cx))
-                    .is_err()
-                {
+                if this.update(cx, |this, cx| this.advance_toasts(cx)).is_err() {
                     break;
                 }
             }
@@ -487,11 +484,10 @@ impl ShellRoot {
         .detach();
     }
 
-    fn advance_toasts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // Timers pause while the user is reading the stack, and while the
-        // window is in the background — a toast that expired unseen behind
-        // another window was never delivered.
-        let paused = self.toast_state.is_expanded() || !window.is_window_active();
+    fn advance_toasts(&mut self, cx: &mut Context<Self>) {
+        // Timers pause while the user is reading the stack, not while the window
+        // is inactive: a visible side-by-side window would hold its toasts forever.
+        let paused = self.toast_state.is_expanded();
         if self
             .toasts
             .advance(cx.background_executor().now(), paused)
@@ -1413,8 +1409,6 @@ mod tests {
     #[gpui::test]
     fn a_toast_retires_itself_when_its_timeout_elapses(cx: &mut TestAppContext) {
         let (root, cx) = shell_root(cx);
-        // Timeouts only run while the window is active, so the test has to say
-        // that it is.
         cx.update(|window, _| window.activate_window());
         cx.run_until_parked();
 
@@ -1432,10 +1426,11 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_toast_does_not_expire_while_the_window_is_in_the_background(cx: &mut TestAppContext) {
+    fn a_toast_expires_while_the_window_is_in_the_background(cx: &mut TestAppContext) {
         let (root, cx) = shell_root(cx);
 
         root.update_in(cx, |root, window, cx| {
+            assert!(!window.is_window_active());
             root.push_toast(
                 ToastRequest::new("Saved").with_timeout(Some(Duration::from_secs(1))),
                 window,
@@ -1445,7 +1440,7 @@ mod tests {
 
         cx.executor().advance_clock(Duration::from_secs(10));
         cx.run_until_parked();
-        assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 1);
+        assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 0);
     }
 
     #[gpui::test]
