@@ -151,6 +151,36 @@ pub struct ShellRoot {
     /// between two triggers and the paint priority; the root owns only the
     /// decision to have one, and what an appearing tooltip looks like.
     tooltip_overlay: Entity<TooltipOverlay>,
+    /// The performance HUD, while a script has asked for one. See
+    /// [`ShellRoot::show_fps_monitor`].
+    fps_hud: Option<FpsHudRequest>,
+}
+
+/// Where the performance HUD sits over the window and how it behaves.
+///
+/// What a script's `show_fps_monitor(options)` names, with the same defaults
+/// `gpui_fps` gives an overlay a Rust host places by hand -- except
+/// `continuous`, which is off: a HUD a script switches on is there to watch
+/// the application's own frames, not to drive a redraw loop of its own.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FpsHudRequest {
+    /// Corner or edge of the window.
+    pub anchor: Anchor,
+    /// Whether the HUD requests another animation frame after every render.
+    pub continuous: bool,
+    /// The per-frame budget the HUD grades frame cost against. `None` keeps
+    /// the HUD's own default.
+    pub frame_budget: Option<Duration>,
+}
+
+impl Default for FpsHudRequest {
+    fn default() -> Self {
+        Self {
+            anchor: Anchor::TopRight,
+            continuous: false,
+            frame_budget: None,
+        }
+    }
 }
 
 pub(crate) struct MountedApplication {
@@ -206,6 +236,7 @@ impl ShellRoot {
             toast_focus_handle: cx.focus_handle().tab_stop(true),
             next_toast_ordinal: 0,
             tooltip_overlay: cx.new(|_| TooltipOverlay::new().render_with(render_tooltip)),
+            fps_hud: None,
         }
     }
 
@@ -280,6 +311,60 @@ impl ShellRoot {
     /// How many toasts are mounted, including ones playing their exit.
     pub fn toast_count(&self) -> usize {
         self.toasts.len()
+    }
+
+    /// Draws the performance HUD over the window, above every other layer,
+    /// until [`hide_fps_monitor`](Self::hide_fps_monitor). Calling it again
+    /// moves or reconfigures the HUD that is already up.
+    ///
+    /// The root owns the HUD rather than the script's tree: the script says
+    /// whether and where, and what it renders can neither move the HUD nor
+    /// rebuild it. The monitor behind the overlay is `gpui_fps`'s own, one per
+    /// window, so a HUD hidden and shown again keeps its history.
+    ///
+    /// Refused, with `false`, from a render pass; see `overlay_mutation_allowed`.
+    pub fn show_fps_monitor(&mut self, request: FpsHudRequest, cx: &mut Context<Self>) -> bool {
+        if !overlay_mutation_allowed("show_fps_monitor") {
+            return false;
+        }
+        self.fps_hud = Some(request);
+        cx.notify();
+        true
+    }
+
+    /// Takes the performance HUD down. `true` if one was up.
+    pub fn hide_fps_monitor(&mut self, cx: &mut Context<Self>) -> bool {
+        if !overlay_mutation_allowed("hide_fps_monitor") {
+            return false;
+        }
+        let was_visible = self.fps_hud.take().is_some();
+        if was_visible {
+            cx.notify();
+        }
+        was_visible
+    }
+
+    /// Whether the performance HUD is up.
+    pub fn fps_monitor_visible(&self) -> bool {
+        self.fps_hud.is_some()
+    }
+
+    /// The HUD, when a script has asked for one. Above every other layer: it
+    /// is a diagnostic, and a dialog over it would hide the reading the
+    /// dialog's own frames are producing.
+    fn fps_layer(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui_fps::FpsOverlay> {
+        let request = self.fps_hud?;
+        let mut overlay = gpui_fps::fps_monitor(window, cx)
+            .anchor(request.anchor)
+            .continuous(request.continuous);
+        if let Some(budget) = request.frame_budget {
+            overlay = overlay.frame_budget(budget);
+        }
+        Some(overlay)
     }
 
     /// Opens a dialog on top of the stack, with default dismissal.
@@ -726,7 +811,7 @@ impl ShellRoot {
 }
 
 impl Render for ShellRoot {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = Theme::global(cx).tokens;
         let (colors, radius, spacing) = (tokens.colors, tokens.radius, tokens.spacing);
 
@@ -776,6 +861,7 @@ impl Render for ShellRoot {
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
             .child(self.toast_layer(&colors, &radius, &spacing, cx))
             .child(self.tooltip_overlay.clone())
+            .children(self.fps_layer(window, cx))
     }
 }
 
