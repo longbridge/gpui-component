@@ -1,7 +1,7 @@
 ---
 title: Tabs
 description: A tab list and accessible tab controls with controlled selection.
-order: 30
+order: 31
 ---
 
 # Tabs

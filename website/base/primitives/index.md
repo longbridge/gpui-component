@@ -39,6 +39,7 @@ GPUI Base primitives provide behavior without prescribing presentation. Each pag
 - [Select](./select.md) — A button-like selection control backed by an anchored, keyboard-navigable popup.
 - [Sheet](./sheet.md) — A modal surface that enters from an edge while managing dismissal and focus.
 - [Slider](./slider.md) — A state-driven range input with independently styleable track, indicator, and thumb.
+- [Nav Stack](./nav-stack.md) — A navigation stack of views with push, pop, and replace, and an animatable transition lifecycle.
 - [Switch](./switch.md) — A controlled on/off control with separately styleable track and thumb.
 - [Table](./table.md) — Semantic table primitives for composing headers, bodies, rows, and cells.
 - [Tabs](./tabs.md) — A tab list and accessible tab controls with controlled selection.

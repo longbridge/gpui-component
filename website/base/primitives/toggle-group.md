@@ -1,7 +1,7 @@
 ---
 title: Toggle Group
 description: Coordinates a set of toggle controls as a single- or multiple-selection group.
-order: 33
+order: 34
 ---
 
 # Toggle Group

@@ -1,7 +1,7 @@
 ---
 title: Toggle
 description: A controlled two-state pressable for persistent choices such as formatting.
-order: 32
+order: 33
 ---
 
 # Toggle

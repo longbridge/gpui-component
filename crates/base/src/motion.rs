@@ -1,8 +1,8 @@
 #[cfg(not(target_family = "wasm"))]
-use std::time::Instant;
+pub(crate) use std::time::Instant;
 use std::{rc::Rc, time::Duration};
 #[cfg(target_family = "wasm")]
-use web_time::Instant;
+pub(crate) use web_time::Instant;
 
 use gpui::{
     App, Bounds, ElementId, Pixels, SharedString, Size, SpringConfig, SpringState, SpringTarget,
@@ -137,11 +137,15 @@ impl Transition {
         self
     }
 
-    fn sample(&self, progress: f32) -> f32 {
+    pub(crate) fn duration(&self) -> Duration {
+        self.duration
+    }
+
+    pub(crate) fn sample(&self, progress: f32) -> f32 {
         self.easing.sample(progress)
     }
 
-    fn progress(&self, elapsed: Duration, duration: Duration) -> (f32, MotionStatus) {
+    pub(crate) fn progress(&self, elapsed: Duration, duration: Duration) -> (f32, MotionStatus) {
         let Some(active_elapsed) = self.delay.active_elapsed(elapsed) else {
             return (0.0, MotionStatus::Delayed);
         };

@@ -27,12 +27,13 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, AutoScroll, Avatar, AvatarFallback, Button, Calendar,
     CalendarItemKind, CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible,
     ColorPicker, ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop,
-    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState,
-    Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
-    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
-    TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
-    TextViewState, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree,
-    TreeItem, TreeState, VirtualListScrollHandle, v_virtual_list,
+    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, NavMotion,
+    NavOperation, NavStack, NavStackState, OtpState, Popup, Scrollbar, ScrollbarMode, Select,
+    Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb, SwitchTrack,
+    Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TextSelectionEvent,
+    TextSelectionHandle, TextSelectionLayer, TextViewState, Textarea, Toast, ToastTransitionStatus,
+    Toggle, ToggleGroup, Tooltip, Tree, TreeItem, TreeState, VirtualListScrollHandle,
+    v_virtual_list,
 };
 use palette::{activate as activate_palette, canvas as example_canvas, example_rgb};
 #[cfg(target_family = "wasm")]
@@ -107,6 +108,7 @@ pub const COMPONENTS: &[&str] = &[
     "select",
     "sheet",
     "slider",
+    "nav-stack",
     "switch",
     "table",
     "tabs",
@@ -147,6 +149,7 @@ pub struct BaseShowcase {
     popup_open: bool,
     page: usize,
     slider: gpui::Entity<SliderState>,
+    stack: gpui::Entity<NavStackState>,
     input: gpui::Entity<InputState>,
     textarea: gpui::Entity<TextareaState>,
     editor: gpui::Entity<EditorState>,
@@ -260,6 +263,13 @@ impl BaseShowcase {
         let slider = cx.new(|_| SliderState::new().min(0.).max(100.).default_value(64.));
         cx.observe(&slider, |_, _, cx| cx.notify()).detach();
 
+        let stack = cx.new(|_| NavStackState::new());
+        stack.update(cx, |state, cx| {
+            let root = cx.new(|_| components::ShowcasePage::new(1, stack.downgrade()));
+            state.push(root, NavMotion::Immediate, cx);
+        });
+        cx.observe(&stack, |_, _, cx| cx.notify()).detach();
+
         let color_picker =
             cx.new(|cx| ColorPickerState::new(window, cx).default_value(example_rgb(0x2563eb)));
         cx.observe(&color_picker, |_, _, cx| cx.notify()).detach();
@@ -322,6 +332,7 @@ impl BaseShowcase {
             popup_open: false,
             page: 3,
             slider,
+            stack,
             input,
             textarea,
             editor,
@@ -469,6 +480,7 @@ impl Render for BaseShowcase {
             "resizable" => self.resizable().into_any_element(),
             "scrollbar" => self.scrollbar().into_any_element(),
             "slider" => self.slider(cx).into_any_element(),
+            "nav-stack" => self.nav_stack().into_any_element(),
             "select" => self.select(false, cx).into_any_element(),
             "sheet" => self.sheet(cx).into_any_element(),
             "switch" => self.switch(cx).into_any_element(),

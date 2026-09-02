@@ -102,8 +102,8 @@ semantic seams. Base does not walk arbitrary descendant trees to discover them.
 ### 3. Stateful systems
 
 Examples include InputState, TextareaState, EditorState, CalendarState, TreeState, SliderState,
-ResizableState, OtpState, ColorPickerState, ToastManager, ToastStackState, DockArea, TabGroup, and
-TilesState.
+ResizableState, OtpState, ColorPickerState, ToastManager, ToastStackState, NavStackState, DockArea,
+TabGroup, and TilesState.
 
 These modules retain data because their behavior spans frames or requires
 measurement, subscriptions, history, focus, or incremental updates. State is
