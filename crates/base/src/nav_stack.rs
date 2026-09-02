@@ -1,13 +1,14 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
-    AnyElement, AnyView, App, Context, Div, Entity, EventEmitter, IntoElement, ParentElement as _,
-    RenderOnce, StyleRefinement, Styled, Window, div,
+    AnyElement, AnyView, App, Context, Div, ElementId, Entity, EventEmitter,
+    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{
-    StyledExt as _,
-    motion::{Instant, MotionStatus, PresencePhase, Transition},
+    History, HistoryItem, StyledExt as _,
+    motion::{Presence, PresencePhase, Transition},
 };
 
 /// What a running transition is doing, in Qt's terms.
@@ -42,29 +43,31 @@ pub enum NavMotion {
 pub enum NavStackEvent {
     Pushed,
     Popped,
+    Forwarded,
     Replaced,
     Cleared,
 }
 
-/// The view leaving the stack, kept mounted until its transition finishes.
+/// The view leaving the stack, kept mounted until its exit transition
+/// finishes. The element samples that transition as a [`Presence`] keyed by
+/// the view, so an interrupted change reverses from where it is.
+#[derive(Clone)]
 struct Transit {
     outgoing: AnyView,
+    /// The position the outgoing view had on the stack.
+    index: usize,
     operation: NavOperation,
-    started_at: Instant,
+    motion: NavMotion,
 }
 
-/// One frame of a running transition, sampled by the element.
-struct TransitFrame {
-    outgoing: AnyView,
-    operation: NavOperation,
-    progress: f32,
-    status: MotionStatus,
-}
-
-/// A last-in-first-out stack of views, one visible at a time.
+/// A stack of views, one visible at a time, with the pages popped off it
+/// kept for `forward`.
 ///
 /// This is SwiftUI's `NavigationStack`, Qt's `StackView` and WinUI's
-/// `Frame`: navigation between pages.
+/// `Frame`: navigation between pages. Underneath it is a [`History`] of
+/// views — the stack is the undo side, and a popped page waits on the redo
+/// side until a push discards it, which is what WinUI's `BackStack` and
+/// `ForwardStack` do.
 ///
 /// The stack owns which view is current and the lifecycle of a change: after
 /// a push, pop or replace, the outgoing view stays mounted until the
@@ -74,10 +77,43 @@ struct TransitFrame {
 ///
 /// `pop` keeps the root, as Qt's `StackView` and UIKit's navigation controller
 /// do; `clear` is the way to empty the stack. A back button is shown when
-/// `depth() > 1`.
+/// `depth() > 1`, a forward button when `forward_views()` is not empty.
 pub struct NavStackState {
-    views: Vec<AnyView>,
+    history: History<NavEntry>,
     transit: Option<Transit>,
+}
+
+/// A view on the stack. Equality is the view's identity, so a page pushed
+/// twice is two entries of the same view.
+#[derive(Clone)]
+struct NavEntry {
+    view: AnyView,
+    version: usize,
+}
+
+impl NavEntry {
+    fn new(view: impl Into<AnyView>) -> Self {
+        Self {
+            view: view.into(),
+            version: 0,
+        }
+    }
+}
+
+impl PartialEq for NavEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.view == other.view
+    }
+}
+
+impl HistoryItem for NavEntry {
+    fn version(&self) -> usize {
+        self.version
+    }
+
+    fn set_version(&mut self, version: usize) {
+        self.version = version;
+    }
 }
 
 impl EventEmitter<NavStackEvent> for NavStackState {}
@@ -91,145 +127,185 @@ impl Default for NavStackState {
 impl NavStackState {
     pub fn new() -> Self {
         Self {
-            views: Vec::new(),
+            history: History::new(),
             transit: None,
         }
     }
 
     /// The number of views on the stack.
     pub fn depth(&self) -> usize {
-        self.views.len()
+        self.history.undos().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.views.is_empty()
+        self.history.undos().is_empty()
     }
 
     /// The view on top of the stack, which is the one shown once any
     /// transition has finished.
     pub fn current(&self) -> Option<&AnyView> {
-        self.views.last()
+        self.history.current().map(|entry| &entry.view)
     }
 
     /// Every view on the stack, root first.
-    pub fn views(&self) -> &[AnyView] {
-        &self.views
+    pub fn views(&self) -> impl ExactSizeIterator<Item = &AnyView> {
+        self.history.undos().iter().map(|entry| &entry.view)
     }
 
-    /// Pushes `view` on top of the stack.
+    /// The views popped since the last push, nearest first: the one
+    /// `forward` would bring back is the first.
+    pub fn forward_views(&self) -> impl ExactSizeIterator<Item = &AnyView> {
+        self.history.redos().iter().rev().map(|entry| &entry.view)
+    }
+
+    /// Pushes `view` on top of the stack and discards the forward views.
     ///
     /// Into an empty stack this is immediate, like Qt's `initialItem`. Over
     /// an existing top it starts a [`NavOperation::Push`] transition, unless
     /// `motion` is [`NavMotion::Immediate`].
     pub fn push(&mut self, view: impl Into<AnyView>, motion: NavMotion, cx: &mut Context<Self>) {
-        let outgoing = self.views.last().cloned();
-        self.views.push(view.into());
-        self.begin(outgoing, NavOperation::Push, motion, cx);
-        cx.emit(NavStackEvent::Pushed);
-        cx.notify();
+        let outgoing = self.top();
+        self.history.push(NavEntry::new(view));
+        self.finish(
+            outgoing,
+            NavOperation::Push,
+            motion,
+            NavStackEvent::Pushed,
+            cx,
+        );
     }
 
     /// Pops the top view and returns it, starting a [`NavOperation::Pop`]
-    /// transition to the view below.
+    /// transition to the view below. The view waits in `forward_views`.
     ///
     /// The root is never popped: this returns `None` at a depth of one or
     /// less.
     pub fn pop(&mut self, motion: NavMotion, cx: &mut Context<Self>) -> Option<AnyView> {
-        if self.views.len() <= 1 {
+        if self.depth() <= 1 {
             return None;
         }
-        let popped = self.views.pop()?;
-        self.begin(Some(popped.clone()), NavOperation::Pop, motion, cx);
-        cx.emit(NavStackEvent::Popped);
-        cx.notify();
-        Some(popped)
+        let popped = self.top();
+        self.undo_one()?;
+        self.finish(
+            popped.clone(),
+            NavOperation::Pop,
+            motion,
+            NavStackEvent::Popped,
+            cx,
+        );
+        popped.map(|(view, _)| view)
     }
 
     /// Pops every view above the root in one [`NavOperation::Pop`]
     /// transition from the previous top, and returns them root-side first.
     pub fn pop_to_root(&mut self, motion: NavMotion, cx: &mut Context<Self>) -> Vec<AnyView> {
-        if self.views.len() <= 1 {
-            return Vec::new();
+        let outgoing = self.top();
+        let mut popped = Vec::new();
+        while self.depth() > 1 {
+            match self.undo_one() {
+                Some(view) => popped.push(view),
+                None => break,
+            }
         }
-        let popped: Vec<AnyView> = self.views.drain(1..).collect();
-        self.begin(popped.last().cloned(), NavOperation::Pop, motion, cx);
-        cx.emit(NavStackEvent::Popped);
-        cx.notify();
+        if popped.is_empty() {
+            return popped;
+        }
+        self.finish(
+            outgoing,
+            NavOperation::Pop,
+            motion,
+            NavStackEvent::Popped,
+            cx,
+        );
+        popped.reverse();
         popped
     }
 
+    /// Brings back the most recently popped view, starting a
+    /// [`NavOperation::Push`] transition over the current top, and returns
+    /// it. `None` when nothing has been popped since the last push.
+    pub fn forward(&mut self, motion: NavMotion, cx: &mut Context<Self>) -> Option<AnyView> {
+        let outgoing = self.top();
+        let view = self.history.redo()?.into_iter().next()?.view;
+        self.finish(
+            outgoing,
+            NavOperation::Push,
+            motion,
+            NavStackEvent::Forwarded,
+            cx,
+        );
+        Some(view)
+    }
+
     /// Swaps the top view for `view` and returns the one replaced, starting a
-    /// [`NavOperation::Replace`] transition. On an empty stack this is a
-    /// push.
+    /// [`NavOperation::Replace`] transition. The forward views are kept. On
+    /// an empty stack this is a push.
     pub fn replace(
         &mut self,
         view: impl Into<AnyView>,
         motion: NavMotion,
         cx: &mut Context<Self>,
     ) -> Option<AnyView> {
-        let Some(replaced) = self.views.pop() else {
+        let Some(replaced) = self.top() else {
             self.push(view, motion, cx);
             return None;
         };
-        self.views.push(view.into());
-        self.begin(Some(replaced.clone()), NavOperation::Replace, motion, cx);
-        cx.emit(NavStackEvent::Replaced);
-        cx.notify();
-        Some(replaced)
+        self.history.replace_current(NavEntry::new(view));
+        self.finish(
+            Some(replaced.clone()),
+            NavOperation::Replace,
+            motion,
+            NavStackEvent::Replaced,
+            cx,
+        );
+        Some(replaced.0)
     }
 
-    /// Empties the stack immediately, abandoning any running transition.
+    /// Empties the stack and the forward views immediately, abandoning any
+    /// running transition.
     pub fn clear(&mut self, cx: &mut Context<Self>) {
-        self.views.clear();
+        self.history.clear();
         self.transit = None;
         cx.emit(NavStackEvent::Cleared);
         cx.notify();
     }
 
-    /// Starts a transition from `outgoing`, or none for an immediate change.
-    /// A transition already running is finished on the spot either way, so
-    /// at most one outgoing view is ever mounted.
-    fn begin(
-        &mut self,
-        outgoing: Option<AnyView>,
-        operation: NavOperation,
-        motion: NavMotion,
-        cx: &Context<Self>,
-    ) {
-        if motion == NavMotion::Immediate {
-            self.transit = None;
-            return;
-        }
-        self.transit = outgoing.map(|outgoing| Transit {
-            outgoing,
-            operation,
-            started_at: cx.background_executor().now(),
-        });
+    /// The top view with its position, before an operation moves it.
+    fn top(&self) -> Option<(AnyView, usize)> {
+        let index = self.depth().checked_sub(1)?;
+        self.current().cloned().map(|view| (view, index))
     }
 
-    /// Samples the running transition at `now`, dropping the outgoing view
-    /// once the transition has finished. `None` means there is nothing in
-    /// transit: no `transition` finishes immediately.
-    fn advance(&mut self, now: Instant, transition: Option<&Transition>) -> Option<TransitFrame> {
-        let transit = self.transit.as_ref()?;
-        let (progress, status) = match transition {
-            Some(transition) => {
-                let elapsed = now.saturating_duration_since(transit.started_at);
-                let (progress, status) = transition.progress(elapsed, transition.duration());
-                (transition.sample(progress), status)
-            }
-            None => (1.0, MotionStatus::Finished),
-        };
-        if status == MotionStatus::Finished {
-            self.transit = None;
-            return None;
-        }
-        Some(TransitFrame {
-            outgoing: transit.outgoing.clone(),
-            operation: transit.operation,
-            progress,
-            status,
-        })
+    /// Takes the top view back onto the forward side. Every push has its own
+    /// version, so an undo step is one view.
+    fn undo_one(&mut self) -> Option<AnyView> {
+        self.history
+            .undo()?
+            .into_iter()
+            .next()
+            .map(|entry| entry.view)
+    }
+
+    /// Records the change: `outgoing` stays mounted until its exit
+    /// transition finishes, or not at all for an immediate change. A change
+    /// already in transit is superseded, so at most one outgoing view is ever
+    /// mounted; the element reverses its presence from wherever it is.
+    fn finish(
+        &mut self,
+        outgoing: Option<(AnyView, usize)>,
+        operation: NavOperation,
+        motion: NavMotion,
+        event: NavStackEvent,
+        cx: &mut Context<Self>,
+    ) {
+        self.transit = outgoing.map(|(outgoing, index)| Transit {
+            outgoing,
+            index,
+            operation,
+            motion,
+        });
+        cx.emit(event);
+        cx.notify();
     }
 }
 
@@ -290,46 +366,79 @@ impl Styled for NavStack {
 
 impl RenderOnce for NavStack {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let now = cx.background_executor().now();
-        let transition = if cx.reduce_motion() {
-            None
-        } else {
-            self.transition.as_ref()
+        let (current, depth, transit) = {
+            let state = self.state.read(cx);
+            (
+                state.current().cloned(),
+                state.depth(),
+                state.transit.clone(),
+            )
         };
-        let frame = self
-            .state
-            .update(cx, |state, _| state.advance(now, transition));
-        let views = self.state.read(cx).views.clone();
+        let immediate = cx.reduce_motion()
+            || self.transition.is_none()
+            || transit
+                .as_ref()
+                .is_some_and(|transit| transit.motion == NavMotion::Immediate);
+        let transition = if immediate {
+            Transition::new(Duration::ZERO)
+        } else {
+            self.transition
+                .clone()
+                .unwrap_or_else(|| Transition::new(Duration::ZERO))
+        };
 
-        let mut items = Vec::with_capacity(2);
-        if let Some(current) = views.last() {
-            let index = views.len() - 1;
-            match frame {
-                Some(frame) => {
-                    if matches!(frame.status, MotionStatus::Delayed | MotionStatus::Running) {
-                        window.request_animation_frame();
-                    }
+        // The outgoing view's presence is the change's clock: its exit runs
+        // 1 → 0, reversing if the change is interrupted, and both pages of
+        // the change read their progress from it.
+        let change = transit.and_then(|transit| {
+            let sample = Presence::new(page_id(&transit.outgoing), false)
+                .transition(transition.clone())
+                .sample(window, cx);
+            if sample.should_render() {
+                Some((transit, 1.0 - sample.progress))
+            } else {
+                self.state.update(cx, |state, _| state.transit = None);
+                None
+            }
+        });
+
+        // The current view's presence is sampled too, so a view brought back
+        // by `forward` or revealed by `pop` starts its next exit from present.
+        // With nothing changing it settles on the spot; the root does not
+        // animate in.
+        if let Some(current) = &current {
+            let transition = if change.is_some() {
+                transition
+            } else {
+                Transition::new(Duration::ZERO)
+            };
+            Presence::new(page_id(current), true)
+                .transition(transition)
+                .sample(window, cx);
+        }
+
+        let mut items = Vec::with_capacity(3);
+        if let Some(current) = current {
+            let index = depth - 1;
+            match change {
+                Some((transit, progress)) => {
                     let current = NavPage::new(
-                        current.clone(),
+                        current,
                         index,
                         PresencePhase::Entering,
-                        Some(frame.operation),
-                        frame.progress,
+                        Some(transit.operation),
+                        progress,
                     );
-                    let outgoing_index = match frame.operation {
-                        NavOperation::Push => index.saturating_sub(1),
-                        NavOperation::Pop | NavOperation::Replace => index + 1,
-                    };
                     let outgoing = NavPage::new(
-                        frame.outgoing,
-                        outgoing_index,
+                        transit.outgoing,
+                        transit.index,
                         PresencePhase::Exiting,
-                        Some(frame.operation),
-                        frame.progress,
+                        Some(transit.operation),
+                        progress,
                     );
                     // A pushed or replacing view paints over what it covers; a
                     // popped view paints over what it reveals.
-                    match frame.operation {
+                    match transit.operation {
                         NavOperation::Push | NavOperation::Replace => {
                             items.push(outgoing);
                             items.push(current);
@@ -341,7 +450,7 @@ impl RenderOnce for NavStack {
                     }
                 }
                 None => items.push(NavPage::new(
-                    current.clone(),
+                    current,
                     index,
                     PresencePhase::Present,
                     None,
@@ -349,6 +458,7 @@ impl RenderOnce for NavStack {
                 )),
             }
         }
+        let changing = items.len() > 1;
 
         let render_item = self.render_item;
         self.base
@@ -358,7 +468,17 @@ impl RenderOnce for NavStack {
                 Some(render) => render(item, window, cx),
                 None => item.into_any_element(),
             }))
+            // Neither page takes pointer input while the change runs: the
+            // outgoing one is on its way out, and the incoming one is not yet
+            // where it will be.
+            .when(changing, |this| {
+                this.child(div().absolute().inset_0().occlude())
+            })
     }
+}
+
+fn page_id(view: &AnyView) -> ElementId {
+    ("nav-stack", view.entity_id()).into()
 }
 
 /// One mounted view of a [`NavStack`], handed to the item renderer.
@@ -501,10 +621,11 @@ mod tests {
         let popped = stack.update(cx, |stack, cx| stack.pop(NavMotion::Animated, cx));
         assert_eq!(popped, Some(second.clone()));
         stack.read_with(cx, |stack, _| {
-            assert_eq!(stack.views(), std::slice::from_ref(&root));
+            assert_eq!(stack.views().collect::<Vec<_>>(), [&root]);
             let transit = stack.transit.as_ref().expect("pop transitions");
             assert_eq!(transit.operation, NavOperation::Pop);
             assert_eq!(transit.outgoing, second);
+            assert_eq!(transit.index, 1, "the popped view keeps its position");
         });
 
         assert_eq!(
@@ -537,8 +658,10 @@ mod tests {
             pages[1..]
         );
         stack.read_with(cx, |stack, _| {
-            assert_eq!(stack.views(), &pages[..1]);
-            assert_eq!(stack.transit.as_ref().map(|t| &t.outgoing), Some(&pages[2]));
+            assert_eq!(stack.views().cloned().collect::<Vec<_>>(), pages[..1]);
+            let transit = stack.transit.as_ref().expect("pop_to_root transitions");
+            assert_eq!(transit.outgoing, pages[2]);
+            assert_eq!(transit.index, 2, "the previous top keeps its position");
         });
         assert!(
             stack
@@ -569,10 +692,14 @@ mod tests {
             Some(first.clone())
         );
         stack.read_with(cx, |stack, _| {
-            assert_eq!(stack.views(), std::slice::from_ref(&second));
+            assert_eq!(stack.views().collect::<Vec<_>>(), [&second]);
             let transit = stack.transit.as_ref().expect("replace transitions");
             assert_eq!(transit.operation, NavOperation::Replace);
             assert_eq!(transit.outgoing, first);
+            assert_eq!(
+                transit.index, 0,
+                "the replaced view sat where the new one sits"
+            );
         });
 
         stack.update(cx, |stack, cx| stack.clear(cx));
@@ -591,71 +718,126 @@ mod tests {
     }
 
     #[gpui::test]
-    fn advance_drops_the_outgoing_view_when_the_transition_finishes(cx: &mut TestAppContext) {
-        let (stack, _) = stack(cx);
-        let (root, second) = (page(cx), page(cx));
+    fn popped_views_wait_for_forward_until_the_next_push(cx: &mut TestAppContext) {
+        let (stack, events) = stack(cx);
+        let pages: Vec<AnyView> = (0..3).map(|_| page(cx)).collect();
+        for view in &pages {
+            stack.update(cx, |stack, cx| {
+                stack.push(view.clone(), NavMotion::Animated, cx)
+            });
+        }
+        assert!(
+            stack
+                .update(cx, |stack, cx| stack.forward(NavMotion::Animated, cx))
+                .is_none()
+        );
+
         stack.update(cx, |stack, cx| {
-            stack.push(root, NavMotion::Animated, cx);
-            stack.push(second, NavMotion::Animated, cx);
+            stack.pop(NavMotion::Animated, cx);
+            stack.pop(NavMotion::Animated, cx);
         });
-        let started_at = stack.read_with(cx, |stack, _| stack.transit.as_ref().unwrap().started_at);
-        let transition = Transition::new(Duration::from_millis(200));
-
-        stack.update(cx, |stack, _| {
-            let frame = stack
-                .advance(started_at + Duration::from_millis(100), Some(&transition))
-                .expect("halfway through, still in transit");
-            assert_eq!(frame.operation, NavOperation::Push);
-            assert_eq!(frame.status, MotionStatus::Running);
-            assert!(frame.progress > 0.0 && frame.progress < 1.0);
-            assert!(stack.transit.is_some());
-
-            assert!(
-                stack
-                    .advance(started_at + Duration::from_millis(200), Some(&transition))
-                    .is_none()
+        stack.read_with(cx, |stack, _| {
+            assert_eq!(stack.depth(), 1);
+            assert_eq!(
+                stack.forward_views().cloned().collect::<Vec<_>>(),
+                pages[1..]
             );
-            assert!(stack.transit.is_none());
         });
+
+        let brought_back = stack.update(cx, |stack, cx| stack.forward(NavMotion::Animated, cx));
+        assert_eq!(brought_back, Some(pages[1].clone()));
+        stack.read_with(cx, |stack, _| {
+            assert_eq!(stack.current(), Some(&pages[1]));
+            let transit = stack
+                .transit
+                .as_ref()
+                .expect("forward transitions like a push");
+            assert_eq!(transit.operation, NavOperation::Push);
+            assert_eq!(transit.outgoing, pages[0]);
+            assert_eq!(stack.forward_views().len(), 1);
+        });
+
+        let fresh = page(cx);
+        stack.update(cx, |stack, cx| stack.push(fresh, NavMotion::Animated, cx));
+        assert_eq!(
+            stack.read_with(cx, |stack, _| stack.forward_views().len()),
+            0
+        );
+        assert_eq!(events.borrow().last(), Some(&NavStackEvent::Pushed));
+        assert!(events.borrow().contains(&NavStackEvent::Forwarded));
     }
 
     #[gpui::test]
-    fn without_a_transition_the_change_is_immediate(cx: &mut TestAppContext) {
-        let (stack, _) = stack(cx);
-        let (root, second) = (page(cx), page(cx));
-        stack.update(cx, |stack, cx| {
-            stack.push(root, NavMotion::Animated, cx);
-            stack.push(second, NavMotion::Animated, cx);
-        });
-        let started_at = stack.read_with(cx, |stack, _| stack.transit.as_ref().unwrap().started_at);
-        stack.update(cx, |stack, _| {
-            assert!(stack.advance(started_at, None).is_none());
-            assert!(stack.transit.is_none());
-        });
-    }
-
-    #[gpui::test]
-    fn an_immediate_change_mounts_no_outgoing_view(cx: &mut TestAppContext) {
+    fn an_immediate_change_records_its_motion_and_supersedes_the_running_one(
+        cx: &mut TestAppContext,
+    ) {
         let (stack, events) = stack(cx);
         let (root, second, third) = (page(cx), page(cx), page(cx));
         stack.update(cx, |stack, cx| {
             stack.push(root, NavMotion::Animated, cx);
-            stack.push(second, NavMotion::Animated, cx);
+            stack.push(second.clone(), NavMotion::Animated, cx);
             stack.push(third.clone(), NavMotion::Immediate, cx);
         });
         stack.read_with(cx, |stack, _| {
             assert_eq!(stack.current(), Some(&third));
-            assert!(
-                stack.transit.is_none(),
-                "immediate also ends the running push"
-            );
+            let transit = stack.transit.as_ref().expect("the change is recorded");
+            assert_eq!(transit.motion, NavMotion::Immediate);
+            assert_eq!(transit.outgoing, second, "the running push was superseded");
         });
         assert_eq!(
             stack.update(cx, |stack, cx| stack.pop(NavMotion::Immediate, cx)),
-            Some(third)
+            Some(third.clone())
         );
-        assert!(stack.read_with(cx, |stack, _| stack.transit.is_none()));
+        stack.read_with(cx, |stack, _| {
+            let transit = stack.transit.as_ref().unwrap();
+            assert_eq!(transit.motion, NavMotion::Immediate);
+            assert_eq!(transit.outgoing, third);
+        });
         assert_eq!(events.borrow().len(), 4);
+    }
+
+    struct Host {
+        stack: Entity<NavStackState>,
+    }
+
+    impl Render for Host {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            NavStack::new(&self.stack)
+                .size_full()
+                .transition(Transition::new(Duration::from_millis(200)))
+        }
+    }
+
+    #[gpui::test]
+    fn the_outgoing_view_is_dropped_once_its_exit_has_run(cx: &mut TestAppContext) {
+        let stack = cx.new(|_| NavStackState::new());
+        let (root, second) = (page(cx), page(cx));
+        let (_, cx) = cx.add_window_view({
+            let stack = stack.clone();
+            move |_, _| Host { stack }
+        });
+        stack.update(cx, |stack, cx| {
+            stack.push(root, NavMotion::Immediate, cx);
+            stack.push(second, NavMotion::Animated, cx);
+        });
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(stack.read_with(cx, |stack, _| stack.transit.is_some()));
+
+        cx.executor().advance_clock(Duration::from_millis(100));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(stack.read_with(cx, |stack, _| stack.transit.is_some()));
+
+        cx.executor().advance_clock(Duration::from_millis(150));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(stack.read_with(cx, |stack, _| stack.transit.is_none()));
+
+        // An immediate change is gone after the frame that draws it.
+        stack.update(cx, |stack, cx| {
+            stack.pop(NavMotion::Immediate, cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(stack.read_with(cx, |stack, _| stack.transit.is_none()));
     }
 
     #[gpui::test]

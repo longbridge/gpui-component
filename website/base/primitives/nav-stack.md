@@ -1,12 +1,12 @@
 ---
 title: Nav Stack
-description: A navigation stack of views with push, pop, and replace, and an animatable transition lifecycle.
-order: 28
+description: A navigation stack of views with push, pop, forward, and replace, and an animatable transition lifecycle.
+order: 16
 ---
 
 # Nav Stack
 
-A last-in-first-out stack of views, one visible at a time: push a view over the current one, pop back to the one below, or replace the top. It is SwiftUI's `NavigationStack`, Qt's `StackView`, and WinUI's `Frame`.
+A last-in-first-out stack of views, one visible at a time: push a view over the current one, pop back to the one below, or replace the top. It is SwiftUI's `NavigationStack`, Qt's `StackView`, and WinUI's `Frame`. Underneath it is a [History](../history.md) of views: the stack is the undo side, and a popped page waits on the redo side until the next push discards it, so `forward` brings it back the way WinUI's `GoForward` does.
 
 Like every `gpui-base` primitive, Nav Stack supplies behavior and semantic structure without imposing a product visual language. The pages are views you create, and how a change between them moves is decided by your item renderer.
 
@@ -34,9 +34,10 @@ use gpui_base::motion::{PresencePhase, Transition};
 | `push(view, motion, cx)` | Pushes over the current top. Into an empty stack it is immediate, like Qt's `initialItem`. |
 | `pop(motion, cx)` | Pops the top and returns it. The root is never popped, so this returns `None` at a depth of one. |
 | `pop_to_root(motion, cx)` | Pops everything above the root in one transition and returns those views. |
-| `replace(view, motion, cx)` | Swaps the top for `view` and returns the one replaced. On an empty stack it pushes. |
-| `clear(cx)` | Empties the stack immediately. |
-| `depth()`, `is_empty()`, `current()`, `views()` | Read the stack. Show a back button when `depth() > 1`. |
+| `forward(motion, cx)` | Brings back the most recently popped view over the current top and returns it. `None` when nothing has been popped since the last push. |
+| `replace(view, motion, cx)` | Swaps the top for `view` and returns the one replaced, keeping the forward views. On an empty stack it pushes. |
+| `clear(cx)` | Empties the stack and the forward views immediately. |
+| `depth()`, `is_empty()`, `current()`, `views()`, `forward_views()` | Read the stack. Show a back button when `depth() > 1`, a forward button when `forward_views()` is not empty. |
 
 `NavStack` is the element. It holds the entity, takes a `transition` to run each change under, and hands every mounted view to the `item` renderer as a `NavPage`. Style the element for size, background and clipping; it is positioned so that the two pages of a change can overlap.
 
@@ -75,11 +76,13 @@ NavStack::new(&self.stack)
     })
 ```
 
-The stack also switches immediately when the platform asks for reduced motion, whatever the renderer would have drawn. A new operation while a transition is running finishes that transition on the spot, so at most two pages are ever mounted.
+The stack also switches immediately when the platform asks for reduced motion, whatever the renderer would have drawn. A new operation while a transition is running supersedes it, and the pages reverse from where they are rather than jumping. While a change runs, neither page takes pointer input.
 
 ## State and events
 
 Keep the `NavStackState` entity on the view that renders the stack and observe it, so a push from anywhere re-renders the host. A page that needs to navigate holds a `WeakEntity` of the stack, as the showcase page does.
+
+`views()` and `forward_views()` are enough for a history menu: list both, and pop or forward until the chosen page is current. The showcase page draws that list as a trail of page numbers, the pages ahead greyed out.
 
 Focus is not moved by the stack. `AnyView` carries no focus handle; a page that wants focus takes it when it is pushed, as it would anywhere else.
 
@@ -97,4 +100,4 @@ Announce the page change in the page itself: a heading at the top of each page g
 
 ## Notes
 
-Pages are entities and are retained by the stack until popped or cleared, so a page's own subscriptions and timers live as long as it is on the stack. Verify reduced-motion behavior in the consuming design system.
+Pages are entities. The stack retains the ones on it and the ones popped since the last push, which `forward` can bring back, so a page's own subscriptions and timers live until a push discards it or the stack is cleared. Verify reduced-motion behavior in the consuming design system.
