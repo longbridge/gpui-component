@@ -660,8 +660,12 @@ pub fn materialize(
 ) -> AnyElement {
     let ambient = window.text_style().color;
     // Counted and timed because this is the native half of rebuilding a dirty
-    // script view. Clean window frames reuse ShellRoot's cached subtree and do
-    // not enter here at all.
+    // script view. What a clean window frame costs here depends on what the
+    // view marks: with no `.cached()` element, `ShellRoot` mounts it through
+    // gpui's own cache and a clean frame does not enter here at all; once it
+    // caches subtrees it is mounted uncached instead, and a clean frame walks
+    // the skeleton — every node outside a cached subtree — while the subtrees
+    // themselves are reused.
     let metrics = runtime.metrics();
     metrics.time_materialize(|| {
         materialize_node(

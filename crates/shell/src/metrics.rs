@@ -182,6 +182,11 @@ impl RuntimeMetrics {
 
     /// Mounts gpui answered from its cache. gpui does not report a reuse, so
     /// this is what was mounted less what rendered.
+    ///
+    /// Which makes a mount that was never prepainted count as a reuse too — a
+    /// slot a component was handed and dropped, the content of a popover that
+    /// is closed. Nothing drew it, so nothing rendered it, and the subtraction
+    /// cannot tell that apart from a subtree gpui kept.
     pub fn subtree_reuses(&self) -> u64 {
         self.subtree_mounts.saturating_sub(self.subtree_rebuilds)
     }
