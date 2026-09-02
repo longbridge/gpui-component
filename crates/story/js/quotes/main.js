@@ -131,7 +131,6 @@ export default class QuoteBoard extends View {
           )
           .child(
             action("watch-all", "Watch all", () => watch_all(true), cx, {
-              primary: true,
               disabled: watched === total,
             }),
           )

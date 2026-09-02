@@ -1957,6 +1957,10 @@ mod tests {
             "the quote helpers must read semantic colors from the current context"
         );
         assert!(
+            !quote_source.contains("primary: true"),
+            "watchlist toolbar commands must stay outlined so their disabled labels retain contrast"
+        );
+        assert!(
             motion_source.contains(".left(active ? REST_LEFT + TRAVEL : REST_LEFT)"),
             "the motion card must travel between the two stations the track marks"
         );
