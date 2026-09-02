@@ -180,10 +180,7 @@ impl FpsMonitor {
     /// frame rate the application *can* sustain, not the rate it happens to be
     /// drawing at. Turn it off to measure the real workload — the HUD then only
     /// updates when the window redraws for its own reasons, and reads zero
-    /// while the window is idle. A low rate is then not a finding, so the
-    /// headline is graded by what a frame cost rather than by how many there
-    /// were, and an overrun counts as a dropped frame only when another redraw
-    /// was already waiting on it.
+    /// while the window is idle.
     pub fn continuous(mut self, continuous: bool) -> Self {
         self.continuous = continuous;
         self
@@ -283,12 +280,7 @@ impl FpsMonitor {
             // at this cadence would be an arbitrary sample.
             frame_millis: self.sampler.mean_draw().as_secs_f32() * 1000.,
             percentile_millis: self.sampler.percentile_draw(FRAME_PERCENTILE).as_secs_f32() * 1000.,
-            // Drawing on demand, an overrun drops a frame only if another
-            // redraw was already waiting on it; see `dropped_ratio`.
-            dropped_percent: self
-                .sampler
-                .dropped_ratio(self.frame_budget, !self.continuous)
-                * 100.,
+            dropped_percent: self.sampler.over_budget_ratio(self.frame_budget) * 100.,
             invalidations: self.sampler.mean_invalidations(),
         };
         self.readout_at = Some(now);
@@ -441,19 +433,7 @@ impl Render for FpsMonitor {
             dropped_percent: dropped,
             invalidations,
         } = self.readout;
-        // Continuous, the rate is the rate the window can sustain, and falling
-        // short of the target is the finding. Passive, it is only how often
-        // the application had a reason to draw: a window that redraws six
-        // times a second because six things changed is idle, not slow, and a
-        // red headline over it reports a problem that is not there. So the
-        // headline takes its colour from what those frames cost instead --
-        // the same grade as the FRAME row, which is the reading that says
-        // whether a redraw stutters.
-        let fps_color = if self.continuous {
-            fps_color(fps, budget, style)
-        } else {
-            passive_fps_color(fps, frame_millis, budget, style)
-        };
+        let fps_color = fps_color(fps, budget, style);
         let resources = self.resources.filter(|_| self.show_resources);
         let compact = self.compact;
 
@@ -498,10 +478,10 @@ impl Render for FpsMonitor {
                             "FRAME",
                             format!("{frame_millis:.1} ms"),
                             // Graded against the budget, not against the frame
-                            // rate: an idle window draws a handful of frames a
-                            // second, every one of them well inside the budget,
-                            // and this row is what says so. Drawing on demand,
-                            // the headline follows this grade too.
+                            // rate. An idle window draws a handful of frames a
+                            // second, so the headline goes red while every one
+                            // of those frames was in fact drawn well inside the
+                            // budget; this row is what says so.
                             style.level_color(frame_millis / 1000., budget.as_secs_f32()),
                             style,
                         ))
@@ -603,18 +583,6 @@ fn fps_color(fps: f32, budget: Duration, style: FpsStyle) -> Hsla {
     } else {
         style.bad
     }
-}
-
-/// Grades the headline of a window that draws only when asked.
-///
-/// The rate says nothing about health there — it is the number of things
-/// that changed — so the colour is the FRAME row's: what a frame cost against
-/// the budget. Zero frames is still the idle grey.
-fn passive_fps_color(fps: f32, frame_millis: f32, budget: Duration, style: FpsStyle) -> Hsla {
-    if fps <= 0. {
-        return style.muted;
-    }
-    style.level_color(frame_millis / 1000., budget.as_secs_f32())
 }
 
 /// A row carrying two [`pair`]s, pushed to either inner edge.
@@ -723,19 +691,6 @@ mod tests {
         assert_eq!(fps_color(45., budget, style), style.warn);
         assert_eq!(fps_color(20., budget, style), style.bad);
         assert_eq!(fps_color(0., budget, style), style.muted);
-    }
-
-    #[test]
-    fn a_window_drawing_on_demand_is_graded_by_frame_cost_not_rate() {
-        let style = FpsStyle::dark();
-        let budget = DEFAULT_FRAME_BUDGET;
-
-        // Six cheap frames a second is an idle window, not a slow one.
-        assert_eq!(passive_fps_color(6., 4., budget, style), style.good);
-        // The same six frames, each over budget, is what a stutter looks like.
-        assert_eq!(passive_fps_color(6., 24., budget, style), style.warn);
-        assert_eq!(passive_fps_color(6., 40., budget, style), style.bad);
-        assert_eq!(passive_fps_color(0., 0., budget, style), style.muted);
     }
 
     #[test]
