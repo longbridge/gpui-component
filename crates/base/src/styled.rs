@@ -31,9 +31,12 @@ impl From<Option<Role>> for RoleOverride {
     }
 }
 
+/// A row. Children are centred on the cross axis; see [`StyledExt::h_flex`].
 pub fn h_flex() -> Div {
     div().h_flex()
 }
+
+/// A column. Children stretch to the column's width, as in CSS flexbox.
 pub fn v_flex() -> Div {
     div().v_flex()
 }
@@ -72,6 +75,20 @@ pub trait StyledExt: Styled + Sized {
         self
     }
 
+    /// Lays this element out as a row with its children centred on the
+    /// cross axis, the same as Zed's `h_flex`.
+    ///
+    /// That is what a row of controls wants. It is not what a row of
+    /// full-height columns wants: a column taller than the row is centred,
+    /// so its top is clipped off the top of the window. A row of columns
+    /// says `items_stretch()`:
+    ///
+    /// ```
+    /// use gpui::{Styled as _, div};
+    /// use gpui_base::StyledExt as _;
+    ///
+    /// let shell = div().h_flex().items_stretch().size_full();
+    /// ```
     fn h_flex(self) -> Self {
         self.flex().flex_row().items_center()
     }
