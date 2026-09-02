@@ -1791,6 +1791,10 @@ const ELEMENT_METHODS: &str = r#"    /**
      * edge is a preference rather than a promise.
      */
     anchor(value: Anchor): Element;
+    /** Whether an fps_monitor requests continuous whole-window redraws. Default false. */
+    continuous(value: boolean): Element;
+    /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
+    frame_budget(milliseconds: number): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
     mouse_button(value: MouseButton): Element;
     /**
@@ -3842,6 +3846,8 @@ mod tests {
         "default_open",
         "overlay_closable",
         "anchor",
+        "continuous",
+        "frame_budget",
         "mouse_button",
         "open_delay",
         "close_delay",

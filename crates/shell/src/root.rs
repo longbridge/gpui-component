@@ -18,8 +18,8 @@ use gpui::{
     Anchor, AnyElement, AnyView, App, AppContext as _, ClickEvent, ClipboardItem, Context,
     ElementId, Entity, FocusHandle, Global, Hsla, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, MouseDownEvent, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, WeakFocusHandle, Window, actions, deferred, div,
-    hsla, prelude::FluentBuilder as _, px,
+    StatefulInteractiveElement as _, StyleRefinement, Styled as _, WeakFocusHandle, Window,
+    actions, deferred, div, hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
     ColorTokens, Dialog, POPUP_PRIORITY, Placement, RadiusTokens, Sheet, SpacingTokens,
@@ -771,7 +771,11 @@ impl Render for ShellRoot {
             .text_color(colors.foreground)
             // Painted back to front; see the stacking order on `ShellRoot`.
             .child(TextSelectionLayer)
-            .child(self.content.clone())
+            .child(
+                self.content
+                    .clone()
+                    .cached(StyleRefinement::default().size_full()),
+            )
             .children(self.sheet_layer(&colors, &spacing, cx))
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
             .child(self.toast_layer(&colors, &radius, &spacing, cx))

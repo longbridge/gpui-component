@@ -1,13 +1,14 @@
 //! The single bridge between a script view and GPUI's render loop.
 //!
 //! Every script-defined view, panel, or dialog body is carried by a `ScriptView`
-//! entity. GPUI calls `render` whenever the view is notified — and it is
-//! notified for reasons the script never hears about, from a hover to a cursor
-//! blink to an animation frame. So `render` here is deliberately *not* a script
-//! call:
+//! entity. [`ShellRoot`](crate::root::ShellRoot) mounts the entity through
+//! GPUI's cached-view path, so a clean window frame reuses its rendered subtree
+//! without calling this `render` at all. When the entity or one of its retained
+//! descendants is dirty, `render` remains deliberately *not* necessarily a
+//! script call:
 //!
 //! ```text
-//! GPUI render ──▶ snapshot still valid? ──yes──▶ materialize   (no VM)
+//! dirty view render ─▶ snapshot still valid? ──yes──▶ materialize   (no VM)
 //!                          │
 //!                          no
 //!                          ▼
@@ -16,8 +17,10 @@
 //!
 //! The script runs only when something invalidated its snapshot: `cx.notify()`
 //! from an event or a task, a hot reload, or a palette change. Everything else
-//! replays the description the script already produced. That is what keeps
-//! script cost proportional to application activity rather than to frame rate.
+//! replays the description the script already produced. Clean frames skip both
+//! operations through GPUI's subtree cache. That is what keeps script and
+//! materialization cost proportional to application activity rather than frame
+//! rate.
 
 use std::rc::Rc;
 

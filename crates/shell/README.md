@@ -173,7 +173,7 @@ import { fps_monitor } from "gpui-fps";
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `value` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
-| `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
+| `fps_monitor()` | function | The native `gpui-fps` performance HUD; passive by default, with `.continuous(true)` for a sustained-frame test |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |

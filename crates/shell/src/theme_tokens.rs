@@ -3,9 +3,7 @@
 use std::cell::RefCell;
 
 use gpui::{App, Hsla, Pixels};
-use gpui_base::{
-    ColorTokens, RadiusTokens, SemanticThemeTokens, SpacingTokens, Theme, TypographyTokens,
-};
+use gpui_base::{ColorTokens, RadiusTokens, SemanticThemeTokens, SpacingTokens, Theme};
 
 use crate::scope::with_current_app;
 
@@ -41,27 +39,12 @@ fn with_tokens<R>(read: impl FnOnce(&SemanticThemeTokens) -> R) -> Option<R> {
     CACHED.with(|cached| cached.borrow().as_ref().map(read))
 }
 
+pub(crate) fn current() -> Option<SemanticThemeTokens> {
+    with_tokens(Clone::clone)
+}
+
 pub(crate) fn token_color(name: &str) -> Option<Hsla> {
     with_tokens(|tokens| resolve_color(&tokens.colors, name)).flatten()
-}
-
-pub(crate) fn token_spacing(name: &str) -> Option<Pixels> {
-    with_tokens(|tokens| resolve_spacing(&tokens.spacing, name)).flatten()
-}
-
-pub(crate) fn token_radius(name: &str) -> Option<Pixels> {
-    with_tokens(|tokens| resolve_radius(&tokens.radius, name)).flatten()
-}
-
-/// The whole type scale, rather than one entry by name.
-///
-/// The colour, spacing and radius lookups above answer one token at a time
-/// because a description names them one at a time -- `bg("surface")`. Nothing
-/// names a text style that way: the scale is read whole, to be reported back
-/// to a script, and six lookups that each clone two font families to return
-/// one of them would cost more than the copy this makes.
-pub(crate) fn typography_tokens() -> Option<TypographyTokens> {
-    with_tokens(|tokens| tokens.typography.clone())
 }
 
 pub(crate) const COLOR_TOKEN_NAMES: &[&str] = &[
@@ -98,7 +81,7 @@ pub(crate) fn radius_token_names() -> &'static [&'static str] {
     RADIUS_TOKEN_NAMES
 }
 
-fn resolve_color(colors: &ColorTokens, name: &str) -> Option<Hsla> {
+pub(crate) fn resolve_color(colors: &ColorTokens, name: &str) -> Option<Hsla> {
     Some(match name {
         "background" => colors.background,
         "foreground" => colors.foreground,
@@ -122,7 +105,7 @@ fn resolve_color(colors: &ColorTokens, name: &str) -> Option<Hsla> {
     })
 }
 
-fn resolve_spacing(spacing: &SpacingTokens, name: &str) -> Option<Pixels> {
+pub(crate) fn resolve_spacing(spacing: &SpacingTokens, name: &str) -> Option<Pixels> {
     Some(match name {
         "xxs" => spacing.xxs,
         "xs" => spacing.xs,
@@ -135,7 +118,7 @@ fn resolve_spacing(spacing: &SpacingTokens, name: &str) -> Option<Pixels> {
     })
 }
 
-fn resolve_radius(radius: &RadiusTokens, name: &str) -> Option<Pixels> {
+pub(crate) fn resolve_radius(radius: &RadiusTokens, name: &str) -> Option<Pixels> {
     Some(match name {
         "none" => radius.none,
         "sm" => radius.sm,
