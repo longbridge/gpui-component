@@ -932,6 +932,11 @@ pub struct SpecArena {
     /// declarations, or the element filling a named slot. They still take ops,
     /// but they can never enter the tree.
     claimed: Vec<bool>,
+    /// Roots of the subtrees handed to a registered component as element
+    /// arguments. Nothing lists them as a child — that is what claiming them
+    /// means — but they are materialized from this same arena, so any walk
+    /// that has to see the whole description has to start from them too.
+    element_arguments: Vec<SpecId>,
     /// Retained view handles already described in this snapshot. GPUI cannot
     /// mount one entity at two positions in the same tree.
     mounted_views: HashSet<crate::entities::EntityHandle>,
@@ -950,6 +955,7 @@ impl SpecArena {
         self.nodes.clear();
         self.parented.clear();
         self.claimed.clear();
+        self.element_arguments.clear();
         self.mounted_views.clear();
         self.virtual_items = 0;
         self.structure = 0;
@@ -1027,9 +1033,17 @@ impl SpecArena {
     /// The script ids of every `.cached()` element reachable from `root`.
     /// An element that asked for a cache without an id is not listed: it is
     /// drawn plain, and has no entity to keep.
+    /// Element arguments are walked beside `root` because a registered
+    /// component's element argument is materialized from this arena with this
+    /// snapshot, so a `.cached()` inside one is mounted as a subtree of the
+    /// same view. It is listed even when the component holding it is never
+    /// attached to the tree: over-listing costs an id nothing is mounted at,
+    /// while missing one drops the entity — and every transition, scroll
+    /// offset and hover state in it — on every rebuild.
     pub(crate) fn cached_keys(&self, root: SpecId) -> HashSet<SharedString> {
         let mut keys = HashSet::new();
         let mut stack = vec![root];
+        stack.extend(self.element_arguments.iter().copied());
         while let Some(id) = stack.pop() {
             let Some(node) = self.node(id) else { continue };
             let mut cached = false;
@@ -1073,6 +1087,20 @@ impl SpecArena {
         self.ensure_claimable(id)?;
         self.structure = mix(self.structure, mix(8, u64::from(id)));
         self.claimed[id as usize] = true;
+        Ok(())
+    }
+
+    /// Claims a node a registered component took as an element argument, and
+    /// remembers where it went.
+    ///
+    /// The plain [`Self::claim`] is enough for a state style or a slot: both
+    /// record the detached id in the op they push, so a walk over the ops
+    /// finds them again. An element argument disappears into an opaque
+    /// component payload instead, and only the adapter can read it back — so
+    /// the arena keeps the root itself.
+    pub(crate) fn claim_element_argument(&mut self, id: SpecId) -> Result<(), SpecError> {
+        self.claim(id)?;
+        self.element_arguments.push(id);
         Ok(())
     }
 
@@ -1144,6 +1172,8 @@ impl SpecArena {
         }
         self.parented.extend_from_slice(&source.parented);
         self.claimed.extend_from_slice(&source.claimed);
+        self.element_arguments
+            .extend(source.element_arguments.iter().map(|id| id + base));
 
         // The root arrives with no parent so the caller can attach it, whatever
         // it was in the template.

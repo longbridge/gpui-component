@@ -8149,7 +8149,7 @@ impl ShellRuntime {
             for element in element_ids {
                 self.arena
                     .borrow_mut()
-                    .claim(element)
+                    .claim_element_argument(element)
                     .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
             }
             Ok(payload)

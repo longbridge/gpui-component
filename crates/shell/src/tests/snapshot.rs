@@ -1186,3 +1186,121 @@ fn the_root_view_is_cached_only_while_it_has_no_cached_subtrees(cx: &mut TestApp
         "both subtrees are reused on a clean frame"
     );
 }
+
+#[gpui::test]
+fn a_cached_subtree_inside_an_element_argument_is_a_subtree_of_this_view(cx: &mut TestAppContext) {
+    // A registered component can take a whole element as a constructor
+    // argument. Such a node is claimed off the tree — no parent lists it as a
+    // child — but it is materialized with the same snapshot, so a `.cached()`
+    // inside it is mounted as one of this view's subtrees like any other. The
+    // walk that lists the keys has to reach it, or the view believes it caches
+    // nothing (and keeps the root cache, defeating every subtree) while
+    // `retain` drops the entity after every rebuild.
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+        ConstructorDescriptor, MaterializeRequest,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct WrapMaterializer;
+    impl ComponentMaterializer for WrapMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let argument = request
+                .payload()
+                .downcast_ref::<ComponentArgument>()
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Wrap payload"))?;
+            let child = request.resolve_element(&argument)?;
+            Ok(div().size_full().child(child).into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("Wrap", Arc::new(WrapMaterializer)).with_constructors(vec![
+                ConstructorDescriptor::new(
+                    "Wrap",
+                    vec![ArgumentDescriptor::new("child", ArgumentSchema::Element)],
+                    |arguments| Ok(ComponentPayload::new(arguments[0].clone())),
+                ),
+            ]),
+        )
+        .unwrap();
+    let runtime =
+        ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r#"
+import { View, div } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
+import { Wrap } from "gpui-component";
+
+export default class Wrapped extends View {
+  init() { this.label = "before"; }
+  render(cx) {
+    return v_flex()
+      .size_full()
+      .child(
+        Checkbox.new("bump").on_change((_, cx) => {
+          this.label = "after";
+          cx.notify();
+        }),
+      )
+      .child(
+        new Wrap(
+          div().id("argument").size_full().cached().child(this.label),
+        ),
+      );
+  }
+}
+"#;
+    let view_type = runtime.load_source(ENTRY, source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context.update(|window, cx| {
+        let object = runtime
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        cx.new(|_| ScriptView::new(runtime.clone(), object))
+    });
+    mount(&mut context, &view);
+
+    context.update(|_, cx| {
+        let view = view.read(cx);
+        let snapshot = view.snapshot().expect("published");
+        assert!(
+            snapshot.cached_keys().contains("argument"),
+            "a .cached() held as an element argument is still one of this view's subtrees: {:?}",
+            snapshot.cached_keys()
+        );
+        assert!(
+            view.caches_subtrees(),
+            "so the root must mount this view uncached"
+        );
+    });
+
+    let entities = runtime.subtree_caches().entities(view.entity_id());
+    assert_eq!(entities.len(), 1, "the argument's subtree has an entity");
+    let before = entities[0].entity_id();
+
+    let callback = click_target(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw_frame(&mut context);
+
+    let entities = runtime.subtree_caches().entities(view.entity_id());
+    assert_eq!(entities.len(), 1);
+    assert_eq!(
+        entities[0].entity_id(),
+        before,
+        "an id the description still marks keeps its entity, and with it every \
+         transition, scroll offset and hover state inside the subtree"
+    );
+}
