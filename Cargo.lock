@@ -780,7 +780,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -800,7 +800,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -4634,7 +4634,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.57.0",
 ]
 
 [[package]]
@@ -7701,7 +7701,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=4d41783d47da01d07d42daa042739bf8f1d81ee3#4d41783d47da01d07d42daa042739bf8f1d81ee3"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7#6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7"
 dependencies = [
  "either",
  "indexmap",
@@ -7712,7 +7712,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-core"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=4d41783d47da01d07d42daa042739bf8f1d81ee3#4d41783d47da01d07d42daa042739bf8f1d81ee3"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7#6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7"
 dependencies = [
  "async-lock",
  "bytes",
@@ -7730,7 +7730,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-macro"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=4d41783d47da01d07d42daa042739bf8f1d81ee3#4d41783d47da01d07d42daa042739bf8f1d81ee3"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7#6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7"
 dependencies = [
  "convert_case 0.11.0",
  "fnv",
@@ -7748,7 +7748,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-runtime"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=4d41783d47da01d07d42daa042739bf8f1d81ee3#4d41783d47da01d07d42daa042739bf8f1d81ee3"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7#6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -7770,7 +7770,7 @@ dependencies = [
 [[package]]
 name = "quickjs-jit-sys"
 version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=4d41783d47da01d07d42daa042739bf8f1d81ee3#4d41783d47da01d07d42daa042739bf8f1d81ee3"
+source = "git+https://github.com/longbridge/quickjs-jit?rev=6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7#6a7fbca0acfc28bc37c94f2db1bd8f80398b01a7"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
