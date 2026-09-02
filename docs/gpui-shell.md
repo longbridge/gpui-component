@@ -3402,6 +3402,32 @@ cache of a markerless view (`shell_root_reuses_a_clean_views_materialized_subtre
 and the subtree caches of a marked one are the same one level, placed where
 the application says.
 
+Three things the application has to know before it places a marker.
+
+**A cached subtree is a scope for retained element state.** The subtree is
+rendered by an entity, and gpui keeps the element state of everything inside a
+view under `ElementId::View(entity_id)` — so a name looked up inside a cached
+subtree and the same name looked up outside it reach different slots. What
+pairs by name pairs only within one side of the boundary: a
+`Scrollbar.vertical("watchlist")` in the skeleton does not reach an
+`id("watchlist").overflow_y_scroll()` area inside a cached panel, and reports
+that it drives nothing. Put the bar and its area on the same side.
+
+**Motion on the marked element itself animates the wrong half.** The split
+puts the element's box — size, margin, flex, position — outside the cache and
+everything inside the box within it, and a transition is sampled where its
+property landed. `.transition("width")` on a `.cached()` element therefore
+animates a width inside a box whose width has already jumped. Animate
+properties inside the box, and put layout motion on a child or on the parent.
+
+**A `.cached()` inside a dock panel costs the split and saves nothing.** The
+dock's tab panel mounts every panel `.cached(absolute().size_full())`
+unconditionally, and gpui's cache is one level deep: a subtree that dirties
+itself inside a dock panel dirties the panel's own cached mount, and
+everything in that panel rebuilds with it. Until the dock's panel mount learns
+the rule `ShellRoot::content_element` applies — mount uncached once the view
+marks a subtree — markers belong in views the shell root carries.
+
 `RuntimeMetrics::subtree_mounts`, `subtree_rebuilds` and `subtree_reuses`
 are the attribution this section used to be short of, per frame and per
 view. What is still missing is which *subtree* rebuilt; the entity knows, the

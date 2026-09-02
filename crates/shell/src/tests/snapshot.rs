@@ -1488,3 +1488,143 @@ fn retiring_a_view_releases_its_cached_subtrees(cx: &mut TestAppContext) {
         "and drawing it again must not put them back"
     );
 }
+
+/// Collects the `tracing` events a body emits on this thread.
+///
+/// Some of what the shell reports has no other observable: a `Scrollbar` whose
+/// scroll area never turned up is laid out and painted exactly as one whose did.
+/// The warning is the behavior.
+fn captured_warnings(body: impl FnOnce()) -> Vec<String> {
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct Capture(Arc<Mutex<Vec<String>>>);
+
+    struct Message(String);
+
+    impl tracing::field::Visit for Message {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.0 = format!("{value:?}");
+            }
+        }
+    }
+
+    impl tracing::Subscriber for Capture {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            self.0.lock().expect("capture").push(message.0);
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    let capture = Capture(Arc::new(Mutex::new(Vec::new())));
+    tracing::subscriber::with_default(capture.clone(), body);
+    let collected = capture.0.lock().expect("capture").clone();
+    collected
+}
+
+/// A scroll area inside a cached panel, with the bar `where` says.
+fn scrollbar_across_a_cached_panel(bar_inside: bool) -> String {
+    let bar = r#"Scrollbar.vertical("watchlist").mode("always").absolute().inset_0()"#;
+    let panel_extra = if bar_inside {
+        format!(".child({bar})")
+    } else {
+        String::new()
+    };
+    let outside = if bar_inside {
+        String::new()
+    } else {
+        format!(".child({bar})")
+    };
+    format!(
+        r#"
+import {{ View }} from "gpui";
+import {{ Scrollbar, v_flex }} from "gpui-base";
+
+export default class Watchlist extends View {{
+  render() {{
+    return v_flex()
+      .relative()
+      .size_full()
+      .child(
+        v_flex()
+          .id("panel")
+          .size_full()
+          .relative()
+          .cached()
+          .child(
+            v_flex()
+              .id("watchlist")
+              .size_full()
+              .overflow_y_scroll()
+              .children(Array.from({{ length: 40 }}, (_, index) => `Quote ${{index}}`)),
+          ){panel_extra},
+      ){outside};
+  }}
+}}
+"#
+    )
+}
+
+#[gpui::test]
+fn a_scrollbar_pairs_with_a_scroll_area_on_its_own_side_of_a_cached_boundary(
+    cx: &mut TestAppContext,
+) {
+    // `.cached()` is an element-state scope boundary, not only a layout one.
+    // gpui pushes `ElementId::View(entity_id)` for the subtree's own view, so
+    // `use_keyed_state` inside it keys under one more segment than the same
+    // call outside — and a `Scrollbar` and its scroll area are paired through
+    // exactly that state. They have to sit on the same side of the boundary.
+    let (_, mut context, view) = script_view(cx, &scrollbar_across_a_cached_panel(true));
+    let together = captured_warnings(|| {
+        mount(&mut context, &view);
+        // Two frames: the first lays the area out, the second is the one on
+        // which the bar would report having found nothing.
+        draw_frame(&mut context);
+        draw_frame(&mut context);
+    });
+    assert!(
+        !together.iter().any(|line| line.contains("drives nothing")),
+        "a bar beside its scroll area inside the same cached subtree still pairs: {together:?}"
+    );
+}
+
+#[gpui::test]
+fn a_scrollbar_outside_a_cached_subtree_does_not_reach_the_area_inside(cx: &mut TestAppContext) {
+    let (_, mut context, view) = script_view(cx, &scrollbar_across_a_cached_panel(false));
+    let split = captured_warnings(|| {
+        mount(&mut context, &view);
+        draw_frame(&mut context);
+        draw_frame(&mut context);
+    });
+    assert!(
+        split.iter().any(|line| line.contains("drives nothing")),
+        "a bar in the skeleton cannot reach a scroll area inside a cached subtree, and says so: \
+         {split:?}"
+    );
+
+    // The same two elements in the same two places, with the marker taken off:
+    // it is the cached subtree that separates them, not the nesting.
+    let source = scrollbar_across_a_cached_panel(false).replace(".cached()", "");
+    let (_, mut context, view) = script_view(cx, &source);
+    let uncached = captured_warnings(|| {
+        mount(&mut context, &view);
+        draw_frame(&mut context);
+        draw_frame(&mut context);
+    });
+    assert!(
+        !uncached.iter().any(|line| line.contains("drives nothing")),
+        "without the marker the same shapes pair: {uncached:?}"
+    );
+}

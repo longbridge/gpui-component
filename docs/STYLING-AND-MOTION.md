@@ -220,6 +220,14 @@ owns that subtree. Placed inside a `.cached()` element, that view is the
 whole script view and the frame costs the whole description. Put the animated
 element inside the smallest `.cached()` box that has a parent-decided size.
 
+*Inside* it, not on it. Marking an element `.cached()` splits its style: the
+box it occupies in its parent's flow — size, margin, flex, position — stays
+outside the cache, and everything resolved within that box goes inside. A
+transition on the marked element itself is sampled on the inner half, so
+`.transition("width")` there animates a width inside a box whose width has
+already jumped. Animate properties inside the box; put layout motion on a
+child or on the parent.
+
 The caller chooses what the value means and applies it to opacity, color,
 geometry, or another interpolatable property.
 

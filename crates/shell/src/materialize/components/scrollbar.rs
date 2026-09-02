@@ -20,6 +20,14 @@
 //! [`crate::scroll::Scrollable`] does — puts the ancestors' ids in front of the
 //! name and reaches a different slot.
 //!
+//! Which is why **a bar and its scroll area have to sit on the same side of a
+//! `.cached()` element**. A cached subtree is rendered by an entity of its own,
+//! and gpui pushes that entity's `ElementId::View` onto the path for the whole
+//! of it, so a name looked up inside the subtree and the same name looked up
+//! outside it are two different slots. Both inside, or both outside; a bar in
+//! the skeleton driving an area inside a cached panel finds an empty position
+//! and reports it below. §20.4 of `docs/gpui-shell.md` states the rule.
+//!
 //! The pairing is therefore a contract nothing in the call expresses: nothing in
 //! `Scrollbar.vertical("watchlist")` says that some other element has to carry
 //! that id. So a bar whose scroll area never turns up says so, rather than

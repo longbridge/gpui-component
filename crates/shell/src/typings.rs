@@ -1823,7 +1823,19 @@ const ELEMENT_METHODS: &str = r#"    /**
      * something elsewhere reuses it as drawn. Needs `.id()`, and a size the
      * parent decides (`size_full`, explicit `w`/`h`, or `flex_1` under a flex
      * parent): a cached subtree is laid out from that size, never measured
-     * from its contents. Without an id it is drawn uncached and reported.
+     * from its contents. Without an id it is drawn uncached and reported, and
+     * so is a second element claiming an id another one already marked.
+     *
+     * It is a boundary for retained element state as well as for layout, so a
+     * `Scrollbar` and the `id(...).overflow_y_scroll()` area it drives must sit
+     * on the same side of it: they are paired through state kept under the path
+     * of element ids they are looked up from, and a cached subtree adds a
+     * segment to that path.
+     *
+     * The element's own box is decided outside the cache and its contents
+     * inside, so motion applied here animates within a box that has already
+     * jumped: animate properties inside the box, and put layout motion on a
+     * child or on the parent.
      */
     cached(): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
