@@ -75,7 +75,7 @@ For changes whose boundary is not explicit, `group_interval` combines consecutiv
 | `new()` | Creates an empty undo history. `max_undos` defaults to 1000. |
 | `max_undos(n)` | Caps the retained undo transactions. |
 | `group_interval(duration)` | Groups consecutive nearby pushes into one transaction. |
-| `start_grouping()`, `end_grouping()` | Explicitly delimit one transaction. |
+| `start_grouping()`, `end_grouping()` | Make subsequent pushes append to the current transaction; ending grouping stops that explicit append behavior. On an empty history, as in the example above, the first push starts the transaction. |
 | `push(change)` | Records a change in the current or a new transaction and clears redo. |
 | `undo()`, `redo()` | Return the latest transaction newest-first for undo, oldest-first for redo. |
 | `can_undo()`, `can_redo()` | Report whether a transaction is available. |

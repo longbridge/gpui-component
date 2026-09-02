@@ -75,7 +75,7 @@ assert_eq!(
 | `new()` | 创建空 undo 历史。`max_undos` 默认是 1000。 |
 | `max_undos(n)` | 限制保留的 undo 事务数。 |
 | `group_interval(duration)` | 将相隔很近的连续 push 合并为一个事务。 |
-| `start_grouping()`、`end_grouping()` | 显式界定一个事务。 |
+| `start_grouping()`、`end_grouping()` | 让后续 push 追加到当前事务；结束分组会停止这种显式追加行为。和上例一样，空历史中的第一个 push 会创建该事务。 |
 | `push(change)` | 在当前或一个新事务中记录改动，并清空 redo。 |
 | `undo()`、`redo()` | undo 时最新改动在前，redo 时最旧改动在前地返回最新事务。 |
 | `can_undo()`、`can_redo()` | 判断是否有可用事务。 |
