@@ -1,7 +1,7 @@
 ---
 title: Tooltip
 description: A delayed, positioned description associated with a trigger element.
-order: 35
+order: 34
 ---
 
 # Tooltip

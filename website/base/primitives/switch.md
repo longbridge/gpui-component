@@ -1,7 +1,7 @@
 ---
 title: Switch
 description: A controlled on/off control with separately styleable track and thumb.
-order: 29
+order: 28
 ---
 
 # Switch

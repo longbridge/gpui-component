@@ -1,7 +1,7 @@
 ---
 title: Table
 description: Semantic table primitives for composing headers, bodies, rows, and cells.
-order: 30
+order: 29
 ---
 
 # Table

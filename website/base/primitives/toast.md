@@ -1,7 +1,7 @@
 ---
 title: Toast
 description: A managed, animated stack of temporary status messages.
-order: 32
+order: 31
 ---
 
 # Toast
