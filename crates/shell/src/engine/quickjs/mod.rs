@@ -1104,8 +1104,14 @@ pub(crate) mod exports {
         "set_theme",
     ];
 
-    /// The performance overlay, owned by `gpui-fps`.
-    pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
+    /// The performance overlay, owned by `gpui-fps`: the element form, and
+    /// the root-owned HUD a script switches on and off.
+    pub(crate) const GPUI_FPS: &[&str] = &[
+        "fps_monitor",
+        "show_fps_monitor",
+        "hide_fps_monitor",
+        "fps_monitor_visible",
+    ];
 
     /// Shell-owned shared types. Module components are exported from their
     /// host modules rather than through a public generic dispatcher.
@@ -6481,6 +6487,9 @@ globalThis.__gpui = (() => {
     ProgressTrack: { new: () => element(__progress_track()) },
     ProgressIndicator: { new: () => element(__progress_indicator()) },
     fps_monitor: () => element(__fps_monitor()),
+    show_fps_monitor: (options) => __show_fps_monitor(options),
+    hide_fps_monitor: () => __hide_fps_monitor(),
+    fps_monitor_visible: () => __fps_monitor_visible(),
     Radio: { new: (id) => element(__radio(String(id))) },
     Toggle: { new: (id) => element(__toggle(String(id))) },
     RadioGroup: { new: (id) => element(__radio_group(String(id))) },

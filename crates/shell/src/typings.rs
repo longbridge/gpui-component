@@ -3492,16 +3492,48 @@ const BASE_IMPORTS: &str = r#"  import {
 
 "#;
 
-/// The `gpui-fps` performance overlay: one element, from the crate that draws it.
+/// The `gpui-fps` performance overlay: the element form, and the HUD the
+/// window root draws on a script's behalf.
 const FPS: &str = r#"  /**
    * The native `gpui-fps` performance HUD, shared once per window and pinned
    * to the top-right by default. Its parent must be `relative()`.
+   *
+   * Prefer `show_fps_monitor()`: a HUD placed inside the script's own tree is
+   * rebuilt with it, and what the tree does then counts against the reading.
    */
   export function fps_monitor(): Element;
+
+  /** Where the root-owned HUD sits and how it behaves. Every key is optional. */
+  export interface FpsMonitorOptions {
+    /** Corner or edge of the window. Default `top_right`. */
+    anchor?: Anchor;
+    /**
+     * Whether the HUD requests a redraw after every frame, so the rate it
+     * shows is the rate the window *can* sustain. Default `false`: the HUD
+     * observes the application's own frames and reads zero while it idles.
+     */
+    continuous?: boolean;
+    /** Frame budget in milliseconds, for the FRAME grading and the chart's scale. */
+    frame_budget?: number;
+  }
+
+  /**
+   * Draws the performance HUD over the whole window, above every overlay,
+   * until `hide_fps_monitor()`. The window root owns it: the script says
+   * whether and where, and nothing the script renders can move it, rebuild
+   * it, or count against it. Calling it again moves or reconfigures the HUD
+   * that is already up; the monitor behind it keeps its history across a hide
+   * and a show. Needs a live host call: `init()`, an event handler or a task.
+   */
+  export function show_fps_monitor(options?: FpsMonitorOptions): void;
+  /** Takes the HUD down. `true` if one was up. */
+  export function hide_fps_monitor(): boolean;
+  /** Whether the root-owned HUD is up. */
+  export function fps_monitor_visible(): boolean;
 "#;
 
-/// What `gpui-fps`'s one declaration borrows from `"gpui"`.
-const FPS_IMPORTS: &str = r#"  import { Element } from "gpui";
+/// What `gpui-fps`'s declarations borrow from `"gpui"`.
+const FPS_IMPORTS: &str = r#"  import { Anchor, Element } from "gpui";
 
 "#;
 

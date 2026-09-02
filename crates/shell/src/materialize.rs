@@ -2723,7 +2723,7 @@ pub(crate) const ANCHOR_NAMES: [&str; 8] = [
 ];
 
 /// The anchor a script named, or `None` if no variant spells it.
-fn anchor_from_name(name: &str) -> Option<gpui::Anchor> {
+pub(crate) fn anchor_from_name(name: &str) -> Option<gpui::Anchor> {
     match name {
         "top_left" => Some(gpui::Anchor::TopLeft),
         "top_right" => Some(gpui::Anchor::TopRight),
