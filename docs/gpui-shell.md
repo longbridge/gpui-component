@@ -2421,9 +2421,10 @@ timeout, and an optional id — which is what lets the root own the geometry and
 lifecycle without asking the script to render anything. Pushing the same id
 twice replaces rather than stacks, so a repeated "Saved" reads as one event.
 Three are mounted at a time and the rest wait, so a burst is throttled rather
-than lost. A 50 ms clock advances the lifecycle, paused while the stack is
-expanded or the window is inactive — a toast that expired unseen behind another
-window was never delivered.
+than lost. A 50 ms clock advances the lifecycle, paused while hover or focus
+holds the stack expanded — the user is reading it. An inactive window does not
+pause it: activation says nothing about whether the window is on screen, and a
+side-by-side or second-monitor window would otherwise hold its toasts forever.
 
 ### 16.2 The script surface
 
