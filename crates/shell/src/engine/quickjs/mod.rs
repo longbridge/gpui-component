@@ -3404,47 +3404,8 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.dispatch_item(id, "item click", window, cx, |_, handler, context| {
-            handler.call::<_, ()>((key, context))
-        });
-    }
-
-    /// Delivers a secondary press on a virtual list row: the row's key, then
-    /// the press exactly as `on_mouse_down` would report it, with
-    /// `local_position` measured from the row's own box.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn dispatch_item_mouse_button(
-        self: &Rc<Self>,
-        id: CallbackId,
-        key: &str,
-        button: gpui::MouseButton,
-        position: gpui::Point<gpui::Pixels>,
-        click_count: usize,
-        modifiers: gpui::Modifiers,
-        bounds: Option<gpui::Bounds<gpui::Pixels>>,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.dispatch_item(id, "item press", window, cx, |ctx, handler, context| {
-            let event =
-                mouse_button_payload(ctx, button, position, click_count, modifiers, bounds)?;
-            handler.call::<_, ()>((key, event, context))
-        });
-    }
-
-    /// The lifetime checks, scope entry and job drain every row-level dispatch
-    /// shares. The call itself is the caller's, because the two row events
-    /// hand the handler different argument lists.
-    fn dispatch_item(
-        self: &Rc<Self>,
-        id: CallbackId,
-        what: &str,
-        window: &mut Window,
-        cx: &mut App,
-        call: impl for<'js> FnOnce(&Ctx<'js>, Function<'js>, Object<'js>) -> JsResult<()>,
-    ) {
         let Some(entry) = self.callbacks.borrow().get(id) else {
-            tracing::debug!("{what} callback {id} belongs to a superseded render pass");
+            tracing::debug!("item callback {id} belongs to a superseded render pass");
             return;
         };
 
@@ -3453,12 +3414,12 @@ impl ShellRuntime {
             .as_ref()
             .is_some_and(|application| !application.is_active())
         {
-            tracing::debug!("{what} callback {id} belongs to a retired application");
+            tracing::debug!("item callback {id} belongs to a retired application");
             return;
         }
 
         let Some(view) = entry.live_view() else {
-            tracing::debug!("{what} callback {id} owner has been released");
+            tracing::debug!("item callback {id} owner has been released");
             return;
         };
         let policy = view
@@ -3477,12 +3438,11 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            let context = context_object(ctx, ContextBinding::Call(generation))?;
-            call(ctx, handler, context)
+            handler.call::<_, ()>((key, context_object(ctx, ContextBinding::Call(generation))?))
         });
 
         if let Err(error) = result {
-            tracing::error!("error in {what} handler: {error}");
+            tracing::error!("error in item click handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -3935,7 +3895,19 @@ impl ShellRuntime {
         cx: &mut App,
     ) {
         self.dispatch_simple_event(id, "mouse button", window, cx, move |ctx| {
-            mouse_button_payload(ctx, button, position, click_count, modifiers, bounds)
+            let payload = Object::new(ctx.clone())?;
+            payload.set(
+                "button",
+                match button {
+                    gpui::MouseButton::Right => "right",
+                    gpui::MouseButton::Middle => "middle",
+                    _ => "left",
+                },
+            )?;
+            payload.set("click_count", click_count as u32)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
         });
     }
 
@@ -6710,7 +6682,6 @@ impl ShellRuntime {
                 "aria_level",
                 "keep_mounted",
                 "on_item_click",
-                "on_item_secondary_click",
                 "on_change",
                 "on_open_change",
                 "on_confirm",
@@ -7655,7 +7626,6 @@ impl ShellRuntime {
             | "on_dismiss"
             | "on_step"
             | "on_item_click"
-            | "on_item_secondary_click"
             | "on_mouse_move"
             | "on_hover"
             | "on_key_down"
@@ -7686,10 +7656,8 @@ impl ShellRuntime {
                             "`{method}` cannot be registered from a virtual list's item \
                              renderer: the rows are rebuilt every frame, so a handler \
                              registered there would pile up for as long as the view stood. \
-                             Use `on_item_click((key, cx) => ...)` or \
-                             `on_item_secondary_click((key, event, cx) => ...)` on the list \
-                             itself, and read the row out of your own data with the stable key \
-                             it gives you"
+                             Use `on_item_click((key, cx) => ...)` on the list itself, and \
+                             read the row out of your own data with the stable key it gives you"
                         ),
                     ));
                 }
@@ -8988,32 +8956,6 @@ fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult
 /// that has not been prepainted yet, so a script reading `undefined` knows the
 /// geometry was unavailable instead of being told the press landed at its
 /// top-left corner.
-/// The object an `on_mouse_down` or `on_mouse_up` handler is handed, built in
-/// one place so a press reported through a row carries the same fields as one
-/// reported through the element it landed on.
-fn mouse_button_payload<'js>(
-    ctx: &Ctx<'js>,
-    button: gpui::MouseButton,
-    position: gpui::Point<gpui::Pixels>,
-    click_count: usize,
-    modifiers: gpui::Modifiers,
-    bounds: Option<gpui::Bounds<gpui::Pixels>>,
-) -> JsResult<Object<'js>> {
-    let payload = Object::new(ctx.clone())?;
-    payload.set(
-        "button",
-        match button {
-            gpui::MouseButton::Right => "right",
-            gpui::MouseButton::Middle => "middle",
-            _ => "left",
-        },
-    )?;
-    payload.set("click_count", click_count as u32)?;
-    set_pointer_geometry(ctx, &payload, position, bounds)?;
-    payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
-    Ok(payload)
-}
-
 fn set_pointer_geometry<'js>(
     ctx: &Ctx<'js>,
     payload: &Object<'js>,
@@ -9498,7 +9440,6 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_scroll_wheel" => "on_scroll_wheel",
         "on_item_click" => "on_item_click",
-        "on_item_secondary_click" => "on_item_secondary_click",
         "on_resize" => "on_resize",
         "tab_bar" => "tab_bar",
         "empty_group" => "empty_group",
