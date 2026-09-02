@@ -60,7 +60,8 @@ pub struct ScriptView {
     /// Set by `refresh`, which has already notified every cached subtree for
     /// the frame the rebuild will land in; cleared by the rebuild. A rebuild
     /// that finds it clear reached the draw some other way — the theme sync,
-    /// a hot reload — and notifies the subtrees itself, a frame late.
+    /// a hot reload — and schedules the notify onto the next frame itself, so
+    /// the subtrees follow one frame late.
     caches_notified: bool,
     /// Learned on the first render. `Drop` needs it to release the caches,
     /// and a view has no other way to know its own entity.
@@ -296,9 +297,19 @@ impl ScriptView {
                 if !self.caches_notified {
                     // The theme sync or a hot reload rebuilt from inside the
                     // draw. gpui takes dirty views before a draw starts, so
-                    // these show the new description one frame late.
+                    // these show the new description one frame late — and a
+                    // notify issued here would not even get that frame:
+                    // `WindowInvalidator::invalidate_view` records the entity
+                    // but leaves the window clean while a draw is in flight,
+                    // so nothing would ask for the next one. `on_next_frame`
+                    // schedules the frame *and* wakes the platform, and its
+                    // callbacks run before that draw with no draw in flight,
+                    // so the notify lands in it.
                     for cache in self.runtime.subtree_caches().entities(view_id) {
-                        cache.update(cx, |_, cx| cx.notify());
+                        let cache = cache.downgrade();
+                        window.on_next_frame(move |_, cx| {
+                            cache.update(cx, |_, cx| cx.notify()).ok();
+                        });
                     }
                 }
                 self.caches_notified = false;

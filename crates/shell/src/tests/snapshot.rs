@@ -1076,7 +1076,16 @@ fn a_rebuild_from_inside_the_draw_reaches_cached_subtrees_a_frame_later(cx: &mut
         "a notify from inside the draw lands in the next frame, not this one"
     );
 
-    draw_frame(&mut context);
+    // Not `draw_frame`: the point of the fallback is that it *asks* for the
+    // frame it needs. `on_next_frame` is the only demand a clean window
+    // answers, so running the scheduled callbacks — which notify the caches
+    // outside any draw, and so dirty the window and draw it at the end of
+    // this update — is what the next frame really is.
+    let scheduled = context.update(|window, cx| window.simulate_next_frame(cx));
+    assert!(
+        scheduled >= 1,
+        "the fallback must schedule the frame it needs, not merely notify into one"
+    );
     let following = runtime.metrics().read().since(&before);
     assert_eq!(
         following.subtree_rebuilds(),
