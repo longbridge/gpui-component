@@ -54,14 +54,15 @@
 //! [`Scrollbar`]: gpui_base::Scrollbar
 
 use std::{
+    cell::Cell,
     ops::Range,
     rc::{Rc, Weak},
 };
 
 use gpui::{
-    AnyElement, App, Axis, Context, ElementId, Empty, InteractiveElement as _, IntoElement,
-    ParentElement as _, Refineable as _, Render, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled as _, Window, div,
+    AnyElement, App, Axis, Bounds, Context, ElementId, Empty, InteractiveElement as _, IntoElement,
+    MouseButton, ParentElement as _, Pixels, Refineable as _, Render, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled as _, Window, canvas, div,
 };
 use gpui_base::{VirtualListScrollHandle, h_virtual_list, v_virtual_list};
 
@@ -136,20 +137,15 @@ pub(in crate::materialize) fn virtual_list(
     let weak = Rc::downgrade(runtime);
     let get_key = spec.get_key();
     let render_items = spec.render_items();
-    let on_item_click = behavior.on_item_click;
+    let handlers = ItemHandlers {
+        click: behavior.on_item_click,
+        secondary_click: behavior.on_item_secondary_click,
+    };
     let describe = move |_: &mut VirtualItems,
                          range: Range<usize>,
                          window: &mut Window,
                          cx: &mut Context<VirtualItems>| {
-        render_range(
-            &weak,
-            get_key,
-            render_items,
-            on_item_click,
-            range,
-            window,
-            cx,
-        )
+        render_range(&weak, get_key, render_items, handlers, range, window, cx)
     };
 
     let sizes = spec.sizes().clone();
@@ -220,7 +216,7 @@ fn render_range(
     runtime: &Weak<ShellRuntime>,
     get_key: CallbackId,
     render_items: CallbackId,
-    on_item_click: Option<CallbackId>,
+    handlers: ItemHandlers,
     range: Range<usize>,
     window: &mut Window,
     cx: &mut App,
@@ -256,19 +252,37 @@ fn render_range(
             .zip(described.keys())
             .map(|(root, key)| {
                 let item = materialize_subtree(&runtime, described.arena(), *root, window, cx);
-                match on_item_click {
-                    Some(callback) => clickable(item, key.clone(), callback, &runtime),
-                    None => item,
+                if handlers.is_empty() {
+                    item
+                } else {
+                    clickable(item, key.clone(), handlers, &runtime)
                 }
             })
             .collect()
     })
 }
 
+/// The list-level handlers a row reports through. Both are optional, and a
+/// list that asked for neither gets its rows exactly as the renderer built
+/// them.
+#[derive(Clone, Copy, Default)]
+struct ItemHandlers {
+    /// `on_item_click`: the key, on a click.
+    click: Option<CallbackId>,
+    /// `on_item_secondary_click`: the key and the press, on a right press.
+    secondary_click: Option<CallbackId>,
+}
+
+impl ItemHandlers {
+    fn is_empty(self) -> bool {
+        self.click.is_none() && self.secondary_click.is_none()
+    }
+}
+
 /// Wraps one row in the hit box that reports its stable domain key.
 ///
-/// Only when the script asked for it: a list with no `on_item_click` gets its
-/// rows exactly as the renderer built them.
+/// Only when the script asked for it: a list with no row handler gets its rows
+/// exactly as the renderer built them.
 ///
 /// The key also becomes the row's element identity; index remains only the
 /// current coordinate used to ask the renderer for a window.
@@ -279,23 +293,67 @@ fn render_range(
 /// *measure* an item, a percentage has no parent size to resolve against and
 /// falls back to the content, so the wrapper cannot inflate the size the list
 /// infers for its cross axis.
+///
+/// A secondary press is reported with the row's own box, the way a press on
+/// any other element is reported with that element's, so `local_position`
+/// means the same thing in both handlers.
 fn clickable(
     item: AnyElement,
     key: String,
-    callback: CallbackId,
+    handlers: ItemHandlers,
     runtime: &Rc<ShellRuntime>,
 ) -> AnyElement {
-    let runtime = Rc::downgrade(runtime);
-    div()
+    let mut row = div()
         .id(ElementId::Name(SharedString::from(format!(
             "gpui-shell-virtual-item:{key}"
         ))))
-        .size_full()
-        .child(item)
-        .on_click(move |_, window, cx| {
+        .size_full();
+    if let Some(callback) = handlers.secondary_click {
+        let runtime = Rc::downgrade(runtime);
+        let key = key.clone();
+        let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let writer = Rc::clone(&bounds);
+        row = row
+            // Captured at paint rather than prepaint, and attached before the
+            // row's content. Paint runs once, for the box that is actually on
+            // screen, where a prepaint capture also sees the passes that only
+            // measure. And an absolute child with no inset sits at its static
+            // position -- where it would have been in flow -- so placed after
+            // the content it would land one row down, and report a press ten
+            // pixels into a row as thirty pixels above it.
+            .child(
+                canvas(
+                    |_, _, _| (),
+                    move |bounds, _, _, _| writer.set(Some(bounds)),
+                )
+                .absolute()
+                .size_full(),
+            )
+            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.dispatch_item_mouse_button(
+                        callback,
+                        &key,
+                        event.button,
+                        event.position,
+                        event.click_count,
+                        event.modifiers,
+                        bounds.get(),
+                        window,
+                        cx,
+                    );
+                }
+            });
+    }
+    row = row.child(item);
+    if let Some(callback) = handlers.click {
+        let runtime = Rc::downgrade(runtime);
+        let key = key.clone();
+        row = row.on_click(move |_, window, cx| {
             if let Some(runtime) = runtime.upgrade() {
                 runtime.dispatch_item_key(callback, &key, window, cx);
             }
-        })
-        .into_any_element()
+        });
+    }
+    row.into_any_element()
 }
