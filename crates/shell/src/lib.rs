@@ -80,6 +80,7 @@ pub mod snapshot;
 pub(crate) mod spec;
 pub(crate) mod storage;
 pub(crate) mod style;
+pub(crate) mod subtree_cache;
 #[cfg(test)]
 mod tests;
 pub(crate) mod theme_tokens;

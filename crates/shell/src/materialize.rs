@@ -697,6 +697,19 @@ pub(crate) fn materialize_subtree(
     materialize_node(runtime, None, arena, root, ambient, window, cx)
 }
 
+/// What a [`SubtreeCache`](crate::subtree_cache::SubtreeCache) renders: the
+/// `.cached()` node itself, with its layout-facing style stripped and
+/// `size_full()` in its place. Replaced in full by the next task.
+pub(crate) fn materialize_subtree_cached(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: &RenderSnapshot,
+    root: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    materialize_subtree(runtime, snapshot.arena(), root, window, cx)
+}
+
 pub(crate) fn try_materialize_subtree(
     runtime: &Rc<ShellRuntime>,
     arena: &SpecArena,

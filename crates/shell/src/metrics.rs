@@ -60,6 +60,8 @@ pub struct RuntimeMetrics {
     materialize_time: Duration,
     structure_repeats: u64,
     structure_changes: u64,
+    subtree_mounts: u64,
+    subtree_rebuilds: u64,
 }
 
 impl RuntimeMetrics {
@@ -166,6 +168,24 @@ impl RuntimeMetrics {
         self.structure_changes
     }
 
+    /// How many times a `.cached()` element was mounted by a view's
+    /// materialization, cached or not yet.
+    pub fn subtree_mounts(&self) -> u64 {
+        self.subtree_mounts
+    }
+
+    /// How many times a cached subtree rendered — materialized its own
+    /// description because gpui found it dirty or had never drawn it.
+    pub fn subtree_rebuilds(&self) -> u64 {
+        self.subtree_rebuilds
+    }
+
+    /// Mounts gpui answered from its cache. gpui does not report a reuse, so
+    /// this is what was mounted less what rendered.
+    pub fn subtree_reuses(&self) -> u64 {
+        self.subtree_mounts.saturating_sub(self.subtree_rebuilds)
+    }
+
     /// What fraction of rebuilds with a predecessor repeated its shape, in the
     /// range `0.0..=1.0`, or `None` when no rebuild has had one yet.
     ///
@@ -208,6 +228,10 @@ impl RuntimeMetrics {
             structure_changes: self
                 .structure_changes
                 .saturating_sub(earlier.structure_changes),
+            subtree_mounts: self.subtree_mounts.saturating_sub(earlier.subtree_mounts),
+            subtree_rebuilds: self
+                .subtree_rebuilds
+                .saturating_sub(earlier.subtree_rebuilds),
         }
     }
 }
@@ -235,6 +259,8 @@ pub(crate) struct Metrics {
     materialize_nanos: Cell<u64>,
     structure_repeats: Cell<u64>,
     structure_changes: Cell<u64>,
+    subtree_mounts: Cell<u64>,
+    subtree_rebuilds: Cell<u64>,
 }
 
 impl Metrics {
@@ -312,6 +338,14 @@ impl Metrics {
         counter.set(counter.get() + 1);
     }
 
+    pub fn record_subtree_mount(&self) {
+        self.subtree_mounts.set(self.subtree_mounts.get() + 1);
+    }
+
+    pub fn record_subtree_rebuild(&self) {
+        self.subtree_rebuilds.set(self.subtree_rebuilds.get() + 1);
+    }
+
     pub fn read(&self) -> RuntimeMetrics {
         RuntimeMetrics {
             script_renders: self.script_renders.get(),
@@ -323,6 +357,8 @@ impl Metrics {
             materialize_time: Duration::from_nanos(self.materialize_nanos.get()),
             structure_repeats: self.structure_repeats.get(),
             structure_changes: self.structure_changes.get(),
+            subtree_mounts: self.subtree_mounts.get(),
+            subtree_rebuilds: self.subtree_rebuilds.get(),
         }
     }
 }

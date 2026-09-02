@@ -1310,6 +1310,8 @@ pub struct ShellRuntime {
     terminal_job_error: RefCell<Option<String>>,
     /// What the runtime is spending. See [`Self::metrics`].
     metrics: Metrics,
+    /// The cached subtrees of every view this runtime renders.
+    subtree_caches: crate::subtree_cache::SubtreeCaches,
     /// An HTTP client supplied by tests that exercise a loopback server.
     ///
     /// This is deliberately runtime-scoped rather than process state: tests
@@ -1542,6 +1544,7 @@ impl ShellRuntime {
             active_context: Cell::new(None),
             terminal_job_error: RefCell::new(None),
             metrics: Metrics::default(),
+            subtree_caches: crate::subtree_cache::SubtreeCaches::default(),
             #[cfg(test)]
             test_http_client: RefCell::new(None),
             context,
@@ -1818,6 +1821,10 @@ impl ShellRuntime {
     /// exists to produce. See [`crate::metrics`].
     pub(crate) fn metrics(&self) -> &Metrics {
         &self.metrics
+    }
+
+    pub(crate) fn subtree_caches(&self) -> &crate::subtree_cache::SubtreeCaches {
+        &self.subtree_caches
     }
 
     #[cfg(test)]
