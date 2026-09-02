@@ -1455,15 +1455,13 @@ impl ShellRuntime {
 
     #[cfg(test)]
     pub(crate) fn new_isolated_interpreter() -> Result<Rc<Self>> {
-        let config = JitConfig::builder()
-            .call_threshold(u32::MAX)
-            .loop_threshold(u32::MAX)
-            .build()
-            .map_err(|error| anyhow!("invalid interpreter-only JIT configuration: {error}"))?;
-        Self::new_isolated_with_components_and_dependency_store(
+        let js_runtime = JitRuntime::builder()
+            .build_interpreter()
+            .map_err(|error| anyhow!("failed to start the JavaScript interpreter: {error}"))?;
+        Self::new_isolated_with_components_dependency_store_and_runtime(
             FrozenComponentRegistry::default(),
             GitDependencyStore::for_user()?,
-            config,
+            js_runtime,
         )
     }
 
@@ -1491,12 +1489,24 @@ impl ShellRuntime {
         dependency_store: GitDependencyStore,
         jit_config: JitConfig,
     ) -> Result<Rc<Self>> {
-        let entities = EntityStore::try_new()
-            .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JitRuntime::builder()
             .config(jit_config)
             .build()
             .map_err(|error| anyhow!("failed to start the JavaScript JIT runtime: {error}"))?;
+        Self::new_isolated_with_components_dependency_store_and_runtime(
+            components,
+            dependency_store,
+            js_runtime,
+        )
+    }
+
+    fn new_isolated_with_components_dependency_store_and_runtime(
+        components: FrozenComponentRegistry,
+        dependency_store: GitDependencyStore,
+        js_runtime: JitRuntime,
+    ) -> Result<Rc<Self>> {
+        let entities = EntityStore::try_new()
+            .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();

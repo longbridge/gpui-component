@@ -26,12 +26,16 @@ use std::{ops::Deref, time::Instant};
 
 use crate::{RenderSnapshot, ScriptView, ShellRuntime, materialize::materialize};
 use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
+use sha2::{Digest as _, Sha256};
 
 /// Rows and columns chosen to land near the doc's "typical panel" figure:
 /// 40 rows x 5 cells plus wrappers is ~250 nodes, each carrying 8-12 ops.
 const ROWS: usize = 40;
 const COLUMNS: usize = 5;
 const ITERATIONS: usize = 50;
+const ACCEPTANCE_ITERATIONS: usize = 200;
+const JIT_WARMUP_RENDERS: usize = 64;
+const RELOAD_OBSERVATIONS: usize = 5;
 /// How many batches of [`ITERATIONS`] a timing takes before believing the
 /// fastest one.
 const ROUNDS: usize = 7;
@@ -111,12 +115,40 @@ function layoutKernel(batches, seed) {
 
 export default class NumericLayout extends View {
   render(cx) {
-    return div().child(`layout:${layoutKernel(2000, 0)}`);
+    return div().child(`layout:${layoutKernel(100, 0)}`);
   }
 }
 "#;
 
 const _: () = assert!(ROWS > 0 && COLUMNS > 0);
+
+#[test]
+fn p99_excludes_one_outlier_from_two_hundred_observations() {
+    let mut samples = vec![1_u64; 199];
+    samples.push(1_000);
+
+    assert_eq!(p99(samples), 1);
+}
+
+#[test]
+fn reload_median_retains_normal_observations_when_one_is_interrupted() {
+    assert_eq!(median_ns(vec![700, 710, 720, 730, 4_000]), 720);
+}
+
+fn p99(mut samples: Vec<u64>) -> u64 {
+    assert!(!samples.is_empty(), "P99 needs at least one sample");
+    let rank = (samples.len() * 99).div_ceil(100);
+    *samples.select_nth_unstable(rank - 1).1
+}
+
+fn median_ns(mut samples: Vec<u64>) -> u64 {
+    assert!(
+        samples.len() % 2 == 1,
+        "reload observations must have an odd count"
+    );
+    let middle = samples.len() / 2;
+    *samples.select_nth_unstable(middle).1
+}
 
 fn source(rows: usize, columns: usize) -> String {
     TEMPLATE
@@ -502,6 +534,147 @@ fn runtime_with_source(
         .expect("instantiate");
 
     (runtime, context, object)
+}
+
+/// Emits one independent process sample for the Issue #3 acceptance runner.
+/// The runner launches this test in interleaved interpreter/automatic pairs;
+/// repeated timings inside this process are observations, not independent
+/// benchmark samples.
+#[gpui::test]
+#[cfg(not(debug_assertions))]
+fn emit_one_jit_acceptance_sample(cx: &mut TestAppContext) {
+    let Ok(path) = std::env::var("GPUI_SHELL_JIT_SAMPLE") else {
+        return;
+    };
+    let interpreter = match std::env::var("GPUI_SHELL_JIT_MODE").as_deref() {
+        Ok("interpreter") => true,
+        Ok("automatic") => false,
+        _ => panic!("GPUI_SHELL_JIT_MODE must be interpreter or automatic"),
+    };
+    let pair_index: usize = std::env::var("GPUI_SHELL_JIT_PAIR")
+        .expect("GPUI_SHELL_JIT_PAIR")
+        .parse()
+        .expect("numeric pair index");
+    let workload = std::env::var("GPUI_SHELL_JIT_WORKLOAD").unwrap_or_else(|_| "panel".into());
+    let benchmark_source = match workload.as_str() {
+        "panel" => source(ROWS, COLUMNS),
+        "compute" => COMPUTE_TEMPLATE.to_owned(),
+        _ => panic!("GPUI_SHELL_JIT_WORKLOAD must be panel or compute"),
+    };
+
+    let first_started = Instant::now();
+    let (runtime, mut context, object) = runtime_with_source(cx, &benchmark_source, interpreter);
+    let first = context.update(|window, cx| {
+        runtime
+            .build_snapshot(&object, None, crate::policy::default(), window, cx)
+            .expect("first render")
+    });
+    let first_window_ns = first_started.elapsed().as_nanos() as u64;
+    let expected_tree = first.debug_tree();
+    cx.run_until_parked();
+
+    for _ in 0..JIT_WARMUP_RENDERS {
+        let snapshot = context.update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("warmup render")
+        });
+        assert_eq!(snapshot.debug_tree(), expected_tree);
+    }
+
+    let mut render_ns = Vec::with_capacity(ACCEPTANCE_ITERATIONS);
+    let steady_started = Instant::now();
+    for _ in 0..ACCEPTANCE_ITERATIONS {
+        let started = Instant::now();
+        let snapshot = context.update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("measured render")
+        });
+        assert_eq!(snapshot.debug_tree(), expected_tree);
+        render_ns.push(started.elapsed().as_nanos() as u64);
+    }
+    let steady_state_ns = steady_started.elapsed().as_nanos() as u64 / ACCEPTANCE_ITERATIONS as u64;
+    let p99_script_render_ns = p99(render_ns);
+    let metrics = runtime.jit_metrics_for_benchmark();
+    assert_eq!(
+        metrics.native_enabled(),
+        !interpreter,
+        "interpreter samples must not attach a JIT backend: {metrics:?}"
+    );
+
+    let mut reload_totals = Vec::with_capacity(RELOAD_OBSERVATIONS);
+    let mut reload_observations = Vec::with_capacity(RELOAD_OBSERVATIONS);
+    let mut reloaded_len = 0;
+    for observation in 0..RELOAD_OBSERVATIONS {
+        let reload_started = Instant::now();
+        let source_started = Instant::now();
+        let reload_type = runtime
+            .load_source(
+                &format!("benchmark-view-reload-{observation}"),
+                &benchmark_source,
+            )
+            .expect("reload source");
+        let source_eval_ns = source_started.elapsed().as_nanos() as u64;
+        let instantiate_started = Instant::now();
+        let reload_object = context
+            .update(|window, cx| runtime.instantiate(&reload_type, window, cx))
+            .expect("reload instantiate");
+        let instantiate_ns = instantiate_started.elapsed().as_nanos() as u64;
+        let render_started = Instant::now();
+        let reloaded = context.update(|window, cx| {
+            runtime
+                .build_snapshot(&reload_object, None, crate::policy::default(), window, cx)
+                .expect("reload render")
+        });
+        let render_ns = render_started.elapsed().as_nanos() as u64;
+        let total_ns = reload_started.elapsed().as_nanos() as u64;
+        assert_eq!(reloaded.debug_tree(), expected_tree);
+        reloaded_len = reloaded.len();
+        reload_totals.push(total_ns);
+        reload_observations.push(serde_json::json!({
+            "source_eval_ns": source_eval_ns,
+            "instantiate_ns": instantiate_ns,
+            "render_ns": render_ns,
+            "total_ns": total_ns,
+        }));
+    }
+    let hot_reload_ns = median_ns(reload_totals);
+
+    let digest = format!("{:x}", Sha256::digest(expected_tree.as_bytes()));
+    let sample = serde_json::json!({
+        "mode": if interpreter { "interpreter" } else { "automatic" },
+        "workload": workload,
+        "pair_index": pair_index,
+        "steady_state_ns": steady_state_ns,
+        "p99_script_render_ns": p99_script_render_ns,
+        "first_window_ns": first_window_ns,
+        "hot_reload_ns": hot_reload_ns,
+        "checksum": format!("{}:{}", reloaded_len, digest),
+        "snapshot_sha256": digest,
+        "script_renders": runtime.read_metrics().script_renders(),
+        "native_enabled": metrics.native_enabled(),
+        "native_entries": metrics.native_entries,
+        "fallback_count": metrics.native_fallbacks,
+        "installed": metrics.installed,
+        "compile_failures": metrics.compile_failures,
+        "unsupported_opcode_failures": metrics.unsupported_opcode_failures,
+        "tier1_rejections": metrics.tier1_rejections,
+        "resource_limit_failures": metrics.resource_limit_failures,
+        "cancelled_compilations": metrics.cancelled_compilations,
+        "compiler_panics": metrics.compiler_panics,
+        "invalid_artifacts": metrics.invalid_artifacts,
+        "install_failures": metrics.install_failures,
+        "native_exits": metrics.native_exits,
+        "osr_entries": metrics.osr_entries,
+        "deopts": metrics.deopts,
+        "reload_observations": reload_observations,
+    });
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&sample).expect("serialize sample"),
+    )
+    .expect("write sample");
 }
 
 struct Empty;
