@@ -1483,6 +1483,27 @@ const ELEMENT_METHODS: &str = r#"    /**
      */
     on_item_click(handler: (key: string, cx: Context) => void): Element;
     /**
+     * `handler(key, event, cx)` on a secondary press — the right button — over
+     * a row of a virtual list. `key` is what the list's `get_key(index)`
+     * returned for that row, and `event` is the press as `on_mouse_down`
+     * reports it: `position` in the window, `local_position` and `bounds`
+     * against the row's own box.
+     *
+     * A press rather than a click, because that is when a context menu opens:
+     * the row is still under the pointer, so the menu can name what it is for
+     * before it is drawn over it. And one handler for the list rather than one
+     * per row, for the reason `on_item_click` gives.
+     *
+     * It is delivered on the row, so a handler for the same button on an
+     * element around the list still fires after it, in the ordinary bubble
+     * order, with that element's own `local_position`. A menu drawn inside a
+     * pane learns which row was pressed from this handler and where in the
+     * pane to open from the pane's.
+     */
+    on_item_secondary_click(
+      handler: (key: string, event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
      * A `Radio` only ever reports `true`. It cannot deselect itself, so an
@@ -3783,6 +3804,7 @@ mod tests {
         "aria_level",
         "keep_mounted",
         "on_item_click",
+        "on_item_secondary_click",
         "on_change",
         "on_step",
         "on_open_change",

@@ -96,17 +96,27 @@ impl FrameSampler {
         self.capacity
     }
 
-    /// Share of the retained frames that overran `budget`, in `0..1`.
-    pub(crate) fn over_budget_ratio(&self, budget: Duration) -> f32 {
+    /// Share of the retained frames that dropped one, in `0..1`.
+    ///
+    /// A frame is dropped when it overran `budget` *and something was waiting
+    /// on it*. Drawing back to back, that is every overrun: the next vsync was
+    /// missed. Drawing only when asked, an overrun with nothing queued behind
+    /// it missed nothing — the window redrew because one thing changed, took
+    /// its time, and went back to idle — so with `contended_only` an overrun
+    /// counts only when at least one more redraw had already been coalesced
+    /// into it. The cost of such a frame still shows in the draw times; what
+    /// this reading says is whether anything was thrown away.
+    pub(crate) fn dropped_ratio(&self, budget: Duration, contended_only: bool) -> f32 {
         if self.samples.is_empty() {
             return 0.;
         }
-        let over = self
+        let dropped = self
             .samples
             .iter()
             .filter(|sample| sample.draw > budget)
+            .filter(|sample| !contended_only || sample.invalidations > 1)
             .count();
-        over as f32 / self.samples.len() as f32
+        dropped as f32 / self.samples.len() as f32
     }
 
     /// Mean draw time across the retained frames.
@@ -415,6 +425,31 @@ mod tests {
             sampler.ingest(vec![timing(window_id, Duration::from_millis(*millis))], now);
         }
         sampler
+    }
+
+    #[test]
+    fn an_overrun_with_nothing_waiting_drops_nothing_on_an_idle_window() {
+        let window_id = WindowId::from(1);
+        let mut sampler = FrameSampler::new(window_id, 8);
+        let now = Instant::now();
+        let budget = Duration::from_millis(16);
+
+        sampler.ingest(
+            vec![
+                timing(window_id, Duration::from_millis(8)),
+                // Slow, but the only thing the window had to do.
+                timing(window_id, Duration::from_millis(24)),
+                // Slow, and two more redraws were already queued behind it.
+                coalesced(window_id, Duration::from_millis(24), 3),
+                timing(window_id, Duration::from_millis(9)),
+            ],
+            now,
+        );
+
+        // Back to back, every overrun missed a vsync.
+        assert_eq!(sampler.dropped_ratio(budget, false), 0.5);
+        // Drawing on demand, only the contended one cost a frame.
+        assert_eq!(sampler.dropped_ratio(budget, true), 0.25);
     }
 
     #[test]
