@@ -201,6 +201,7 @@ pub struct Button {
     border_corners: Corners<bool>,
     border_edges: Edges<bool>,
     dropdown_caret: bool,
+    hover_group: Option<SharedString>,
     size: Size,
     compact: bool,
     tooltip: Option<(
@@ -259,6 +260,7 @@ impl Button {
             outline: false,
             loading_icon: None,
             dropdown_caret: false,
+            hover_group: None,
             tab_index: 0,
             tab_stop: true,
         }
@@ -302,6 +304,14 @@ impl Button {
     /// Set the border edges of the Button.
     pub(crate) fn border_edges(mut self, edges: impl Into<Edges<bool>>) -> Self {
         self.border_edges = edges.into();
+        self
+    }
+
+    /// Join a hover group: while any member is hovered, an idle member shows
+    /// its hover surface at half strength, so a composite such as a split
+    /// button reads as one control with the hovered part emphasized.
+    pub(crate) fn hover_group(mut self, group: impl Into<SharedString>) -> Self {
+        self.hover_group = Some(group.into());
         self
     }
 
@@ -511,6 +521,7 @@ impl RenderOnce for Button {
         let hoverable = self.hoverable();
         let disabled = self.disabled;
         let loading = self.loading;
+        let hover_group = self.hover_group;
         let mut base = self.base;
         let children = self.children;
         let instance_style = base.style().clone();
@@ -618,6 +629,10 @@ impl RenderOnce for Button {
                             this.bg(active_style.bg)
                                 .border_color(active_style.border)
                                 .text_color(active_style.fg)
+                        })
+                        .when_some(hover_group, |this, group| {
+                            let hover_style = style.hovered(self.outline, cx);
+                            this.group_hover(group, |this| this.bg(hover_style.bg.opacity(0.5)))
                         })
                     })
             })
@@ -1174,7 +1189,9 @@ impl ButtonVariant {
             Self::Default => cx.theme().tokens.button_active.into(),
             Self::Primary => cx.theme().tokens.button_primary_active.into(),
             Self::Secondary => cx.theme().tokens.button_secondary_active.into(),
-            Self::Ghost => cx.theme().tokens.secondary_active.into(),
+            // Every other variant selects with its active surface; the ghost
+            // token sits too close to its hover to read as pressed.
+            Self::Ghost => self.active(outline, cx).bg,
             Self::Danger => cx.theme().tokens.button_danger_active.into(),
             Self::Warning => cx.theme().tokens.button_warning_active.into(),
             Self::Success => cx.theme().tokens.button_success_active.into(),
