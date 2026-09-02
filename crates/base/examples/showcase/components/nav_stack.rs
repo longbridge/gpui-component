@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{WeakEntity, relative};
+use gpui::{AnyElement, WeakEntity, relative};
+use gpui_base::NavPage;
 use gpui_base::motion::{PresencePhase, Transition};
 use std::time::Duration;
 
@@ -133,22 +134,22 @@ impl BaseShowcase {
             .border_1()
             .border_color(example_rgb(0xd4d4d4))
             .transition(Transition::new(Duration::from_millis(220)))
-            .item(|item, _, _| {
-                // A pushed page slides in from the right and slides back out
-                // when popped; the page underneath drifts a little to show
-                // depth. A replacement slides in over the page it replaces.
-                let offset = match (item.phase(), item.operation()) {
-                    (PresencePhase::Entering, Some(NavOperation::Push | NavOperation::Replace)) => {
-                        1.0 - item.progress()
-                    }
-                    (PresencePhase::Exiting, Some(NavOperation::Pop)) => item.progress(),
-                    (PresencePhase::Exiting, Some(NavOperation::Push)) => -0.3 * item.progress(),
-                    (PresencePhase::Entering, Some(NavOperation::Pop)) => {
-                        -0.3 * (1.0 - item.progress())
-                    }
-                    _ => 0.0,
-                };
-                item.left(relative(offset)).into_any_element()
-            })
+            .item(|page, _, _| slide(page))
     }
+}
+
+/// A pushed page slides in from the right and slides back out when popped;
+/// the page underneath drifts a little to show depth. A replacement slides in
+/// over the page it replaces. The showcase's own shell uses this too.
+pub(in super::super) fn slide(page: NavPage) -> AnyElement {
+    let offset = match (page.phase(), page.operation()) {
+        (PresencePhase::Entering, Some(NavOperation::Push | NavOperation::Replace)) => {
+            1.0 - page.progress()
+        }
+        (PresencePhase::Exiting, Some(NavOperation::Pop)) => page.progress(),
+        (PresencePhase::Exiting, Some(NavOperation::Push)) => -0.3 * page.progress(),
+        (PresencePhase::Entering, Some(NavOperation::Pop)) => -0.3 * (1.0 - page.progress()),
+        _ => 0.0,
+    };
+    page.left(relative(offset)).into_any_element()
 }

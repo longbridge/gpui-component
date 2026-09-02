@@ -7,7 +7,7 @@ mod palette;
 mod syntect_highlighter;
 
 use gpui::{
-    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
+    AnyElement, App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Window,
     WindowOptions, actions, div, prelude::FluentBuilder as _, px, size,
 };
@@ -124,8 +124,9 @@ pub const COMPONENTS: &[&str] = &[
 ];
 
 pub struct BaseShowcase {
-    component: String,
-    navigation_enabled: bool,
+    /// The shell: the overview at the root, and the component opened from it
+    /// above. A showcase started on one component has that page as its root.
+    pages: gpui::Entity<NavStackState>,
     checkbox_checked: bool,
     radio_selected: usize,
     switch_checked: bool,
@@ -306,9 +307,16 @@ impl BaseShowcase {
                 .detach();
         }
 
+        let showcase = cx.weak_entity();
+        let pages = cx.new(|_| NavStackState::new());
+        pages.update(cx, |pages, cx| {
+            let root = cx.new(|_| ComponentPage::new(component, showcase));
+            pages.push(root, NavMotion::Immediate, cx);
+        });
+        cx.observe(&pages, |_, _, cx| cx.notify()).detach();
+
         let this = Self {
-            navigation_enabled: component == "overview",
-            component,
+            pages,
             checkbox_checked: true,
             radio_selected: 0,
             switch_checked: true,
@@ -400,7 +408,8 @@ impl BaseShowcase {
     }
 
     fn overview(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let entity = cx.entity().downgrade();
+        let showcase = cx.weak_entity();
+        let pages = self.pages.clone();
         div()
             .w(px(720.))
             .max_w_full()
@@ -427,7 +436,8 @@ impl BaseShowcase {
             )
             .child(div().w_full().grid().grid_cols(3).gap_1().children(
                 COMPONENTS.iter().enumerate().map(|(ix, name)| {
-                    let entity = entity.clone();
+                    let showcase = showcase.clone();
+                    let pages = pages.clone();
                     Button::new(("overview-item", ix))
                         .h_9()
                         .px_3()
@@ -440,9 +450,9 @@ impl BaseShowcase {
                         .text_xs()
                         .child(*name)
                         .on_click(move |_, _, cx| {
-                            _ = entity.update(cx, |this, cx| {
-                                this.component = (*name).to_owned();
-                                cx.notify();
+                            pages.update(cx, |pages, cx| {
+                                let page = cx.new(|_| ComponentPage::new(*name, showcase.clone()));
+                                pages.push(page, NavMotion::Animated, cx);
                             });
                         })
                 }),
@@ -453,7 +463,87 @@ impl BaseShowcase {
 impl Render for BaseShowcase {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         activate_palette(window, cx);
-        let content = match self.component.as_str() {
+        let (depth, has_forward) = {
+            let pages = self.pages.read(cx);
+            (pages.depth(), pages.forward_views().len() > 0)
+        };
+        let show_bar = depth > 1 || has_forward;
+        let pages = self.pages.clone();
+        let nav_button = |id: &'static str, label: &'static str| {
+            Button::new(id)
+                .h_7()
+                .px_2()
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_1()
+                .border_color(example_rgb(0x171717))
+                .child(label)
+        };
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(example_canvas())
+            .text_color(example_rgb(0x171717))
+            .text_xs()
+            .font_family("Inter Variable")
+            .child(TextSelectionLayer)
+            .when(show_bar, |this| {
+                this.child(
+                    div()
+                        .h_10()
+                        .flex_none()
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .border_b_1()
+                        .border_color(example_rgb(0xe5e5e5))
+                        .when(depth > 1, |this| {
+                            let pages = pages.clone();
+                            this.child(nav_button("back", "Back").on_click(move |_, _, cx| {
+                                pages.update(cx, |pages, cx| {
+                                    pages.pop(NavMotion::Animated, cx);
+                                });
+                            }))
+                        })
+                        .when(has_forward, |this| {
+                            let pages = pages.clone();
+                            this.child(nav_button("forward", "Forward").on_click(
+                                move |_, _, cx| {
+                                    pages.update(cx, |pages, cx| {
+                                        pages.forward(NavMotion::Animated, cx);
+                                    });
+                                },
+                            ))
+                        }),
+                )
+            })
+            .child(
+                NavStack::new(&self.pages)
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .transition(gpui_base::motion::Transition::new(
+                        std::time::Duration::from_millis(220),
+                    ))
+                    .item(|page, _, _| components::slide(page)),
+            )
+    }
+}
+
+impl BaseShowcase {
+    /// One page of the shell: a component's example in its scroll area, or
+    /// the overview. Called from [`ComponentPage`], which is why it takes the
+    /// component rather than reading a field.
+    fn render_page(
+        &mut self,
+        component: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let content = match component {
             "accordion" => self.accordion(cx).into_any_element(),
             "alert-dialog" => self.alert_dialog(cx).into_any_element(),
             "avatar" => self.avatar().into_any_element(),
@@ -498,49 +588,13 @@ impl Render for BaseShowcase {
             "virtual-list" => self.virtual_list(cx).into_any_element(),
             _ => self.overview(cx).into_any_element(),
         };
-        let show_back = self.navigation_enabled && self.component != "overview";
         // Surfaces rather than parts: these take the whole viewport.
-        let fills_viewport = matches!(self.component.as_str(), "dock");
-        let is_text_view = self.component == "text-view";
-        let entity = cx.entity().downgrade();
+        let fills_viewport = component == "dock";
+        let is_text_view = component == "text-view";
         div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(example_canvas())
-            .text_color(example_rgb(0x171717))
-            .text_xs()
-            .font_family("Inter Variable")
-            .child(TextSelectionLayer)
-            .when(show_back, |this| {
-                this.child(
-                    div()
-                        .h_10()
-                        .flex_none()
-                        .px_3()
-                        .flex()
-                        .items_center()
-                        .border_b_1()
-                        .border_color(example_rgb(0xe5e5e5))
-                        .child(
-                            Button::new("back-to-overview")
-                                .h_7()
-                                .px_2()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .border_1()
-                                .border_color(example_rgb(0x171717))
-                                .child("All components")
-                                .on_click(move |_, _, cx| {
-                                    _ = entity.update(cx, |this, cx| {
-                                        this.component = "overview".to_owned();
-                                        cx.notify();
-                                    });
-                                }),
-                        ),
-                )
-            })
             .child(
                 div()
                     .id("showcase-scroll")
@@ -571,6 +625,34 @@ impl Render for BaseShowcase {
                             ),
                     ),
             )
+            .into_any_element()
+    }
+}
+
+/// A page of the shell. It holds nothing but the component's name: the
+/// example's state lives on the showcase, and rendering goes back there.
+struct ComponentPage {
+    component: String,
+    showcase: gpui::WeakEntity<BaseShowcase>,
+}
+
+impl ComponentPage {
+    fn new(component: impl Into<String>, showcase: gpui::WeakEntity<BaseShowcase>) -> Self {
+        Self {
+            component: component.into(),
+            showcase,
+        }
+    }
+}
+
+impl Render for ComponentPage {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let component = self.component.clone();
+        self.showcase
+            .update(cx, |showcase, cx| {
+                showcase.render_page(&component, window, cx)
+            })
+            .unwrap_or_else(|_| div().into_any_element())
     }
 }
 
