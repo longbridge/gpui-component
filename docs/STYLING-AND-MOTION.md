@@ -213,6 +213,13 @@ The transition owns lifecycle mechanics only:
 - smooth reversal from the currently sampled value;
 - reduced-motion handling.
 
+Under `gpui-shell`, a transition or spring is sampled while the element's
+subtree is materialized, and the frame it requests re-renders the view that
+owns that subtree. Placed inside a `.cached()` element, that view is the
+`SubtreeCache` and the frame costs that subtree; placed outside one, it is the
+whole script view and the frame costs the whole description. Put the animated
+element inside the smallest `.cached()` box that has a parent-decided size.
+
 The caller chooses what the value means and applies it to opacity, color,
 geometry, or another interpolatable property.
 

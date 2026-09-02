@@ -1052,6 +1052,17 @@ flight.
 render that throws on every call would otherwise be exactly as frame-coupled as
 one that succeeds.
 
+**A `.cached()` element replays on its own.** Every frame replays the
+snapshot in Rust, but not every frame has to replay all of it. An element the
+script marks `.cached()` — with an `id`, and a size its parent decides — is
+materialized by a `SubtreeCache` entity of its own and mounted as a gpui
+cached view, so a frame that changed nothing inside it reuses its layout and
+paint, and a frame that changed something inside it (a transition, a spring)
+rebuilds that subtree and nothing around it. A script rebuild reaches every
+cached subtree in the same frame, because `ScriptView::refresh` notifies them
+before the draw begins. §20.4 has the cost model; `subtree_cache.rs` the
+mechanism.
+
 **A failure is reported over the interface, not instead of it.** Because the old
 snapshot survived, there is usually still something correct to draw; blanking it
 would cost the reader their scroll position and their focus in exchange for a
@@ -3365,17 +3376,36 @@ The middle row is the load-bearing one. Mounting a child is recording a handle
 not a script render. Rebuilding a five-panel window therefore costs the parent's
 own description plus four entity renders that never reach the engine.
 
-This is the granularity lever, and unlike everything in §20.6 it is already
-built. It also settles a question that keeps being asked the wrong way round:
-splitting an application for performance means splitting it into **views**, not
-into plugins, applications, or processes. A second application is how a second
-*authority* is obtained (§18), not how a second cache is.
+Two things this does *not* cut. Materialization: a nested view is mounted as
+a plain `AnyView`, so it re-materializes on every frame its parent renders.
+Layout: gpui marks a notified view's ancestors dirty as well, so a child that
+animates dirties the window root, and the root's cached content rebuilds —
+which rebuilds every cached view inside it, because gpui sets
+`window.refreshing` for the duration. Nested views are the lever for *script*
+cost. They are not a lever for the per-frame native cost of a large view.
 
-What is missing is attribution rather than mechanism. `RuntimeMetrics` counts
-the runtime, not the view, so "which boundary is being rebuilt, and how large is
-it" has to be assembled from `ScriptView::is_dirty` and `snapshot().len()` by
-hand. Per-view counters are the diagnostic this chapter is short of; §20.5 is
-the other half of the same gap.
+**`.cached()` is that lever.** An element the script marks `.cached()` is
+rendered by a `SubtreeCache` entity and mounted as a gpui cached view:
+
+| Frame | What is paid |
+| --- | --- |
+| Nothing dirty | The view's skeleton — every node outside a cached subtree — materialized and laid out; every cached subtree reused |
+| A transition or spring inside one cached subtree | The skeleton, plus that one subtree materialized and laid out; the others reused |
+| A script rebuild | The script render, the skeleton, and every cached subtree (milestone A will cut this to the subtrees whose description changed) |
+
+The constraints are gpui's. A cached view is a layout leaf, laid out from the
+style it is given and never measured from its contents, so a `.cached()`
+element needs a size its parent decides: `size_full`, an explicit width and
+height, or `flex_1` under a flex parent. And the cache is one level deep, so
+`ShellRoot` mounts a view uncached as soon as it marks a subtree — the root
+cache of a markerless view (`shell_root_reuses_a_clean_views_materialized_subtree`)
+and the subtree caches of a marked one are the same one level, placed where
+the application says.
+
+`RuntimeMetrics::subtree_mounts`, `subtree_rebuilds` and `subtree_reuses`
+are the attribution this section used to be short of, per frame and per
+view. What is still missing is which *subtree* rebuilt; the entity knows, the
+counter does not.
 
 ### 20.5 Rendering frequency and presentation latency
 
@@ -3457,6 +3487,13 @@ what to measure before building any of it.
 
 **Reuse argument objects.** The context objects handed to item renderers and
 dock renderers should be pre-allocated and reused rather than built per row.
+
+**Cached subtrees are one level.** gpui rebuilds every cached view inside a
+cached view that is rebuilding, and lays a cached view out from its style
+rather than its contents. So `.cached()` is placed by the application at
+boxes with a parent-decided size, and the root cache steps aside for it
+(§20.4). A cache that could nest, or measure its contents, would need gpui to
+change; neither is on this crate's side of the seam.
 
 **Never let script participate** in layout, text shaping, scroll offsets,
 animation interpolation, or hit testing.
