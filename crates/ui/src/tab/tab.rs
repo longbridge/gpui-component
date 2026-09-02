@@ -730,7 +730,11 @@ impl RenderOnce for Tab {
                     .map(|this| match (self.label, max_width) {
                         // Text always takes its natural width, so it needs a box
                         // that is allowed to shrink to ellipsize inside of.
-                        (Some(label), Some(_)) => this.child(div().truncate().child(label)),
+                        (Some(label), Some(_)) => this.child(div()
+                            .min_w_0()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(label)),
                         (Some(label), None) => this.child(label),
                         (None, _) => this,
                     })
