@@ -98,6 +98,11 @@ impl RenderSnapshot {
         }
     }
 
+    /// The view this description belongs to, when it was built for one.
+    pub(crate) fn view(&self) -> Option<gpui::WeakEntity<crate::ScriptView>> {
+        self.inner.view.clone()
+    }
+
     pub(crate) fn application_owner(
         &self,
     ) -> Option<(

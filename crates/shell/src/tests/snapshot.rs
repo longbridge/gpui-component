@@ -18,7 +18,10 @@ use crate::{
     RenderSnapshot, ScriptView, ShellRuntime,
     spec::{CallbackId, SpecOp},
 };
-use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
+use gpui::{
+    AppContext as _, Entity, IntoElement as _, ParentElement as _, Styled as _, TestAppContext,
+    VisualTestContext,
+};
 
 const TOGGLE: &str = r#"
 import { div, View } from "gpui";
@@ -718,6 +721,32 @@ fn render_once(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
     );
 }
 
+/// A window root that mounts the script view uncached, so a cached subtree
+/// inside it is the one level of cache gpui reuses.
+struct Host(Entity<ScriptView>);
+
+impl gpui::Render for Host {
+    fn render(
+        &mut self,
+        _: &mut gpui::Window,
+        _: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        gpui::div().size_full().child(self.0.clone())
+    }
+}
+
+/// Makes `view` the window's content under an uncached `Host` root.
+fn mount(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+    let view = view.clone();
+    context.update(|window, cx| window.replace_root(cx, |_, _| Host(view)));
+}
+
+/// One real window frame: `Window::draw`, with gpui's cached-view
+/// bookkeeping, which `render_once` (an element drawn by hand) skips.
+fn draw_frame(context: &mut VisualTestContext) {
+    context.update(|window, cx| window.draw(cx).clear(cx));
+}
+
 /// The first `on_change` handler in the view's published snapshot.
 fn click_target(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> CallbackId {
     context.update(|_, cx| {
@@ -818,4 +847,89 @@ impl gpui::Render for Empty {
     ) -> impl gpui::IntoElement {
         gpui::div()
     }
+}
+
+const TWO_CACHED_PANELS: &str = r#"
+import { View, div } from "gpui";
+import { v_flex, h_flex, Checkbox } from "gpui-base";
+
+export default class Panels extends View {
+  init() {
+    this.expanded = false;
+    this.label = "left";
+  }
+
+  render(cx) {
+    return h_flex()
+      .size_full()
+      .child(
+        v_flex()
+          .id("left")
+          .flex_1()
+          .min_h(0)
+          .cached()
+          .child(this.label)
+          .child(
+            div()
+              .id("bar")
+              .w(this.expanded ? 200 : 40)
+              .h(8)
+              .transition("width", { duration: 180 }),
+          )
+          .child(
+            Checkbox.new("expand").on_change((expanded, cx) => {
+              this.expanded = expanded;
+              this.label = expanded ? "left, expanded" : "left";
+              cx.notify();
+            }),
+          ),
+      )
+      .child(v_flex().id("right").flex_1().min_h(0).cached().child("right"));
+  }
+}
+"#;
+
+#[gpui::test]
+fn a_cached_element_without_an_id_is_drawn_plain(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class Plain extends View {
+  render() {
+    return div().size_full().cached().child("no id here");
+  }
+}
+"#;
+    let (runtime, mut context, view) = script_view(cx, source);
+    mount(&mut context, &view);
+
+    let metrics = runtime.metrics().read();
+    assert_eq!(
+        metrics.subtree_mounts(),
+        0,
+        "an element without an id must not be mounted as a cached subtree"
+    );
+    assert!(
+        snapshot_text(&mut context, &view).contains("no id here"),
+        "the element still has to be described and drawn"
+    );
+}
+
+#[gpui::test]
+fn a_cached_element_is_mounted_once_per_view_render(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    mount(&mut context, &view);
+
+    let metrics = runtime.metrics().read();
+    assert_eq!(
+        metrics.subtree_mounts(),
+        2,
+        "two cached() elements, two mounts"
+    );
+    assert_eq!(
+        metrics.subtree_rebuilds(),
+        2,
+        "a subtree gpui has never drawn renders on its first frame"
+    );
+    assert_eq!(metrics.materializations(), 1);
 }

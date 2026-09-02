@@ -111,8 +111,8 @@ fn materialize_factory_subtree(
 use smallvec::SmallVec;
 
 use gpui::{
-    AbsoluteLength, AnyElement, App, Bounds, DefiniteLength, InteractiveElement, IntoElement,
-    Length, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
+    AbsoluteLength, AnyElement, App, AppContext as _, Bounds, DefiniteLength, InteractiveElement,
+    IntoElement, Length, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
 use gpui_base::{
@@ -698,8 +698,11 @@ pub(crate) fn materialize_subtree(
 }
 
 /// What a [`SubtreeCache`](crate::subtree_cache::SubtreeCache) renders: the
-/// `.cached()` node itself, with its layout-facing style stripped and
-/// `size_full()` in its place. Replaced in full by the next task.
+/// `.cached()` node itself, with the inner half of its style and `size_full()`
+/// in place of the size the outer `div` in the parent's tree already has.
+///
+/// Passes the snapshot through, so a `.cached()` element nested inside this
+/// one still finds its owning view and gets a cache of its own.
 pub(crate) fn materialize_subtree_cached(
     runtime: &Rc<ShellRuntime>,
     snapshot: &RenderSnapshot,
@@ -707,7 +710,17 @@ pub(crate) fn materialize_subtree_cached(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    materialize_subtree(runtime, snapshot.arena(), root, window, cx)
+    let ambient = window.text_style().color;
+    materialize_node_inner(
+        runtime,
+        Some(snapshot),
+        snapshot.arena(),
+        root,
+        ambient,
+        Some(root),
+        window,
+        cx,
+    )
 }
 
 pub(crate) fn try_materialize_subtree(
@@ -737,6 +750,23 @@ fn materialize_node(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    materialize_node_inner(runtime, snapshot, arena, id, inherited, None, window, cx)
+}
+
+/// The body of [`materialize_node`], with one more parameter: the id of the
+/// `.cached()` node this walk is rendering the inside of, when it is being
+/// called from inside a [`SubtreeCache`](crate::subtree_cache::SubtreeCache)
+/// rather than from an ordinary parent.
+fn materialize_node_inner(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
+    arena: &SpecArena,
+    id: SpecId,
+    inherited: gpui::Hsla,
+    cache_root: Option<SpecId>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let Some(node) = arena.node(id) else {
         return div().into_any_element();
     };
@@ -745,6 +775,37 @@ fn materialize_node(
     };
 
     let (mut refinement, behavior, states, motions, slot_specs) = resolve_ops(arena, node);
+    if behavior.cached {
+        if cache_root == Some(id) {
+            // Rendering inside the SubtreeCache: this node is the cache's own
+            // root, so it takes the inner half of its style and fills the box
+            // the outer half was given in the parent's tree.
+            let (_, inner) = crate::subtree_cache::split_layout_properties(&refinement);
+            refinement = inner;
+        } else {
+            match (
+                behavior.key.clone(),
+                snapshot.and_then(RenderSnapshot::view),
+            ) {
+                (Some(key), Some(view)) => {
+                    return cached_subtree(
+                        runtime,
+                        snapshot.expect("a view implies a snapshot"),
+                        id,
+                        key,
+                        view,
+                        &refinement,
+                        cx,
+                    );
+                }
+                (None, _) => warn_cached_without_id(&component),
+                // A description with no owning view — a virtual list's row
+                // batch, a dock chrome spec — has no entity to hang a cache
+                // on, and draws plain.
+                (Some(_), None) => {}
+            }
+        }
+    }
     let motion_identity = motion_element_id(id, behavior.key.clone(), &component);
     apply_motion(motion_identity, &motions, &mut refinement, window, cx);
     let inherited = refinement.text.color.unwrap_or(inherited);
@@ -2248,6 +2309,47 @@ fn warn_ignored_key(behavior: &Behavior, component: &str) {
              passed to {component}.new(...)"
         );
     }
+}
+
+/// `.cached()` needs `.id()`: the id is what keeps one entity, and the
+/// element state inside it, across frames. Without it the element is drawn
+/// as if the call were not there.
+fn warn_cached_without_id(component: &Component) {
+    tracing::warn!(
+        "cached() on a {} needs id(): the id is the subtree's identity across frames, so \
+         the element is drawn uncached",
+        component.name()
+    );
+}
+
+/// Mounts a `.cached()` node as its own gpui cached view.
+///
+/// The node's style is split in two (`split_layout_properties`): the outer
+/// half sits on a plain `div` here, in the parent's tree, and decides the box;
+/// the inner half is applied by the `SubtreeCache` when it renders the node.
+fn cached_subtree(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: &RenderSnapshot,
+    id: SpecId,
+    key: SharedString,
+    view: gpui::WeakEntity<crate::ScriptView>,
+    refinement: &StyleRefinement,
+    cx: &mut App,
+) -> AnyElement {
+    let (outer, _) = crate::subtree_cache::split_layout_properties(refinement);
+    let entity = runtime
+        .subtree_caches()
+        .get_or_create(view.entity_id(), &key, || {
+            cx.new(|_| crate::subtree_cache::SubtreeCache::new(runtime, snapshot.clone(), id))
+        });
+    entity.update(cx, |cache, _| cache.describe(snapshot.clone(), id));
+    runtime.metrics().record_subtree_mount();
+
+    let mut outer_div = div();
+    outer_div.style().refine(&outer);
+    outer_div
+        .child(entity.cached(StyleRefinement::default().size_full()))
+        .into_any_element()
 }
 
 /// The script's name for an element, or its address in the description.
