@@ -2,9 +2,11 @@
 //! rolling frame time chart, and this process' GPU, CPU and memory usage.
 //!
 //! Frame data comes from GPUI's own frame trace
-//! ([`gpui::FrameTimingCollector`]), so the numbers are what the framework
-//! actually spent in `Window::draw` rather than an approximation measured from
-//! the outside.
+//! ([`gpui::FrameTimingCollector`]). The rate and the interval count frames
+//! *presented*, stamped with their own present time, so they agree with the
+//! platform's overlay (Metal's HUD counts the same drawables); the frame cost
+//! is what the framework actually spent in `Window::draw`, rather than an
+//! approximation measured from the outside.
 //!
 //! Render it wherever it should appear, guarded by your own flag:
 //!
