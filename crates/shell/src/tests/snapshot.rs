@@ -1463,3 +1463,28 @@ export default class Off extends View {
             .is_empty()
     );
 }
+
+#[gpui::test]
+fn retiring_a_view_releases_its_cached_subtrees(cx: &mut TestAppContext) {
+    // Retirement is not the same event as dropping: gpui can hold the entity
+    // for a frame that has already been drawn, and a retired view renders
+    // nothing. Its subtrees have nothing left to draw either, so the registry
+    // must let go of them at that point rather than at the drop that may
+    // never come.
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    mount(&mut context, &view);
+    let view_id = view.entity_id();
+    assert_eq!(runtime.subtree_caches().entities(view_id).len(), 2);
+
+    view.update(&mut context, |view, _| view.retire());
+
+    assert!(
+        runtime.subtree_caches().entities(view_id).is_empty(),
+        "a retired view must not leave its caches in the runtime"
+    );
+    draw_frame(&mut context);
+    assert!(
+        runtime.subtree_caches().entities(view_id).is_empty(),
+        "and drawing it again must not put them back"
+    );
+}

@@ -76,20 +76,35 @@ pub(crate) struct SubtreeCaches {
 }
 
 impl SubtreeCaches {
+    /// The entity for one `(view, script id)`, made on first sight.
+    ///
+    /// `create` runs with no borrow held: it allocates a gpui entity, and this
+    /// map must not be locked while another borrow of it could be reached.
+    /// That leaves a window in which a second call could have inserted the
+    /// same key, so the insert prefers whatever is already there — one id is
+    /// one entity, and the loser is dropped rather than published.
     pub(crate) fn get_or_create(
         &self,
         view: EntityId,
         key: &SharedString,
         create: impl FnOnce() -> Entity<SubtreeCache>,
     ) -> Entity<SubtreeCache> {
-        let mut by_view = self.by_view.borrow_mut();
-        let caches = by_view.entry(view).or_default();
-        if let Some(existing) = caches.get(key) {
+        if let Some(existing) = self
+            .by_view
+            .borrow()
+            .get(&view)
+            .and_then(|caches| caches.get(key))
+        {
             return existing.clone();
         }
         let created = create();
-        caches.insert(key.clone(), created.clone());
-        created
+        self.by_view
+            .borrow_mut()
+            .entry(view)
+            .or_default()
+            .entry(key.clone())
+            .or_insert(created)
+            .clone()
     }
 
     pub(crate) fn entities(&self, view: EntityId) -> Vec<Entity<SubtreeCache>> {

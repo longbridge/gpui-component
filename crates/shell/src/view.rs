@@ -63,8 +63,8 @@ pub struct ScriptView {
     /// a hot reload — and schedules the notify onto the next frame itself, so
     /// the subtrees follow one frame late.
     caches_notified: bool,
-    /// Learned on the first render. `Drop` needs it to release the caches,
-    /// and a view has no other way to know its own entity.
+    /// Learned on the first rebuild or render. `retire` and `Drop` need it to
+    /// release the caches, and a view has no other way to know its own entity.
     entity_id: Option<EntityId>,
     /// Set when the script-visible handle has been released. GPUI may retain
     /// the entity for an older frame, but it must never rebuild after release.
@@ -248,6 +248,13 @@ impl ScriptView {
         self.error = None;
         self.previous = None;
         self.current = None;
+        // A retired view draws nothing, so its subtrees have nothing left to
+        // draw either — and gpui may hold the entity for an older frame long
+        // after this, which is exactly how long the registry would otherwise
+        // keep them.
+        if let Some(entity_id) = self.entity_id {
+            self.runtime.subtree_caches().remove_view(entity_id);
+        }
     }
 
     /// Runs the script and publishes what it produced.
@@ -289,6 +296,10 @@ impl ScriptView {
                 self.error = None;
 
                 let view_id = cx.entity_id();
+                // Learned here as well as in `render`, so a view that rebuilt
+                // and was retired before it ever drew still knows which caches
+                // to release.
+                self.entity_id = Some(view_id);
                 if let Some(current) = self.current.as_ref() {
                     self.runtime
                         .subtree_caches()
