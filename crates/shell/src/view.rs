@@ -60,8 +60,8 @@ pub struct ScriptView {
     /// Set when the script-visible handle has been released. GPUI may retain
     /// the entity for an older frame, but it must never rebuild after release.
     retired: bool,
-    /// The palette the current snapshot resolved its colors against.
-    theme_tokens: Option<gpui_base::SemanticThemeTokens>,
+    /// The tokens and appearance the current snapshot resolved against.
+    theme: Option<crate::theme_tokens::ThemeSnapshotKey>,
     /// The failure of the most recent build, if it failed.
     ///
     /// Held rather than re-derived so a script that throws is not re-run on
@@ -124,7 +124,7 @@ impl ScriptView {
             dirty: true,
             retired: false,
             policy,
-            theme_tokens: None,
+            theme: None,
             error: None,
             ownership,
             runtime,
@@ -289,9 +289,9 @@ impl Render for ScriptView {
         if self.retired {
             return div().into_any_element();
         }
-        let tokens = crate::theme_tokens::sync(cx);
-        if self.theme_tokens.as_ref() != Some(&tokens) {
-            self.theme_tokens = Some(tokens);
+        let theme = crate::theme_tokens::sync(cx);
+        if self.theme.as_ref() != Some(&theme) {
+            self.theme = Some(theme);
             self.dirty = true;
         }
         if self.is_dirty() {

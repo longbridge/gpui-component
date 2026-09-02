@@ -685,6 +685,25 @@ fn a_palette_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
     );
 }
 
+#[gpui::test]
+fn an_appearance_only_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+
+    render_once(&mut context, &view);
+    assert_eq!(runtime.metrics().read().script_renders(), 1);
+
+    context.update(|_, cx| {
+        gpui_base::Theme::global_mut(cx).appearance = gpui_base::ThemeAppearance::Dark;
+    });
+    render_once(&mut context, &view);
+
+    assert_eq!(
+        runtime.metrics().read().script_renders(),
+        2,
+        "appearance is part of cx.theme(), so changing it must invalidate script views"
+    );
+}
+
 /// One GPUI frame containing this view.
 ///
 /// A real layout and paint pass rather than a direct call to `Render::render`:

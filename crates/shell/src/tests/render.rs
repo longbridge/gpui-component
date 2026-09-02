@@ -2358,6 +2358,66 @@ export default class Themed extends View {
 }
 
 #[gpui::test]
+fn repeated_theme_reads_cross_the_snapshot_boundary_once(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+
+let snapshotReads = 0;
+const readSnapshot = globalThis.__theme_snapshot;
+globalThis.__theme_snapshot = () => {
+  snapshotReads += 1;
+  return readSnapshot();
+};
+
+export default class Themed extends View {
+  render(cx) {
+    cx.theme();
+    cx.theme();
+    cx.theme();
+    return `${snapshotReads}:${cx.theme().appearance}`;
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("cached-context-theme.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let first = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("one render must transfer one theme snapshot");
+    assert!(
+        first.contains("text \"1:light\""),
+        "unexpected theme: {first}"
+    );
+    let unchanged = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("an unchanged later render must reuse the transferred theme snapshot");
+    assert!(
+        unchanged.contains("text \"1:light\""),
+        "unchanged theme crossed the snapshot boundary again: {unchanged}"
+    );
+
+    context.update(|_, cx| {
+        gpui_base::Theme::global_mut(cx).appearance = gpui_base::ThemeAppearance::Dark;
+    });
+    let changed = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("a changed appearance must refresh the transferred theme snapshot");
+    assert!(
+        changed.contains("text \"2:dark\""),
+        "changed theme did not cross the snapshot boundary exactly once: {changed}"
+    );
+}
+
+#[gpui::test]
 fn render_context_theme_snapshot_is_deeply_read_only(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");

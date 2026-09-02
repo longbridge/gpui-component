@@ -2887,6 +2887,10 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<RenderSnapshot> {
+        // One theme sync per description makes cx.theme() a JS-only cache read.
+        // The native snapshot crosses the boundary only when this revision
+        // changes, rather than once per component asking for the theme.
+        crate::theme_tokens::sync(cx);
         self.arena.borrow_mut().reset();
         let callbacks = self.callbacks.borrow_mut().begin();
 
@@ -4634,6 +4638,8 @@ impl ShellRuntime {
 
     fn call_render_once(&self, object: &ViewObject, generation: u64) -> Result<SpecId> {
         self.with_js(|ctx| {
+            let prepare_theme: Function = ctx.globals().get("__prepare_theme")?;
+            prepare_theme.call::<_, ()>(())?;
             let instance = object.value.clone().restore(ctx)?;
             let render: Function = instance.get("render").map_err(|_| {
                 Exception::throw_message(ctx, "view class has no render(cx) method")
@@ -6209,7 +6215,11 @@ globalThis.__gpui = (() => {
 
   let cachedThemeSource;
   let cachedTheme;
-  const currentTheme = () => {
+  let cachedThemeRevision = -1;
+  globalThis.__theme_dirty = true;
+  const refreshTheme = () => {
+    const revision = __theme_revision();
+    if (!globalThis.__theme_dirty && revision === cachedThemeRevision) return;
     const source = __theme_snapshot();
     if (source !== cachedThemeSource) {
       cachedThemeSource = source;
@@ -6219,6 +6229,12 @@ globalThis.__gpui = (() => {
       Object.freeze(cachedTheme.radius);
       Object.freeze(cachedTheme);
     }
+    cachedThemeRevision = revision;
+    globalThis.__theme_dirty = false;
+  };
+  globalThis.__prepare_theme = refreshTheme;
+  const currentTheme = () => {
+    if (globalThis.__theme_dirty || cachedTheme === undefined) refreshTheme();
     return cachedTheme;
   };
 
