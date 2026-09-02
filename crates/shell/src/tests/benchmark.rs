@@ -327,6 +327,34 @@ fn numeric_layout_installs_and_enters_native_code(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+#[cfg(not(debug_assertions))]
+fn first_render_defers_jit_profiling_until_the_view_is_warm(cx: &mut TestAppContext) {
+    let (runtime, mut context, object) = runtime_with_source(cx, COMPUTE_TEMPLATE, false);
+
+    context.update(|window, cx| {
+        runtime
+            .build_snapshot(&object, None, crate::policy::default(), window, cx)
+            .expect("first numeric render")
+    });
+    let first = runtime.jit_metrics_for_benchmark();
+    assert_eq!(first.snapshot_requests, 0, "{first:?}");
+
+    for _ in 0..1_000 {
+        context.update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("warm numeric render")
+        });
+        if runtime.jit_metrics_for_benchmark().native_entries > 0 {
+            break;
+        }
+    }
+    let warm = runtime.jit_metrics_for_benchmark();
+    assert!(warm.snapshot_requests > 0, "{warm:?}");
+    assert!(warm.native_entries > 0, "{warm:?}");
+}
+
+#[gpui::test]
 fn materializing_a_snapshot_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
     let (runtime, mut context, object) = grid(cx, ROWS, COLUMNS);
 
