@@ -40,7 +40,7 @@ gpui_platform.workspace = true
 gpui-base = { workspace = true, features = ["inspector"] }
 gpui-fps.workspace = true
 
-rquickjs = { package = "quickjs-jit", version = "0.12.2", features = [
+rquickjs = { package = "quickjs-jit", version = "0.12.4", features = [
     "macro",
     "loader",
     "jit-abi",

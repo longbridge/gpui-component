@@ -7700,9 +7700,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3799a49d313bde82062986ae9008392f2271986f60d52ad04d17364c10677899"
+checksum = "dd0121b4126097ef775b072908b796b8ed49e833a0f538261e45745d454a3a4d"
 dependencies = [
  "either",
  "indexmap",
@@ -7712,9 +7712,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-core"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0afea723ff61662b3df5862ddedb45c6178712305265992a241dc1fb2c16fe4d"
+checksum = "89c1506dcc05dfb0cd829307c862cc01e288a2547d0c930ff0f5cf711244e8a7"
 dependencies = [
  "async-lock",
  "bytes",
@@ -7731,9 +7731,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-macro"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "347de7bd31c58a98fe990a39b43fdcd7d94ac698e9d798c4b996e1678ea67bc8"
+checksum = "4d75791c68333ce296643dabfc9b6c97fff7257d3395f7b92cdfef25ee6ef46f"
 dependencies = [
  "convert_case 0.11.0",
  "fnv",
@@ -7773,9 +7773,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-sys"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afbaa382f53e3162cfbe88f15e81eb18db5e1e4aeab072d2f7c847cc154480bc"
+checksum = "941b0d1cd92be3b47f6c2022a1ce96d2afa208a0b7e9d5852cb82707bcfd0edb"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -8383,7 +8383,7 @@ dependencies = [
 
 [[package]]
 name = "rquickjs"
-version = "0.12.2"
+version = "0.12.4"
 dependencies = [
  "quickjs-jit",
 ]

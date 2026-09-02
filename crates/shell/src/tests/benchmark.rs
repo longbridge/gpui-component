@@ -19,7 +19,7 @@
 //! Run with output:
 //!
 //! ```text
-//! cargo test -p gpui-shell --release --test benchmark -- --nocapture
+//! cargo test -p gpui-shell --release tests::benchmark -- --nocapture
 //! ```
 
 use std::{ops::Deref, time::Instant};
@@ -208,7 +208,7 @@ fn repainting_a_clean_view_never_enters_the_vm(cx: &mut TestAppContext) {
 /// ignored by default because the largest size costs seconds in a debug build:
 ///
 /// ```text
-/// cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
+/// cargo test -p gpui-shell --release tests::benchmark -- --ignored --nocapture
 /// ```
 ///
 /// Two runs out of thirteen have seen the largest size report one script render

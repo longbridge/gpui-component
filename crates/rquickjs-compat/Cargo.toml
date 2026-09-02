@@ -1,6 +1,6 @@
 [package]
 name = "rquickjs"
-version = "0.12.2"
+version = "0.12.4"
 edition.workspace = true
 publish = false
 
@@ -8,7 +8,7 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-upstream = { package = "quickjs-jit", version = "0.12.2", default-features = false }
+upstream = { package = "quickjs-jit", version = "0.12.4", default-features = false }
 
 [features]
 default = ["std"]
