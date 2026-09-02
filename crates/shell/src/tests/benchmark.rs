@@ -26,6 +26,7 @@ use std::{ops::Deref, time::Instant};
 
 use crate::{RenderSnapshot, ScriptView, ShellRuntime, materialize::materialize};
 use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
+#[cfg(not(debug_assertions))]
 use sha2::{Digest as _, Sha256};
 
 /// Rows and columns chosen to land near the doc's "typical panel" figure:
@@ -33,8 +34,11 @@ use sha2::{Digest as _, Sha256};
 const ROWS: usize = 40;
 const COLUMNS: usize = 5;
 const ITERATIONS: usize = 50;
+#[cfg(not(debug_assertions))]
 const ACCEPTANCE_ITERATIONS: usize = 200;
+#[cfg(not(debug_assertions))]
 const JIT_WARMUP_RENDERS: usize = 64;
+#[cfg(not(debug_assertions))]
 const RELOAD_OBSERVATIONS: usize = 5;
 /// How many batches of [`ITERATIONS`] a timing takes before believing the
 /// fastest one.
