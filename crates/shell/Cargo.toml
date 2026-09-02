@@ -24,7 +24,7 @@ default = ["quickjs"]
 # so a second one can be added without the seam having to be invented first.
 quickjs = [
     "dep:rquickjs",
-    "dep:rquickjs-jit",
+    "dep:quickjs-jit-runtime",
     "dep:llrt_buffer",
     "dep:llrt_crypto",
     "dep:llrt_path",
@@ -45,7 +45,7 @@ rquickjs = { package = "quickjs-jit", version = "0.12.4", features = [
     "loader",
     "jit-abi",
 ], optional = true }
-rquickjs-jit = { package = "quickjs-jit-runtime", version = "0.12.2", features = ["compiler"], optional = true }
+quickjs-jit-runtime = { version = "0.12.4", features = ["compiler"], optional = true }
 # LLRT is still pre-release. Keep every module on the same audited revision;
 # crates.io's 0.8.1-beta release uses rquickjs 0.11 and cannot share our VM.
 llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }

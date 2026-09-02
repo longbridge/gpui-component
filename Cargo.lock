@@ -7750,9 +7750,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-runtime"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9545ea7aa2afd1ea049470c71e7f9ed83f3435624d6d25fafdae5c6b7f1510f0"
+checksum = "6ec3b83d7fc220d2cacc3380db73ff4f1ea2c5039d450041212a6d5e87e6f89c"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
