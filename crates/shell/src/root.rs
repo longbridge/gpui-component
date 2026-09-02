@@ -288,6 +288,30 @@ impl ShellRoot {
         &self.content
     }
 
+    /// The content view, cached when it can be.
+    ///
+    /// gpui's view cache is one level deep: while a cached view rebuilds it
+    /// sets `window.refreshing`, and every cached view inside it rebuilds
+    /// with it. A script view that marks `.cached()` subtrees therefore
+    /// carries the cache in those subtrees, and is mounted uncached here so
+    /// they can be reused; a view without any keeps the root cache (#2908).
+    fn content_element(&self, cx: &App) -> AnyElement {
+        let caches_subtrees = self
+            .content
+            .clone()
+            .downcast::<crate::ScriptView>()
+            .map(|view| view.read(cx).caches_subtrees())
+            .unwrap_or(false);
+        if caches_subtrees {
+            self.content.clone().into_any_element()
+        } else {
+            self.content
+                .clone()
+                .cached(StyleRefinement::default().size_full())
+                .into_any_element()
+        }
+    }
+
     pub(crate) fn application(&self) -> Option<&MountedApplication> {
         self.application.as_ref()
     }
@@ -852,11 +876,7 @@ impl Render for ShellRoot {
             .text_color(colors.foreground)
             // Painted back to front; see the stacking order on `ShellRoot`.
             .child(TextSelectionLayer)
-            .child(
-                self.content
-                    .clone()
-                    .cached(StyleRefinement::default().size_full()),
-            )
+            .child(self.content_element(cx))
             .children(self.sheet_layer(&colors, &spacing, cx))
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
             .child(self.toast_layer(&colors, &radius, &spacing, cx))

@@ -1132,3 +1132,48 @@ fn an_animation_in_a_cached_subtree_rebuilds_only_that_subtree(cx: &mut TestAppC
         "only the subtree the transition lives in rebuilds; the other is reused"
     );
 }
+
+#[gpui::test]
+fn the_root_view_is_cached_only_while_it_has_no_cached_subtrees(cx: &mut TestAppContext) {
+    // Without markers: #2908 holds, a clean frame materializes nothing.
+    let (runtime, mut context, view) = script_view(cx, TOGGLE);
+    context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let first = runtime.metrics().read();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let clean = runtime.metrics().read().since(&first);
+    assert_eq!(
+        clean.materializations(),
+        0,
+        "a markerless view keeps the root cache"
+    );
+
+    // With markers: the view materializes its skeleton on a clean frame and
+    // every subtree is reused.
+    let (runtime, mut context, view) = script_view(cx, TWO_CACHED_PANELS);
+    context.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            crate::root::ShellRoot::new(view.clone().into(), window, cx)
+        })
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let first = runtime.metrics().read();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let clean = runtime.metrics().read().since(&first);
+    assert_eq!(clean.script_renders(), 0);
+    assert_eq!(
+        clean.materializations(),
+        1,
+        "a view with cached subtrees is mounted uncached and materializes its skeleton"
+    );
+    assert_eq!(clean.subtree_mounts(), 2);
+    assert_eq!(
+        clean.subtree_rebuilds(),
+        0,
+        "both subtrees are reused on a clean frame"
+    );
+}
