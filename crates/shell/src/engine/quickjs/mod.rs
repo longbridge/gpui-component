@@ -5446,6 +5446,13 @@ globalThis.__gpui = (() => {
     return this;
   };
 
+  methods.frame_budget = function (milliseconds) {
+    __apply(this.__id, "frame_budget", [
+      finitePositive(milliseconds, "frame_budget"),
+    ]);
+    return this;
+  };
+
   // A popover opened by the wrong button is silence, not a visual mistake, so
   // an unknown button name is refused rather than falling back to the left one.
   methods.mouse_button = function (value) {
@@ -6697,6 +6704,7 @@ impl ShellRuntime {
                 "open",
                 "default_open",
                 "overlay_closable",
+                "continuous",
                 "with_item_to_measure_index",
             ]
             .into_iter()
@@ -7695,6 +7703,8 @@ impl ShellRuntime {
             | "default_open"
             | "overlay_closable"
             | "anchor"
+            | "continuous"
+            | "frame_budget"
             | "mouse_button"
             | "open_delay"
             | "close_delay"
@@ -7746,6 +7756,8 @@ impl ShellRuntime {
                     "default_open" => "default_open",
                     "overlay_closable" => "overlay_closable",
                     "anchor" => "anchor",
+                    "continuous" => "continuous",
+                    "frame_budget" => "frame_budget",
                     "mouse_button" => "mouse_button",
                     "open_delay" => "open_delay",
                     "close_delay" => "close_delay",

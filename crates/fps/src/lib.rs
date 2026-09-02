@@ -23,9 +23,10 @@
 //! # }
 //! ```
 //!
-//! The call takes no options. Anything else — a different corner, frame
-//! budget, palette, or an embedded rather than overlaid HUD — is built by
-//! composing the two pieces they use, [`FpsMonitor`] and [`FpsOverlay`].
+//! The returned overlay can change its corner, frame budget, and whether it
+//! continuously drives the window's animation loop. A custom palette or an
+//! embedded rather than overlaid HUD is built by composing [`FpsMonitor`] and
+//! [`FpsOverlay`] directly.
 //!
 //! This crate depends only on `gpui`, so it can be used from any GPUI
 //! application.

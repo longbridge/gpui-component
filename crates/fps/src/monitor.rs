@@ -186,6 +186,15 @@ impl FpsMonitor {
         self
     }
 
+    pub(crate) fn set_frame_budget(&mut self, budget: Duration) {
+        self.frame_budget = budget;
+        self.axis_max = budget.as_secs_f32() * 2.;
+    }
+
+    pub(crate) fn set_continuous(&mut self, continuous: bool) {
+        self.continuous = continuous;
+    }
+
     /// Whether to sample and show CPU, memory and GPU usage. Defaults to
     /// `true`, and is always off on the web.
     ///

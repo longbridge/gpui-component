@@ -501,6 +501,8 @@ struct Behavior {
     /// component's own default, and the two differ: a popover anchors top-left,
     /// a hover card top-center.
     anchor: Option<gpui::Anchor>,
+    continuous: Option<bool>,
+    frame_budget: Option<Duration>,
     /// The pointer button that opens a `Popover`.
     mouse_button: Option<MouseButton>,
     /// The label a hover shows over this element. A string rather than an
@@ -649,9 +651,9 @@ pub fn materialize(
     cx: &mut App,
 ) -> AnyElement {
     let ambient = window.text_style().color;
-    // Counted and timed because this is the half that follows frames: the story
-    // and the benchmark both read the two counters side by side, and the gap
-    // between them is the architecture.
+    // Counted and timed because this is the native half of rebuilding a dirty
+    // script view. Clean window frames reuse ShellRoot's cached subtree and do
+    // not enter here at all.
     let metrics = runtime.metrics();
     metrics.time_materialize(|| {
         materialize_node(
@@ -3109,6 +3111,8 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .and_then(|value| value.as_str().ok())
                 .and_then(|value| anchor_from_name(value));
         }
+        "continuous" => behavior.continuous = Some(flag.unwrap_or(true)),
+        "frame_budget" => behavior.frame_budget = milliseconds(args),
         "mouse_button" => {
             behavior.mouse_button =
                 args.first()
