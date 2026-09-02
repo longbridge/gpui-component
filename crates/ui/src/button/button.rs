@@ -654,9 +654,8 @@ impl RenderOnce for Button {
                 this.child(
                     div()
                         .min_w_0()
-                        .overflow_hidden()
                         .whitespace_nowrap()
-                        .truncate()
+                        .text_ellipsis()
                         .line_height(relative(1.))
                         .child(label),
                 )
