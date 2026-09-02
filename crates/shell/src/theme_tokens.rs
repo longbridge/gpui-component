@@ -8,13 +8,37 @@ use gpui_base::{ColorTokens, RadiusTokens, SemanticThemeTokens, SpacingTokens, T
 use crate::scope::with_current_app;
 
 thread_local! {
-    static CACHED: RefCell<Option<SemanticThemeTokens>> = const { RefCell::new(None) };
+    static CACHED: RefCell<CachedTheme> = const { RefCell::new(CachedTheme {
+        key: None,
+        revision: 0,
+    }) };
 }
 
-pub(crate) fn sync(cx: &App) -> SemanticThemeTokens {
-    let tokens = Theme::global(cx).tokens;
-    CACHED.with(|cached| *cached.borrow_mut() = Some(tokens.clone()));
-    tokens
+#[derive(Clone, PartialEq)]
+pub(crate) struct ThemeSnapshotKey {
+    pub(crate) tokens: SemanticThemeTokens,
+    pub(crate) appearance: gpui_base::ThemeAppearance,
+}
+
+struct CachedTheme {
+    key: Option<ThemeSnapshotKey>,
+    revision: u32,
+}
+
+pub(crate) fn sync(cx: &App) -> ThemeSnapshotKey {
+    let theme = Theme::global(cx);
+    let key = ThemeSnapshotKey {
+        tokens: theme.tokens,
+        appearance: theme.appearance,
+    };
+    CACHED.with(|cached| {
+        let mut cached = cached.borrow_mut();
+        if cached.key.as_ref() != Some(&key) {
+            cached.key = Some(key.clone());
+            cached.revision = cached.revision.wrapping_add(1);
+        }
+    });
+    key
 }
 
 /// Lends the active palette to `read`, from the same two places in the same
@@ -36,11 +60,24 @@ fn with_tokens<R>(read: impl FnOnce(&SemanticThemeTokens) -> R) -> Option<R> {
     }
     // Materializing a description runs outside every call scope, so this is
     // the only palette that path can see.
-    CACHED.with(|cached| cached.borrow().as_ref().map(read))
+    CACHED.with(|cached| cached.borrow().key.as_ref().map(|key| read(&key.tokens)))
 }
 
-pub(crate) fn current() -> Option<SemanticThemeTokens> {
-    with_tokens(Clone::clone)
+pub(crate) fn snapshot() -> ThemeSnapshotKey {
+    CACHED.with(|cached| {
+        cached
+            .borrow()
+            .key
+            .clone()
+            .unwrap_or_else(|| ThemeSnapshotKey {
+                tokens: SemanticThemeTokens::default(),
+                appearance: gpui_base::ThemeAppearance::default(),
+            })
+    })
+}
+
+pub(crate) fn revision() -> u32 {
+    CACHED.with(|cached| cached.borrow().revision)
 }
 
 pub(crate) fn token_color(name: &str) -> Option<Hsla> {

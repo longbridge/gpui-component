@@ -91,6 +91,10 @@ struct TextStyleOverride {
 
 pub fn install(ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     ctx.globals().set(
+        "__theme_revision",
+        Func::from(|| -> u32 { theme_tokens::revision() }),
+    )?;
+    ctx.globals().set(
         "__theme_snapshot",
         Func::from(|_: Ctx<'_>| -> JsResult<String> { Ok(snapshot_json().as_ref().clone()) }),
     )?;
@@ -138,14 +142,16 @@ fn set_theme<'js>(ctx: Ctx<'js>, value: Value<'js>) -> JsResult<()> {
         base.tokens = tokens;
         theme_tokens::sync(cx);
         cx.refresh_windows();
-        Ok(())
+        Ok::<(), rquickjs::Error>(())
     })
     .ok_or_else(|| {
         Exception::throw_type(
             &ctx,
             "set_theme(theme) needs a live host call; call it from an event handler",
         )
-    })?
+    })??;
+    ctx.globals().set("__theme_dirty", true)?;
+    Ok(())
 }
 
 fn apply_colors(
@@ -291,10 +297,8 @@ fn set_radius(t: &mut gpui_base::RadiusTokens, n: &str, v: f32) {
 }
 
 fn snapshot_json() -> Rc<String> {
-    let tokens = theme_tokens::current().unwrap_or_default();
-    let appearance =
-        crate::scope::with_current_app(|cx| Theme::global(cx).appearance).unwrap_or_default();
-    SNAPSHOT_CACHE.with(|cache| cache.borrow_mut().snapshot(&tokens, appearance))
+    let theme = theme_tokens::snapshot();
+    SNAPSHOT_CACHE.with(|cache| cache.borrow_mut().snapshot(&theme.tokens, theme.appearance))
 }
 
 fn build_snapshot_json(
