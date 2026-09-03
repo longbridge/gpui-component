@@ -19,6 +19,8 @@ pub struct SearchMatcher {
 #[derive(Debug, Clone)]
 pub struct SearchSession {
     pub open: bool,
+    /// Advances whenever search is explicitly invoked, including while already open.
+    pub activation_revision: u64,
     pub replace_mode: bool,
     pub case_insensitive: bool,
     pub query: String,
@@ -31,6 +33,7 @@ impl Default for SearchSession {
     fn default() -> Self {
         Self {
             open: false,
+            activation_revision: 0,
             replace_mode: false,
             case_insensitive: true,
             query: String::new(),
@@ -44,6 +47,7 @@ impl Default for SearchSession {
 impl SearchSession {
     pub(crate) fn open(&mut self, replace_mode: bool, replaceable: bool) {
         self.open = true;
+        self.activation_revision = self.activation_revision.wrapping_add(1);
         self.replace_mode = replace_mode && replaceable;
     }
 
@@ -359,6 +363,18 @@ impl DoubleEndedIterator for SearchMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_an_active_session_advances_the_activation_revision() {
+        let mut session = SearchSession::default();
+
+        session.open(false, true);
+        let first_revision = session.activation_revision;
+        session.open(false, true);
+
+        assert!(session.open);
+        assert_ne!(session.activation_revision, first_revision);
+    }
 
     #[test]
     fn finds_navigates_and_preserves_replacement_position() {

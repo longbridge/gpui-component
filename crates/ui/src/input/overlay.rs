@@ -25,7 +25,7 @@ impl<M: OverlayMode> Global for InputOverlayRegistry<M> {}
 
 struct InputOverlayHost<M: OverlayMode> {
     search: Entity<SearchPanel<M>>,
-    search_signature: (bool, bool, String, Option<usize>),
+    search_signature: (bool, bool, String, Option<usize>, u64),
     /// The language-feature popovers. Only a code editor has them.
     lsp: Option<LspOverlays>,
 }
@@ -280,7 +280,7 @@ impl<M: OverlayMode> InputOverlayHost<M> {
     fn new(state: Entity<InputBaseState<M>>, window: &mut Window, cx: &mut App) -> Self {
         Self {
             search: SearchPanel::new(state.clone(), window, cx),
-            search_signature: (false, false, String::new(), None),
+            search_signature: (false, false, String::new(), None, 0),
             lsp: M::build_lsp(&state, window, cx),
         }
     }
@@ -306,13 +306,15 @@ impl<M: OverlayMode> InputOverlayHost<M> {
             replace_mode,
             search_session.query.clone(),
             search_session.anchor_offset,
+            search_session.activation_revision,
         );
         if search_signature != self.search_signature {
-            let (was_open, was_replace, _, was_anchor) = &self.search_signature;
+            let (was_open, was_replace, _, was_anchor, was_activation) = &self.search_signature;
             let query_echo = search_open
                 && *was_open
                 && *was_replace == replace_mode
                 && *was_anchor == search_session.anchor_offset
+                && *was_activation == search_session.activation_revision
                 && self.search.read(cx).query(cx) == search_session.query;
             self.search_signature = search_signature;
             if !query_echo {
