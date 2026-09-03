@@ -23,7 +23,7 @@ cargo run -p gpui-base --example components -- scrollbar
 ```
 
 The source is available in
-[`components/scrollbar.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/scrollbar.rs).
+[`components/scrollbar.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/scrollbar.rs).
 
 ## Imports
 
@@ -94,11 +94,11 @@ Scrollbar::vertical(&scroll_handle).mode(ScrollbarMode::Hover);
 Scrollbar::vertical(&scroll_handle).mode(ScrollbarMode::Always);
 ```
 
-| Mode | Behavior |
-| --- | --- |
+| Mode        | Behavior                                                                                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Scrolling` | Appears after scrolling or dragging. A visible scrollbar stays visible while hovered; leaving starts a fresh idle hold. Hover cannot reveal a fully hidden scrollbar. |
-| `Hover` | Appears when the pointer enters the scrollbar track. |
-| `Always` | Remains visible and skips visibility transitions. |
+| `Hover`     | Appears when the pointer enters the scrollbar track.                                                                                                                  |
+| `Always`    | Remains visible and skips visibility transitions.                                                                                                                     |
 
 All modes use a 6 px resting thumb by default. Track hover keeps that width.
 Thumb hover and active dragging target the 8 px active width. Width changes use
@@ -175,12 +175,12 @@ and width changes.
 
 The example theme above produces this choreography:
 
-| Trigger | Entrance |
-| --- | --- |
-| Scroll in `Scrolling` or `Hover` mode | `entrance`: fade in place |
-| Track hover in `Hover` mode | `entrance`: fade in place |
-| Thumb hover in `Hover` mode | `thumb_hover_entrance`: slide from the nearest edge while fading |
-| `Always` mode | Immediate; visibility motion is skipped |
+| Trigger                               | Entrance                                                         |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| Scroll in `Scrolling` or `Hover` mode | `entrance`: fade in place                                        |
+| Track hover in `Hover` mode           | `entrance`: fade in place                                        |
+| Thumb hover in `Hover` mode           | `thumb_hover_entrance`: slide from the nearest edge while fading |
+| `Always` mode                         | Immediate; visibility motion is skipped                          |
 
 For `SlideAndFade`, a vertical scrollbar enters from the right and a horizontal
 scrollbar enters from the bottom. Opacity uses linear entrance progress;

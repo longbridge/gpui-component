@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/longbridge/gpui-component/main/website/public/logo.svg" width="112" alt="GPUI Kit logo" />
+  <img src="https://raw.githubusercontent.com/longbridge/gpui-kit/main/website/public/logo.svg" width="112" alt="GPUI Kit logo" />
   <br>
   <strong>GPUI Kit</strong>
 </p>
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-[![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
+[![Build Status](https://github.com/longbridge/gpui-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-kit/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-kit/badge.svg)](https://docs.rs/gpui-kit/) [![Crates.io](https://img.shields.io/crates/v/gpui-kit.svg)](https://crates.io/crates/gpui-kit)
 
 Build fantastic, high-performance desktop apps with Rust and GPUI.
 
@@ -18,11 +18,14 @@ infrastructure, and opens the finished application to JavaScript extensions.
 Documentation: <https://gpui-kit.com>
 
 ```text
-gpui-kit
+gpui-kit             The one crate applications depend on
 ├── gpui-base        Unstyled behavior, state, and infrastructure
 ├── gpui-shell       JavaScript extensions for a Rust host
 └── gpui-component   GPUI Component: the complete styled UI system
 ```
+
+`gpui-kit` pins the matching GPUI release and re-exports every layer, so an
+application lists a single dependency and never GPUI itself.
 
 ## Features
 
@@ -89,7 +92,7 @@ The layering follows the same separation that makes the
 
 | GPUI Kit ecosystem                   | Web ecosystem                   |
 | ------------------------------------ | ------------------------------- |
-| GPUI              | HTML + Tailwind CSS             |
+| GPUI                                 | HTML + Tailwind CSS             |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com)  |
 | `gpui-component`                     | shadcn's styled component layer |
 
@@ -111,6 +114,13 @@ commercial desktop application rather than designed in isolation.
 [dependencies]
 gpui-kit = "0.6"
 ```
+
+`gpui-kit` brings in GPUI together with `gpui-base`, `gpui-component`,
+`gpui-shell` and the default icon set, all on by default. Add the `webview`
+feature for the WebView element, or turn default features off to keep only
+the layers you use. The `gpui-component` features (`inspector`, `decimal`,
+`tree-sitter`, and each `tree-sitter-<language>`) are available under the same
+names.
 
 ### Basic Example
 
@@ -157,22 +167,24 @@ fn main() {
 
 ### Icons
 
-GPUI Component has an `Icon` element, but it does not include SVG files by default.
-
-The example uses [Lucide](https://lucide.dev) icons, but you can use any icons you like. Just name the SVG files as defined in [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86). You can add any icons you need to your project.
+The default `assets` feature bundles the [Lucide](https://lucide.dev) icon set
+as `gpui-kit-assets`; pass it to the application with
+`gpui_kit::application().with_assets(gpui_kit::assets::Assets)`. To ship your
+own icons instead, leave that feature out and name the SVG files as defined in
+[IconName](https://github.com/longbridge/gpui-kit/blob/main/crates/ui/src/icon.rs#L86).
 
 ## Skills for AI Coding Agents
 
 Install the GPUI Kit skills for your AI coding agent (Cursor, Claude Code, Gemini CLI, Codex, etc.):
 
 ```bash
-npx skills add longbridge/gpui-component
+npx skills add longbridge/gpui-kit
 ```
 
-| Skill | Description |
-| --- | --- |
-| `gpui-component` | Component catalog, usage patterns, and contributor code style guide. |
-| `gpui` | Low-level GPUI framework mechanics (elements, entities, async, focus, actions, tests). |
+| Skill            | Description                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `gpui-component` | Component catalog, usage patterns, and contributor code style guide.                   |
+| `gpui`           | Low-level GPUI framework mechanics (elements, entities, async, focus, actions, tests). |
 
 ## Development
 
@@ -219,54 +231,12 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Compare to others
 
-| Features              | GPUI Kit                       | [Iced]             | [egui]                | [Qt 6]                                            |
-| --------------------- | ------------------------------ | ------------------ | --------------------- | ------------------------------------------------- |
-| Language              | Rust                           | Rust               | Rust                  | C++/QML                                           |
-| Core Render           | GPUI                           | wgpu               | wgpu                  | QT                                                |
-| License               | Apache 2.0                     | MIT                | MIT/Apache 2.0        | [Commercial/LGPL](https://www.qt.io/qt-licensing) |
-| Min Binary Size [^1]  | 12MB                           | 11MB               | 5M                    | 20MB [^2]                                         |
-| Cross-Platform        | Yes                            | Yes                | Yes                   | Yes                                               |
-| Documentation         | Simple                         | Simple             | Simple                | Good                                              |
-| Web                   | Yes (WASM)                     | Yes                | Yes                   | Yes                                               |
-| UI Style              | Modern                         | Basic              | Basic                 | Basic                                             |
-| CJK Support           | Yes                            | Yes                | Bad                   | Yes                                               |
-| Chart                 | Yes                            | No                 | No                    | Yes                                               |
-| Table (Large dataset) | Yes<br>(Virtual Rows, Columns) | No                 | Yes<br>(Virtual Rows) | Yes<br>(Virtual Rows, Columns)                    |
-| Table Column Resize   | Yes                            | No                 | Yes                   | Yes                                               |
-| Text base             | Rope                           | [COSMIC Text] [^3] | trait TextBuffer [^4] | [QTextDocument]                                   |
-| CodeEditor            | Simple                         | Simple             | Simple                | Basic API                                         |
-| Dock Layout           | Yes                            | Yes                | Yes                   | Yes                                               |
-| Syntax Highlight      | [Tree Sitter]                  | [Syntect]          | [Syntect]             | [QSyntaxHighlighter]                              |
-| Markdown Rendering    | Yes                            | Yes                | Basic                 | No                                                |
-| Markdown mix HTML     | Yes                            | No                 | No                    | No                                                |
-| HTML Rendering        | Basic                          | No                 | No                    | Basic                                             |
-| Text Selection        | TextView                       | No                 | Any Label             | Yes                                               |
-| Custom Theme          | Yes                            | Yes                | Yes                   | Yes                                               |
-| Built Themes          | Yes                            | No                 | No                    | No                                                |
-| I18n                  | Yes                            | Yes                | Yes                   | Yes                                               |
-
-> Please submit an issue or PR if any mistakes or outdated are found.
-
-[Iced]: https://github.com/iced-rs/iced
-[egui]: https://github.com/emilk/egui
-[QT 6]: https://www.qt.io/product/qt6
-[Tree Sitter]: https://tree-sitter.github.io/tree-sitter/
-[Syntect]: https://github.com/trishume/syntect
-[QSyntaxHighlighter]: https://doc.qt.io/qt-6/qsyntaxhighlighter.html
-[QTextDocument]: https://doc.qt.io/qt-6/qtextdocument.html
-[COSMIC Text]: https://github.com/pop-os/cosmic-text
-
-[^1]: Release builds by use simple hello world example.
-
-[^2]: [Reducing Binary Size of Qt Applications](https://www.qt.io/blog/reducing-binary-size-of-qt-applications-part-3-more-platforms)
-
-[^3]: Iced Editor: <https://github.com/iced-rs/iced/blob/db5a1f6353b9f8520c4f9633d1cdc90242c2afe1/graphics/src/text/editor.rs#L65-L68>
-
-[^4]: egui TextBuffer: <https://github.com/emilk/egui/blob/0a81372cfd3a4deda640acdecbbaf24bf78bb6a2/crates/egui/src/widgets/text_edit/text_buffer.rs#L20>
+See the [comparison with Iced, egui and Qt 6](https://gpui-kit.com/docs/comparison) on the site.
 
 ## License
 
 Apache-2.0
 
+- Built on [GPUI](https://github.com/zed-industries/zed), the UI framework behind Zed, also Apache-2.0.
 - UI design based on [shadcn/ui](https://ui.shadcn.com), some from [Reui](https://reui.io).
 - Icons from [Lucide](https://lucide.dev).

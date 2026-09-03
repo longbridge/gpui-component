@@ -12,7 +12,7 @@ Like every `gpui-base` primitive, Nav Stack supplies behavior and semantic struc
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
 cargo run -p gpui-base --example components -- nav-stack
@@ -29,21 +29,21 @@ use gpui_base::motion::{PresencePhase, Transition};
 
 `NavStackState` is the stack. It lives in a GPUI entity, holds `AnyView`s root first, and emits `NavStackEvent` after every change.
 
-| Method | Does |
-| --- | --- |
-| `push(view, motion, cx)` | Pushes over the current top. Into an empty stack it is immediate, like Qt's `initialItem`. |
-| `pop(motion, cx)` | Pops the top and returns it. The root is never popped, so this returns `None` at a depth of one. |
-| `pop_to_root(motion, cx)` | Pops everything above the root in one transition and returns those views. |
-| `forward(motion, cx)` | Brings back the most recently popped view over the current top and returns it. `None` when nothing has been popped since the last push. |
-| `replace(view, motion, cx)` | Swaps the top for `view` and returns the one replaced, keeping the forward views. On an empty stack it pushes. |
-| `clear(cx)` | Empties the stack and the forward views immediately. |
-| `depth()`, `is_empty()`, `current()`, `views()`, `forward_views()` | Read the stack. Show a back button when `depth() > 1`, a forward button when `forward_views()` is not empty. |
+| Method                                                             | Does                                                                                                                                    |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `push(view, motion, cx)`                                           | Pushes over the current top. Into an empty stack it is immediate, like Qt's `initialItem`.                                              |
+| `pop(motion, cx)`                                                  | Pops the top and returns it. The root is never popped, so this returns `None` at a depth of one.                                        |
+| `pop_to_root(motion, cx)`                                          | Pops everything above the root in one transition and returns those views.                                                               |
+| `forward(motion, cx)`                                              | Brings back the most recently popped view over the current top and returns it. `None` when nothing has been popped since the last push. |
+| `replace(view, motion, cx)`                                        | Swaps the top for `view` and returns the one replaced, keeping the forward views. On an empty stack it pushes.                          |
+| `clear(cx)`                                                        | Empties the stack and the forward views immediately.                                                                                    |
+| `depth()`, `is_empty()`, `current()`, `views()`, `forward_views()` | Read the stack. Show a back button when `depth() > 1`, a forward button when `forward_views()` is not empty.                            |
 
 `NavStack` is the element. It holds the entity, takes a `transition` to run each change under, and hands every mounted view to the `item` renderer as a `NavPage`. Style the element for size, background and clipping; it is positioned so that the two pages of a change can overlap.
 
 `NavPage` is what the renderer receives. It already fills the container. Read `phase()` (`Entering`, `Present` or `Exiting`), `operation()` (`Push`, `Pop` or `Replace`, or `None` once settled) and `progress()` (eased, `0.0` to `1.0`, shared by both pages of one change), refine the page with GPUI styles, and return it.
 
-The authoritative module is [`components/nav_stack.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/nav_stack.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/nav_stack.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/nav_stack.rs). Native and browser previews compile this same file.
 
 ## Animation
 

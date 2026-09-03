@@ -33,21 +33,21 @@ single screen, what this project is — and then prove it is real.
 Defined in `.vitepress/theme/style.css`, mapped from the default theme so the
 site and the documented components share one palette.
 
-| Token | Light | Dark | Theme source |
-| --- | --- | --- | --- |
-| `--background` | `#ffffff` | `#0a0a0a` | `background` |
-| `--foreground` | `#0a0a0a` | `#fafafa` | `foreground` |
-| `--border` | `#e5e5e5` | `#262626` | `border` |
-| `--secondary` | `#f5f5f5` | `#262626` | `secondary.background` |
-| `--muted-foreground` | `#737373` | `#a3a3a3` | `muted.foreground` |
-| `--sidebar` | `#fafafa` | `#0f0f0f` | `sidebar.background` |
-| `--titlebar` | `#f8f8f8` | `#171717` | `title_bar.background` |
-| `--brand` | `#171717` | `#fafafa` | `primary.background` |
-| `--data-1…5` | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5` |
-| logo accent | `#3b82f6` | `#419cff` | light `chart_2` / dark syntax link and tag blue |
-| `--selection` | `#55a0fc` | same | `selection.background` |
-| `--success` | `#22c55e` | same | `success.background` |
-| `--code-*` | macos-classic-light | macos-classic-dark | `src/*.theme.json` |
+| Token                | Light                 | Dark                           | Theme source                                    |
+| -------------------- | --------------------- | ------------------------------ | ----------------------------------------------- |
+| `--background`       | `#ffffff`             | `#0a0a0a`                      | `background`                                    |
+| `--foreground`       | `#0a0a0a`             | `#fafafa`                      | `foreground`                                    |
+| `--border`           | `#e5e5e5`             | `#262626`                      | `border`                                        |
+| `--secondary`        | `#f5f5f5`             | `#262626`                      | `secondary.background`                          |
+| `--muted-foreground` | `#737373`             | `#a3a3a3`                      | `muted.foreground`                              |
+| `--sidebar`          | `#fafafa`             | `#0f0f0f`                      | `sidebar.background`                            |
+| `--titlebar`         | `#f8f8f8`             | `#171717`                      | `title_bar.background`                          |
+| `--brand`            | `#171717`             | `#fafafa`                      | `primary.background`                            |
+| `--data-1…5`         | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5`                               |
+| logo accent          | `#3b82f6`             | `#419cff`                      | light `chart_2` / dark syntax link and tag blue |
+| `--selection`        | `#55a0fc`             | same                           | `selection.background`                          |
+| `--success`          | `#22c55e`             | same                           | `success.background`                            |
+| `--code-*`           | macos-classic-light   | macos-classic-dark             | `src/*.theme.json`                              |
 
 Rules that follow from this:
 
@@ -231,7 +231,7 @@ through motion alone.
 `apps.vue` lists the applications people have shipped with the library — the
 strongest available answer to "is this real?", and the reason it sits in the
 navbar rather than inside the Resources menu. Submissions come from
-[discussion #989](https://github.com/longbridge/gpui-component/discussions/989).
+[discussion #989](https://github.com/longbridge/gpui-kit/discussions/989).
 
 - **The screenshots are the authors' own published GitHub URLs**, used as
   submitted. They must not be wrapped in `.mac-window`: most already contain a
@@ -251,12 +251,12 @@ navbar rather than inside the Resources menu. Submissions come from
 
 ## Files
 
-| File | Role |
-| --- | --- |
-| `.vitepress/theme/style.css` | Tokens, `.mac-window`, VitePress overrides, doc typography |
-| `index.vue` | Landing page: markup, bilingual copy, page-scoped styles |
-| `apps.vue` | App Stories page: the showcase list, bilingual copy, page-scoped styles |
-| `.vitepress/theme/index.ts` | Theme entry; injects nav controls and the example window |
-| `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages |
-| `.vitepress/config.mts` | Navigation, sidebar generation, locales |
-| `src/*.theme.json` | shiki syntax themes; the source of `--code-*` |
+| File                                               | Role                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `.vitepress/theme/style.css`                       | Tokens, `.mac-window`, VitePress overrides, doc typography              |
+| `index.vue`                                        | Landing page: markup, bilingual copy, page-scoped styles                |
+| `apps.vue`                                         | App Stories page: the showcase list, bilingual copy, page-scoped styles |
+| `.vitepress/theme/index.ts`                        | Theme entry; injects nav controls and the example window                |
+| `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages                                |
+| `.vitepress/config.mts`                            | Navigation, sidebar generation, locales                                 |
+| `src/*.theme.json`                                 | shiki syntax themes; the source of `--code-*`                           |

@@ -23,7 +23,7 @@
         <div class="mt-6 text-(--muted-foreground)">
             {{ moreText }}
             <a
-                href="https://github.com/longbridge/gpui-component/graphs/contributors"
+                href="https://github.com/longbridge/gpui-kit/graphs/contributors"
                 target="_blank"
             >
                 {{ contributorsLinkText }}</a
@@ -48,7 +48,9 @@ const description = computed(() =>
         : "Thanks to all the people who have contributed to this project!",
 );
 const moreText = computed(() =>
-    isZh.value ? "这里没有展示全部贡献者，完整列表请查看 GitHub 上的 " : "More contributors not shown here. See the full ",
+    isZh.value
+        ? "这里没有展示全部贡献者，完整列表请查看 GitHub 上的 "
+        : "More contributors not shown here. See the full ",
 );
 const contributorsLinkText = computed(() =>
     isZh.value ? "贡献者列表" : "Contributors",

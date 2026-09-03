@@ -1,4 +1,3 @@
-
 ## Description
 
 We less than 150 words description for a PR changes, including new features, bug fixes, and improvements. And if there have APIs break changes (Only `crates/ui` changes) we should have a section called `## Breaking Changes` to list them clearly.
@@ -41,7 +40,7 @@ We pefer the following format for breaking changes descriptions:
 
 ### Large API changes
 
-When one change forces several migration paths, use one `###` subsection per path, each with a short label and a `diff` block, as in [#2691](https://github.com/longbridge/gpui-component/pull/2691):
+When one change forces several migration paths, use one `###` subsection per path, each with a short label and a `diff` block, as in [#2691](https://github.com/longbridge/gpui-kit/pull/2691):
 
 ````md
 ## Breaking Changes

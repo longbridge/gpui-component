@@ -141,7 +141,7 @@ impl Render for MenuStory {
                             .label("Edit")
                             .dropdown_menu(move |this, window, cx| {
                                 this.min_w(250.)
-                                    .link("About", "https://github.com/longbridge/gpui-component")
+                                    .link("About", "https://github.com/longbridge/gpui-kit")
                                     .check_side(check_side.unwrap_or(Side::Left))
                                     .separator()
                                     .item(PopupMenuItem::new("Handle Click").on_click(
@@ -212,7 +212,7 @@ impl Render for MenuStory {
                                         menu.link_with_icon(
                                             "GPUI Component",
                                             IconName::Github,
-                                            "https://github.com/longbridge/gpui-component",
+                                            "https://github.com/longbridge/gpui-kit",
                                         )
                                         .separator()
                                         .link("GPUI Kit", "https://gpui-kit.com")
@@ -262,7 +262,7 @@ impl Render for MenuStory {
                                         .external_link_icon(false)
                                         .link(
                                             "About",
-                                            "https://github.com/longbridge/gpui-component",
+                                            "https://github.com/longbridge/gpui-kit",
                                         )
                                         .separator()
                                         .menu("Cut", Box::new(Cut))
@@ -360,7 +360,7 @@ impl Render for MenuStory {
                                 move |this, _, _| {
                                     this.link(
                                         "About",
-                                        "https://github.com/longbridge/gpui-component",
+                                        "https://github.com/longbridge/gpui-kit",
                                     )
                                     .separator()
                                     .menu("Item 1", Box::new(Info(1)))
@@ -385,7 +385,7 @@ impl Render for MenuStory {
                                 move |this, _, _| {
                                     this.link(
                                         "About",
-                                        "https://github.com/longbridge/gpui-component",
+                                        "https://github.com/longbridge/gpui-kit",
                                     )
                                     .separator()
                                     .menu("Item 1", Box::new(Info(1)))

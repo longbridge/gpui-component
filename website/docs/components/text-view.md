@@ -81,7 +81,7 @@ keyboard activation, touch, and modifier keys:
 use gpui::ClickEvent;
 use gpui_component::text::markdown;
 
-markdown("[Open the project](https://github.com/longbridge/gpui-component)")
+markdown("[Open the project](https://github.com/longbridge/gpui-kit)")
     .on_link_click(|url, event, _window, cx| {
         if event.is_right_click() {
             println!("Show a context menu for {url}");

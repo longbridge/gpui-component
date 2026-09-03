@@ -62,4 +62,4 @@ let password = cx.new(|cx| {
 cargo run -p gpui-base --example components -- input
 ```
 
-实现位于 [`input.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/input.rs)。
+实现位于 [`input.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/input.rs)。

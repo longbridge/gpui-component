@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/gpui-base/badge.svg)](https://docs.rs/gpui-base)
 [![License](https://img.shields.io/crates/l/gpui-base.svg)](../../LICENSE-APACHE)
 
-`gpui-base` is the reusable foundation of the [GPUI Component](https://github.com/longbridge/gpui-component) Rust desktop application framework, built on GPUI. It is intended for applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
+`gpui-base` is the reusable foundation of the [GPUI Component](https://github.com/longbridge/gpui-kit) Rust desktop application framework, built on GPUI. It is intended for applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
 
 > Use [`gpui-component`](https://crates.io/crates/gpui-component) if you want ready-to-use components with a complete visual design. Use `gpui-base` if your application should own its component source and visual styles while reusing stable, shared behavior.
 
@@ -26,12 +26,12 @@ Dependencies always point from higher layers toward the foundation: `gpui-base` 
 
 The GPUI Component ecosystem follows the same layering idea as [shadcn](https://ui.shadcn.com):
 
-| GPUI ecosystem | shadcn ecosystem |
-| --- | --- |
-| GPUI | HTML + Tailwind CSS |
-| `gpui-base` | [Base UI](https://base-ui.com) |
-| `gpui-component` | shadcn |
-| `crates/ui` in GPUI Component | shadcn's default UI |
+| GPUI ecosystem                | shadcn ecosystem               |
+| ----------------------------- | ------------------------------ |
+| GPUI                          | HTML + Tailwind CSS            |
+| `gpui-base`                   | [Base UI](https://base-ui.com) |
+| `gpui-component`              | shadcn                         |
+| `crates/ui` in GPUI Component | shadcn's default UI            |
 
 ## Design Principles
 
@@ -189,19 +189,19 @@ Base controls cannot suppress `hover` or `active` styles while disabled, because
 | `Switch` / `SwitchTrack` / `SwitchThumb` | A controlled switch with independently styled track and thumb parts                                   |
 | `Toggle` / `ToggleGroup`                 | A controlled pressed state and grouping container                                                     |
 | `Link`                                   | Link semantics and activation with an application-provided `open_with` navigation strategy            |
-| `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling  |
-| `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion       |
+| `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling |
+| `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion     |
 
 ### Text Editing
 
 Text editing is split into purpose-specific controls instead of exposing the
 complete editor interface on every text field:
 
-| Control | State | Use |
-| --- | --- | --- |
-| [`Input`](../../website/base/primitives/input.md) | `InputState` | Single-line values, masking, validation, and number stepping |
-| [`Textarea`](../../website/base/primitives/textarea.md) | `TextareaState` | Ordinary multi-line text, fixed rows, wrapping, and auto-grow |
-| [`Editor`](../../website/base/primitives/editor.md) | `EditorState` | Source code, highlighting, gutter, folding, decorations, diagnostics, and LSP integration |
+| Control                                                 | State           | Use                                                                                       |
+| ------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| [`Input`](../../website/base/primitives/input.md)       | `InputState`    | Single-line values, masking, validation, and number stepping                              |
+| [`Textarea`](../../website/base/primitives/textarea.md) | `TextareaState` | Ordinary multi-line text, fixed rows, wrapping, and auto-grow                             |
+| [`Editor`](../../website/base/primitives/editor.md)     | `EditorState`   | Source code, highlighting, gutter, folding, decorations, diagnostics, and LSP integration |
 
 All three share the internal `InputBaseState` editing engine. Applications
 should construct the purpose-specific state rather than configuring modes on
@@ -267,7 +267,7 @@ Tokens describe design semantics; they do not automatically style unstyled contr
 
 | API                               | Purpose                                                                 |
 | --------------------------------- | ----------------------------------------------------------------------- |
-| `History`                         | Browser-style navigation trail with back and forward entries             |
+| `History`                         | Browser-style navigation trail with back and forward entries            |
 | `UndoHistory`                     | Grouped undo and redo transactions                                      |
 | `SliderState`                     | Single or range values, linear or logarithmic scales, and slider events |
 | `IndexPath`                       | A section, row, and column index path                                   |
@@ -323,7 +323,7 @@ style and motion contracts.
 
 ## Related Resources
 
-- [GPUI Kit repository](https://github.com/longbridge/gpui-component)
+- [GPUI Kit repository](https://github.com/longbridge/gpui-kit)
 - [GPUI Kit documentation](https://gpui-kit.com)
 - [`gpui-component` crate](https://crates.io/crates/gpui-component)
 - [`gpui-base` API documentation](https://docs.rs/gpui-base)

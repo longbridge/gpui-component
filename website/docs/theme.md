@@ -44,9 +44,9 @@ Top-level theme fields, such as `cx.theme().button_primary`, remain solid `Hsla`
 
 ## Theme Registry
 
-There have more than 20 built-in themes available in [themes](https://github.com/longbridge/gpui-component/tree/main/themes) folder.
+There have more than 20 built-in themes available in [themes](https://github.com/longbridge/gpui-kit/tree/main/themes) folder.
 
-https://github.com/longbridge/gpui-component/tree/main/themes
+https://github.com/longbridge/gpui-kit/tree/main/themes
 
 And we have a [ThemeRegistry] to help us to load themes.
 

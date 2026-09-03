@@ -29,21 +29,21 @@ use gpui_base::motion::{PresencePhase, Transition};
 
 `NavStackState` 就是栈。它放在 GPUI entity 里，按根在前的顺序持有 `AnyView`，每次变化后 emit `NavStackEvent`。
 
-| 方法 | 作用 |
-| --- | --- |
-| `push(view, motion, cx)` | 压到当前栈顶之上。压入空栈时立即生效，与 Qt 的 `initialItem` 一致。 |
-| `pop(motion, cx)` | 弹出栈顶并返回它。根页面永远不会被弹出，深度为 1 时返回 `None`。 |
-| `pop_to_root(motion, cx)` | 用一次过渡弹掉根以上的全部页面，并返回它们。 |
-| `forward(motion, cx)` | 把最近弹掉的页面带回到当前栈顶之上并返回它。上次 push 之后没有弹过页面时返回 `None`。 |
-| `replace(view, motion, cx)` | 用 `view` 换掉栈顶并返回被换掉的页面，前进页保留。空栈时等于 push。 |
-| `clear(cx)` | 立即清空栈和前进页。 |
-| `depth()`、`is_empty()`、`current()`、`views()`、`forward_views()` | 读取栈。`depth() > 1` 时显示返回按钮，`forward_views()` 非空时显示前进按钮。 |
+| 方法                                                               | 作用                                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `push(view, motion, cx)`                                           | 压到当前栈顶之上。压入空栈时立即生效，与 Qt 的 `initialItem` 一致。                   |
+| `pop(motion, cx)`                                                  | 弹出栈顶并返回它。根页面永远不会被弹出，深度为 1 时返回 `None`。                      |
+| `pop_to_root(motion, cx)`                                          | 用一次过渡弹掉根以上的全部页面，并返回它们。                                          |
+| `forward(motion, cx)`                                              | 把最近弹掉的页面带回到当前栈顶之上并返回它。上次 push 之后没有弹过页面时返回 `None`。 |
+| `replace(view, motion, cx)`                                        | 用 `view` 换掉栈顶并返回被换掉的页面，前进页保留。空栈时等于 push。                   |
+| `clear(cx)`                                                        | 立即清空栈和前进页。                                                                  |
+| `depth()`、`is_empty()`、`current()`、`views()`、`forward_views()` | 读取栈。`depth() > 1` 时显示返回按钮，`forward_views()` 非空时显示前进按钮。          |
 
 `NavStack` 是元素。它持有 entity，用 `transition` 指定每次变化的时长，把每个已挂载的视图作为 `NavPage` 交给 `item` renderer。元素本身负责尺寸、背景和裁剪；它已经设置了定位，让一次变化中的两个页面可以重叠。
 
 `NavPage` 是 renderer 收到的东西，已经铺满容器。读取 `phase()`（`Entering`、`Present` 或 `Exiting`）、`operation()`（`Push`、`Pop`、`Replace`，稳定后为 `None`）和 `progress()`（已缓动，`0.0` 到 `1.0`，一次变化中两个页面共用），用 GPUI 样式修饰后返回。
 
-权威实现位于 [`components/nav_stack.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/nav_stack.rs)，原生与浏览器预览编译的是同一文件。
+权威实现位于 [`components/nav_stack.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/nav_stack.rs)，原生与浏览器预览编译的是同一文件。
 
 ## 动画
 

@@ -14,7 +14,7 @@ order: 24
 cargo run -p gpui-base --example components -- scrollbar
 ```
 
-原生与 WASM 共用 [`scrollbar.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/scrollbar.rs)。
+原生与 WASM 共用 [`scrollbar.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/scrollbar.rs)。
 
 ## 基本用法
 

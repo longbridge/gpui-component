@@ -1,6 +1,5 @@
 const IGNORE_LOGINS = ["dependabot[bot]", "copilot"];
-const API_URL =
-  "https://api.github.com/repos/longbridge/gpui-component/contributors";
+const API_URL = "https://api.github.com/repos/longbridge/gpui-kit/contributors";
 const MAX_CONTRIBUTORS = 24;
 
 function requestHeaders() {

@@ -35,7 +35,7 @@
                     <span>{{ copy.searchShort }}</span>
                 </a>
                 <a
-                    href="https://github.com/longbridge/gpui-component"
+                    href="https://github.com/longbridge/gpui-kit"
                     target="_blank"
                     class="home-nav__github"
                     :title="`${stars} stars on GitHub`"
@@ -362,12 +362,12 @@
             <a :href="skillsHref" target="_blank">Skills</a>
             <a :href="llmsHref" target="_blank">llms-full.txt</a>
             <a
-                href="https://github.com/longbridge/gpui-component/issues"
+                href="https://github.com/longbridge/gpui-kit/issues"
                 target="_blank"
                 >{{ copy.reportBug }}</a
             >
             <a
-                href="https://github.com/longbridge/gpui-component/discussions"
+                href="https://github.com/longbridge/gpui-kit/discussions"
                 target="_blank"
                 >{{ copy.discussion }}</a
             >
@@ -493,13 +493,13 @@ const capIcons = {
 // the headline dependency; the clipboard gets the full block from the Getting
 // Started guide, because gpui-component alone does not build.
 const installCommand =
-    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }';
+    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }';
 const installSnippet = [
     "[dependencies]",
     'gpui = { git = "https://github.com/zed-industries/zed" }',
     'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
-    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }',
-    'gpui-kit-assets = { git = "https://github.com/longbridge/gpui-component" }',
+    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }',
+    'gpui-kit-assets = { git = "https://github.com/longbridge/gpui-kit" }',
 ].join("\n");
 
 const copied = ref(false);

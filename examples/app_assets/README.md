@@ -1,6 +1,6 @@
 ## Icon assets in GPUI Component
 
-The [IconName](https://github.com/longbridge/gpui-component/blob/6998708b817024c2ac0f1ea164d74ddfc024e124/crates/ui/src/icon.rs#L9) is a enum that defined a bunch of icon names, because some internal components in GPUI Component will use them.
+The [IconName](https://github.com/longbridge/gpui-kit/blob/6998708b817024c2ac0f1ea164d74ddfc024e124/crates/ui/src/icon.rs#L9) is a enum that defined a bunch of icon names, because some internal components in GPUI Component will use them.
 
 You can see, we have a lot of svg icon files in the `assets/icons` folder, but we are not embed all of the icon files in the library by default. This for keep the library size small.
 

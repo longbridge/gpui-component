@@ -19,7 +19,7 @@ const NOTIFICATION_MARKDOWN: &str = r#"
 This is a custom notification.
 - List item 1
 - List item 2
-- [Click here](https://github.com/longbridge/gpui-component)
+- [Click here](https://github.com/longbridge/gpui-kit)
 "#;
 
 pub struct NotificationStory {

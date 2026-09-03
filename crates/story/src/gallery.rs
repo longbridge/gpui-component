@@ -449,7 +449,7 @@ impl Render for Gallery {
                             .icon(IconName::Github)
                             .tooltip("GPUI Component GitHub repository")
                             .on_click(|_, _, cx| {
-                                cx.open_url("https://github.com/longbridge/gpui-component")
+                                cx.open_url("https://github.com/longbridge/gpui-kit")
                             }),
                     ),
             )

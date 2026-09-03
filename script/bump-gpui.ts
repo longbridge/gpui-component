@@ -62,7 +62,10 @@ const VERSION = "0.3";
  * Zed's reqwest fork (https://github.com/zed-industries/reqwest) is published
  * separately as `gpui-pre-reqwest`; the version here must match that publish.
  */
-const DEPENDENCY_OVERRIDES: Record<string, { package: string; version: string }> = {
+const DEPENDENCY_OVERRIDES: Record<
+  string,
+  { package: string; version: string }
+> = {
   reqwest: { package: "gpui-pre-reqwest", version: "0.12.15" },
 };
 
@@ -71,7 +74,8 @@ const ZED_DEFAULT_REV = "main";
 const PUBLISH_PREFIX = "gpui-pre";
 const ROOT_CRATES = ["gpui", "gpui_platform", "gpui_macros", "reqwest_client"];
 const CRATES_IO_API = "https://crates.io/api/v1/crates";
-const USER_AGENT = "gpui-kit bump-gpui (https://github.com/longbridge/gpui-component)";
+const USER_AGENT =
+  "gpui-kit bump-gpui (https://github.com/longbridge/gpui-kit)";
 const RATE_LIMIT_FALLBACK_MS = (10 * 60 + 30) * 1000;
 
 const DEP_TABLES = ["dependencies", "build-dependencies"] as const;
@@ -86,9 +90,11 @@ type Toml = Record<string, any>;
 // Logging (mirrors script/bump-version.sh)
 // ---------------------------------------------------------------------------
 
-const USE_COLOR = Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined;
+const USE_COLOR =
+  Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined;
 
-const paint = (code: string, text: string) => (USE_COLOR ? `\x1b[${code}m${text}\x1b[0m` : text);
+const paint = (code: string, text: string) =>
+  USE_COLOR ? `\x1b[${code}m${text}\x1b[0m` : text;
 const bold = (text: string) => paint("1", text);
 const dim = (text: string) => paint("2", text);
 
@@ -101,11 +107,16 @@ function logHeader(message: string) {
   console.log();
 }
 
-const logStep = (step: string, message: string) => console.log(`${paint("1;35", `[${step}]`)} ${message}`);
-const logSuccess = (message: string) => console.log(`${paint("1;32", "✓")} ${message}`);
-const logInfo = (message: string) => console.log(`${paint("36", "ℹ")} ${message}`);
-const logWarn = (message: string) => console.log(`${paint("1;33", "!")} ${message}`);
-const logError = (message: string) => console.error(`${paint("1;31", "✗")} ${message}`);
+const logStep = (step: string, message: string) =>
+  console.log(`${paint("1;35", `[${step}]`)} ${message}`);
+const logSuccess = (message: string) =>
+  console.log(`${paint("1;32", "✓")} ${message}`);
+const logInfo = (message: string) =>
+  console.log(`${paint("36", "ℹ")} ${message}`);
+const logWarn = (message: string) =>
+  console.log(`${paint("1;33", "!")} ${message}`);
+const logError = (message: string) =>
+  console.error(`${paint("1;31", "✗")} ${message}`);
 
 /** A user-facing failure; the message is printed without a stack trace. */
 class BumpError extends Error {}
@@ -122,7 +133,9 @@ interface RunOptions {
 
 /** Run a command, echoing it first. Throws BumpError on failure. */
 async function run(cmd: string[], options: RunOptions = {}): Promise<string> {
-  const shown = options.cwd ? `(cd ${options.cwd} && ${cmd.join(" ")})` : cmd.join(" ");
+  const shown = options.cwd
+    ? `(cd ${options.cwd} && ${cmd.join(" ")})`
+    : cmd.join(" ");
   console.log(dim(`$ ${shown}`));
   const { code, output } = await spawn(cmd, options.cwd, !options.capture);
   if (code !== 0) {
@@ -133,13 +146,21 @@ async function run(cmd: string[], options: RunOptions = {}): Promise<string> {
 }
 
 /** Run a command, streaming its output while also capturing it. */
-async function runStreaming(cmd: string[], cwd: string): Promise<{ code: number; output: string }> {
+async function runStreaming(
+  cmd: string[],
+  cwd: string,
+): Promise<{ code: number; output: string }> {
   console.log(dim(`$ (cd ${cwd} && ${cmd.join(" ")})`));
   return spawn(cmd, cwd, true);
 }
 
 async function spawn(cmd: string[], cwd: string | undefined, echo: boolean) {
-  const process_ = Bun.spawn(cmd, { cwd, stdin: "inherit", stdout: "pipe", stderr: "pipe" });
+  const process_ = Bun.spawn(cmd, {
+    cwd,
+    stdin: "inherit",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const chunks: string[] = [];
   const decoder = new TextDecoder();
   const pump = async (stream: ReadableStream<Uint8Array>) => {
@@ -158,11 +179,18 @@ async function spawn(cmd: string[], cwd: string | undefined, echo: boolean) {
 // Zed checkout
 // ---------------------------------------------------------------------------
 
-async function prepareZed(rev: string, existing: string | undefined): Promise<string> {
+async function prepareZed(
+  rev: string,
+  existing: string | undefined,
+): Promise<string> {
   if (existing !== undefined) {
-    const zed = resolve(existing.replace(/^~(?=$|\/)/, process.env.HOME ?? "~"));
+    const zed = resolve(
+      existing.replace(/^~(?=$|\/)/, process.env.HOME ?? "~"),
+    );
     if (!existsSync(join(zed, "Cargo.toml"))) {
-      throw new BumpError(`${zed} does not look like a Zed checkout (no Cargo.toml)`);
+      throw new BumpError(
+        `${zed} does not look like a Zed checkout (no Cargo.toml)`,
+      );
     }
     logInfo(`Using existing Zed checkout at ${bold(zed)}`);
     return zed;
@@ -175,16 +203,24 @@ async function prepareZed(rev: string, existing: string | undefined): Promise<st
     await run(["git", "remote", "add", "origin", ZED_GIT_URL], { cwd: zed });
   }
   logInfo(`Fetching ${bold(rev)} from ${ZED_GIT_URL}`);
-  await run(["git", "fetch", "--depth", "1", "--no-tags", "origin", rev], { cwd: zed });
-  await run(["git", "checkout", "-q", "--detach", "--force", "FETCH_HEAD"], { cwd: zed });
+  await run(["git", "fetch", "--depth", "1", "--no-tags", "origin", rev], {
+    cwd: zed,
+  });
+  await run(["git", "checkout", "-q", "--detach", "--force", "FETCH_HEAD"], {
+    cwd: zed,
+  });
   return zed;
 }
 
 async function zedRevision(zed: string): Promise<string> {
   try {
-    return (await run(["git", "rev-parse", "HEAD"], { cwd: zed, capture: true })).trim();
+    return (
+      await run(["git", "rev-parse", "HEAD"], { cwd: zed, capture: true })
+    ).trim();
   } catch {
-    throw new BumpError(`${zed} is not a git checkout; cannot determine the Zed revision`);
+    throw new BumpError(
+      `${zed} is not a git checkout; cannot determine the Zed revision`,
+    );
   }
 }
 
@@ -224,7 +260,9 @@ function loadWorkspace(zed: string): Workspace {
   const manifest = readToml(join(zed, "Cargo.toml"));
   const members = new Map<string, Toml>();
   for (const pattern of manifest.workspace.members as string[]) {
-    const matches = [...new Bun.Glob(pattern).scanSync({ cwd: zed, onlyFiles: false })].sort();
+    const matches = [
+      ...new Bun.Glob(pattern).scanSync({ cwd: zed, onlyFiles: false }),
+    ].sort();
     for (const match of matches) {
       const cargoToml = join(zed, match, "Cargo.toml");
       if (existsSync(cargoToml)) {
@@ -243,19 +281,28 @@ function applyDependencyOverrides(ws: Workspace) {
   for (const [name, override] of Object.entries(DEPENDENCY_OVERRIDES)) {
     const spec = dependencies[name];
     if (spec === undefined) {
-      logWarn(`workspace dependency \`${name}\` is not defined in Zed; override ignored`);
+      logWarn(
+        `workspace dependency \`${name}\` is not defined in Zed; override ignored`,
+      );
       continue;
     }
     const rest = isPlainObject(spec) ? withoutSource(spec) : {};
-    dependencies[name] = { package: override.package, version: override.version, ...rest };
-    logInfo(`${name}: using ${override.package} ${override.version} instead of ${describeSource(spec)}`);
+    dependencies[name] = {
+      package: override.package,
+      version: override.version,
+      ...rest,
+    };
+    logInfo(
+      `${name}: using ${override.package} ${override.version} instead of ${describeSource(spec)}`,
+    );
   }
 }
 
 function describeSource(spec: unknown): string {
   if (typeof spec === "string") return `crates.io ${spec}`;
   if (isPlainObject(spec)) {
-    if (spec.git !== undefined) return `${spec.package ?? "git"} from ${spec.git}`;
+    if (spec.git !== undefined)
+      return `${spec.package ?? "git"} from ${spec.git}`;
     if (spec.path !== undefined) return `path ${spec.path}`;
     if (spec.version !== undefined) return `crates.io ${spec.version}`;
   }
@@ -265,7 +312,9 @@ function describeSource(spec: unknown): string {
 /** `gpui` -> `gpui-pre`, `gpui_macros` -> `gpui-pre-macros`, `collections` -> `gpui-pre-collections`. */
 function publishedName(zedName: string): string {
   if (zedName === "gpui") return PUBLISH_PREFIX;
-  const suffix = zedName.startsWith("gpui_") ? zedName.slice("gpui_".length) : zedName;
+  const suffix = zedName.startsWith("gpui_")
+    ? zedName.slice("gpui_".length)
+    : zedName;
   return `${PUBLISH_PREFIX}-${suffix.replaceAll("_", "-")}`;
 }
 
@@ -273,12 +322,19 @@ function publishedName(zedName: string): string {
 function ensureUniqueNames(crates: Crate[]) {
   const byPublished = new Map<string, string[]>();
   for (const crate of crates) {
-    byPublished.set(crate.publishedName, [...(byPublished.get(crate.publishedName) ?? []), crate.name]);
+    byPublished.set(crate.publishedName, [
+      ...(byPublished.get(crate.publishedName) ?? []),
+      crate.name,
+    ]);
   }
   const clashes = [...byPublished].filter(([, names]) => names.length > 1);
   if (clashes.length > 0) {
-    const detail = clashes.map(([published, names]) => `${published} <- ${names.join(", ")}`).join("\n  ");
-    throw new BumpError(`these Zed crates would publish under the same name:\n  ${detail}`);
+    const detail = clashes
+      .map(([published, names]) => `${published} <- ${names.join(", ")}`)
+      .join("\n  ");
+    throw new BumpError(
+      `these Zed crates would publish under the same name:\n  ${detail}`,
+    );
   }
 }
 
@@ -299,7 +355,9 @@ function depTables(manifest: Toml, dev = false): DepEntry[] {
   }
   for (const [cfg, cfgTables] of Object.entries(manifest.target ?? {})) {
     for (const table of names) {
-      for (const [name, spec] of Object.entries((cfgTables as Toml)[table] ?? {})) {
+      for (const [name, spec] of Object.entries(
+        (cfgTables as Toml)[table] ?? {},
+      )) {
         entries.push({ tablePath: ["target", cfg, table], name, spec });
       }
     }
@@ -313,9 +371,12 @@ function effectiveSpec(ws: Workspace, name: string, spec: any): Toml {
   if (spec.workspace) {
     const base = workspaceDependencies(ws)[name];
     if (base === undefined) {
-      throw new BumpError(`dependency \`${name}\` inherits from the workspace but is not defined there`);
+      throw new BumpError(
+        `dependency \`${name}\` inherits from the workspace but is not defined there`,
+      );
     }
-    const merged: Toml = typeof base === "string" ? { version: base } : { ...base };
+    const merged: Toml =
+      typeof base === "string" ? { version: base } : { ...base };
     merged.optional = Boolean(spec.optional);
     merged.workspace = true;
     return merged;
@@ -332,9 +393,13 @@ function pathDepTarget(crateDir: string, spec: Toml): string | undefined {
 /** Every workspace crate the root crates need, in dependency order. */
 function collectClosure(ws: Workspace): Crate[] {
   const byName = new Map<string, string>();
-  for (const [rel, manifest] of ws.members) byName.set(manifest.package.name, rel);
+  for (const [rel, manifest] of ws.members)
+    byName.set(manifest.package.name, rel);
   for (const root of ROOT_CRATES) {
-    if (!byName.has(root)) throw new BumpError(`crate \`${root}\` was not found in the Zed workspace`);
+    if (!byName.has(root))
+      throw new BumpError(
+        `crate \`${root}\` was not found in the Zed workspace`,
+      );
   }
 
   const order: string[] = [];
@@ -343,10 +408,14 @@ function collectClosure(ws: Workspace): Crate[] {
 
   const visit = (relDir: string) => {
     if (done.has(relDir)) return;
-    if (visiting.has(relDir)) throw new BumpError(`dependency cycle through ${relDir}`);
+    if (visiting.has(relDir))
+      throw new BumpError(`dependency cycle through ${relDir}`);
     visiting.add(relDir);
     const manifest = ws.members.get(relDir);
-    if (manifest === undefined) throw new BumpError(`path dependency \`${relDir}\` is not a workspace member`);
+    if (manifest === undefined)
+      throw new BumpError(
+        `path dependency \`${relDir}\` is not a workspace member`,
+      );
     for (const { name, spec } of depTables(manifest)) {
       const target = pathDepTarget(relDir, effectiveSpec(ws, name, spec));
       if (target !== undefined) visit(target);
@@ -388,7 +457,8 @@ function isPublishableSource(spec: Toml): boolean {
 function featureTargets(entry: string): [string, string | undefined] {
   if (entry.startsWith("dep:")) return [entry.slice(4), undefined];
   const slash = entry.indexOf("/");
-  if (slash !== -1) return [entry.slice(0, slash).replace(/\?$/, ""), entry.slice(slash + 1)];
+  if (slash !== -1)
+    return [entry.slice(0, slash).replace(/\?$/, ""), entry.slice(slash + 1)];
   return [entry, undefined];
 }
 
@@ -423,52 +493,75 @@ function pruneUnpublishable(ws: Workspace, crates: Crate[]) {
       if (isPublishableSource(merged)) continue;
       const source = merged.git ?? "?";
       if (!merged.optional) {
-        errors.push(`${crate.name}: \`${name}\` comes from ${source} without a crates.io version`);
+        errors.push(
+          `${crate.name}: \`${name}\` comes from ${source} without a crates.io version`,
+        );
         continue;
       }
       removeDependency(crate.manifest, tablePath, name);
       removed.push(name);
-      logWarn(`${crate.name}: dropping optional dependency \`${name}\` (${source} has no crates.io version)`);
+      logWarn(
+        `${crate.name}: dropping optional dependency \`${name}\` (${source} has no crates.io version)`,
+      );
     }
 
     const removedSet = new Set(removed);
     const droppedFeatures: string[] = [];
     for (const [feature, entries] of Object.entries(features)) {
-      const needsRemoved = entries.filter((e) => e.startsWith("dep:") && removedSet.has(featureTargets(e)[0]));
+      const needsRemoved = entries.filter(
+        (e) => e.startsWith("dep:") && removedSet.has(featureTargets(e)[0]),
+      );
       if (needsRemoved.length > 0) {
         // The feature exists to turn this dependency on; without it the
         // feature would enable code that cannot compile.
         delete features[feature];
         droppedFeatures.push(feature);
-        logWarn(`${crate.name}: dropping feature \`${feature}\` (needs \`${featureTargets(needsRemoved[0])[0]}\`)`);
+        logWarn(
+          `${crate.name}: dropping feature \`${feature}\` (needs \`${featureTargets(needsRemoved[0])[0]}\`)`,
+        );
       } else {
-        features[feature] = entries.filter((e) => !removedSet.has(featureTargets(e)[0]));
+        features[feature] = entries.filter(
+          (e) => !removedSet.has(featureTargets(e)[0]),
+        );
       }
     }
 
-    const referenced = new Set(Object.values(features).flat().map((e) => featureTargets(e)[0]));
+    const referenced = new Set(
+      Object.values(features)
+        .flat()
+        .map((e) => featureTargets(e)[0]),
+    );
     for (const { tablePath, name, spec } of depTables(crate.manifest)) {
       const merged = effectiveSpec(ws, name, spec);
       if (merged.optional && explicitOnly.has(name) && !referenced.has(name)) {
         removeDependency(crate.manifest, tablePath, name);
         removed.push(name);
-        logWarn(`${crate.name}: dropping optional dependency \`${name}\` (no feature enables it any more)`);
+        logWarn(
+          `${crate.name}: dropping optional dependency \`${name}\` (no feature enables it any more)`,
+        );
       }
     }
 
     let pruned = ws.pruned.get(crate.relDir);
-    if (pruned === undefined) ws.pruned.set(crate.relDir, (pruned = { deps: [], features: [] }));
+    if (pruned === undefined)
+      ws.pruned.set(crate.relDir, (pruned = { deps: [], features: [] }));
     pruned.deps.push(...removed);
     pruned.features.push(...droppedFeatures);
   }
 
   // Features that referenced a dropped feature, in this or another crate.
-  const droppedByName = new Map(crates.map((c) => [c.name, new Set(ws.pruned.get(c.relDir)?.features ?? [])]));
+  const droppedByName = new Map(
+    crates.map((c) => [
+      c.name,
+      new Set(ws.pruned.get(c.relDir)?.features ?? []),
+    ]),
+  );
   for (const crate of crates) {
     const depNames = new Map<string, string>();
     for (const { name, spec } of depTables(crate.manifest)) {
       const target = pathDepTarget(crate.relDir, effectiveSpec(ws, name, spec));
-      if (target !== undefined) depNames.set(name, ws.members.get(target)!.package.name);
+      if (target !== undefined)
+        depNames.set(name, ws.members.get(target)!.package.name);
     }
     const features: Record<string, string[]> = crate.manifest.features ?? {};
     for (const [feature, entries] of Object.entries(features)) {
@@ -481,7 +574,9 @@ function pruneUnpublishable(ws: Workspace, crates: Crate[]) {
   }
 
   if (errors.length > 0) {
-    throw new BumpError(`these dependencies cannot be published to crates.io:\n  ${errors.join("\n  ")}`);
+    throw new BumpError(
+      `these dependencies cannot be published to crates.io:\n  ${errors.join("\n  ")}`,
+    );
   }
 }
 
@@ -491,7 +586,11 @@ function selectCrates(ws: Workspace): Crate[] {
   for (;;) {
     pruneUnpublishable(ws, crates);
     const again = collectClosure(ws);
-    if (again.map((c) => c.relDir).join("\n") === crates.map((c) => c.relDir).join("\n")) break;
+    if (
+      again.map((c) => c.relDir).join("\n") ===
+      crates.map((c) => c.relDir).join("\n")
+    )
+      break;
     crates = again;
   }
   for (const crate of crates) {
@@ -516,7 +615,10 @@ function tomlKey(key: string): string {
 }
 
 const isPlainObject = (value: unknown): value is Toml =>
-  typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Date);
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof Date);
 
 function tomlScalar(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -525,7 +627,8 @@ function tomlScalar(value: unknown): string {
   if (Array.isArray(value)) {
     const items = value.map(tomlScalar);
     const joined = items.join(", ");
-    if (joined.length > 80) return `[\n${items.map((item) => `    ${item},\n`).join("")}]`;
+    if (joined.length > 80)
+      return `[\n${items.map((item) => `    ${item},\n`).join("")}]`;
     return `[${joined}]`;
   }
   if (isPlainObject(value)) {
@@ -539,8 +642,14 @@ function tomlScalar(value: unknown): string {
 
 function isDepTable(path: string[]): boolean {
   const last = path.at(-1);
-  if (last !== undefined && [...DEP_TABLES, DEV_DEP_TABLE].includes(last as any)) return true;
-  return path.length === 2 && path[0] === "workspace" && path[1] === "dependencies";
+  if (
+    last !== undefined &&
+    [...DEP_TABLES, DEV_DEP_TABLE].includes(last as any)
+  )
+    return true;
+  return (
+    path.length === 2 && path[0] === "workspace" && path[1] === "dependencies"
+  );
 }
 
 function inlineDict(path: string[], value: Toml): boolean {
@@ -550,7 +659,11 @@ function inlineDict(path: string[], value: Toml): boolean {
   // `[lints.clippy] style = { level = "allow", priority = -1 }` and
   // `[profile.dev.package] foo = { opt-level = 3 }` stay one entry per line.
   const last = path.at(-1)!;
-  return (path.includes("lints") || path.includes("profile")) && last !== "lints" && last !== "profile";
+  return (
+    (path.includes("lints") || path.includes("profile")) &&
+    last !== "lints" &&
+    last !== "profile"
+  );
 }
 
 function emitTable(lines: string[], path: string[], table: Toml) {
@@ -560,24 +673,34 @@ function emitTable(lines: string[], path: string[], table: Toml) {
   for (const [key, value] of Object.entries(table)) {
     if (isPlainObject(value) && !inlineDict(path, value)) {
       subtables.push([key, value]);
-    } else if (Array.isArray(value) && value.length > 0 && value.every(isPlainObject)) {
+    } else if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every(isPlainObject)
+    ) {
       arraysOfTables.push([key, value]);
     } else {
       values.push([key, value]);
     }
   }
 
-  if (path.length > 0 && (values.length > 0 || (subtables.length === 0 && arraysOfTables.length === 0))) {
+  if (
+    path.length > 0 &&
+    (values.length > 0 ||
+      (subtables.length === 0 && arraysOfTables.length === 0))
+  ) {
     if (lines.length > 0) lines.push("");
     lines.push(`[${path.map(tomlKey).join(".")}]`);
   }
-  for (const [key, value] of values) lines.push(`${tomlKey(key)} = ${tomlScalar(value)}`);
+  for (const [key, value] of values)
+    lines.push(`${tomlKey(key)} = ${tomlScalar(value)}`);
   for (const [key, value] of subtables) emitTable(lines, [...path, key], value);
   for (const [key, items] of arraysOfTables) {
     const header = [...path, key].map(tomlKey).join(".");
     for (const item of items) {
       lines.push("", `[[${header}]]`);
-      for (const [k, v] of Object.entries(item)) lines.push(`${tomlKey(k)} = ${tomlScalar(v)}`);
+      for (const [k, v] of Object.entries(item))
+        lines.push(`${tomlKey(k)} = ${tomlScalar(v)}`);
     }
   }
 }
@@ -588,19 +711,39 @@ function tomlDump(document: Toml): string {
   return `${lines.join("\n")}\n`;
 }
 
-const SOURCE_KEYS = ["path", "package", "version", "git", "rev", "branch", "tag", "registry"];
+const SOURCE_KEYS = [
+  "path",
+  "package",
+  "version",
+  "git",
+  "rev",
+  "branch",
+  "tag",
+  "registry",
+];
 
-const withoutSource = (spec: Toml) => Object.fromEntries(Object.entries(spec).filter(([k]) => !SOURCE_KEYS.includes(k)));
+const withoutSource = (spec: Toml) =>
+  Object.fromEntries(
+    Object.entries(spec).filter(([k]) => !SOURCE_KEYS.includes(k)),
+  );
 
-function crateManifest(crate: Crate, cratesByDir: Map<string, Crate>, version: string, zedSha: string): Toml {
+function crateManifest(
+  crate: Crate,
+  cratesByDir: Map<string, Crate>,
+  version: string,
+  zedSha: string,
+): Toml {
   const source = crate.manifest;
   const pkg: Toml = { ...source.package };
   if (pkg.license === undefined && pkg["license-file"] === undefined) {
-    throw new BumpError(`${crate.name}: no \`license\` in Cargo.toml; crates.io requires one`);
+    throw new BumpError(
+      `${crate.name}: no \`license\` in Cargo.toml; crates.io requires one`,
+    );
   }
 
   const snapshot = `(${PUBLISH_PREFIX} snapshot of zed@${zedSha.slice(0, 7)})`;
-  const description: string = pkg.description || `Zed's \`${crate.name}\` crate`;
+  const description: string =
+    pkg.description || `Zed's \`${crate.name}\` crate`;
   pkg.name = crate.publishedName;
   pkg.version = version;
   pkg.publish = true;
@@ -608,7 +751,11 @@ function crateManifest(crate: Crate, cratesByDir: Map<string, Crate>, version: s
   pkg.repository ??= ZED_GIT_URL;
   pkg.metadata = {
     ...(pkg.metadata ?? {}),
-    [PUBLISH_PREFIX]: { "zed-crate": crate.name, "zed-version": crate.version, "zed-rev": zedSha },
+    [PUBLISH_PREFIX]: {
+      "zed-crate": crate.name,
+      "zed-version": crate.version,
+      "zed-rev": zedSha,
+    },
   };
 
   const lib: Toml = { ...(source.lib ?? {}) };
@@ -625,7 +772,9 @@ function crateManifest(crate: Crate, cratesByDir: Map<string, Crate>, version: s
         const target = pathDepTarget(crate.relDir, spec);
         const dep = cratesByDir.get(target ?? "");
         if (dep === undefined) {
-          throw new BumpError(`${crate.name}: path dependency \`${name}\` (${target}) is not being published`);
+          throw new BumpError(
+            `${crate.name}: path dependency \`${name}\` (${target}) is not being published`,
+          );
         }
         entry = {
           path: relative(crate.relDir, dep.relDir),
@@ -655,12 +804,17 @@ function crateManifest(crate: Crate, cratesByDir: Map<string, Crate>, version: s
   }
 
   for (const [key, value] of Object.entries(source)) {
-    if (!(key in out) && ![DEV_DEP_TABLE, "target", "workspace"].includes(key)) out[key] = value;
+    if (!(key in out) && ![DEV_DEP_TABLE, "target", "workspace"].includes(key))
+      out[key] = value;
   }
   return out;
 }
 
-function workspaceManifest(ws: Workspace, crates: Crate[], version: string): Toml {
+function workspaceManifest(
+  ws: Workspace,
+  crates: Crate[],
+  version: string,
+): Toml {
   const zedWs = ws.manifest.workspace;
   const byDir = new Map(crates.map((c) => [c.relDir, c]));
   const dependencies: Toml = {};
@@ -712,7 +866,12 @@ function copyCrate(source: string, destination: string) {
   });
 }
 
-function stageWorkspace(ws: Workspace, crates: Crate[], version: string, zedSha: string): string {
+function stageWorkspace(
+  ws: Workspace,
+  crates: Crate[],
+  version: string,
+  zedSha: string,
+): string {
   const staging = join(WORK_DIR, "workspace");
   if (existsSync(staging)) {
     for (const entry of readdirSync(staging)) {
@@ -722,20 +881,30 @@ function stageWorkspace(ws: Workspace, crates: Crate[], version: string, zedSha:
   }
   mkdirSync(staging, { recursive: true });
 
-  for (const crate of crates) copyCrate(join(ws.root, crate.relDir), join(staging, crate.relDir));
+  for (const crate of crates)
+    copyCrate(join(ws.root, crate.relDir), join(staging, crate.relDir));
 
   const cratesByDir = new Map(crates.map((c) => [c.relDir, c]));
   for (const crate of crates) {
     const manifest = crateManifest(crate, cratesByDir, version, zedSha);
-    writeFileSync(join(staging, crate.relDir, "Cargo.toml"), tomlDump(manifest));
+    writeFileSync(
+      join(staging, crate.relDir, "Cargo.toml"),
+      tomlDump(manifest),
+    );
   }
   vendorGpuiSourcesForApple(staging, crates);
 
-  writeFileSync(join(staging, "Cargo.toml"), tomlDump(workspaceManifest(ws, crates, version)));
+  writeFileSync(
+    join(staging, "Cargo.toml"),
+    tomlDump(workspaceManifest(ws, crates, version)),
+  );
   const lock = join(ws.root, "Cargo.lock");
   if (existsSync(lock)) cpSync(lock, join(staging, "Cargo.lock"));
   for (const entry of readdirSync(ws.root)) {
-    if (entry.startsWith("LICENSE") && statSync(join(ws.root, entry)).isFile()) {
+    if (
+      entry.startsWith("LICENSE") &&
+      statSync(join(ws.root, entry)).isFile()
+    ) {
       cpSync(join(ws.root, entry), join(staging, entry));
     }
   }
@@ -752,7 +921,10 @@ function stageWorkspace(ws: Workspace, crates: Crate[], version: string, zedSha:
       dropped_features: c.prunedFeatures,
     })),
   };
-  writeFileSync(join(WORK_DIR, "gpui-pre.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  writeFileSync(
+    join(WORK_DIR, "gpui-pre.json"),
+    `${JSON.stringify(summary, null, 2)}\n`,
+  );
   return staging;
 }
 
@@ -779,20 +951,32 @@ function vendorGpuiSourcesForApple(staging: string, crates: Crate[]) {
         "update vendorGpuiSourcesForApple in script/bump-gpui.ts",
     );
   }
-  const sources = [...text.matchAll(/gpui_dir\.join\("([^"]+)"\)/g)].map((m) => m[1]);
+  const sources = [...text.matchAll(/gpui_dir\.join\("([^"]+)"\)/g)].map(
+    (m) => m[1],
+  );
   if (sources.length === 0) {
-    throw new BumpError("crates/gpui_apple/build.rs lists no `gpui_dir.join(...)` sources; update script/bump-gpui.ts");
+    throw new BumpError(
+      "crates/gpui_apple/build.rs lists no `gpui_dir.join(...)` sources; update script/bump-gpui.ts",
+    );
   }
   const vendor = join(staging, apple.relDir, "vendor", "gpui");
   for (const rel of sources) {
     const source = join(staging, gpui.relDir, rel);
-    if (!existsSync(source)) throw new BumpError(`gpui_apple/build.rs needs ${rel}, which gpui does not have`);
+    if (!existsSync(source))
+      throw new BumpError(
+        `gpui_apple/build.rs needs ${rel}, which gpui does not have`,
+      );
     const destination = join(vendor, rel);
     mkdirSync(dirname(destination), { recursive: true });
     cpSync(source, destination);
   }
-  writeFileSync(buildRs, text.replaceAll(GPUI_APPLE_SIBLING, GPUI_APPLE_VENDORED));
-  logInfo(`gpui_apple: vendored ${sources.length} gpui source files for its shader bindings`);
+  writeFileSync(
+    buildRs,
+    text.replaceAll(GPUI_APPLE_SIBLING, GPUI_APPLE_VENDORED),
+  );
+  logInfo(
+    `gpui_apple: vendored ${sources.length} gpui source files for its shader bindings`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -802,12 +986,15 @@ function vendorGpuiSourcesForApple(staging: string, crates: Crate[]) {
 async function cratesIoGet(path: string): Promise<Toml | undefined> {
   let response: Response;
   try {
-    response = await fetch(`${CRATES_IO_API}/${path}`, { headers: { "User-Agent": USER_AGENT } });
+    response = await fetch(`${CRATES_IO_API}/${path}`, {
+      headers: { "User-Agent": USER_AGENT },
+    });
   } catch (error) {
     throw new BumpError(`cannot reach crates.io: ${(error as Error).message}`);
   }
   if (response.status === 404) return undefined;
-  if (!response.ok) throw new BumpError(`crates.io returned ${response.status} for ${path}`);
+  if (!response.ok)
+    throw new BumpError(`crates.io returned ${response.status} for ${path}`);
   return (await response.json()) as Toml;
 }
 
@@ -835,15 +1022,22 @@ async function nextVersion(base: string, crates: Crate[]): Promise<string> {
     await Bun.sleep(200); // be polite to the crates.io API
   }
   if (highest < 0) return `${base}.0`;
-  const incomplete = crates.filter((crate) => !numbers.get(crate)!.has(highest));
+  const incomplete = crates.filter(
+    (crate) => !numbers.get(crate)!.has(highest),
+  );
   if (incomplete.length > 0) {
-    logInfo(`Resuming ${base}.${highest}: ${incomplete.length} crates are still missing it`);
+    logInfo(
+      `Resuming ${base}.${highest}: ${incomplete.length} crates are still missing it`,
+    );
     return `${base}.${highest}`;
   }
   return `${base}.${highest + 1}`;
 }
 
-async function versionIsPublished(name: string, version: string): Promise<boolean> {
+async function versionIsPublished(
+  name: string,
+  version: string,
+): Promise<boolean> {
   const data = await cratesIoGet(`${name}/${version}`);
   return data?.version !== undefined && !data.version.yanked;
 }
@@ -851,21 +1045,29 @@ async function versionIsPublished(name: string, version: string): Promise<boolea
 async function unpublished(crates: Crate[], version: string): Promise<Crate[]> {
   const pending: Crate[] = [];
   for (const crate of crates) {
-    if (!(await versionIsPublished(crate.publishedName, version))) pending.push(crate);
+    if (!(await versionIsPublished(crate.publishedName, version)))
+      pending.push(crate);
     await Bun.sleep(200); // be polite to the crates.io API
   }
   return pending;
 }
 
-const RATE_LIMIT_MARKERS = ["429", "Too Many Requests", "too many new crates", "too many crates"];
+const RATE_LIMIT_MARKERS = [
+  "429",
+  "Too Many Requests",
+  "too many new crates",
+  "too many crates",
+];
 
 /** When crates.io says to try again, return that instant. */
 function rateLimitDeadline(output: string): Date | undefined {
-  if (!RATE_LIMIT_MARKERS.some((marker) => output.includes(marker))) return undefined;
+  if (!RATE_LIMIT_MARKERS.some((marker) => output.includes(marker)))
+    return undefined;
   const match = /try again after ([^.\n]+?)(?: or |\.|$)/m.exec(output);
   if (match) {
     const parsed = new Date(match[1].trim());
-    if (!Number.isNaN(parsed.getTime())) return new Date(parsed.getTime() + 15_000);
+    if (!Number.isNaN(parsed.getTime()))
+      return new Date(parsed.getTime() + 15_000);
   }
   return new Date(Date.now() + RATE_LIMIT_FALLBACK_MS);
 }
@@ -877,24 +1079,44 @@ async function waitUntil(deadline: Date) {
     const total = Math.floor(remaining / 1000);
     const minutes = String(Math.floor(total / 60)).padStart(2, "0");
     const seconds = String(total % 60).padStart(2, "0");
-    process.stdout.write(`\r${paint("36", "ℹ")} crates.io rate limit; retrying in ${minutes}:${seconds} `);
+    process.stdout.write(
+      `\r${paint("36", "ℹ")} crates.io rate limit; retrying in ${minutes}:${seconds} `,
+    );
     await Bun.sleep(Math.min(30_000, remaining));
   }
   console.log();
 }
 
-async function publish(staging: string, crates: Crate[], version: string, wait: boolean) {
+async function publish(
+  staging: string,
+  crates: Crate[],
+  version: string,
+  wait: boolean,
+) {
   for (;;) {
     const pending = await unpublished(crates, version);
     if (pending.length === 0) {
-      logSuccess(`All ${crates.length} crates are on crates.io at ${bold(version)}`);
+      logSuccess(
+        `All ${crates.length} crates are on crates.io at ${bold(version)}`,
+      );
       return;
     }
     const already = crates.filter((c) => !pending.includes(c));
-    if (already.length > 0) logInfo(`Skipping ${already.length} crates already published at ${version}`);
-    logInfo(`Publishing ${pending.length} crates: ${pending.map((c) => c.publishedName).join(", ")}`);
+    if (already.length > 0)
+      logInfo(
+        `Skipping ${already.length} crates already published at ${version}`,
+      );
+    logInfo(
+      `Publishing ${pending.length} crates: ${pending.map((c) => c.publishedName).join(", ")}`,
+    );
 
-    const cmd = ["cargo", "publish", "--workspace", "--no-verify", "--allow-dirty"];
+    const cmd = [
+      "cargo",
+      "publish",
+      "--workspace",
+      "--no-verify",
+      "--allow-dirty",
+    ];
     for (const crate of already) cmd.push("--exclude", crate.publishedName);
     const { code, output } = await runStreaming(cmd, staging);
     if (code === 0) {
@@ -903,7 +1125,10 @@ async function publish(staging: string, crates: Crate[], version: string, wait: 
     }
 
     const deadline = rateLimitDeadline(output);
-    if (deadline === undefined) throw new BumpError("cargo publish failed; fix the error above and re-run to resume");
+    if (deadline === undefined)
+      throw new BumpError(
+        "cargo publish failed; fix the error above and re-run to resume",
+      );
     if (!wait) {
       throw new BumpError(
         "crates.io rate limit reached (new crates are limited per 10 minutes); re-run this command later to resume",
@@ -971,9 +1196,13 @@ function parseCommandLine(argv: string[]): Args {
     console.log(USAGE);
     process.exit(0);
   }
-  if (parsed.positionals.length > 1) throw new BumpError(`unexpected argument \`${parsed.positionals[1]}\`\n\n${USAGE}`);
+  if (parsed.positionals.length > 1)
+    throw new BumpError(
+      `unexpected argument \`${parsed.positionals[1]}\`\n\n${USAGE}`,
+    );
   const version = parsed.positionals[0];
-  if (version !== undefined && !SEMVER.test(version)) throw new BumpError(`\`${version}\` is not a valid semver version`);
+  if (version !== undefined && !SEMVER.test(version))
+    throw new BumpError(`\`${version}\` is not a valid semver version`);
   return {
     version,
     rev: parsed.values.rev as string,
@@ -987,7 +1216,8 @@ function parseCommandLine(argv: string[]): Args {
 
 async function main(argv: string[]): Promise<number> {
   const args = parseCommandLine(argv);
-  if (Bun.which("cargo") === null) throw new BumpError("cargo is not installed");
+  if (Bun.which("cargo") === null)
+    throw new BumpError("cargo is not installed");
 
   const totalSteps = args.stageOnly ? 3 : args.dryRun ? 4 : 5;
   logHeader(`Publishing GPUI from Zed as ${PUBLISH_PREFIX}`);
@@ -1004,8 +1234,11 @@ async function main(argv: string[]): Promise<number> {
   const crates = selectCrates(ws);
   const version = args.version ?? (await nextVersion(VERSION, crates));
   const width = Math.max(...crates.map((c) => c.name.length));
-  for (const crate of crates) console.log(`    ${crate.name.padEnd(width)}  ->  ${crate.publishedName}`);
-  logSuccess(`${crates.length} crates will be published as version ${bold(version)}`);
+  for (const crate of crates)
+    console.log(`    ${crate.name.padEnd(width)}  ->  ${crate.publishedName}`);
+  logSuccess(
+    `${crates.length} crates will be published as version ${bold(version)}`,
+  );
   console.log();
 
   logStep(`3/${totalSteps}`, "Staging a standalone workspace");
@@ -1019,8 +1252,14 @@ async function main(argv: string[]): Promise<number> {
     logWarn("Skipping verification (--no-verify)");
   } else {
     logStep(`4/${totalSteps}`, "Verifying with `cargo publish --dry-run`");
-    const { code } = await runStreaming(["cargo", "publish", "--workspace", "--dry-run", "--allow-dirty"], staging);
-    if (code !== 0) throw new BumpError("verification failed; inspect the staged workspace and fix the issue");
+    const { code } = await runStreaming(
+      ["cargo", "publish", "--workspace", "--dry-run", "--allow-dirty"],
+      staging,
+    );
+    if (code !== 0)
+      throw new BumpError(
+        "verification failed; inspect the staged workspace and fix the issue",
+      );
     logSuccess("Every crate packages and builds");
   }
   console.log();
@@ -1034,7 +1273,9 @@ async function main(argv: string[]): Promise<number> {
   console.log();
 
   console.log(paint("1;32", `╔${"═".repeat(56)}╗`));
-  console.log(`${paint("1;32", "║")}  ${bold(`🚀 ${PUBLISH_PREFIX} ${version} is live (zed@${zedSha.slice(0, 7)})`)}`);
+  console.log(
+    `${paint("1;32", "║")}  ${bold(`🚀 ${PUBLISH_PREFIX} ${version} is live (zed@${zedSha.slice(0, 7)})`)}`,
+  );
   console.log(paint("1;32", `╚${"═".repeat(56)}╝`));
   console.log();
   console.log("Depend on it with:");
@@ -1042,7 +1283,9 @@ async function main(argv: string[]): Promise<number> {
   console.log("    [workspace.dependencies]");
   for (const crate of crates) {
     if (ROOT_CRATES.includes(crate.name)) {
-      console.log(`    ${crate.name} = { package = "${crate.publishedName}", version = "=${version}" }`);
+      console.log(
+        `    ${crate.name} = { package = "${crate.publishedName}", version = "=${version}" }`,
+      );
     }
   }
   console.log();

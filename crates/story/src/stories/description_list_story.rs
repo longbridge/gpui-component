@@ -51,7 +51,7 @@ impl DescriptionListStory {
             ("--", "--", 1),
             (
                 "Repository",
-                "https://github.com/longbridge/gpui-component",
+                "https://github.com/longbridge/gpui-kit",
                 2,
             ),
             (

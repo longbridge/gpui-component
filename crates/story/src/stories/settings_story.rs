@@ -354,7 +354,7 @@ impl SettingsStory {
                                         .disabled(options.is_disabled())
                                         .on_click(|_, _, cx| {
                                             cx.open_url(
-                                                "https://github.com/longbridge/gpui-component",
+                                                "https://github.com/longbridge/gpui-kit",
                                             );
                                         }),
                                 )
@@ -480,7 +480,7 @@ impl SettingsStory {
                             "GitHub Repository",
                             SettingField::element(OpenURLSettingField::new(
                                 "Repository...",
-                                "https://github.com/longbridge/gpui-component",
+                                "https://github.com/longbridge/gpui-kit",
                             )),
                         )
                         .description("Open the GitHub repository in your default browser."),
