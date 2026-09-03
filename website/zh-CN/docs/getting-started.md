@@ -12,8 +12,8 @@ order: -2
 
 ```toml
 [dependencies]
-gpui = { package = "gpui-pre", version = "0.3.0-260903" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-260903", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0-0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 # 可选：使用内置默认资源
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }

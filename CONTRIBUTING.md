@@ -158,7 +158,7 @@ its original crate name as the library name, so `use gpui::*` works unchanged.
 ./script/bump-gpui.ts --rev 1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a
 ```
 
-Every crate is published at `<VERSION>-<YYMMDD>`, for example `0.3.0-260903`:
+Every crate is published at `<VERSION>-<YYMMDD>`, for example `0.3.0-0`:
 the `VERSION` constant at the top of `script/bump-gpui.ts` plus the UTC date of
 the run. Day-to-day snapshots differ by date alone; raise `VERSION` only when
 the crates should sort as a new release. crates.io never accepts the same
@@ -187,7 +187,7 @@ the generated workspace.
 Depend on the result with:
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0-260903" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-260903" }
-gpui_macros = { package = "gpui-pre-macros", version = "0.3.0-260903" }
+gpui = { package = "gpui-pre", version = "0.3.0-0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0" }
+gpui_macros = { package = "gpui-pre-macros", version = "0.3.0-0" }
 ```

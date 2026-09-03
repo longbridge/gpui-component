@@ -28,9 +28,9 @@
  *     script/bump-gpui.ts [VERSION] [--rev REV] [--zed PATH]
  *                         [--dry-run] [--stage-only] [--no-verify] [--no-wait]
  *
- * Every crate is published at `<VERSION>-<YYMMDD>`, e.g. `0.3.0-260903`:
- * the `VERSION` constant below plus the UTC date of the run. A positional
- * VERSION overrides the whole thing for one run.
+ * Every crate is published at `<VERSION>-<N>`, e.g. `0.3.0-12`: the
+ * `VERSION` constant below plus a counter that continues from whatever
+ * crates.io already has. A positional VERSION overrides that for one run.
  */
 
 import {
@@ -48,10 +48,10 @@ import { parseArgs } from "node:util";
 
 /**
  * The base version of every `gpui-pre-*` crate. Each run publishes
- * `<VERSION>-<YYMMDD>` (see `datedVersion`), so a new base is only needed
- * when the crates should sort as a new release; day-to-day snapshots differ
- * by date alone. The Zed commit each build came from is recorded in every
- * crate's description and `[package.metadata.gpui-pre]`.
+ * `<VERSION>-<N>` with the next unused counter (see `nextVersion`), so a new
+ * base is only needed when the crates should sort as a new release. The Zed
+ * commit each build came from is recorded in every crate's description and
+ * `[package.metadata.gpui-pre]`.
  */
 const VERSION = "0.3.0";
 
@@ -810,6 +810,38 @@ async function cratesIoGet(path: string): Promise<Toml | undefined> {
   return (await response.json()) as Toml;
 }
 
+/**
+ * The next `<base>-<N>` to publish, from what crates.io already holds.
+ *
+ * The counter continues from the highest number any of the crates has; if a
+ * previous run stopped part-way (the rate limit, a crash) some crates lack
+ * that number, and the run resumes at it instead of starting a new one.
+ * Yanked versions still occupy their number.
+ */
+async function nextVersion(base: string, crates: Crate[]): Promise<string> {
+  const pattern = new RegExp(`^${base.replaceAll(".", "\\.")}-(\\d+)$`);
+  const numbers = new Map<Crate, Set<number>>();
+  let highest = -1;
+  for (const crate of crates) {
+    const data = await cratesIoGet(`${crate.publishedName}/versions`);
+    const published = new Set<number>();
+    for (const version of data?.versions ?? []) {
+      const match = pattern.exec(String(version.num));
+      if (match) published.add(Number(match[1]));
+    }
+    numbers.set(crate, published);
+    highest = Math.max(highest, ...published);
+    await Bun.sleep(200); // be polite to the crates.io API
+  }
+  if (highest < 0) return `${base}-0`;
+  const incomplete = crates.filter((crate) => !numbers.get(crate)!.has(highest));
+  if (incomplete.length > 0) {
+    logInfo(`Resuming ${base}-${highest}: ${incomplete.length} crates are still missing it`);
+    return `${base}-${highest}`;
+  }
+  return `${base}-${highest + 1}`;
+}
+
 async function versionIsPublished(name: string, version: string): Promise<boolean> {
   const data = await cratesIoGet(`${name}/${version}`);
   return data?.version !== undefined && !data.version.yanked;
@@ -884,12 +916,6 @@ async function publish(staging: string, crates: Crate[], version: string, wait: 
 // Entry point
 // ---------------------------------------------------------------------------
 
-/** `0.3.0` on 2026-09-03 becomes `0.3.0-260903`; crates.io rejects a repeat on the same day. */
-function datedVersion(base: string): string {
-  const today = new Date().toISOString().slice(2, 10).replaceAll("-", "");
-  return `${base}-${today}`;
-}
-
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
@@ -898,8 +924,8 @@ const USAGE = `Usage: script/bump-gpui.ts [VERSION] [options]
 Publish Zed's GPUI crates to crates.io as ${PUBLISH_PREFIX}-*.
 
 Arguments:
-  VERSION           publish exactly this version instead of
-                    <VERSION>-<YYMMDD> (today: ${datedVersion(VERSION)})
+  VERSION           publish exactly this version instead of ${VERSION}-<N>,
+                    where N continues from what crates.io already has
 
 Options:
   --rev REV         Zed branch, tag or commit (default: ${ZED_DEFAULT_REV})
@@ -975,7 +1001,7 @@ async function main(argv: string[]): Promise<number> {
   logStep(`2/${totalSteps}`, "Collecting the crates that gpui needs");
   const ws = loadWorkspace(zed);
   const crates = selectCrates(ws);
-  const version = args.version ?? datedVersion(VERSION);
+  const version = args.version ?? (await nextVersion(VERSION, crates));
   const width = Math.max(...crates.map((c) => c.name.length));
   for (const crate of crates) console.log(`    ${crate.name.padEnd(width)}  ->  ${crate.publishedName}`);
   logSuccess(`${crates.length} crates will be published as version ${bold(version)}`);

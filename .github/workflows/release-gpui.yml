@@ -15,7 +15,7 @@ on:
         required: false
         default: "main"
       version:
-        description: "Publish exactly this version instead of <VERSION>-<YYMMDD>"
+        description: "Publish exactly this version instead of the next <VERSION>-<N>"
         required: false
         default: ""
 
