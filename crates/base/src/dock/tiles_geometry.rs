@@ -4,7 +4,7 @@
 //!
 //! This module decides *where* a tile lands. It draws nothing: the tile
 //! frame, the drag-bar chrome, and the resize-handle visuals are appearance
-//! and live in `crates/ui`.
+//! and live in `crates/component`.
 
 use gpui::{Bounds, EntityId, Pixels, Point, Size, px, size};
 
@@ -15,7 +15,7 @@ pub const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 
 /// Height of the tile's drag bar. This is hit-target geometry the skin must
 /// agree with when it paints the drag bar, not a visual constant, so it
-/// lives here rather than in `crates/ui`.
+/// lives here rather than in `crates/component`.
 pub const DRAG_BAR_HEIGHT: Pixels = px(30.);
 
 /// Size of the resize-handle hit target at a tile's corner/edge. Same

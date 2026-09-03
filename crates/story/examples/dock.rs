@@ -1,6 +1,5 @@
 use anyhow::{Context as _, Result};
-use gpui::*;
-use gpui_component::{
+use gpui_kit::component::{
     IconName, Root, Sizable,
     button::{Button, ButtonVariants as _},
     dock::{
@@ -10,14 +9,15 @@ use gpui_component::{
     menu::DropdownMenu,
     status_bar::StatusBar,
 };
+use gpui_kit::*;
 
-use gpui_component_assets::Assets;
 use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DataTableStory, DialogStory,
     FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TooltipStory,
 };
+use gpui_kit::assets::Assets;
 use serde::Deserialize;
 use std::{rc::Rc, time::Duration};
 
@@ -426,16 +426,16 @@ impl StoryWorkspace {
         cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                window_min_size: Some(gpui::Size {
+                window_min_size: Some(gpui_kit::Size {
                     width: px(640.),
                     height: px(480.),
                 }),
                 #[cfg(target_os = "linux")]
-                window_background: gpui::WindowBackgroundAppearance::Transparent,
+                window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
                 #[cfg(target_os = "linux")]
-                window_decorations: Some(gpui::WindowDecorations::Client),
+                window_decorations: Some(gpui_kit::WindowDecorations::Client),
                 kind: WindowKind::Normal,
-                ..gpui_component::TitleBar::window_options()
+                ..gpui_kit::component::TitleBar::window_options()
             };
 
             let window = cx.open_window(options, |window, cx| {
@@ -600,7 +600,7 @@ impl Render for StoryWorkspace {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         init(cx);

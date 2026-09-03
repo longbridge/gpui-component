@@ -29,8 +29,8 @@ indeterminate control, and plain text when the state does not need motion.
 ```rust
 use std::time::Duration;
 
-use gpui::{ParentElement as _, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, Styled as _};
+use gpui_kit::component::{
     shimmer::{ShimmerStyle, ShimmerText},
     ActiveTheme as _,
 };
@@ -165,7 +165,7 @@ Use `MarkerContent::text(...)` to give the component a text run that can receive
 the highlight:
 
 ```rust
-use gpui_component::marker::{Marker, MarkerContent, MarkerLoadingStyle};
+use gpui_kit::component::marker::{Marker, MarkerContent, MarkerLoadingStyle};
 
 Marker::new()
     .loading(true)
@@ -191,7 +191,7 @@ status is `Uploading` or `Processing`. Customize that title without replacing
 the attachment composition:
 
 ```rust
-use gpui_component::attachment::{
+use gpui_kit::component::attachment::{
     Attachment, AttachmentContent, AttachmentDescription, AttachmentStatus, AttachmentTitle,
 };
 
@@ -221,7 +221,7 @@ behavior matters.
 accepted:
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     bubble::{Bubble, BubbleContent, BubbleVariant},
     message::{Message, MessageContent},
 };

@@ -10,7 +10,7 @@ Avatar 用于显示用户头像图片，并在无图片时自动回退为姓名�
 ## 导入
 
 ```rust
-use gpui_component::avatar::{Avatar, AvatarGroup};
+use gpui_kit::component::avatar::{Avatar, AvatarGroup};
 ```
 
 ## 用法
@@ -42,7 +42,7 @@ Avatar::new()
 适用于匿名用户或没有姓名的场景：
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Avatar::new()
 
@@ -177,7 +177,7 @@ AvatarGroup::new()
 ### 团队成员展示
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 v_flex()
     .gap_4()
@@ -218,7 +218,7 @@ h_flex()
 ### 匿名用户
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Avatar::new()
     .placeholder(IconName::UserCircle)

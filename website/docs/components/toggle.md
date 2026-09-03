@@ -10,7 +10,7 @@ A button-style toggle component that represents on/off or selected states. Unlik
 ## Import
 
 ```rust
-use gpui_component::button::{Toggle, ToggleGroup};
+use gpui_kit::component::button::{Toggle, ToggleGroup};
 ```
 
 ## Usage
@@ -31,7 +31,7 @@ Here, we can use `on_click` to handle toggle state changes. The callback receive
 ### Icon Toggle
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Toggle::new("toggle2")
     .icon(IconName::Eye)
@@ -231,7 +231,7 @@ Pass a non-zero gap when you want the segmented sizing and variants but separate
 items:
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 ToggleGroup::new("quick-actions")
     .segmented()

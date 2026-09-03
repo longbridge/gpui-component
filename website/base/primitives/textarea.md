@@ -14,7 +14,7 @@ cursor position. Code-editor concepts are intentionally kept on
 ## Import
 
 ```rust
-use gpui_base::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::base::input::{InputEvent, Textarea, TextareaState};
 ```
 
 ## Fixed rows

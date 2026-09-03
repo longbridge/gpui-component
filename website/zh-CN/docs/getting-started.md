@@ -12,18 +12,17 @@ order: -2
 
 ```toml
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-# 可选：使用内置默认资源
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 anyhow = "1.0"
 ```
 
 :::tip
-`gpui-component-assets` 是可选依赖。
+`gpui-kit` 始终引入 GPUI 和 `gpui-base`，并默认带上 `gpui-component` 和默认图标集。如果你希望自行管理图标与资源文件，只保留需要的 feature 即可：
 
-如果你希望自行管理图标与资源文件，可以不添加它。更多说明见 [资源与图标](./assets.md)。
+```toml
+gpui-kit = { version = "0.6", default-features = false, features = ["component"] }
+```
+更多说明见 [资源与图标](./assets.md)。
 :::
 
 ## 快速开始
@@ -31,8 +30,9 @@ anyhow = "1.0"
 下面是一个最小可运行示例：
 
 ```rust
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct HelloWorld;
 
@@ -55,10 +55,10 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
 
     app.run(move |cx| {
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {
@@ -73,7 +73,7 @@ fn main() {
 ```
 
 :::info
-请确保在 `app.run` 闭包中尽早调用 `gpui_component::init(cx);`。它会初始化主题和全局配置。
+请确保在 `app.run` 闭包中尽早调用 `gpui_kit::init(cx);`。它会初始化主题和全局配置。
 :::
 
 ## 后续阅读

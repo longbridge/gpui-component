@@ -22,7 +22,7 @@ For richer selection UIs with custom trigger rendering or multi-select, see [Com
 ## Import
 
 ```rust
-use gpui_component::select::{
+use gpui_kit::component::select::{
     Select, SelectState, SelectItem, SelectDelegate,
     SelectEvent, SearchableVec, SelectGroup
 };
@@ -106,7 +106,7 @@ impl SelectItem for Country {
         self.name.clone()
     }
 
-    fn display_title(&self) -> Option<gpui::AnyElement> {
+    fn display_title(&self) -> Option<gpui_kit::AnyElement> {
         // Custom display for selected item
         Some(format!("{} ({})", self.name, self.code).into_any_element())
     }
@@ -281,7 +281,7 @@ impl SelectItem for Region {
         self.name.clone()
     }
 
-    fn display_title(&self) -> Option<gpui::AnyElement> {
+    fn display_title(&self) -> Option<gpui_kit::AnyElement> {
         Some(
             h_flex()
                 .items_center()

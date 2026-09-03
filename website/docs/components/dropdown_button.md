@@ -12,13 +12,13 @@ Shared variant and size can be set on the DropdownButton. Action-specific option
 ## Import
 
 ```rust
-use gpui_component::button::{Button, DropdownButton};
+use gpui_kit::component::button::{Button, DropdownButton};
 ```
 
 ## Usage
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))

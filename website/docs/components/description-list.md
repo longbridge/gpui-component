@@ -10,7 +10,7 @@ A versatile component for displaying key-value pairs in a structured, organized 
 ## Import
 
 ```rust
-use gpui_component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
+use gpui_kit::component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
 ```
 
 ## Usage
@@ -41,7 +41,7 @@ DescriptionList::new()
 // Horizontal layout (default)
 DescriptionList::horizontal()
     .item("Platform", "macOS, Windows, Linux", 1)
-    .item("Repository", "https://github.com/longbridge/gpui-component", 1)
+    .item("Repository", "https://github.com/longbridge/gpui-kit", 1)
 
 // Vertical layout
 DescriptionList::vertical()
@@ -62,7 +62,7 @@ DescriptionList::new()
             .value("Full-featured UI components for desktop applications")
             .span(3), // Spans all 3 columns
         DescriptionItem::new("Repository")
-            .value("https://github.com/longbridge/gpui-component")
+            .value("https://github.com/longbridge/gpui-kit")
             .span(2), // Spans 2 columns
     ])
 ```
@@ -108,7 +108,7 @@ DescriptionList::new()
 ### Custom Label Width (Horizontal Layout)
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 DescriptionList::horizontal()
     .label_width(px(200.0)) // Set custom label width
@@ -119,7 +119,7 @@ DescriptionList::horizontal()
 ### Rich Content with Custom Elements
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 DescriptionList::new()
     .columns(2)
@@ -151,7 +151,7 @@ DescriptionList::new()
         ).span(3),
 
         DescriptionItem::new("Repository").value(
-            "https://github.com/longbridge/gpui-component"
+            "https://github.com/longbridge/gpui-kit"
         ).span(2),
         DescriptionItem::new("License").value("Apache-2.0").span(1),
 

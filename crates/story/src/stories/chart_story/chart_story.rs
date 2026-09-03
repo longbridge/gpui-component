@@ -1,9 +1,4 @@
-use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight, Hsla, IntoElement,
-    ParentElement, Render, Rgba, SharedString, Styled, Window, div, linear_color_stop,
-    linear_gradient, prelude::FluentBuilder, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, StyledExt,
     chart::{
         AreaChart, BarChart, CandlestickChart, LineChart, PieChart, RadarChart, SankeyChart,
@@ -14,6 +9,11 @@ use gpui_component::{
     plot::shape::{BarAlignment, SankeyAlign, SankeyLink, SankeyValueScale},
     separator::Separator,
     v_flex,
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight, Hsla, IntoElement,
+    ParentElement, Render, Rgba, SharedString, Styled, Window, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder, px,
 };
 use serde::Deserialize;
 
@@ -149,7 +149,7 @@ impl ChartStory {
                         growth: node.growth.parse().ok(),
                         color: Rgba::try_from(node.color.as_ref())
                             .map(Into::into)
-                            .unwrap_or(gpui::black()),
+                            .unwrap_or(gpui_kit::black()),
                     })
                     .collect();
                 // Skip links with unknown node keys or unparsable values
@@ -430,7 +430,7 @@ impl Render for ChartStory {
                             .value(|d| d.desktop)
                             .name("Desktop")
                             .stroke(cx.theme().chart_3)
-                            .fill(gpui::transparent_black())
+                            .fill(gpui_kit::transparent_black())
                             .max_value(400.)
                             .grid_levels(5)
                             .id("radar-chart-lines-only"),

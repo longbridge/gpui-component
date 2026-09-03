@@ -49,7 +49,7 @@ That is what makes a large View expensive. Everything it draws shares one Snapsh
 Splitting is the fix. Give each part that changes on its own a View of its own with `cx.new`, and a change reaches one Snapshot instead of all of them:
 
 ```js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 
 export default class Terminal extends View {
   init(props, cx) {

@@ -12,7 +12,7 @@ Before you start, please make sure you have read: [Icons & Assets](../assets.md)
 ## Import
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 ```
 
 ## Usage
@@ -49,13 +49,13 @@ Icon::new(IconName::Heart)
 
 // Using custom colors
 Icon::new(IconName::Star)
-    .text_color(gpui::red())
+    .text_color(gpui_kit::red())
 ```
 
 ### Rotated Icons
 
 ```rust
-use gpui::Radians;
+use gpui_kit::Radians;
 
 // Rotate by radians
 Icon::new(IconName::ArrowUp)
@@ -143,7 +143,7 @@ The Icon component supports several predefined sizes:
 You can define your own `IconName` to have more specific icons for your application. We have `IconNamed` trait for you to implement for your.
 
 ```rust
-use gpui_component::IconNamed;
+use gpui_kit::component::IconNamed;
 
 pub enum IconName {
     Encounters,
@@ -152,7 +152,7 @@ pub enum IconName {
 }
 
 impl IconNamed for IconName {
-    fn path(self) -> gpui::SharedString {
+    fn path(self) -> gpui_kit::SharedString {
         match self {
             IconName::Encounters => "icons/encounters.svg",
             IconName::Monsters => "icons/monsters.svg",
@@ -186,7 +186,7 @@ div()
 ### Icon in Button
 
 ```rust
-use gpui_component::button::Button;
+use gpui_kit::component::button::Button;
 
 Button::new("like-btn")
     .icon(

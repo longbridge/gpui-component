@@ -1,22 +1,18 @@
 [package]
 name = "gpui-component-story"
-version = "0.5.1"
+version = "0.6.0"
 publish = false
 edition.workspace = true
 
 [features]
-inspector = ["gpui-component/inspector"]
-tree-sitter = ["gpui-component/tree-sitter-languages"]
-test-support = ["gpui/test-support"]
+inspector = ["gpui-kit/inspector"]
+tree-sitter = ["gpui-kit/tree-sitter-languages"]
+test-support = ["gpui-kit/test-support"]
 default = ["tree-sitter"]
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
-gpui-base.workspace = true
-gpui_platform.workspace = true
-gpui-component = { workspace = true }
-gpui-component-assets.workspace = true
+gpui-kit.workspace = true
 gpui-fps.workspace = true
 
 async-channel = "2.3.1"
@@ -49,7 +45,6 @@ tree-sitter-navi = "0.2.3"
 color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui_web.workspace = true
 # WASM has no tree-sitter grammars, so the Editor story highlights with
 # `syntect` there. Native uses the built-in tree-sitter highlighter.
 syntect.workspace = true
@@ -61,7 +56,7 @@ getrandom = { version = "0.2", features = ["js"] }
 gtk = { version = "0.18" }
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

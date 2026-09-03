@@ -6,7 +6,7 @@ This is first paragraph, there have **BOLD**, _italic_, and ~~strikethrough~~, `
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM]. It includes various stylistic elements and plain text.
 
-Link click handling: [open this link](https://github.com/longbridge/gpui-component) to see the custom `TextView` callback in the application log.
+Link click handling: [open this link](https://github.com/longbridge/gpui-kit) to see the custom `TextView` callback in the application log.
 
 ![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
 

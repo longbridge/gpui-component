@@ -19,8 +19,8 @@ concerns.
 ## Import
 
 ```rust
-use gpui::{Axis, ParentElement as _, Styled as _};
-use gpui_component::{
+use gpui_kit::{Axis, ParentElement as _, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Colorize as _, Icon, IconName, Sizable as _, Size,
     attachment::{
         Attachment, AttachmentActions, AttachmentContent, AttachmentDescription,

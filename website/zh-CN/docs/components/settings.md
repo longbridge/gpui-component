@@ -12,7 +12,7 @@ Settings 组件用于构建应用设置界面，支持页面分组、按标题/�
 ## 导入
 
 ```rust
-use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_kit::component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 ```
 
 ## 用法
@@ -42,7 +42,7 @@ Settings
 ### 基础示例
 
 ```rust
-use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_kit::component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 
 Settings::new("my-settings")
     .pages(vec![
@@ -87,7 +87,7 @@ Settings::new("app-settings")
 ### 分组样式
 
 ```rust
-use gpui_component::group_box::GroupBoxVariant;
+use gpui_kit::component::group_box::GroupBoxVariant;
 
 Settings::new("my-settings")
     .with_group_variant(GroupBoxVariant::Outline)
@@ -228,7 +228,7 @@ SettingItem::new(
 ### Markdown 描述
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 SettingItem::new(
     "Documentation",
@@ -367,7 +367,7 @@ SettingItem::new(
 ### NumberInput
 
 ```rust
-use gpui_component::setting::NumberFieldOptions;
+use gpui_kit::component::setting::NumberFieldOptions;
 
 SettingItem::new(
     "Font Size",
@@ -408,7 +408,7 @@ SettingItem::new(
 如果某个字段逻辑较复杂并且需要复用，可以实现 [SettingFieldElement] trait：
 
 ```rust
-use gpui_component::setting::{SettingFieldElement, RenderOptions};
+use gpui_kit::component::setting::{SettingFieldElement, RenderOptions};
 
 struct OpenURLSettingField {
     label: SharedString,
@@ -438,7 +438,7 @@ SettingItem::new(
     "GitHub Repository",
     SettingField::element(OpenURLSettingField {
         label: "Repository...".into(),
-        url: "https://github.com/longbridge/gpui-component".into(),
+        url: "https://github.com/longbridge/gpui-kit".into(),
     })
 )
 ```
@@ -467,8 +467,8 @@ SettingItem::new(
 ### 完整设置页示例
 
 ```rust
-use gpui::{App, SharedString};
-use gpui_component::{
+use gpui_kit::{App, SharedString};
+use gpui_kit::component::{
     Settings, SettingPage, SettingGroup, SettingItem, SettingField,
     setting::NumberFieldOptions,
     group_box::GroupBoxVariant,

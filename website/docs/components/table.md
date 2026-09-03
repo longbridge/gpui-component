@@ -10,7 +10,7 @@ A simple, stateless, composable table component for rendering tabular data. Unli
 ## Import
 
 ```rust
-use gpui_component::table::{
+use gpui_kit::component::table::{
     Table, TableHeader, TableBody, TableFooter,
     TableRow, TableHead, TableCell, TableCaption,
 };

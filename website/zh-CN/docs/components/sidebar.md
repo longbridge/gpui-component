@@ -10,7 +10,7 @@ Sidebar 是一个灵活的应用导航组件，支持折叠状态、嵌套菜单
 ## 导入
 
 ```rust
-use gpui_component::sidebar::{
+use gpui_kit::component::sidebar::{
     Sidebar, SidebarHeader, SidebarFooter, SidebarGroup,
     SidebarMenu, SidebarMenuItem, SidebarToggleButton
 };
@@ -21,7 +21,7 @@ use gpui_component::sidebar::{
 ### 基础 Sidebar
 
 ```rust
-use gpui_component::{sidebar::*, Side};
+use gpui_kit::component::{sidebar::*, Side};
 
 Sidebar::new()
     .header(
@@ -108,7 +108,7 @@ Sidebar::new()
 ### Badge 与后缀
 
 ```rust
-use gpui_component::{Badge, Switch};
+use gpui_kit::component::{Badge, Switch};
 
 SidebarMenuItem::new("Notifications")
     .icon(IconName::Bell)
@@ -134,7 +134,7 @@ Sidebar::new()
 ### 右键菜单
 
 ```rust
-use gpui_component::menu::PopupMenu;
+use gpui_kit::component::menu::PopupMenu;
 
 SidebarMenuItem::new("Project Files")
     .icon(IconName::Folder)

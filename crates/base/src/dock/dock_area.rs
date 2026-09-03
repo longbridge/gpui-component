@@ -3925,7 +3925,7 @@ mod tests {
         );
     }
 
-    // The tests below were ported from `crates/ui/src/dock/tab_panel.rs` when
+    // The tests below were ported from `crates/component/src/dock/tab_panel.rs` when
     // the dock skin was rebuilt on this crate. They are the surviving record
     // of the `is_empty` semantics and the documented `set_active` contract.
 

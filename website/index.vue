@@ -35,7 +35,7 @@
                     <span>{{ copy.searchShort }}</span>
                 </a>
                 <a
-                    href="https://github.com/longbridge/gpui-component"
+                    href="https://github.com/longbridge/gpui-kit"
                     target="_blank"
                     class="home-nav__github"
                     :title="`${stars} stars on GitHub`"
@@ -103,11 +103,10 @@
             <div class="hero__grid" aria-hidden="true"></div>
             <div class="hero__inner">
                 <div class="hero__copy">
-                    <a href="https://gpui.rs" target="_blank" class="eyebrow">
+                    <span class="eyebrow">
                         <span class="eyebrow__pulse" aria-hidden="true"></span>
                         {{ copy.eyebrow }}
-                        <ArrowRight />
-                    </a>
+                    </span>
                     <h1>{{ copy.title }}</h1>
                     <p class="hero__lead">{{ copy.lead }}</p>
                     <div class="hero__actions">
@@ -152,7 +151,7 @@
                         /></span>
                         <span class="mac-window__title">main.rs</span>
                     </div>
-                    <pre><code><span class="c-kw">use</span> gpui_component::{<span class="c-mod">button</span>::*, *};
+                    <pre><code><span class="c-kw">use</span> gpui_kit::component::{<span class="c-mod">button</span>::*, *};
 
 <span class="c-kw">impl</span> <span class="c-type">Render</span> <span class="c-kw">for</span> <span class="c-type">HelloWorld</span> {
     <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;) -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span> {
@@ -358,17 +357,16 @@
             </p>
         </div>
         <nav :aria-label="copy.footerNav">
-            <a href="https://gpui.rs" target="_blank">GPUI</a>
             <a :href="contributorsHref">{{ copy.contributors }}</a>
             <a :href="skillsHref" target="_blank">Skills</a>
             <a :href="llmsHref" target="_blank">llms-full.txt</a>
             <a
-                href="https://github.com/longbridge/gpui-component/issues"
+                href="https://github.com/longbridge/gpui-kit/issues"
                 target="_blank"
                 >{{ copy.reportBug }}</a
             >
             <a
-                href="https://github.com/longbridge/gpui-component/discussions"
+                href="https://github.com/longbridge/gpui-kit/discussions"
                 target="_blank"
                 >{{ copy.discussion }}</a
             >
@@ -489,19 +487,11 @@ const capIcons = {
     theme: Palette,
 };
 
-// The crate is not published yet, so the real dependency is a git one — the
-// hero must not suggest a `cargo add` that would fail. The line on screen is
-// the headline dependency; the clipboard gets the full block from the Getting
-// Started guide, because gpui-component alone does not build.
-const installCommand =
-    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }';
-const installSnippet = [
-    "[dependencies]",
-    'gpui = { git = "https://github.com/zed-industries/zed" }',
-    'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
-    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }',
-    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }',
-].join("\n");
+// `gpui-kit` is the one dependency an application needs: it pins GPUI and
+// carries every layer. The line on screen is what the clipboard gets, with
+// the `[dependencies]` header so it pastes straight into Cargo.toml.
+const installCommand = 'gpui-kit = "0.6.0"';
+const installSnippet = ["[dependencies]", installCommand].join("\n");
 
 const copied = ref(false);
 let copyTimer;
@@ -528,7 +518,7 @@ const copy = computed(() =>
               themeNav: "切换主题",
               menuNav: "打开菜单",
               copyLabel: "复制安装命令",
-              eyebrow: "基于 GPUI，经过 Longbridge 生产验证",
+              eyebrow: "经过 Longbridge 生产验证",
               title: "构建出色的高性能桌面应用。",
               lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体，并可用 JavaScript 扩展；从第一天起用于构建 Longbridge Pro。",
               componentsAction: "浏览组件",
@@ -633,7 +623,7 @@ const copy = computed(() =>
               themeNav: "Toggle color theme",
               menuNav: "Open menu",
               copyLabel: "Copy install command",
-              eyebrow: "Built on GPUI. Proven at Longbridge.",
+              eyebrow: "Proven in production at Longbridge.",
               title: "Build fantastic, high-performance desktop apps.",
               lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — extensible in JavaScript, and used to build Longbridge Pro from day one.",
               componentsAction: "Browse components",

@@ -10,8 +10,8 @@ Kbd 用于展示键盘快捷键和组合键，并会自动根据平台采用合�
 ## 导入
 
 ```rust
-use gpui_component::kbd::Kbd;
-use gpui::Keystroke;
+use gpui_kit::component::kbd::Kbd;
+use gpui_kit::Keystroke;
 ```
 
 ## 用法
@@ -66,7 +66,7 @@ Kbd::new(Keystroke::parse("cmd-s").unwrap())
 ### 从 Action 绑定读取
 
 ```rust
-use gpui::{Action, Window, FocusHandle};
+use gpui_kit::{Action, Window, FocusHandle};
 
 if let Some(kbd) = Kbd::binding_for_action(&MyAction {}, None, window) {
     // 显示该 action 绑定的快捷键
@@ -113,7 +113,7 @@ if let Some(kbd) = Kbd::binding_for_action_in(&MyAction {}, &focus_handle, windo
 ### 快捷键帮助面板
 
 ```rust
-use gpui::{div, h_flex, v_flex};
+use gpui_kit::{div, h_flex, v_flex};
 
 v_flex()
     .gap_2()

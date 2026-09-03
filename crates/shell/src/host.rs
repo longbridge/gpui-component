@@ -62,7 +62,7 @@ pub fn main_with_brand_and_components(
             // The root always, whether or not anything there imports the module:
             // this command was asked for explicitly, and an empty directory is a
             // reasonable place to start an application. Every other directory
-            // that imports `gpui` comes along with it.
+            // that imports `gpui-kit` comes along with it.
             match crate::write_type_declarations_with_components(&directory, &components) {
                 Ok(_) => {}
                 Err(error) => {
@@ -296,7 +296,7 @@ Arguments:
   <directory>  The application root, or the {ENTRY} inside it.
 
 Commands:
-  types        Write gpui.d.ts next to the application, so an editor — or a
+  types        Write gpui-kit.d.ts next to the application, so an editor — or a
                model writing the code — sees the whole API and catches a
                mistyped style method before it runs.
   check        Load and render the application once without showing a window,
@@ -386,7 +386,7 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
             // The declarations describe the runtime that is about to run this
             // script, which is the only version worth editing against. Doing it
             // here rather than asking the author to remember a command is what
-            // keeps a stale `gpui.d.ts` from being possible at all.
+            // keeps a stale `gpui-kit.d.ts` from being possible at all.
             //
             // Every launch rather than development mode only: this binary runs an
             // application from its source directory, which is where somebody is
@@ -1011,7 +1011,6 @@ mod tests {
               "id": "com.example.market",
               "name": "Market",
               "version": "1.0.0",
-              "shell-version": "0.1.0",
               "entry": "main.js",
               "capabilities": {
                 "network": { "hosts": ["quotes.example.com"] },

@@ -10,7 +10,7 @@ Slider 用于在给定范围内选择数值，支持单值和区间选择、横�
 ## 导入
 
 ```rust
-use gpui_component::slider::{Slider, SliderState, SliderEvent, SliderValue};
+use gpui_kit::component::slider::{Slider, SliderState, SliderEvent, SliderValue};
 ```
 
 ## 用法

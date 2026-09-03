@@ -14,7 +14,7 @@ description: 渲染 Markdown 与 HTML 文本，并支持自定义 Markdown 插�
 ## 导入
 
 ```rust
-use gpui_component::text::{markdown, TextView};
+use gpui_kit::component::text::{markdown, TextView};
 ```
 
 ## 用法
@@ -24,7 +24,7 @@ use gpui_component::text::{markdown, TextView};
 只需要渲染 Markdown 时，可以使用 `markdown` helper：
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 markdown("# Hello\n\nThis is **Markdown**.")
     .selectable(true)
@@ -34,7 +34,7 @@ markdown("# Hello\n\nThis is **Markdown**.")
 如果需要稳定 id，也可以直接构造 `TextView`：
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_kit::component::text::TextView;
 
 TextView::markdown("preview", markdown_source)
     .selectable(true)
@@ -58,8 +58,8 @@ markdown(source)
 Markdown 插件实现 `MarkdownPlugin`：
 
 ```rust
-use gpui::{App, IntoElement, ParentElement as _, Window};
-use gpui_component::text::{
+use gpui_kit::{App, IntoElement, ParentElement as _, Window};
+use gpui_kit::component::text::{
     markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
 };
 
@@ -117,7 +117,7 @@ impl MarkdownPlugin for TickerPlugin {
     ) -> impl IntoElement {
         let ticker = node.data::<TickerNode>().expect("ticker node data");
 
-        gpui::div().child(format!("${}", ticker.symbol))
+        gpui_kit::div().child(format!("${}", ticker.symbol))
     }
 }
 ```
@@ -163,6 +163,6 @@ Inline 插件保留给未来的 `TextView` 支持。
 ```rust
 markdown(source)
     .code_block_actions(|code_block, _window, _cx| {
-        gpui::div().child(format!("Run {}", code_block.lang().unwrap_or_default()))
+        gpui_kit::div().child(format!("Run {}", code_block.lang().unwrap_or_default()))
     })
 ```

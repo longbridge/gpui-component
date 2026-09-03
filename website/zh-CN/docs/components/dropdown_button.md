@@ -12,13 +12,13 @@ description: DropdownButton 由一个主按钮和一个触发下拉菜单的按�
 ## 导入
 
 ```rust
-use gpui_component::button::{Button, DropdownButton};
+use gpui_kit::component::button::{Button, DropdownButton};
 ```
 
 ## 用法
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))

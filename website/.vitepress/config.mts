@@ -14,30 +14,42 @@ function wasmExamplesDevServer() {
     ["/gallery", resolve("../crates/story-web/www/dist")],
   ]);
   const contentTypes: Record<string, string> = {
-    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-    ".wasm": "application/wasm", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".wasm": "application/wasm",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
   };
   return {
     name: "wasm-examples-dev-server",
     configureServer(server: any) {
       server.middlewares.use((req: any, res: any, next: () => void) => {
         const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
-        const entry = [...roots].find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+        const entry = [...roots].find(
+          ([prefix]) =>
+            pathname === prefix || pathname.startsWith(`${prefix}/`),
+        );
         if (!entry) return next();
         const [prefix, root] = entry;
         const relative = pathname.slice(prefix.length).replace(/^\/+/, "");
         let file = join(root, relative || "index.html");
-        if (!existsSync(file) || !statSync(file).isFile()) file = join(root, "index.html");
+        if (!existsSync(file) || !statSync(file).isFile())
+          file = join(root, "index.html");
         if (!existsSync(file)) {
           res.statusCode = 503;
-          res.end("WASM example is not built. Run its Makefile build target first.");
+          res.end(
+            "WASM example is not built. Run its Makefile build target first.",
+          );
           return;
         }
         // The Rust example is rebuilt before the VitePress dev server starts.
         // Never let a surviving iframe reuse an older index that points at an
         // obsolete hashed WASM asset after that restart.
         res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Content-Type", contentTypes[extname(file)] ?? "application/octet-stream");
+        res.setHeader(
+          "Content-Type",
+          contentTypes[extname(file)] ?? "application/octet-stream",
+        );
         createReadStream(file).pipe(res);
       });
     },
@@ -146,8 +158,6 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   return {
     message,
     copyright: `
-      <a href="https://gpui.rs">GPUI</a>
-      |
       <a href="${prefix}/docs/design-guides">${designGuidesText}</a>
       |
       <a href="${prefix}/docs/coding-guides">${codingGuidesText}</a>
@@ -160,9 +170,9 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
       |
       <a href="/llms-full.txt" target="_blank">llms-full.txt</a>
       |
-      <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">${reportBugText}</a>
+      <a href="https://github.com/longbridge/gpui-kit/issues" target="_blank">${reportBugText}</a>
       |
-      <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">${discussionText}</a>
+      <a href="https://github.com/longbridge/gpui-kit/discussions" target="_blank">${discussionText}</a>
       <br />
       Icon resources are used <a href="https://lucide.dev" target="_blank">Lucide</a>,
       <a href="https://isocons.app" target="_blank">Isocons</a>.
@@ -201,15 +211,15 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
         },
         {
           text: releasesText,
-          link: "https://github.com/longbridge/gpui-component/releases",
+          link: "https://github.com/longbridge/gpui-kit/releases",
         },
         {
           text: issuesText,
-          link: "https://github.com/longbridge/gpui-component/issues",
+          link: "https://github.com/longbridge/gpui-kit/issues",
         },
         {
           text: discussionText,
-          link: "https://github.com/longbridge/gpui-component/discussions",
+          link: "https://github.com/longbridge/gpui-kit/discussions",
         },
       ],
     },
@@ -232,14 +242,14 @@ const sharedThemeConfig = {
 const SITE_URL = "https://gpui-kit.com";
 const SITE_TITLE = "GPUI Kit";
 const SITE_DESCRIPTION =
-  "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.";
+  "A comprehensive Rust framework for building fantastic, high-performance desktop apps.";
 
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
   title: "GPUI Kit",
   base: "/",
   description:
-    "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.",
+    "A comprehensive Rust framework for building fantastic, high-performance desktop apps.",
   cleanUrls: true,
   head: [
     // One icon link, not a `prefers-color-scheme` pair: the site's own
@@ -308,7 +318,7 @@ const config: UserConfig = {
         footer: createFooter("", "en"),
         editLink: {
           pattern:
-            "https://github.com/longbridge/gpui-component/edit/main/website/:path",
+            "https://github.com/longbridge/gpui-kit/edit/main/website/:path",
         },
       },
     },
@@ -333,7 +343,7 @@ const config: UserConfig = {
         darkModeSwitchTitle: "切换到深色模式",
         editLink: {
           pattern:
-            "https://github.com/longbridge/gpui-component/edit/main/website/:path",
+            "https://github.com/longbridge/gpui-kit/edit/main/website/:path",
         },
       },
     },

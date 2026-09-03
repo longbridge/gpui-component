@@ -12,7 +12,7 @@ Focus Trap 是一个用于将键盘焦点限制在特定容器内的工具能力
 ## 导入
 
 ```rust
-use gpui_component::FocusTrapElement;
+use gpui_kit::component::FocusTrapElement;
 ```
 
 ## 用法

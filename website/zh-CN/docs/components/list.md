@@ -10,8 +10,8 @@ List 是一个功能完整的列表组件，支持虚拟化展示、搜索、分
 ## 导入
 
 ```rust
-use gpui_component::list::{List, ListState, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
-use gpui_component::IndexPath;
+use gpui_kit::component::list::{List, ListState, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
+use gpui_kit::component::IndexPath;
 ```
 
 ## 用法

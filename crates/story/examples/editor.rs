@@ -8,8 +8,9 @@ use std::{
 };
 
 use autocorrect::ignorer::Ignorer;
-use gpui::{prelude::FluentBuilder, *};
-use gpui_component::{
+use gpui_component_story::Open;
+use gpui_kit::assets::Assets;
+use gpui_kit::component::{
     ActiveTheme, IconName, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
@@ -25,8 +26,7 @@ use gpui_component::{
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
-use gpui_component_assets::Assets;
-use gpui_component_story::Open;
+use gpui_kit::{prelude::FluentBuilder, *};
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
@@ -626,7 +626,7 @@ impl DocumentColorProvider for ExampleLspStore {
         text: &Rope,
         _window: &mut Window,
         _cx: &mut App,
-    ) -> Task<gpui::Result<Vec<lsp_types::ColorInformation>>> {
+    ) -> Task<gpui_kit::Result<Vec<lsp_types::ColorInformation>>> {
         let nodes = color_lsp::parse(&text.to_string());
         let colors = nodes
             .into_iter()
@@ -1191,7 +1191,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         gpui_component_story::init(cx);

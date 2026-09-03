@@ -11,11 +11,7 @@
             </ul>
         </div>
 
-        <div
-            class="apps-filter"
-            role="group"
-            :aria-label="copy.filterLabel"
-        >
+        <div class="apps-filter" role="group" :aria-label="copy.filterLabel">
             <button
                 v-for="category in categories"
                 :key="category.id"
@@ -89,7 +85,7 @@
             <p>{{ copy.ctaLead }}</p>
             <a
                 class="apps-cta__action"
-                href="https://github.com/longbridge/gpui-component/discussions/989"
+                href="https://github.com/longbridge/gpui-kit/discussions/989"
                 target="_blank"
                 rel="noopener noreferrer"
             >
@@ -537,7 +533,8 @@ const copy = computed(() =>
               visit: "Website",
               sourceLink: "Source",
               ctaTitle: "Built something with GPUI Kit?",
-              ctaLead: "Post it in the showcase discussion and it can appear on this page.",
+              ctaLead:
+                  "Post it in the showcase discussion and it can appear on this page.",
               ctaAction: "Submit your app",
           },
 );
