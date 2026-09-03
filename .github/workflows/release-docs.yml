@@ -72,14 +72,13 @@ jobs:
         run: |
           bun install
           bun run build
-          cp .vitepress/dist/index.html .vitepress/dist/404.html
 
       - name: Copy WASM apps to Website
         run: |
-          mkdir -p website/.vitepress/dist/gallery
-          cp -r crates/story-web/www/dist/* website/.vitepress/dist/gallery/
-          mkdir -p website/.vitepress/dist/examples/base
-          cp -r crates/base/examples/wasm/www/dist/* website/.vitepress/dist/examples/base/
+          mkdir -p website/dist/gallery
+          cp -r crates/story-web/www/dist/* website/dist/gallery/
+          mkdir -p website/dist/examples/base
+          cp -r crates/base/examples/wasm/www/dist/* website/dist/examples/base/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -87,7 +86,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "website/.vitepress/dist"
+          path: "website/dist"
 
       - name: Deploy to GitHub Pages
         id: deployment

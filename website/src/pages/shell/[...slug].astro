@@ -5,10 +5,13 @@ import { enShellSidebar } from '../../lib/sidebar';
 
 export async function getStaticPaths() {
   const entries = await getCollection('shell');
-  return entries.map((entry) => ({
-    params: { slug: entry.id.replace(/\.md$/, '') },
-    props: { entry },
-  }));
+  return entries.map((entry) => {
+    const slug = entry.id.replace(/\.md$/, '');
+    return {
+      params: { slug: slug === 'index' ? undefined : slug },
+      props: { entry },
+    };
+  });
 }
 
 const { entry } = Astro.props;
