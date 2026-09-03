@@ -1021,7 +1021,19 @@ impl DockArea {
                         // its sizes land last — `insert_panel` renormalizes
                         // everything it touches, which would otherwise undo
                         // the share an edit just decided.
-                        state.adopt_sizes(&sizes, cx);
+                        //
+                        // What the tree decides is the *share*, not the pixel
+                        // count. The file holds absolute pixels measured in
+                        // whatever window last saved it, so restoring into a
+                        // different one leaves their total off the container —
+                        // and `adjust_to_container_size` rescales the state to
+                        // the container on the very next pass. Adopting the
+                        // raw numbers then re-asserts the stale total on every
+                        // reconcile, and the two overwrite each other frame
+                        // after frame until some interaction settles it on a
+                        // ratio that matches neither. Hand over the share
+                        // instead, so both sides already agree.
+                        state.adopt_sizes(&scale_sizes_to(state.container_size(), &sizes), cx);
                     });
                     if let Some(cached) = self.splits.get_mut(&node) {
                         cached.children = children;
@@ -1637,6 +1649,25 @@ impl ContainerPlan {
     }
 }
 
+/// Re-express slot sizes as shares of `container`, keeping their proportions.
+///
+/// Returns them unchanged unless every slot is constrained and both the
+/// container and the recorded total are usable: an unconstrained slot is laid
+/// out by flex and takes the leftover, so scaling only the constrained ones
+/// would move a divider nothing asked to move.
+fn scale_sizes_to(container: Pixels, sizes: &[Option<Pixels>]) -> Vec<Option<Pixels>> {
+    let total: f32 = sizes.iter().flatten().map(|size| size.as_f32()).sum();
+    if container <= px(0.) || total <= 0. || sizes.iter().any(Option::is_none) {
+        return sizes.to_vec();
+    }
+
+    let scale = container.as_f32() / total;
+    sizes
+        .iter()
+        .map(|size| size.map(|size| px(size.as_f32() * scale)))
+        .collect()
+}
+
 /// Bring one split's `ResizableState` panel list from `previous` to `next`,
 /// inserting and removing at the exact index rather than at the tail.
 ///
@@ -2070,6 +2101,35 @@ mod tests {
     use super::*;
     use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, drain_active, log_of};
     use crate::dock::{TabGroupContext, TileContext};
+
+    /// The file holds pixels measured in whatever window last saved it, so its
+    /// total is off the container the layout is restored into.
+    #[test]
+    fn slot_sizes_are_re_expressed_as_shares_of_the_container() {
+        let scaled = scale_sizes_to(px(800.), &[Some(px(300.)), Some(px(100.))]);
+
+        assert_eq!(scaled, vec![Some(px(600.)), Some(px(200.))]);
+    }
+
+    /// An unconstrained slot is laid out by flex and takes the leftover, so
+    /// scaling only its siblings would move a divider nothing asked to move.
+    #[test]
+    fn an_unconstrained_slot_leaves_every_size_alone() {
+        let sizes = [Some(px(300.)), None];
+
+        assert_eq!(scale_sizes_to(px(800.), &sizes), sizes.to_vec());
+    }
+
+    /// Nothing to scale against before the first layout pass, or when the
+    /// recorded sizes carry no length at all.
+    #[test]
+    fn an_unusable_container_or_total_leaves_every_size_alone() {
+        let sizes = [Some(px(300.)), Some(px(100.))];
+        assert_eq!(scale_sizes_to(px(0.), &sizes), sizes.to_vec());
+
+        let zeroed = [Some(px(0.)), Some(px(0.))];
+        assert_eq!(scale_sizes_to(px(800.), &zeroed), zeroed.to_vec());
+    }
 
     fn setup(cx: &mut TestAppContext) -> (Entity<DockArea>, &mut VisualTestContext) {
         cx.update(|cx| {
