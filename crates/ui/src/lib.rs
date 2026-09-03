@@ -59,6 +59,7 @@ pub mod pagination;
 pub mod plot;
 pub mod popover;
 pub mod progress;
+pub mod questionnaire;
 pub mod radio;
 pub mod rating;
 /// Backwards-compatible resizable component paths.
@@ -139,6 +140,7 @@ pub fn init(cx: &mut App) {
     command::init(cx);
     notification::init(cx);
     popover::init(cx);
+    questionnaire::init(cx);
     menu::init(cx);
     table::init(cx);
     tooltip::init(cx);
