@@ -290,14 +290,15 @@ Uses `rust-i18n` crate.
 - When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
 - `docs/` holds internal architecture specifications (RFC, migration status, reviews).
   These are single-language and are not published to the site; see `docs/README.md`.
-- `skills/gpui-component/references/{coding,design}-guides.md` are verbatim copies
-  of the English `website/docs/` originals, vendored so the skill works after
+- `skills/gpui-kit/references/coding-guides.md` and
+  `skills/gpui-kit-design-guides/references/design-guides.md` are verbatim copies
+  of the English `website/docs/` originals, vendored so the skills work after
   `npx skills add` in a project that does not have this repo. After editing either
   guide, copy it across:
 
   ```bash
-  cp website/docs/design-guides.md skills/gpui-component/references/design-guides.md
-  cp website/docs/coding-guides.md skills/gpui-component/references/coding-guides.md
+  cp website/docs/design-guides.md skills/gpui-kit-design-guides/references/design-guides.md
+  cp website/docs/coding-guides.md skills/gpui-kit/references/coding-guides.md
   ```
 
   CI fails if the copies drift. Never edit the copy directly — edit `website/docs/`.
@@ -314,8 +315,8 @@ CI runs full test suite on each platform.
 
 This project has custom Claude Code skills to assist with common development tasks:
 
-- **gpui** (`skills/`) - GPUI framework knowledge: actions/keybindings, async, context, custom elements, entity state, events, focus, global state, layout/styling, testing
-- **gpui-component** (`skills/`) - How to use gpui-component: setup, stateless/stateful patterns, common component APIs, theming
+- **gpui-kit** (`skills/`) - Building applications on the `gpui-kit` crate: setup, component catalog, stateless/stateful patterns, theming, GPUI mechanics (actions, async, contexts, custom elements, entities, events, focus, global state, layout, `ElementId`, testing), and the normative Coding Guides
+- **gpui-kit-design-guides** (`skills/`) - The normative Design Guides; load before any UI, layout, interaction, or interface-copy work
 - **gpui-component-dev** (`.claude/skills/`) - Contributing to gpui-component: creating new components, writing stories, writing documentation, writing PR descriptions
 
 When working on tasks related to these areas, Claude Code will automatically use the appropriate skill to provide specialized guidance and patterns.

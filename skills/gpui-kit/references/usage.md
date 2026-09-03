@@ -349,7 +349,7 @@ Theme::global_mut(cx).apply_config(&theme_config);
 
 ## Layout Helpers
 
-gpui-component extends GPUI with convenient layout methods:
+`gpui_kit::component` extends GPUI with convenient layout methods:
 
 ```rust
 h_flex()    // div().flex().flex_row().items_center()

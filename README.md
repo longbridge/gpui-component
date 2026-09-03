@@ -181,10 +181,10 @@ Install the GPUI Kit skills for your AI coding agent (Cursor, Claude Code, Gemin
 npx skills add longbridge/gpui-kit
 ```
 
-| Skill            | Description                                                                            |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| `gpui-component` | Component catalog, usage patterns, and contributor code style guide.                   |
-| `gpui`           | Low-level GPUI framework mechanics (elements, entities, async, focus, actions, tests). |
+| Skill                    | Description                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `gpui-kit`               | Setup, component catalog, usage patterns, GPUI mechanics (elements, entities, async, focus, actions, tests), and the Coding Guides. |
+| `gpui-kit-design-guides` | The Design Guides: layout, spacing, hierarchy, interaction states, overlays, and interface copy.                      |
 
 ## Development
 

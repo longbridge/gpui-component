@@ -52,4 +52,6 @@ fn main() {
 
 The `gpui-component` features (`inspector`, `decimal`, `tree-sitter`,
 `tree-sitter-languages`, and each `tree-sitter-<language>`) are available on
-`gpui-kit` under the same names. See <https://gpui-kit.com> for the guides.
+`gpui-kit` under the same names. `test-support` turns on GPUI's test harness
+for `#[gpui_kit::test]`, `TestAppContext` and `VisualTestContext`; enable it
+under `[dev-dependencies]`. See <https://gpui-kit.com> for the guides.

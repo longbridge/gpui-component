@@ -23,6 +23,8 @@ component = ["dep:gpui-component"]
 shell = ["dep:gpui-shell"]
 # The default icon set for `gpui-component`, `gpui_kit::assets`.
 assets = ["dep:gpui-kit-assets"]
+# GPUI's test harness: `#[gpui_kit::test]`, `TestAppContext`, `VisualTestContext`.
+test-support = ["gpui/test-support"]
 # The WebView element, `gpui_kit::webview`.
 webview = ["dep:gpui-wry"]
 inspector = ["gpui/inspector", "gpui-base/inspector", "gpui-component?/inspector"]
@@ -77,3 +79,6 @@ gpui-wry = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }

@@ -1,3 +1,6 @@
+# Testing
+
+**Contents:** [Overview](#overview) · [Core Testing Infrastructure](#core-testing-infrastructure) · [Additional Resources](#additional-resources)
 
 ## Overview
 
@@ -5,7 +8,8 @@ GPUI provides a comprehensive testing framework that allows you to test UI compo
 
 ### Rules
 
-- If test does not require windows or rendering, we can avoid use `[gpui_kit::test]` and `TestAppContext`, just write simple rust test.
+- `#[gpui_kit::test]` is GPUI's test attribute reached through the umbrella crate. It needs the `test-support` feature: add `gpui-kit = { version = "...", features = ["test-support"] }` under `[dev-dependencies]`.
+- If the test does not need windows or rendering, skip `#[gpui_kit::test]` and `TestAppContext` and write a plain `#[test]`.
 
 ## Core Testing Infrastructure
 

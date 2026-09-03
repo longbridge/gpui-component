@@ -54,10 +54,11 @@ jobs:
       - name: Skill guides are in sync
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          for guide in coding-guides design-guides; do
-            if ! diff -u "website/docs/$guide.md" "skills/gpui-component/references/$guide.md"; then
-              echo "::error::skills/gpui-component/references/$guide.md is stale."
-              echo "Run: cp website/docs/$guide.md skills/gpui-component/references/$guide.md"
+          for pair in "coding-guides skills/gpui-kit" "design-guides skills/gpui-kit-design-guides"; do
+            set -- $pair
+            if ! diff -u "website/docs/$1.md" "$2/references/$1.md"; then
+              echo "::error::$2/references/$1.md is stale."
+              echo "Run: cp website/docs/$1.md $2/references/$1.md"
               exit 1
             fi
           done
