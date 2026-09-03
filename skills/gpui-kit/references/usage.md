@@ -1,4 +1,4 @@
-# gpui-component Usage Guide
+# gpui-kit Usage Guide
 
 **Contents:** [Setup](#setup) · [Component Types](#component-types) · [Common Components](#common-components) (Button, Input, Select, Checkbox, Icon, Dialog, Notification, Tabs, Tooltip, Form, List) · [Theming](#theming) · [Layout Helpers](#layout-helpers) · [Overlay Layers](#overlay-layers-dialogs-sheets-notifications) · [Shared Traits](#shared-traits)
 
@@ -390,6 +390,7 @@ impl Render for MyApp {
 ## Shared Traits
 
 All components follow the builder pattern `Component::new("id").method().method()`:
+
 - `Sizable`: `.xsmall()` / `.small()` / `.medium()` (default) / `.large()`
 - `Disableable`: `.disabled(bool)`
 - `Selectable`: `.selected(bool)`

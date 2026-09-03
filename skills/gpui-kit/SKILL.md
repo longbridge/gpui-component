@@ -150,7 +150,7 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 | `GroupBox`        | `group_box::GroupBox`                                                    | Labeled container        |
 | `Resizable`       | `resizable::{h_resizable, v_resizable, resizable_panel, ResizableState}` | Draggable split panes    |
 | `Scrollable`      | `scroll::Scrollbar`                                                      | Custom scrollbar         |
-| `FocusTrap`       | `gpui_kit::base::focus_trap::FocusTrapElement`                                | Keyboard trap for modals |
+| `FocusTrap`       | `gpui_kit::base::focus_trap::FocusTrapElement`                           | Keyboard trap for modals |
 
 ### Data Display
 
@@ -174,4 +174,4 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 ## Reference Files
 
 - [usage.md](references/usage.md) — setup patterns, component types, common examples
-- [style-guide.md](references/style-guide.md) — code style for contributors
+- All more specific reference files are in the `references/` folder, and linked from the [Navigation Table](references/gpui.md) for quick access.
