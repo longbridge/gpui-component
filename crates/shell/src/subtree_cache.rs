@@ -1,7 +1,7 @@
 //! A script-marked subtree rendered by an entity of its own, so gpui can cache
 //! its layout and paint across the frames that change nothing inside it.
 //!
-//! See `docs/superpowers/specs/2026-09-02-subtree-cache-design.md`.
+//! See §20.4 of `docs/gpui-shell.md`.
 
 use std::{
     cell::RefCell,

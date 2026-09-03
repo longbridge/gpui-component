@@ -1303,7 +1303,7 @@ export default class Wrapped extends View {
             "a .cached() held as an element argument is still one of this view's subtrees"
         );
         assert!(
-            view.caches_subtrees(),
+            view.has_cached_subtrees(),
             "so the root must mount this view uncached"
         );
     });
@@ -1451,7 +1451,7 @@ export default class Off extends View {
             "cached(false) marks nothing"
         );
         assert!(
-            !view.caches_subtrees(),
+            !view.has_cached_subtrees(),
             "so the root keeps its own cache, as it does for a view with no markers"
         );
     });

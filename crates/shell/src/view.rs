@@ -234,7 +234,7 @@ impl ScriptView {
     /// `ShellRoot` reads this every frame: gpui's view cache is one level
     /// deep, so a view with cached subtrees is mounted uncached and the
     /// subtrees carry the cache instead.
-    pub fn caches_subtrees(&self) -> bool {
+    pub fn has_cached_subtrees(&self) -> bool {
         self.current
             .as_ref()
             .is_some_and(|snapshot| !snapshot.cached_nodes().is_empty())

@@ -296,13 +296,13 @@ impl ShellRoot {
     /// carries the cache in those subtrees, and is mounted uncached here so
     /// they can be reused; a view without any keeps the root cache (#2908).
     fn content_element(&self, cx: &App) -> AnyElement {
-        let caches_subtrees = self
+        let has_cached_subtrees = self
             .content
             .clone()
             .downcast::<crate::ScriptView>()
-            .map(|view| view.read(cx).caches_subtrees())
+            .map(|view| view.read(cx).has_cached_subtrees())
             .unwrap_or(false);
-        if caches_subtrees {
+        if has_cached_subtrees {
             self.content.clone().into_any_element()
         } else {
             self.content
@@ -1119,30 +1119,6 @@ fn install_key_bindings(cx: &mut App) {
     cx.set_global(KeyBindingsInstalled);
 }
 
-/// Whether an overlay may be opened or closed right now.
-///
-/// Overlay changes mutate the window, so they are only legal from an `Event` or
-/// `Task` call scope (`crate::scope`). Outside any scope — host Rust code, a
-/// test — there is nothing to check. A `Render` or `Layout` scope is a script
-/// bug: it is reported and ignored rather than panicked on, because a script
-/// error must not take the window down (`docs/gpui-shell.md` §5.8).
-/// Rebuilds a script overlay's description before it draws.
-///
-/// An overlay's content is a function, and what it closes over is somebody
-/// else's state -- that is the contract `open_dialog` and `open_sheet`
-/// document, and the only one they can have: neither answers a view handle, so
-/// there is nothing for a script to notify when the state behind the closure
-/// moves. Without this, an overlay materializes the description it was built
-/// with, once, for as long as it is open: a dialog that looks up what someone
-/// typed shows the answer to nothing.
-///
-/// So the root rebuilds it whenever the root itself draws, which is what
-/// `window.refresh()` -- the call whose whole purpose is "there is no view to
-/// notify" -- now reaches. Marking it dirty schedules no frame of its own: the
-/// overlay is about to render as part of this one, and it renders from the
-/// script rather than from the cache.
-///
-/// A non-script overlay owns its own state and is left alone.
 /// Bars an overlay's script view from keeping cached subtrees.
 ///
 /// `rebuild_script_overlay` below rebuilds it on every root render, from
@@ -1164,12 +1140,36 @@ fn disable_subtree_caches(content: &AnyView, cx: &mut App) {
     }
 }
 
+/// Rebuilds a script overlay's description before it draws.
+///
+/// An overlay's content is a function, and what it closes over is somebody
+/// else's state -- that is the contract `open_dialog` and `open_sheet`
+/// document, and the only one they can have: neither answers a view handle, so
+/// there is nothing for a script to notify when the state behind the closure
+/// moves. Without this, an overlay materializes the description it was built
+/// with, once, for as long as it is open: a dialog that looks up what someone
+/// typed shows the answer to nothing.
+///
+/// So the root rebuilds it whenever the root itself draws, which is what
+/// `window.refresh()` -- the call whose whole purpose is "there is no view to
+/// notify" -- now reaches. Marking it dirty schedules no frame of its own: the
+/// overlay is about to render as part of this one, and it renders from the
+/// script rather than from the cache.
+///
+/// A non-script overlay owns its own state and is left alone.
 fn rebuild_script_overlay(content: &AnyView, cx: &mut App) {
     if let Ok(view) = content.clone().downcast::<ScriptView>() {
         view.update(cx, |view, _| view.invalidate());
     }
 }
 
+/// Whether an overlay may be opened or closed right now.
+///
+/// Overlay changes mutate the window, so they are only legal from an `Event` or
+/// `Task` call scope (`crate::scope`). Outside any scope — host Rust code, a
+/// test — there is nothing to check. A `Render` or `Layout` scope is a script
+/// bug: it is reported and ignored rather than panicked on, because a script
+/// error must not take the window down (`docs/gpui-shell.md` §5.8).
 fn overlay_mutation_allowed(operation: &str) -> bool {
     match scope::current_phase() {
         None => true,

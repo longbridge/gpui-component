@@ -1836,8 +1836,11 @@ const ELEMENT_METHODS: &str = r#"    /**
      * inside, so motion applied here animates within a box that has already
      * jumped: animate properties inside the box, and put layout motion on a
      * child or on the parent.
+     *
+     * `cached(false)` turns the marker off for one element, the way every
+     * other flag method reads a `false`.
      */
-    cached(): Element;
+    cached(value?: boolean): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
     mouse_button(value: MouseButton): Element;
     /**
@@ -4710,10 +4713,10 @@ mod tests {
     }
 
     #[test]
-    fn a_cached_subtree_is_declared_as_a_nullary_element_method() {
+    fn a_cached_subtree_is_declared_as_an_optional_flag_method() {
         let declarations = base_declarations();
         assert!(
-            declarations.contains("\n    cached(): Element;\n"),
+            declarations.contains("\n    cached(value?: boolean): Element;\n"),
             "cached() is not declared on Element"
         );
     }
