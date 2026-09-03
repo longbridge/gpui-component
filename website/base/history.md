@@ -17,6 +17,25 @@ order: 7
 use gpui_base::{History, UndoHistory};
 ```
 
+## Which one to use
+
+Choose the type from the meaning of the state, not from the names of the UI
+commands that operate on it:
+
+- Use `History<T>` when each entry is a location and moving backward or
+  forward returns the location reached. The current root must remain available.
+- Use `UndoHistory<T>` when each entry is a reversible change and undo or redo
+  must return every change in one user transaction.
+- Use a domain-specific manager when grouping depends on richer semantics than
+  time or explicit boundaries. The Input component, for example, has a private
+  transaction manager that understands typing, deletion, selection, and IME
+  composition.
+
+Within gpui-component, `NavStack` uses `History<NavEntry>` for page navigation,
+while Dock's tiles canvas uses `UndoHistory<TileChange>` to reverse grouped
+move and resize changes. Input deliberately keeps its specialized private undo
+manager.
+
 ## `History`: a navigation trail
 
 Push every location the user visits. The current entry is the last value in the trail. For example, after visiting `A -> B -> C`, `C` is current and going back returns the new current entry, `B`:

@@ -17,6 +17,16 @@ order: 7
 use gpui_base::{History, UndoHistory};
 ```
 
+## 如何选择
+
+应根据状态的含义选择类型，而不是根据操作它的 UI 命令名称选择：
+
+- 当每个条目表示一个位置，后退或前进需要返回到达的位置，并且必须保留当前根条目时，使用 `History<T>`。
+- 当每个条目表示一项可逆改动，并且 undo 或 redo 需要返回一次用户事务中的全部改动时，使用 `UndoHistory<T>`。
+- 当分组依赖比时间或显式边界更丰富的领域语义时，使用领域专用的管理器。例如 Input 使用私有事务管理器来理解输入、删除、选择区和 IME 组合输入。
+
+在 gpui-component 内部，`NavStack` 使用 `History<NavEntry>` 进行页面导航；Dock 的 tiles canvas 使用 `UndoHistory<TileChange>` 回退分组的移动和缩放改动；Input 则有意保留其专用的私有 undo manager。
+
 ## `History`：导航轨迹
 
 每到一个位置就 push 一条。当前条目是轨迹中的最后一个值。例如访问完 `A -> B -> C` 后，当前是 `C`；后退会返回新的当前条目 `B`：
