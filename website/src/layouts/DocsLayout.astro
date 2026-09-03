@@ -4,6 +4,7 @@ import Nav from '../components/Nav.astro';
 import Sidebar from '../components/Sidebar.astro';
 import type { SidebarItem } from '../lib/sidebar';
 import { fetchStarCount } from '../lib/github';
+import { SITE_URL } from '../lib/site';
 
 export interface Props {
   title?: string;
@@ -18,7 +19,6 @@ const hasSidebar = sidebar.length > 0;
 const pathname = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
 
-const SITE_URL = 'https://longbridge.github.io/gpui-component';
 const canonical = `${SITE_URL}${pathname}`;
 
 let starCount = 0;

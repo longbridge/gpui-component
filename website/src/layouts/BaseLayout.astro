@@ -1,4 +1,6 @@
 ---
+import { SITE_URL } from '../lib/site';
+
 export interface Props {
   title?: string;
   description?: string;
@@ -16,7 +18,6 @@ const {
 } = Astro.props;
 
 const SITE_TITLE = 'GPUI Component';
-const SITE_URL = 'https://longbridge.github.io/gpui-component';
 const OG_IMAGE = `${SITE_URL}/og.png`;
 
 const pageTitle = title ? `${title} · ${SITE_TITLE}` : SITE_TITLE;
