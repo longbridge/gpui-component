@@ -1,14 +1,14 @@
 ---
 name: gpui-kit
-description: How to build desktop applications with GPUI Kit, the Rust framework published as the gpui-kit crate (GPUI plus gpui_kit::component, gpui_kit::base, gpui_kit::shell, gpui_kit::assets). Use when setting up a gpui-kit app, choosing or using a component (Button, Input, Select, Dialog, Sheet, Tabs, Sidebar, List, DataTable, Tree, Chart, etc.), handling component state, theming, or window overlays, and for GPUI mechanics: actions and keybindings, async tasks, contexts, custom elements, entities, events, focus, global state, layout and styling, ElementId, and tests. Holds the normative Coding Guides: read them before any architecture, state-ownership, public API, naming, or testing decision. Pairs with the gpui-kit-design-guides skill for the Design Guides.
+description: How to build desktop applications with GPUI Kit, the Rust framework published as the gpui-kit crate (GPUI plus gpui_kit::component, gpui_kit::base, gpui_kit::assets). Use when setting up a gpui-kit app, choosing or using a component (Button, Input, Select, Dialog, Sheet, Tabs, Sidebar, List, DataTable, Tree, Chart, etc.), handling component state, theming, or window overlays, and for GPUI mechanics: actions and keybindings, async tasks, contexts, custom elements, entities, events, focus, global state, layout and styling, ElementId, and tests. Holds the normative Coding Guides: read them before any architecture, state-ownership, public API, naming, or testing decision. Pairs with the gpui-kit-design-guides skill for the Design Guides.
 ---
 
 # GPUI Kit
 
 Applications depend on one crate, `gpui-kit`. GPUI is `use gpui_kit::*;`, and
 each layer is reachable by name: `gpui_kit::component` (styled components),
-`gpui_kit::base` (unstyled behavior), `gpui_kit::shell` (JavaScript
-extensions), `gpui_kit::assets` (default icons), `gpui_kit::platform`.
+`gpui_kit::base` (unstyled behavior), `gpui_kit::assets` (default icons),
+`gpui_kit::platform`.
 
 ## Read the Guides First
 
@@ -67,7 +67,7 @@ A floor, not a substitute for the guides.
   plausible-looking method that does not exist is the most common failure.
 - **One dependency.** Applications depend on `gpui-kit` alone. GPUI is
   `use gpui_kit::*;`; the layers are `gpui_kit::component`, `gpui_kit::base`,
-  `gpui_kit::shell`, `gpui_kit::assets`, `gpui_kit::platform`.
+  `gpui_kit::assets`, `gpui_kit::platform`.
 - **Framework owns behavior, application owns presentation.** Do not put
   colors, sizing, or layout in `gpui-base`; do not put interaction behavior in
   application styling code.

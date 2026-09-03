@@ -8,7 +8,7 @@ homepage = "https://gpui-kit.com"
 repository = "https://github.com/longbridge/gpui-kit/tree/main/crates/fps"
 readme = "README.md"
 edition.workspace = true
-publish = false
+publish = true
 version = "0.6.0"
 
 [lib]

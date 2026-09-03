@@ -16,11 +16,9 @@ edition.workspace = true
 workspace = true
 
 [features]
-default = ["component", "assets", "shell"]
+default = ["component", "assets"]
 # The styled component library, `gpui_kit::component`. Initializes `gpui-base` too.
 component = ["dep:gpui-component"]
-# JavaScript extensions for a Rust host, `gpui_kit::shell`.
-shell = ["dep:gpui-shell"]
 # The default icon set for `gpui-component`, `gpui_kit::assets`.
 assets = ["dep:gpui-kit-assets"]
 # GPUI's test harness: `#[gpui_kit::test]`, `TestAppContext`, `VisualTestContext`.
@@ -72,7 +70,6 @@ gpui_platform.workspace = true
 gpui-base.workspace = true
 gpui-component = { workspace = true, optional = true }
 gpui-kit-assets = { workspace = true, optional = true }
-gpui-shell = { workspace = true, optional = true }
 
 # `reqwest_client` pulls in tokio's default runtime, which does not build on wasm.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

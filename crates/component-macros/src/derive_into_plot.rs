@@ -6,9 +6,13 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let type_name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
+    let gpui = match crate::crate_path::gpui() {
+        Ok(path) => path,
+        Err(error) => return error.into_compile_error().into(),
+    };
 
     let expanded = quote! {
-        impl #impl_generics gpui::IntoElement for #type_name #type_generics #where_clause {
+        impl #impl_generics #gpui::IntoElement for #type_name #type_generics #where_clause {
             type Element = Self;
 
             fn into_element(self) -> Self::Element {
@@ -21,30 +25,30 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
             /// the generated `prepaint`/`paint` so the cell type lives in a single place.
             #[doc(hidden)]
             fn __plot_tooltip_cursor(
-                global_id: &gpui::GlobalElementId,
-                window: &mut gpui::Window,
-            ) -> std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>> {
+                global_id: &#gpui::GlobalElementId,
+                window: &mut #gpui::Window,
+            ) -> std::rc::Rc<std::cell::Cell<Option<#gpui::Point<#gpui::Pixels>>>> {
                 window.with_element_state(global_id, |prev, _| {
                     let cell: std::rc::Rc<
-                        std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>,
+                        std::cell::Cell<Option<#gpui::Point<#gpui::Pixels>>>,
                     > = prev.unwrap_or_default();
                     (cell.clone(), cell)
                 })
             }
         }
 
-        impl #impl_generics gpui::Element for #type_name #type_generics #where_clause {
+        impl #impl_generics #gpui::Element for #type_name #type_generics #where_clause {
             type RequestLayoutState = ();
             // Carries the hitbox used for occlusion-aware hover detection, the plot's
             // prepainted child elements and the prepainted tooltip overlay (if any)
             // from `prepaint` to `paint`.
             type PrepaintState = (
-                Option<gpui::Hitbox>,
-                Vec<gpui::AnyElement>,
-                Option<gpui::AnyElement>,
+                Option<#gpui::Hitbox>,
+                Vec<#gpui::AnyElement>,
+                Option<#gpui::AnyElement>,
             );
 
-            fn id(&self) -> Option<gpui::ElementId> {
+            fn id(&self) -> Option<#gpui::ElementId> {
                 // `Some` opts the plot in to interactive tooltips; `None` (the default)
                 // keeps the element a pure, non-interactive plot identical to before.
                 <Self as Plot>::id(self)
@@ -56,13 +60,13 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
             fn request_layout(
                 &mut self,
-                _: Option<&gpui::GlobalElementId>,
-                _: Option<&gpui::InspectorElementId>,
-                window: &mut gpui::Window,
-                cx: &mut gpui::App,
-            ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-                let style = gpui::Style {
-                    size: gpui::Size::full(),
+                _: Option<&#gpui::GlobalElementId>,
+                _: Option<&#gpui::InspectorElementId>,
+                window: &mut #gpui::Window,
+                cx: &mut #gpui::App,
+            ) -> (#gpui::LayoutId, Self::RequestLayoutState) {
+                let style = #gpui::Style {
+                    size: #gpui::Size::full(),
                     ..Default::default()
                 };
 
@@ -71,12 +75,12 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
             fn prepaint(
                 &mut self,
-                global_id: Option<&gpui::GlobalElementId>,
-                _: Option<&gpui::InspectorElementId>,
-                bounds: gpui::Bounds<gpui::Pixels>,
+                global_id: Option<&#gpui::GlobalElementId>,
+                _: Option<&#gpui::InspectorElementId>,
+                bounds: #gpui::Bounds<#gpui::Pixels>,
                 _: &mut Self::RequestLayoutState,
-                window: &mut gpui::Window,
-                cx: &mut gpui::App,
+                window: &mut #gpui::Window,
+                cx: &mut #gpui::App,
             ) -> Self::PrepaintState {
                 // Child elements must be laid out here: `layout_as_root` / `prepaint_at`
                 // are prepaint-only. Above the early return below, so plots without an
@@ -91,7 +95,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 // The hitbox lets the mouse handler hit-test with occlusion awareness:
                 // `Hitbox::is_hovered` returns false while an occluding hitbox (e.g. an
                 // open popup menu) is above the plot, unlike a plain bounds test.
-                let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+                let hitbox = window.insert_hitbox(bounds, #gpui::HitboxBehavior::Normal);
 
                 let overlay = (|| {
                     // The cell only gates visibility: it holds the cursor recorded by the
@@ -124,13 +128,13 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
             fn paint(
                 &mut self,
-                global_id: Option<&gpui::GlobalElementId>,
-                _: Option<&gpui::InspectorElementId>,
-                bounds: gpui::Bounds<gpui::Pixels>,
+                global_id: Option<&#gpui::GlobalElementId>,
+                _: Option<&#gpui::InspectorElementId>,
+                bounds: #gpui::Bounds<#gpui::Pixels>,
                 _: &mut Self::RequestLayoutState,
                 prepaint: &mut Self::PrepaintState,
-                window: &mut gpui::Window,
-                cx: &mut gpui::App,
+                window: &mut #gpui::Window,
+                cx: &mut #gpui::App,
             ) {
                 <Self as Plot>::paint(self, bounds, window, cx);
 
@@ -170,7 +174,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     }
 
                     window.on_mouse_event(
-                        move |e: &gpui::MouseMoveEvent, _, window: &mut gpui::Window, _| {
+                        move |e: &#gpui::MouseMoveEvent, _, window: &mut #gpui::Window, _| {
                             // `is_hovered` is false when an occluding hitbox (popup menu,
                             // modal, ...) is above the cursor, so the tooltip clears instead
                             // of tracking the mouse through the overlay.

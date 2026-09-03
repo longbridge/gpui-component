@@ -242,14 +242,14 @@ const sharedThemeConfig = {
 const SITE_URL = "https://gpui-kit.com";
 const SITE_TITLE = "GPUI Kit";
 const SITE_DESCRIPTION =
-  "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.";
+  "A comprehensive Rust framework for building fantastic, high-performance desktop apps.";
 
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
   title: "GPUI Kit",
   base: "/",
   description:
-    "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.",
+    "A comprehensive Rust framework for building fantastic, high-performance desktop apps.",
   cleanUrls: true,
   head: [
     // One icon link, not a `prefers-color-scheme` pair: the site's own

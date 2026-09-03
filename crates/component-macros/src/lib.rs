@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 
+mod crate_path;
 mod derive_into_plot;
 
 /// Input for icon_name! macro: EnumName, "path", [optional derives]

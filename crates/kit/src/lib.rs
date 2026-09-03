@@ -12,7 +12,6 @@
 //! | [`base`]        | `gpui-base`       | always           |
 //! | [`component`]   | `gpui-component`  | `component` (on) |
 //! | [`assets`]      | `gpui-kit-assets` | `assets` (on)    |
-//! | [`shell`]       | `gpui-shell`      | `shell` (on)     |
 //!
 //! [`application`] opens the platform and [`init`] initializes the enabled
 //! layers:
@@ -43,6 +42,42 @@
 //! ```
 //!
 //! See [`component`] for the same program with the styled component library.
+
+/// Defines unit actions without requiring consumers to depend on GPUI under the
+/// crate name `gpui`.
+///
+/// GPUI's original macro spells its derive as `gpui::Action`, which does not
+/// resolve when GPUI is consumed solely through this facade.
+#[macro_export]
+macro_rules! actions {
+    ($namespace:path, [ $( $(#[$attr:meta])* $name:ident),* $(,)? ]) => {
+        $(
+            #[derive(
+                ::std::clone::Clone,
+                ::std::cmp::PartialEq,
+                ::std::default::Default,
+                ::std::fmt::Debug,
+                $crate::Action
+            )]
+            #[action(namespace = $namespace)]
+            $(#[$attr])*
+            pub struct $name;
+        )*
+    };
+    ([ $( $(#[$attr:meta])* $name:ident),* $(,)? ]) => {
+        $(
+            #[derive(
+                ::std::clone::Clone,
+                ::std::cmp::PartialEq,
+                ::std::default::Default,
+                ::std::fmt::Debug,
+                $crate::Action
+            )]
+            $(#[$attr])*
+            pub struct $name;
+        )*
+    };
+}
 
 // Everything in GPUI itself, so `use gpui_kit::*;` is enough to get started.
 // With the `test-support` feature the glob also carries GPUI's `test`
@@ -93,8 +128,6 @@ pub use ::gpui_web as web;
 pub use ::gpui_component as component;
 #[cfg(feature = "assets")]
 pub use ::gpui_kit_assets as assets;
-#[cfg(feature = "shell")]
-pub use ::gpui_shell as shell;
 
 pub use ::gpui_platform::application;
 
@@ -102,10 +135,7 @@ pub use ::gpui_platform::application;
 ///
 /// With the `component` feature (on by default) this is
 /// `gpui_component::init`, which also initializes `gpui-base`; otherwise it
-/// is `gpui_base::init`. The `shell` runtime has its own
-/// [`shell::init`](gpui_shell::init) and
-/// [`shell::init_with_components`](gpui_shell::init_with_components), which
-/// the host calls when it registers its component catalog.
+/// is `gpui_base::init`.
 pub fn init(cx: &mut App) {
     #[cfg(feature = "component")]
     gpui_component::init(cx);

@@ -1,7 +1,7 @@
 ---
 title: GPUI Kit
 layout: false
-description: 基于 Rust + GPUI 构建卓越的桌面应用程序
+description: 用 Rust 构建卓越、高性能的桌面应用程序
 ---
 
 <script setup>

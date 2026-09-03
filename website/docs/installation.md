@@ -45,4 +45,25 @@ To install the `gpui-component` library, you can use Cargo, the Rust package man
 gpui-kit = "0.6"
 ```
 
-`gpui-kit` depends on the matching GPUI crates for you and puts GPUI and `gpui-component` at its root: `use gpui_kit::*;` replaces `use gpui_kit::*; use gpui_kit::component::*;`. The rest of these docs write `gpui::…` and `gpui_kit::component::…` paths; they resolve after that import, which also brings those crate names into scope.
+`gpui-kit` depends on the matching GPUI crates for you, so your application never lists GPUI itself. `use gpui_kit::*;` is GPUI, and the layers are reachable by name: `gpui_kit::component` (the styled components), `gpui_kit::base`, `gpui_kit::assets` and `gpui_kit::platform`.
+
+## Faster development builds
+
+Debug builds compile GPUI, the component library and the text stack without
+optimizations, which makes a `cargo run` build of your application render
+noticeably slower than a release build. Optimize just those crates while your
+own code stays a fast, debuggable debug build. Profiles only take effect in
+the root `Cargo.toml` of your application (or workspace):
+
+```toml
+[profile.dev.package]
+gpui-pre = { opt-level = 3 }
+gpui-component = { opt-level = 3 }
+gpui-kit = { opt-level = 3 }
+gpui-kit-assets = { opt-level = 3 }
+gpui-pre-macros = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+```

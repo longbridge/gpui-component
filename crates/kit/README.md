@@ -18,7 +18,6 @@ reachable by name:
 | `gpui_kit::base`      | `gpui-base`       | always           |
 | `gpui_kit::component` | `gpui-component`  | `component` (on) |
 | `gpui_kit::assets`    | `gpui-kit-assets` | `assets` (on)    |
-| `gpui_kit::shell`     | `gpui-shell`      | `shell` (on)     |
 
 `gpui_kit::application()` opens the platform and `gpui_kit::init()`
 initializes the enabled layers:

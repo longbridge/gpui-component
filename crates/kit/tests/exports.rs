@@ -17,6 +17,21 @@ mod glob_is_gpui {
 
     actions!(exports, [Quit]);
 
+    #[derive(Action, Clone, PartialEq)]
+    struct DerivedAction;
+
+    #[derive(Render)]
+    struct DerivedRender;
+
+    #[derive(IntoElement)]
+    struct DerivedElement;
+
+    impl RenderOnce for DerivedElement {
+        fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+            div()
+        }
+    }
+
     fn build() -> impl IntoElement {
         div().child("hello").bg(red())
     }
@@ -24,6 +39,19 @@ mod glob_is_gpui {
     fn startup(cx: &mut App) {
         gpui_kit::init(cx);
         let _ = gpui_kit::application;
+    }
+}
+
+/// Importing only the macro must not require a transitive crate named `gpui`.
+mod selective_actions_import {
+    use gpui_kit::actions;
+
+    actions!(exports, [SelectivelyImportedAction]);
+
+    fn assert_action<T: gpui_kit::Action>() {}
+
+    fn action_is_from_the_facade() {
+        assert_action::<SelectivelyImportedAction>();
     }
 }
 
@@ -46,10 +74,18 @@ mod always {
 #[cfg(feature = "component")]
 mod component {
     use gpui_kit::component::button::*;
+    use gpui_kit::component::plot::{IntoPlot, Plot};
     use gpui_kit::component::{ActiveTheme, Root, Size};
     use gpui_kit::*;
 
     type Sizing = Size;
+
+    #[derive(IntoPlot)]
+    struct DerivedPlot;
+
+    impl Plot for DerivedPlot {
+        fn paint(&mut self, _: Bounds<Pixels>, _: &mut Window, _: &mut App) {}
+    }
 
     fn theme(cx: &App) -> Hsla {
         cx.theme().background
@@ -65,9 +101,4 @@ mod component {
 #[cfg(feature = "assets")]
 mod assets {
     type Assets = gpui_kit::assets::Assets;
-}
-
-#[cfg(feature = "shell")]
-mod shell {
-    const _INIT: fn(&mut gpui_kit::App) = gpui_kit::shell::init;
 }

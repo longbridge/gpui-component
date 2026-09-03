@@ -487,19 +487,11 @@ const capIcons = {
     theme: Palette,
 };
 
-// The crate is not published yet, so the real dependency is a git one — the
-// hero must not suggest a `cargo add` that would fail. The line on screen is
-// the headline dependency; the clipboard gets the full block from the Getting
-// Started guide, because gpui-component alone does not build.
-const installCommand =
-    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }';
-const installSnippet = [
-    "[dependencies]",
-    'gpui = { git = "https://github.com/zed-industries/zed" }',
-    'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
-    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }',
-    'gpui-kit-assets = { git = "https://github.com/longbridge/gpui-kit" }',
-].join("\n");
+// `gpui-kit` is the one dependency an application needs: it pins GPUI and
+// carries every layer. The line on screen is what the clipboard gets, with
+// the `[dependencies]` header so it pastes straight into Cargo.toml.
+const installCommand = 'gpui-kit = "0.6.0"';
+const installSnippet = ["[dependencies]", installCommand].join("\n");
 
 const copied = ref(false);
 let copyTimer;
@@ -526,7 +518,7 @@ const copy = computed(() =>
               themeNav: "切换主题",
               menuNav: "打开菜单",
               copyLabel: "复制安装命令",
-              eyebrow: "基于 GPUI，经过 Longbridge 生产验证",
+              eyebrow: "经过 Longbridge 生产验证",
               title: "构建出色的高性能桌面应用。",
               lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体，并可用 JavaScript 扩展；从第一天起用于构建 Longbridge Pro。",
               componentsAction: "浏览组件",
@@ -631,7 +623,7 @@ const copy = computed(() =>
               themeNav: "Toggle color theme",
               menuNav: "Open menu",
               copyLabel: "Copy install command",
-              eyebrow: "Built on GPUI. Proven at Longbridge.",
+              eyebrow: "Proven in production at Longbridge.",
               title: "Build fantastic, high-performance desktop apps.",
               lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — extensible in JavaScript, and used to build Longbridge Pro from day one.",
               componentsAction: "Browse components",

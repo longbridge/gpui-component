@@ -17,7 +17,7 @@ anyhow = "1.0"
 ```
 
 :::tip
-`gpui-kit` 始终引入 GPUI 和 `gpui-base`，并默认带上 `gpui-component`、`gpui-shell` 和默认图标集。如果你希望自行管理图标与资源文件，只保留需要的 feature 即可：
+`gpui-kit` 始终引入 GPUI 和 `gpui-base`，并默认带上 `gpui-component` 和默认图标集。如果你希望自行管理图标与资源文件，只保留需要的 feature 即可：
 
 ```toml
 gpui-kit = { version = "0.6", default-features = false, features = ["component"] }

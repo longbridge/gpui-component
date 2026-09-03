@@ -25,7 +25,7 @@ natural Chinese rather than word-for-word translation.
 
 ## Project Overview
 
-GPUI Kit is a Rust desktop application framework built on GPUI, published at <https://gpui-kit.com>. It ships as three crates: `gpui-base` (unstyled behavior and infrastructure), `gpui-shell` (JavaScript extensions for a Rust host), and `gpui-component` (GPUI Component, the styled component library with 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design). Applications depend on the umbrella crate `gpui-kit` (`crates/kit`), which pins the matching `gpui-pre-*` snapshot of GPUI and puts GPUI at its root (`use gpui_kit::*;`) with `gpui_kit::platform`, `gpui_kit::base`, `gpui_kit::component`, `gpui_kit::shell` and `gpui_kit::assets` reachable by name, so they never list GPUI itself.
+GPUI Kit is a Rust desktop application framework built on GPUI, published at <https://gpui-kit.com>. It ships as three crates: `gpui-base` (unstyled behavior and infrastructure), `gpui-shell` (JavaScript extensions for a Rust host), and `gpui-component` (GPUI Component, the styled component library with 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design). Applications depend on the umbrella crate `gpui-kit` (`crates/kit`), which pins the matching `gpui-pre-*` snapshot of GPUI and puts GPUI at its root (`use gpui_kit::*;`) with `gpui_kit::platform`, `gpui_kit::base`, `gpui_kit::component` and `gpui_kit::assets` reachable by name, so they never list GPUI itself. `gpui-shell` is not part of `gpui-kit` and is not published yet (its `llrt_*` dependencies are git-only); use it as a git dependency.
 
 This is a Rust workspace project with the following main crates:
 

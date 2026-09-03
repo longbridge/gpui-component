@@ -80,6 +80,7 @@ const CRATES_IO_API = "https://crates.io/api/v1/crates";
 const USER_AGENT =
   "gpui-kit bump-gpui (https://github.com/longbridge/gpui-kit)";
 const RATE_LIMIT_FALLBACK_MS = (10 * 60 + 30) * 1000;
+const FACADE_PATH_DEPENDENCY = "proc-macro-crate";
 
 const DEP_TABLES = ["dependencies", "build-dependencies"] as const;
 const DEV_DEP_TABLE = "dev-dependencies";
@@ -794,6 +795,17 @@ function crateManifest(
   for (const table of DEP_TABLES) {
     if (source[table] !== undefined) out[table] = rewriteTable(source[table]);
   }
+  if (crate.name === "gpui_macros") {
+    const dependencies: Toml = (out.dependencies ??= {});
+    const existing = dependencies[FACADE_PATH_DEPENDENCY];
+    if (existing !== undefined) {
+      throw new BumpError(
+        `gpui_macros already depends on \`${FACADE_PATH_DEPENDENCY}\`; ` +
+          "update installFacadeAwareMacroPaths in script/bump-gpui.ts",
+      );
+    }
+    dependencies[FACADE_PATH_DEPENDENCY] = "3";
+  }
   if (source.target !== undefined) {
     const targets: Toml = {};
     for (const [cfg, cfgTables] of Object.entries(source.target as Toml)) {
@@ -895,6 +907,8 @@ function stageWorkspace(
       tomlDump(manifest),
     );
   }
+  installFacadeAwareMacroPaths(staging, crates);
+  makeDeclarativeMacrosCrateRelative(staging, crates);
   vendorGpuiSourcesForApple(staging, crates);
 
   writeFileSync(
@@ -929,6 +943,322 @@ function stageWorkspace(
     `${JSON.stringify(summary, null, 2)}\n`,
   );
   return staging;
+}
+
+const FACADE_PATH_MODULE = "gpui_pre_facade_paths";
+const FACADE_PATH_MARKER = `mod ${FACADE_PATH_MODULE};`;
+const PROC_MACRO_ATTRIBUTE = /^#\[proc_macro(?:_derive\([^\n]*\)|_attribute)?\]$/;
+
+/**
+ * Declarative macros cannot be repaired by the proc-macro output rewriter:
+ * names in their expansion must resolve before a derive macro can run. Make
+ * the known `actions!` derive crate-relative so it also works when re-exported
+ * through gpui-kit (or when gpui-pre itself is renamed by a consumer).
+ */
+function makeDeclarativeMacrosCrateRelative(staging: string, crates: Crate[]) {
+  const gpui = crates.find((crate) => crate.name === "gpui");
+  if (gpui === undefined)
+    throw new BumpError("gpui is missing from the staged crate set");
+  const actionPath = join(staging, gpui.relDir, "src/action.rs");
+  if (!existsSync(actionPath))
+    throw new BumpError("gpui declarative macro source does not exist: src/action.rs");
+  const source = readFileSync(actionPath, "utf8");
+  writeFileSync(actionPath, rewriteDeclarativeMacroPaths(source));
+  logInfo("gpui: made actions! derive paths crate-relative");
+}
+
+function rewriteDeclarativeMacroPaths(source: string): string {
+  const needle = "gpui::Action)]";
+  // Only the `actions!` macro body expands in the caller's crate; gpui's own
+  // modules also derive `gpui::Action` (through `extern crate self as gpui`)
+  // and must keep that spelling, since `$crate` is meaningless outside a macro.
+  const header = "macro_rules! actions {";
+  const start = source.indexOf(header);
+  if (start === -1) throw new BumpError("gpui src/action.rs no longer defines `macro_rules! actions`");
+  let depth = 0;
+  let end = -1;
+  for (let index = start + header.length - 1; index < source.length; index++) {
+    if (source[index] === "{") depth++;
+    else if (source[index] === "}" && --depth === 0) {
+      end = index + 1;
+      break;
+    }
+  }
+  if (end === -1) throw new BumpError("gpui src/action.rs: unbalanced `macro_rules! actions` block");
+  const body = source.slice(start, end);
+  if (!body.includes(needle)) {
+    throw new BumpError(`gpui actions! no longer derives \`${needle}\`; update rewriteDeclarativeMacroPaths in script/bump-gpui.ts`);
+  }
+  return source.slice(0, start) + body.replaceAll(needle, "$crate::Action)]") + source.slice(end);
+}
+
+/**
+ * Wrap every upstream proc-macro entry point at staging time. The wrapper
+ * rewrites only generated path heads (`gpui::` and `gpui_platform::`), so
+ * ordinary identifiers and the upstream implementations remain untouched.
+ *
+ * This intentionally transforms the discovered upstream entry points instead
+ * of maintaining a hand-written list. Strict signature and count checks make
+ * a Zed layout/API change stop the publish rather than silently miss a macro.
+ */
+function wrapProcMacroEntrypoints(source: string): {
+  source: string;
+  count: number;
+} {
+  const lines = source.split("\n");
+  const output: string[] = [];
+  let count = 0;
+  let attributes = 0;
+
+  for (let index = 0; index < lines.length; index++) {
+    const attribute = lines[index];
+    if (!PROC_MACRO_ATTRIBUTE.test(attribute)) {
+      output.push(attribute);
+      continue;
+    }
+    attributes++;
+
+    const between: string[] = [];
+    let signatureIndex = index + 1;
+    while (signatureIndex < lines.length && lines[signatureIndex].startsWith("#[")) {
+      between.push(lines[signatureIndex]);
+      signatureIndex++;
+    }
+    const signature = lines[signatureIndex] ?? "";
+    const match = /^pub fn ([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\) -> TokenStream \{$/.exec(
+      signature,
+    );
+    if (match === null) {
+      throw new BumpError(
+        `gpui_macros proc-macro entry after \`${attribute}\` has an unsupported signature: \`${signature}\``,
+      );
+    }
+    const [, name, parameters] = match;
+    const callArguments = parameters
+      .split(",")
+      .map((parameter) => parameter.trim())
+      .filter(Boolean)
+      .map((parameter) => {
+        const argument = /^([A-Za-z_][A-Za-z0-9_]*)\s*:/.exec(parameter)?.[1];
+        if (argument === undefined)
+          throw new BumpError(
+            `gpui_macros proc-macro \`${name}\` has an unsupported parameter: \`${parameter}\``,
+          );
+        return argument;
+      });
+
+    // `#[cfg]` gates written before or after the `#[proc_macro*]` attribute
+    // must also gate the wrapped body: upstream gates both the entry point and
+    // the module it calls (e.g. `derive_inspector_reflection`), so an ungated
+    // wrapper would reference a module that was configured out.
+    const preceding: string[] = [];
+    for (let back = output.length - 1; back >= 0 && output[back].startsWith("#["); back--) {
+      preceding.unshift(output[back]);
+    }
+    const gates = [...preceding, ...between].filter((line) => line.startsWith("#[cfg"));
+
+    output.push(attribute, ...between, signature);
+    output.push(
+      `    ${FACADE_PATH_MODULE}::rewrite(__gpui_pre_${name}(${callArguments.join(", ")}))`,
+      "}",
+      "",
+      ...gates,
+      `fn __gpui_pre_${name}(${parameters}) -> TokenStream {`,
+    );
+    index = signatureIndex;
+    count++;
+  }
+
+  if (attributes === 0)
+    throw new BumpError(
+      "gpui_macros has no #[proc_macro*] entry points; update installFacadeAwareMacroPaths in script/bump-gpui.ts",
+    );
+  if (count !== attributes)
+    throw new BumpError(
+      `gpui_macros found ${attributes} proc-macro attributes but wrapped ${count}`,
+    );
+  return { source: output.join("\n"), count };
+}
+
+function facadePathModuleSource(): string {
+  return `// Injected by gpui-kit's script/bump-gpui.ts. Keep fixes in that script.
+use proc_macro::{Group, Ident, Literal, Punct, Spacing, TokenStream, TokenTree};
+use proc_macro_crate::{crate_name, FoundCrate};
+
+enum FacadePath {
+    Itself,
+    Name(String),
+}
+
+pub(crate) fn rewrite(stream: TokenStream) -> TokenStream {
+    let facade = match crate_name("gpui-kit") {
+        Ok(FoundCrate::Name(name)) => Some(FacadePath::Name(name)),
+        Ok(FoundCrate::Itself) => Some(FacadePath::Itself),
+        Err(_) => None,
+    };
+    rewrite_stream(stream, facade.as_ref())
+}
+
+fn rewrite_stream(stream: TokenStream, facade: Option<&FacadePath>) -> TokenStream {
+    let tokens: Vec<_> = stream.into_iter().collect();
+    let mut output = TokenStream::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            TokenTree::Group(group) => {
+                let mut rewritten = Group::new(group.delimiter(), rewrite_stream(group.stream(), facade));
+                rewritten.set_span(group.span());
+                output.extend([TokenTree::Group(rewritten)]);
+            }
+            TokenTree::Ident(ident)
+                if is_path_head(&tokens, index)
+                    && (ident.to_string() == "gpui" || ident.to_string() == "gpui_platform") =>
+            {
+                append_path_head(&mut output, ident, facade);
+            }
+            TokenTree::Literal(literal) => {
+                output.extend([TokenTree::Literal(rewrite_literal(literal, facade))]);
+            }
+            token => output.extend([token.clone()]),
+        }
+    }
+    output
+}
+
+fn is_path_head(tokens: &[TokenTree], index: usize) -> bool {
+    matches!(tokens.get(index + 1), Some(TokenTree::Punct(first)) if first.as_char() == ':')
+        && matches!(tokens.get(index + 2), Some(TokenTree::Punct(second)) if second.as_char() == ':')
+}
+
+fn append_path_head(output: &mut TokenStream, original: &Ident, facade: Option<&FacadePath>) {
+    let name = match facade {
+        Some(FacadePath::Itself) => "crate",
+        Some(FacadePath::Name(name)) => name,
+        None => {
+            output.extend([TokenTree::Ident(original.clone())]);
+            return;
+        }
+    };
+    output.extend([TokenTree::Ident(Ident::new(name, original.span()))]);
+    if original.to_string() == "gpui_platform" {
+        output.extend([
+            TokenTree::Punct(Punct::new(':', Spacing::Joint)),
+            TokenTree::Punct(Punct::new(':', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("platform", original.span())),
+        ]);
+    }
+}
+
+fn rewrite_literal(literal: &Literal, facade: Option<&FacadePath>) -> Literal {
+    let (gpui, platform) = match facade {
+        Some(FacadePath::Itself) => ("crate::".into(), "crate::platform::".into()),
+        Some(FacadePath::Name(name)) =>
+            (format!("::{name}::"), format!("::{name}::platform::")),
+        None => return literal.clone(),
+    };
+    let text = literal.to_string();
+    let rewritten = text
+        .replace("::gpui_platform::", &platform)
+        .replace("::gpui::", &gpui);
+    if rewritten == text { return literal.clone() }
+    let Ok(parsed) = rewritten.parse::<TokenStream>() else { return literal.clone() };
+    let mut tokens = parsed.into_iter();
+    match (tokens.next(), tokens.next()) {
+        (Some(TokenTree::Literal(literal)), None) => literal,
+        _ => literal.clone(),
+    }
+}
+`;
+}
+
+function installFacadeAwareMacroPaths(staging: string, crates: Crate[]) {
+  const macros = crates.find((crate) => crate.name === "gpui_macros");
+  if (macros === undefined)
+    throw new BumpError("gpui_macros is missing from the staged crate set");
+  const crateDir = join(staging, macros.relDir);
+  const relativeLib = String(macros.manifest.lib?.path ?? "src/lib.rs");
+  const libPath = join(crateDir, relativeLib);
+  if (!existsSync(libPath))
+    throw new BumpError(`gpui_macros library entry does not exist: ${relativeLib}`);
+  const source = readFileSync(libPath, "utf8");
+  if (source.includes(FACADE_PATH_MARKER))
+    throw new BumpError(`gpui_macros already declares \`${FACADE_PATH_MARKER}\``);
+  const wrapped = wrapProcMacroEntrypoints(source);
+  writeFileSync(libPath, `${FACADE_PATH_MARKER}\n${wrapped.source}`);
+  writeFileSync(join(dirname(libPath), `${FACADE_PATH_MODULE}.rs`), facadePathModuleSource());
+  logInfo(`gpui_macros: made ${wrapped.count} proc-macro entry points facade-aware`);
+}
+
+function runSelfTest() {
+  const declarativeFixture = [
+    "macro_rules! actions {",
+    "    ($ns:path, [ $($name:ident),* ]) => { $( #[derive(gpui::Action)] pub struct $name; )* };",
+    "    ([ $($name:ident),* ]) => { $( #[derive(gpui::Action)] pub struct $name; )* };",
+    "}",
+    "mod builtin {",
+    "    #[derive(gpui::Action)]",
+    "    pub struct Unbind;",
+    "}",
+  ].join("\n");
+  const declarativeTransformed = rewriteDeclarativeMacroPaths(declarativeFixture);
+  if (
+    declarativeTransformed.split("$crate::Action)]").length - 1 !== 2 ||
+    // The derive on gpui's own struct, outside the macro, keeps its path.
+    declarativeTransformed.split("gpui::Action)]").length - 1 !== 1
+  ) {
+    throw new BumpError("self-test did not make only the actions! body crate-relative");
+  }
+  const fixture = `mod implementation;
+use proc_macro::TokenStream;
+#[proc_macro_derive(Action, attributes(action))]
+pub fn derive_action(input: TokenStream) -> TokenStream {
+    implementation::derive_action(input)
+}
+#[proc_macro_attribute]
+#[doc(hidden)]
+pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
+    implementation::test(args, item)
+}
+#[cfg(any(feature = "inspector", debug_assertions))]
+mod gated;
+/// Docs stay on the entry point.
+#[cfg(any(feature = "inspector", debug_assertions))]
+#[proc_macro_attribute]
+pub fn gated(args: TokenStream, input: TokenStream) -> TokenStream {
+    gated::gated(args, input)
+}
+fn helper(input: TokenStream) -> TokenStream { input }
+`;
+  const transformed = wrapProcMacroEntrypoints(fixture);
+  if (transformed.count !== 3) throw new BumpError("self-test wrapped the wrong macro count");
+  for (const expected of [
+    "rewrite(__gpui_pre_derive_action(input))",
+    "fn __gpui_pre_test(args: TokenStream, item: TokenStream)",
+    // The wrapped body carries the entry point's `#[cfg]` gate, and only that.
+    '\n#[cfg(any(feature = "inspector", debug_assertions))]\nfn __gpui_pre_gated(args: TokenStream, input: TokenStream)',
+    "\nfn __gpui_pre_derive_action(input: TokenStream)",
+    "fn helper(input: TokenStream)",
+  ]) {
+    if (!transformed.source.includes(expected))
+      throw new BumpError(`self-test output is missing \`${expected}\``);
+  }
+  let driftFailed = false;
+  try {
+    wrapProcMacroEntrypoints("#[proc_macro]\npub unsafe fn changed() -> TokenStream {");
+  } catch (error) {
+    driftFailed = error instanceof BumpError;
+  }
+  if (!driftFailed) throw new BumpError("self-test did not reject an upstream signature change");
+  const pathRewriter = facadePathModuleSource();
+  for (const expected of [
+    'crate_name("gpui-kit")',
+    'ident.to_string() == "gpui_platform"',
+    'Some(FacadePath::Itself) => "crate"',
+    'Some(FacadePath::Itself) => ("crate::".into(), "crate::platform::".into())',
+  ]) {
+    if (!pathRewriter.includes(expected))
+      throw new BumpError(`self-test path rewriter is missing \`${expected}\``);
+  }
+  logSuccess("Facade-aware gpui_macros transformation self-test passed");
 }
 
 const GPUI_APPLE_SIBLING = '.join("../gpui")';
@@ -1157,6 +1487,7 @@ Arguments:
                     where N continues from what crates.io already has
 
 Options:
+  --self-test       test the gpui_macros source transformation and stop
   --rev REV         Zed branch, tag or commit (default: ${ZED_DEFAULT_REV})
   --zed PATH        use this Zed checkout instead of fetching one
   --dry-run         stage and verify, but do not publish
@@ -1174,6 +1505,7 @@ interface Args {
   stageOnly: boolean;
   noVerify: boolean;
   noWait: boolean;
+  selfTest: boolean;
 }
 
 function parseCommandLine(argv: string[]): Args {
@@ -1189,6 +1521,7 @@ function parseCommandLine(argv: string[]): Args {
         "stage-only": { type: "boolean", default: false },
         "no-verify": { type: "boolean", default: false },
         "no-wait": { type: "boolean", default: false },
+        "self-test": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -1214,11 +1547,16 @@ function parseCommandLine(argv: string[]): Args {
     stageOnly: parsed.values["stage-only"] as boolean,
     noVerify: parsed.values["no-verify"] as boolean,
     noWait: parsed.values["no-wait"] as boolean,
+    selfTest: parsed.values["self-test"] as boolean,
   };
 }
 
 async function main(argv: string[]): Promise<number> {
   const args = parseCommandLine(argv);
+  if (args.selfTest) {
+    runSelfTest();
+    return 0;
+  }
   if (Bun.which("cargo") === null)
     throw new BumpError("cargo is not installed");
 
