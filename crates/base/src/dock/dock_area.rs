@@ -3046,7 +3046,8 @@ mod tests {
             "the added panel's view is registered"
         );
         let state = cx.read(|cx| area.read(cx).dump(cx));
-        let names: Vec<&str> = state.center.children[0]
+        let names: Vec<&str> = state
+            .center
             .children
             .iter()
             .map(|child| child.panel_name.as_str())
@@ -3391,7 +3392,7 @@ mod tests {
         cx.update(|window, cx| area.update(cx, |area, cx| area.load(state, window, cx).unwrap()));
 
         let dumped = cx.read(|cx| area.read(cx).dump(cx));
-        let tiles = &dumped.center.children[0];
+        let tiles = &dumped.center;
         assert_eq!(tiles.panel_name, "Tiles");
         assert_eq!(
             tiles
