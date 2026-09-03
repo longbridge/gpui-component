@@ -151,25 +151,21 @@ its original crate name as the library name, so `use gpui::*` works unchanged.
 # Verify the latest Zed `main` without uploading anything.
 ./script/bump-gpui.ts --dry-run
 
-# Publish from Zed `main` as <VERSION>-<today>.
+# Publish from Zed `main` as the next <VERSION>.<N>.
 ./script/bump-gpui.ts
 
 # Publish a specific Zed commit.
 ./script/bump-gpui.ts --rev 1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a
 ```
 
-Every crate is published at `<VERSION>-<N>`, for example `0.3.0-12`: the
-`VERSION` constant at the top of `script/bump-gpui.ts` plus a counter that
-continues from the highest number crates.io already has (`0.3.0` first).
-A run that stopped part-way resumes the same number. Raise `VERSION` only when
-the crates should sort as a new release. The Zed commit each build came from is
-recorded in every crate's description and `[package.metadata.gpui-pre]`.
-
-Cargo only matches pre-release versions when the requirement itself carries a
-pre-release tag, so `version = "0.3.0"` would find nothing while only
-`0.3.0-N` snapshots exist. Write `version = "0.3.0"`: it accepts `0.3.0`
-and every later `0.3.0-N`, and consumers pick up new snapshots with
-`cargo update`.
+Every crate is published at `<VERSION>.<N>`, for example `0.3.12`: the
+`VERSION` constant at the top of `script/bump-gpui.ts` (`0.3`) plus a patch
+number that continues from the highest one crates.io already has (`0.3.0`
+first). A run that stopped part-way resumes the same number. Raise `VERSION`
+only when the crates should start a new minor series. A requirement such as
+`version = "0.3.0"` accepts every later `0.3.x`, so consumers pick up new
+snapshots with `cargo update`. The Zed commit each build came from is recorded
+in every crate's description and `[package.metadata.gpui-pre]`.
 
 The `Release GPUI` workflow (`.github/workflows/release-gpui.yml`) runs this
 script every other Sunday (even ISO weeks) at 18:00 Beijing time and can be
