@@ -42,7 +42,7 @@ We use Rust programming language to build the `gpui-component` library. Make sur
 To install the `gpui-component` library, you can use Cargo, the Rust package manager. Add the following line to your `Cargo.toml` file under the `[dependencies]` section:
 
 ```toml
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```

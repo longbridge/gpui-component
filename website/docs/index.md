@@ -43,7 +43,7 @@ Add `gpui` and `gpui-component` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
+gpui = { package = "gpui-pre", version = "0.3.0" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
