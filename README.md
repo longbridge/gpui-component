@@ -237,6 +237,6 @@ See the [comparison with Iced, egui and Qt 6](https://gpui-kit.com/docs/comparis
 
 Apache-2.0
 
-- Built on [GPUI](https://github.com/zed-industries/zed), the UI framework behind Zed, also Apache-2.0.
+- Built on [GPUI](https://github.com/zed-industries/zed), the UI framework from Zed Industries, also Apache-2.0. The `gpui-pre-*` crates are snapshots of it, published with Zed's license and notices intact.
 - UI design based on [shadcn/ui](https://ui.shadcn.com), some from [Reui](https://reui.io).
 - Icons from [Lucide](https://lucide.dev).

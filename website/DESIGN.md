@@ -260,3 +260,11 @@ navbar rather than inside the Resources menu. Submissions come from
 | `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages                                |
 | `.vitepress/config.mts`                            | Navigation, sidebar generation, locales                                 |
 | `src/*.theme.json`                                 | shiki syntax themes; the source of `--code-*`                           |
+
+## Attribution
+
+The footer is the one place the site states GPUI's origin, in one plain
+line: built on GPUI, from Zed Industries, also Apache-2.0. The landing page
+footer and the docs footer say the same thing. Do not repeat it in the hero,
+tutorials or API pages, where the product is GPUI Kit, and do not grow it into
+a disclaimer.
