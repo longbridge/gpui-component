@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- color-picker
 ## 导入
 
 ```rust
-use gpui_base::{ColorPicker, ColorPickerEvent, ColorPickerState, ColorSwatch};
+use gpui_kit::base::{ColorPicker, ColorPickerEvent, ColorPickerState, ColorSwatch};
 ```
 
 ## 结构与 API

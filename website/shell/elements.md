@@ -362,10 +362,10 @@ div()
   .child(name);
 ```
 
-Role names mirror `gpui::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui-kit.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
+Role names mirror `gpui_kit::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui-kit.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
 
 ```text
-unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
+unknown accessibility role `listbox`; the names mirror gpui_kit::Role in snake_case
 — see the Role type in gpui-kit.d.ts
 ```
 

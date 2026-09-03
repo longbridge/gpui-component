@@ -14,13 +14,13 @@ order: 9
 
 依赖可以是 manifest 指向的任何一个 Git 仓库。`omarchy-ui` 属于其中一类，而这一类有自己的名字：**shell package**——为 gpui-shell 而写、而不是为 Node 或浏览器而写的 JavaScript package，就像 crate 是为 Cargo 而写的一样。五件事决定一个仓库是不是 shell package：
 
-| shell package                                          | 原因                                                       |
-| ------------------------------------------------------ | ---------------------------------------------------------- |
-| 发布 ES module，且不需要构建步骤                       | 运行时直接求值 checkout 里的文件，而且 `require` 不存在     |
-| 根目录 `package.json` 带 `"type": "module"` 与 `main`   | 它让声明只需一行，并同时向运行时和编辑器指明 entry          |
-| 只 import 内建模块与自己的文件                          | 其余的都解析不了——它无法反向伸回 import 它的应用            |
-| 把 `gpui-kit` 与 `gpui-base` 当作由环境提供，而非自己的依赖 | 它们来自加载它的运行时，版本由 Host 决定                    |
-| 不声明任何属于自己的 capability                         | 它的 `fs` 与 `fetch` 调用都跑在使用方应用的授权之下         |
+| shell package                                               | 原因                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------- |
+| 发布 ES module，且不需要构建步骤                            | 运行时直接求值 checkout 里的文件，而且 `require` 不存在 |
+| 根目录 `package.json` 带 `"type": "module"` 与 `main`       | 它让声明只需一行，并同时向运行时和编辑器指明 entry      |
+| 只 import 内建模块与自己的文件                              | 其余的都解析不了——它无法反向伸回 import 它的应用        |
+| 把 `gpui-kit` 与 `gpui-base` 当作由环境提供，而非自己的依赖 | 它们来自加载它的运行时，版本由 Host 决定                |
+| 不声明任何属于自己的 capability                             | 它的 `fs` 与 `fetch` 调用都跑在使用方应用的授权之下     |
 
 这个名字不会被任何代码读取：依赖是靠被声明来识别的，不是靠被贴标签。它的作用是让一个作者写下、另一个作者找到；写给搜索引擎的那一份，是仓库上的 `gpui-shell` topic。
 
@@ -68,7 +68,9 @@ export function render(cx) {
 
   const page = new PageColumn("projects-page").child(card).build(cx);
   return new AppShell()
-    .content(new CenteredWorkspace("projects-workspace").content(page).build(cx))
+    .content(
+      new CenteredWorkspace("projects-workspace").content(page).build(cx),
+    )
     .build(cx);
 }
 ```
@@ -77,14 +79,14 @@ export function render(cx) {
 
 ## 什么能解析，解析到哪里
 
-| 写法                             | 解析结果                                                     |
-| -------------------------------- | ------------------------------------------------------------ |
-| `"omarchy-ui"`                   | package entry——见 [package entry](#package-entry)            |
-| `"omarchy-ui/src/style"`         | checkout 内的该文件，`.js` 后缀可省略                        |
-| package 内部的 `"./theme.js"`    | 该 package 自己 checkout 内的文件                            |
-| package 内部的 `"gpui-kit"`          | 内建模块，与应用代码中完全一致                               |
-| 另一个已声明的依赖名             | 那个 package 的 entry——已声明的 package 之间互相可见         |
-| 从 package 内部用裸名 import 应用文件 | 拒绝：package 不能反向伸回 import 它的应用                |
+| 写法                                  | 解析结果                                             |
+| ------------------------------------- | ---------------------------------------------------- |
+| `"omarchy-ui"`                        | package entry——见 [package entry](#package-entry)    |
+| `"omarchy-ui/src/style"`              | checkout 内的该文件，`.js` 后缀可省略                |
+| package 内部的 `"./theme.js"`         | 该 package 自己 checkout 内的文件                    |
+| package 内部的 `"gpui-kit"`           | 内建模块，与应用代码中完全一致                       |
+| 另一个已声明的依赖名                  | 那个 package 的 entry——已声明的 package 之间互相可见 |
+| 从 package 内部用裸名 import 应用文件 | 拒绝：package 不能反向伸回 import 它的应用           |
 
 解析结果一旦离开起点所在的 checkout，就会在模块加载前被拒绝，因此 `../` 无法走出一个 package、进入旁边的缓存。在应用目录内，同一条边界就是应用根目录，也正是[沙箱](./capabilities.md#沙箱)对相对 import 已有的规则。
 
@@ -105,11 +107,11 @@ export function render(cx) {
 }
 ```
 
-| 形式                       | 选中                        |
-| -------------------------- | --------------------------- |
-| `owner/repository`         | `main`                      |
+| 形式                       | 选中                         |
+| -------------------------- | ---------------------------- |
+| `owner/repository`         | `main`                       |
 | `owner/repository#ref`     | 该 branch、tag 或 commit-ish |
-| `https://…/repository`     | remote 的 `HEAD`            |
+| `https://…/repository`     | remote 的 `HEAD`             |
 | `https://…/repository#ref` | 该 branch、tag 或 commit-ish |
 
 简写形式故意收得很紧：恰好一组 `owner/repository`，字符限于字母数字与 `.`、`-`、`_`，最多一个 `#`，前后不能有空白，fragment 必须是合法的 Git ref 名。其余一律作为 manifest 错误，而不是从一个笔误里猜出 URL。完整 URL 可以是任意 Git 传输方式，包括 `ssh://` 与 `git@host:owner/repo`。
@@ -202,13 +204,13 @@ node_modules/
 
 ## 抓取与链接何时发生
 
-| 调用                                          | 抓取并链接 | 失败时                                  |
-| --------------------------------------------- | ---------- | --------------------------------------- |
-| `gpui-shell <directory>`                       | 是         | 加载失败；仅链接这一步是 best-effort    |
-| `gpui-shell check <directory>`                 | 是         | 作为 check 失败报告                     |
-| `gpui-shell types <directory>`                 | 是         | 报告错误，并带非零退出码                |
-| 嵌入式 Host 的 `ShellRuntime::load`            | 是         | 加载失败；仅链接这一步是 best-effort    |
-| `gpui_shell::write_dependency_links(root)`     | 是         | 以 error 返回给调用方                   |
+| 调用                                            | 抓取并链接 | 失败时                               |
+| ----------------------------------------------- | ---------- | ------------------------------------ |
+| `gpui-shell <directory>`                        | 是         | 加载失败；仅链接这一步是 best-effort |
+| `gpui-shell check <directory>`                  | 是         | 作为 check 失败报告                  |
+| `gpui-shell types <directory>`                  | 是         | 报告错误，并带非零退出码             |
+| 嵌入式 Host 的 `ShellRuntime::load`             | 是         | 加载失败；仅链接这一步是 best-effort |
+| `gpui_kit::shell::write_dependency_links(root)` | 是         | 以 error 返回给调用方                |
 
 加载依赖抓取，所以无法 materialize 的依赖会让加载失败。写编辑器链接则不然：只读的应用目录是失去编辑器类型的理由，不是拒绝运行的理由。`gpui-shell types` 存在的意义正是这个差别——它做同样的事，并把没能完成的部分报出来。
 
@@ -218,16 +220,16 @@ hot-reload 对待 package 的方式与对待应用文件一致：每次加载都
 
 以下每一种都在应用 JavaScript 求值之前报告：
 
-| 信息                                                       | 原因                                                    |
-| ---------------------------------------------------------- | ------------------------------------------------------- |
-| `GitHub shorthand must contain exactly owner/repository …`  | 简写里带了路径、scheme 或非法字符                       |
-| `a string dependency #Git ref must not be empty`            | 末尾多了一个 `#`                                        |
-| `could not clone Git dependency …`                          | Git 失败：remote 不存在、没有凭据、没有网络             |
-| `git timed out after 30 seconds …`                          | fetch 卡住，通常是弹出了交互式凭据提示                  |
-| `Git dependency … cache origin is …, expected …`            | 两个 manifest 对同一条缓存记录不一致；删掉它再试        |
-| `Git dependency … package.json main must be a string`       | `main` 是对象，或是逃出 checkout 的路径                 |
-| `Git dependency … has no entry …`                           | `main` 或 object 形式的 `entry` 指向不存在的东西        |
-| `cannot resolve module … from …`                            | subpath import 指向不存在的文件，或离开了 checkout      |
+| 信息                                                       | 原因                                               |
+| ---------------------------------------------------------- | -------------------------------------------------- |
+| `GitHub shorthand must contain exactly owner/repository …` | 简写里带了路径、scheme 或非法字符                  |
+| `a string dependency #Git ref must not be empty`           | 末尾多了一个 `#`                                   |
+| `could not clone Git dependency …`                         | Git 失败：remote 不存在、没有凭据、没有网络        |
+| `git timed out after 30 seconds …`                         | fetch 卡住，通常是弹出了交互式凭据提示             |
+| `Git dependency … cache origin is …, expected …`           | 两个 manifest 对同一条缓存记录不一致；删掉它再试   |
+| `Git dependency … package.json main must be a string`      | `main` 是对象，或是逃出 checkout 的路径            |
+| `Git dependency … has no entry …`                          | `main` 或 object 形式的 `entry` 指向不存在的东西   |
+| `cannot resolve module … from …`                           | subpath import 指向不存在的文件，或离开了 checkout |
 
 ## 发布一个 shell package
 
@@ -241,8 +243,8 @@ shell package 就是一个普通的 Git 仓库：`omarchy-ui` 没有构建产物
 
 ## 继续阅读
 
-| 页面                                    | 内容                                               |
-| --------------------------------------- | -------------------------------------------------- |
-| [能力](./capabilities.md)               | manifest 的其余部分：身份、版本，以及脚本能触达什么 |
-| [快速开始](./getting-started.md)        | `gpui-shell types`、`check`，以及依赖加入的那份声明 |
-| [API 参考](./api.md)                    | package 与你的代码一同 import 的内建模块            |
+| 页面                             | 内容                                                |
+| -------------------------------- | --------------------------------------------------- |
+| [能力](./capabilities.md)        | manifest 的其余部分：身份、版本，以及脚本能触达什么 |
+| [快速开始](./getting-started.md) | `gpui-shell types`、`check`，以及依赖加入的那份声明 |
+| [API 参考](./api.md)             | package 与你的代码一同 import 的内建模块            |

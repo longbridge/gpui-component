@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- resizable
 ## Import
 
 ```rust
-use gpui_base::{ResizablePanel, ResizablePanelGroup, ResizableState, h_resizable, resizable_panel};
+use gpui_kit::base::{ResizablePanel, ResizablePanelGroup, ResizableState, h_resizable, resizable_panel};
 ```
 
 ## Anatomy and API

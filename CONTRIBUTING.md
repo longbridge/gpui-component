@@ -179,8 +179,14 @@ constant in the script; keep that version in step with the hand-published one.
 
 The script runs on [Bun](https://bun.sh) and needs Cargo 1.90+ (for `cargo publish --workspace`)
 and a crates.io token from `cargo login`. It stages a standalone workspace in
-`target/gpui-pre/workspace`, verifies it with `cargo publish --dry-run`, and
-then uploads. crates.io only accepts a few brand-new crates per ten minutes, so
+`target/gpui-pre/workspace`, verifies it with `cargo publish --dry-run`, then
+builds and tests this repository against the staged crates (the same `check`,
+`clippy` and `test` commands CI runs, injected with `--config patch.crates-io`
+so nothing in the checkout changes), and only then uploads. Applications
+depend on `gpui-pre` with a caret requirement and pick up new snapshots on
+`cargo update`, so a Zed change that breaks `gpui-component` fails the release
+instead of reaching users; adapt the repository first, then publish. Pass
+`--skip-kit-check` only when you know why. crates.io only accepts a few brand-new crates per ten minutes, so
 the first run waits between batches; re-running resumes from where it stopped.
 Pass `--zed <path>` to reuse a local Zed checkout and `--stage-only` to inspect
 the generated workspace.

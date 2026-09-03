@@ -62,9 +62,9 @@ The window state belongs to the retained `TextSelectionLayer` element. Handles a
 Add one `TextSelectionLayer` as the first child of the window root:
 
 ```rust
-use gpui::prelude::*;
-use gpui::{Context, Render, Window};
-use gpui_base::TextSelectionLayer;
+use gpui_kit::prelude::*;
+use gpui_kit::{Context, Render, Window};
+use gpui_kit::base::TextSelectionLayer;
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -83,8 +83,8 @@ impl Render for AppView {
 Create one handle for the semantic lifetime of the participant. Do not create a new handle every frame.
 
 ```rust
-use gpui::{Context, Subscription, Window};
-use gpui_base::TextSelectionHandle;
+use gpui_kit::{Context, Subscription, Window};
+use gpui_kit::base::TextSelectionHandle;
 
 struct DocumentView {
     selection: TextSelectionHandle,
@@ -113,15 +113,15 @@ The `fallback_copy_text` passed to `TextSelectionHandle::new` is used until the 
 Call `TextSelectionHandle::register(registration, window, cx)` once per rendered frame, after the handle's bounds and hitbox are known:
 
 ```rust
-use gpui::{Bounds, Hitbox, Pixels, Window};
-use gpui_base::TextSelectionRegistration;
+use gpui_kit::{Bounds, Hitbox, Pixels, Window};
+use gpui_kit::base::TextSelectionRegistration;
 
 fn register_selection(
     handle: &TextSelectionHandle,
     hitbox: Hitbox,
     bounds: Bounds<Pixels>,
     window: &mut Window,
-    cx: &mut gpui::App,
+    cx: &mut gpui_kit::App,
 ) {
     handle.register(
         TextSelectionRegistration::new(hitbox, bounds)
@@ -146,15 +146,15 @@ Handles not registered in the current frame stop participating automatically.
 In paint, call `TextSelectionHandle::update_runs` with laid-out runs containing the exact text used to create each `TextLayout`. It returns a `TextSelectionProjection` containing UTF-8-safe byte ranges:
 
 ```rust
-use gpui::{Bounds, Pixels, SharedString, TextLayout};
-use gpui_base::TextSelectionRun;
+use gpui_kit::{Bounds, Pixels, SharedString, TextLayout};
+use gpui_kit::base::TextSelectionRun;
 
 fn selected_range(
     handle: &TextSelectionHandle,
     text: SharedString,
     layout: TextLayout,
     bounds: Bounds<Pixels>,
-    cx: &mut gpui::App,
+    cx: &mut gpui_kit::App,
 ) -> Option<std::ops::Range<usize>> {
     handle
         .update_runs(
@@ -188,7 +188,7 @@ cargo run -p gpui-base --example components -- text-selection
 Use `TextSelection` associated functions to read or mutate the window selection. No extension trait import is required:
 
 ```rust
-use gpui_base::TextSelection;
+use gpui_kit::base::TextSelection;
 
 let has_selection = TextSelection::has_selection(window, cx);
 let text = TextSelection::selected_text(window, cx);
@@ -225,7 +225,7 @@ For a virtualized document, inspect `TextSelectionEvent::SelectionChanged` and u
 Only handles in the active `TextSelectionScopeId` participate. Set the active window scope, then mark the corresponding rendered subtree:
 
 ```rust
-use gpui_base::{ElementExt as _, TextSelection, TextSelectionScopeId};
+use gpui_kit::base::{ElementExt as _, TextSelection, TextSelectionScopeId};
 
 let dialog_scope = TextSelectionScopeId::new();
 TextSelection::activate_scope(dialog_scope, window, cx);

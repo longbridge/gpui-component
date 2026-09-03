@@ -151,7 +151,7 @@
                         /></span>
                         <span class="mac-window__title">main.rs</span>
                     </div>
-                    <pre><code><span class="c-kw">use</span> gpui_component::{<span class="c-mod">button</span>::*, *};
+                    <pre><code><span class="c-kw">use</span> gpui_kit::component::{<span class="c-mod">button</span>::*, *};
 
 <span class="c-kw">impl</span> <span class="c-type">Render</span> <span class="c-kw">for</span> <span class="c-type">HelloWorld</span> {
     <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;) -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span> {

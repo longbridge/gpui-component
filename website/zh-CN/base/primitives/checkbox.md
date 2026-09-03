@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- checkbox
 ## 导入
 
 ```rust
-use gpui_base::{Checkbox, CheckboxIndicator};
+use gpui_kit::base::{Checkbox, CheckboxIndicator};
 ```
 
 ## 结构与 API

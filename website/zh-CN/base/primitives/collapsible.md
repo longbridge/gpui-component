@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- collapsible
 ## 导入
 
 ```rust
-use gpui_base::{Collapsible};
+use gpui_kit::base::{Collapsible};
 ```
 
 ## 结构与 API

@@ -45,6 +45,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 
 /**
@@ -1494,6 +1495,7 @@ Options:
   --stage-only      stage the workspace and stop
   --no-verify       skip \`cargo publish --dry-run\` verification
   --no-wait         abort instead of waiting on the crates.io rate limit
+  --skip-kit-check  do not build and test this repository against the staged crates
   -h, --help        show this help
 `;
 
@@ -1505,6 +1507,7 @@ interface Args {
   stageOnly: boolean;
   noVerify: boolean;
   noWait: boolean;
+  skipKitCheck: boolean;
   selfTest: boolean;
 }
 
@@ -1521,6 +1524,7 @@ function parseCommandLine(argv: string[]): Args {
         "stage-only": { type: "boolean", default: false },
         "no-verify": { type: "boolean", default: false },
         "no-wait": { type: "boolean", default: false },
+        "skip-kit-check": { type: "boolean", default: false },
         "self-test": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
@@ -1547,8 +1551,84 @@ function parseCommandLine(argv: string[]): Args {
     stageOnly: parsed.values["stage-only"] as boolean,
     noVerify: parsed.values["no-verify"] as boolean,
     noWait: parsed.values["no-wait"] as boolean,
+    skipKitCheck: parsed.values["skip-kit-check"] as boolean,
     selfTest: parsed.values["self-test"] as boolean,
   };
+}
+
+/**
+ * Build and test this repository against the staged crates before anything is
+ * uploaded. Applications depend on `gpui-pre` with a caret requirement, so a
+ * snapshot whose API drifted away from `gpui-component` would reach them on
+ * their next `cargo update`; this turns that into a failed release instead.
+ *
+ * The staged crates are injected with `--config patch.crates-io…` so no file
+ * in the repository changes. They are patched from a copy outside the
+ * repository: a path dependency under the workspace root would be treated as
+ * a member of this workspace and lose its own `workspace = true` inheritance.
+ * Cargo keeps a locked version when it still satisfies the requirement, so
+ * the published crates are moved to the staged version in a scratch copy of
+ * `Cargo.lock`, which is restored afterwards.
+ */
+async function verifyKitAgainstStaging(staging: string, crates: Crate[], version: string) {
+  const mirror = join(tmpdir(), `${PUBLISH_PREFIX}-kit-check`);
+  rmSync(mirror, { recursive: true, force: true });
+  cpSync(staging, mirror, {
+    recursive: true,
+    // Leave the staged workspace's own build directory behind; the path is
+    // judged relative to the staging root, which itself lives under `target/`.
+    filter: (path) => relative(staging, path).split("/")[0] !== "target",
+  });
+  const patches = crates.flatMap((crate) => [
+    "--config",
+    `patch.crates-io.${crate.publishedName}.path=${JSON.stringify(join(mirror, crate.relDir))}`,
+  ]);
+  const lockPath = join(REPO_ROOT, "Cargo.lock");
+  const lockBackup = existsSync(lockPath) ? readFileSync(lockPath) : undefined;
+  const locked = new Set(
+    [...(lockBackup?.toString() ?? "").matchAll(/^name = "([^"]+)"$/gm)].map((m) => m[1]),
+  );
+  try {
+    const toUpdate = crates.filter((crate) => locked.has(crate.publishedName));
+    if (toUpdate.length > 0) {
+      await run(
+        ["cargo", "update", ...patches, ...toUpdate.flatMap((crate) => ["-p", crate.publishedName])],
+        { cwd: REPO_ROOT },
+      );
+    }
+
+    const metadata = JSON.parse(
+      await run(["cargo", "metadata", "--format-version", "1", ...patches], { cwd: REPO_ROOT, capture: true }),
+    ) as { packages: { name: string; version: string; manifest_path: string }[] };
+    const foreign = crates
+      .map((crate) => metadata.packages.find((pkg) => pkg.name === crate.publishedName))
+      .filter((pkg): pkg is NonNullable<typeof pkg> => pkg !== undefined && !pkg.manifest_path.startsWith(mirror));
+    if (foreign.length > 0) {
+      const detail = foreign.map((pkg) => `${pkg.name} ${pkg.version} from ${pkg.manifest_path}`).join("\n  ");
+      throw new BumpError(
+        `the workspace did not resolve to the staged ${version}; its Cargo.toml requirement rejects it:\n  ${detail}`,
+      );
+    }
+
+    // The same commands the repository's CI runs.
+    const commands = [
+      ["cargo", "check", ...patches, "--workspace", "--all-targets"],
+      ["cargo", "clippy", ...patches, "-p", "gpui-component", "-p", "gpui-component-story", "-p", "gpui-kit-assets", "-p", "gpui-kit", "--", "--deny", "warnings"],
+      ["cargo", "test", ...patches, "--workspace", "--exclude", "gpui-shell", "--features", "gpui-component-story/test-support"],
+    ];
+    for (const cmd of commands) {
+      const { code } = await runStreaming(cmd, REPO_ROOT);
+      if (code !== 0) {
+        throw new BumpError(
+          `gpui-kit does not build or pass its tests against the staged gpui-pre ${version}; ` +
+            "adapt the repository to the Zed changes before publishing",
+        );
+      }
+    }
+  } finally {
+    if (lockBackup !== undefined) writeFileSync(lockPath, lockBackup);
+    else if (existsSync(lockPath)) rmSync(lockPath);
+  }
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -1560,7 +1640,7 @@ async function main(argv: string[]): Promise<number> {
   if (Bun.which("cargo") === null)
     throw new BumpError("cargo is not installed");
 
-  const totalSteps = args.stageOnly ? 3 : args.dryRun ? 4 : 5;
+  const totalSteps = args.stageOnly ? 3 : args.dryRun ? 5 : 6;
   logHeader(`Publishing GPUI from Zed as ${PUBLISH_PREFIX}`);
   mkdirSync(WORK_DIR, { recursive: true });
 
@@ -1604,12 +1684,21 @@ async function main(argv: string[]): Promise<number> {
     logSuccess("Every crate packages and builds");
   }
   console.log();
+
+  if (args.skipKitCheck) {
+    logWarn("Skipping the gpui-kit compatibility check (--skip-kit-check)");
+  } else {
+    logStep(`5/${totalSteps}`, "Building and testing gpui-kit against the staged crates");
+    await verifyKitAgainstStaging(staging, crates, version);
+    logSuccess(`gpui-kit builds and passes its tests against gpui-pre ${version}`);
+  }
+  console.log();
   if (args.dryRun) {
     logInfo("Dry run complete; nothing was uploaded");
     return 0;
   }
 
-  logStep(`5/${totalSteps}`, "Publishing to crates.io");
+  logStep(`6/${totalSteps}`, "Publishing to crates.io");
   await publish(staging, crates, version, !args.noWait);
   console.log();
 

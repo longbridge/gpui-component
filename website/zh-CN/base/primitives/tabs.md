@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- tabs
 ## 导入
 
 ```rust
-use gpui_base::{Tab, Tabs};
+use gpui_kit::base::{Tab, Tabs};
 ```
 
 ## 结构与 API

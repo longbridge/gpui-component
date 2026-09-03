@@ -21,8 +21,8 @@ cargo run -p gpui-base --example components -- nav-stack
 ## Import
 
 ```rust
-use gpui_base::{NavMotion, NavOperation, NavPage, NavStack, NavStackState};
-use gpui_base::motion::{PresencePhase, Transition};
+use gpui_kit::base::{NavMotion, NavOperation, NavPage, NavStack, NavStackState};
+use gpui_kit::base::motion::{PresencePhase, Transition};
 ```
 
 ## Anatomy and API

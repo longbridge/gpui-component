@@ -134,6 +134,8 @@ fn language_menu(_: &App) -> MenuItem {
 
 #[cfg(all(test, feature = "test-support"))]
 mod tests {
+    // The glob also carries GPUI's `test` attribute; keep the built-in one for `#[test]`.
+    use core::prelude::v1::test;
     use gpui_kit::*;
 
     use super::*;

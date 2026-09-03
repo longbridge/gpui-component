@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- hover-card
 ## 导入
 
 ```rust
-use gpui_base::{HoverCard};
+use gpui_kit::base::{HoverCard};
 ```
 
 ## 结构与 API

@@ -121,7 +121,7 @@ implementing this architecture:
 - Keep source distribution or registry tooling above the `gpui-base` seam; no
   registry or CLI crate is currently part of the workspace.
 - Preserve 100% backward compatibility for existing consumers, including current
-  imports such as `use gpui_component::button::Button;`.
+  imports such as `use gpui_kit::component::button::Button;`.
 
 ### Component Initialization
 

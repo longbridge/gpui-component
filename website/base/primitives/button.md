@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- button
 ## Import
 
 ```rust
-use gpui_base::{Button};
+use gpui_kit::base::{Button};
 ```
 
 ## Anatomy and API

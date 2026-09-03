@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- sheet
 ## Import
 
 ```rust
-use gpui_base::{Sheet};
+use gpui_kit::base::{Sheet};
 ```
 
 ## Anatomy and API

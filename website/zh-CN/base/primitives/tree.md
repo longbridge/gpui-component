@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- tree
 ## 导入
 
 ```rust
-use gpui_base::{Tree, TreeItem, TreeState};
+use gpui_kit::base::{Tree, TreeItem, TreeState};
 ```
 
 ## 结构与 API

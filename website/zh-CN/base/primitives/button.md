@@ -19,7 +19,7 @@ cargo run -p gpui-base --example components -- button
 ## 导入
 
 ```rust
-use gpui_base::Button;
+use gpui_kit::base::Button;
 ```
 
 ## 结构与 API

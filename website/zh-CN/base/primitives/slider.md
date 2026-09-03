@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- slider
 ## 导入
 
 ```rust
-use gpui_base::{Slider, SliderState};
+use gpui_kit::base::{Slider, SliderState};
 ```
 
 ## 结构与 API

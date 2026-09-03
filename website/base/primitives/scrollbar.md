@@ -30,8 +30,8 @@ The source is available in
 ```rust
 use std::time::Duration;
 
-use gpui::{div, px, rgb, ScrollHandle, Styled as _};
-use gpui_base::{
+use gpui_kit::{div, px, rgb, ScrollHandle, Styled as _};
+use gpui_kit::base::{
     Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarMode,
     ScrollbarMotion, ScrollbarStyles, ScrollbarTheme, Theme,
 };
@@ -55,7 +55,7 @@ impl ActivityList {
         }
     }
 
-    fn render_list(&self) -> impl gpui::IntoElement {
+    fn render_list(&self) -> impl gpui_kit::IntoElement {
         div()
             .relative()
             .size_full()
@@ -114,7 +114,7 @@ scroll.
 it during application initialization or when your design-system theme changes.
 
 ```rust
-fn install_scrollbar_theme(cx: &mut gpui::App) {
+fn install_scrollbar_theme(cx: &mut gpui_kit::App) {
     let styles = ScrollbarStyles::default()
         .track(|style| {
             style
@@ -243,7 +243,7 @@ scrollable extent:
 
 ```rust
 Scrollbar::vertical(&scroll_handle)
-    .scroll_size(gpui::size(px(800.), px(4_000.)));
+    .scroll_size(gpui_kit::size(px(800.), px(4_000.)));
 ```
 
 ## Custom scroll handles
@@ -252,8 +252,8 @@ Scrollbar::vertical(&scroll_handle)
 `ScrollbarHandle`. Custom scroll containers can implement the same trait:
 
 ```rust
-use gpui::{Bounds, Pixels, Point, Size};
-use gpui_base::ScrollbarHandle;
+use gpui_kit::{Bounds, Pixels, Point, Size};
+use gpui_kit::base::ScrollbarHandle;
 
 impl ScrollbarHandle for MyScrollState {
     fn viewport_bounds(&self) -> Bounds<Pixels> {

@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- toggle-group
 ## Import
 
 ```rust
-use gpui_base::{Toggle, ToggleGroup};
+use gpui_kit::base::{Toggle, ToggleGroup};
 ```
 
 ## Anatomy and API

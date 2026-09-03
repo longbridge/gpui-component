@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- accordion
 ## 导入
 
 ```rust
-use gpui_base::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
+use gpui_kit::base::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
 ```
 
 ## 结构与 API

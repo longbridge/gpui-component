@@ -362,10 +362,10 @@ div()
   .child(name);
 ```
 
-role 的取值逐字镜像 `gpui::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui-kit.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
+role 的取值逐字镜像 `gpui_kit::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui-kit.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
 
 ```text
-unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
+unknown accessibility role `listbox`; the names mirror gpui_kit::Role in snake_case
 — see the Role type in gpui-kit.d.ts
 ```
 

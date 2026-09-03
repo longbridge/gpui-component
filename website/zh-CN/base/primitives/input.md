@@ -11,7 +11,7 @@ order: 14
 ## 导入
 
 ```rust
-use gpui_base::input::{Input, InputEvent, InputState};
+use gpui_kit::base::input::{Input, InputEvent, InputState};
 ```
 
 ## 基本用法

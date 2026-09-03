@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- link
 ## 导入
 
 ```rust
-use gpui_base::{Link};
+use gpui_kit::base::{Link};
 ```
 
 ## 结构与 API

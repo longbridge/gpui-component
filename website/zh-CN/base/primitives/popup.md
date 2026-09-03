@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- popup
 ## 导入
 
 ```rust
-use gpui_base::{Popup};
+use gpui_kit::base::{Popup};
 ```
 
 ## 结构与 API

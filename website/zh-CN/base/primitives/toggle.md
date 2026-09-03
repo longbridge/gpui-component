@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- toggle
 ## 导入
 
 ```rust
-use gpui_base::{Toggle};
+use gpui_kit::base::{Toggle};
 ```
 
 ## 结构与 API

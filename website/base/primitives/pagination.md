@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- pagination
 ## Import
 
 ```rust
-use gpui_base::{Pagination, PaginationState};
+use gpui_kit::base::{Pagination, PaginationState};
 ```
 
 ## Anatomy and API

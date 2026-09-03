@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- radio
 ## 导入
 
 ```rust
-use gpui_base::{Radio};
+use gpui_kit::base::{Radio};
 ```
 
 ## 结构与 API

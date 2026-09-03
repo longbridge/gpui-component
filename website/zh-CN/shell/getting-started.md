@@ -13,19 +13,19 @@ order: 2
 `gpui-shell` 二进制本身是一个很薄的 Host：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的 Host 做的也是同样四件事。
 
 ```rust
-use gpui_shell::{Capabilities, ShellRuntime};
+use gpui_kit::shell::{Capabilities, ShellRuntime};
 
 gpui_platform::application()
-    .with_assets(gpui_shell::AppAssets::new(root.clone()))
+    .with_assets(gpui_kit::shell::AppAssets::new(root.clone()))
     .run(move |cx| {
         // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
-        gpui_shell::init(cx);
+        gpui_kit::shell::init(cx);
 
         let runtime = ShellRuntime::new(cx).expect("script runtime");
 
         // 在 Host 开口之前，什么都不允许。
-        gpui_shell::set_store_path(store_directory.join("store.json"));
-        gpui_shell::set_capabilities(
+        gpui_kit::shell::set_store_path(store_directory.join("store.json"));
+        gpui_kit::shell::set_capabilities(
             Capabilities::new()
                 .read_roots([root.clone()])
                 .write_roots([store_directory.clone()])
@@ -68,7 +68,11 @@ export default class Hello extends View {
       .justify_center()
       .gap(12)
       .bg(cx.theme().colors.background)
-      .child(div().text_color(cx.theme().colors.foreground).child(`Clicked ${this.clicks} times`))
+      .child(
+        div()
+          .text_color(cx.theme().colors.foreground)
+          .child(`Clicked ${this.clicks} times`),
+      )
       .child(
         Button.new("click")
           .h(28)
@@ -184,11 +188,11 @@ gpui-shell types <directory>
 gpui-shell --help | --version
 ```
 
-| 参数           | 含义                                        |
-| -------------- | ------------------------------------------- |
-| `<directory>`  | 应用根目录，或其中的 `main.js`              |
-| `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1` |
+| 参数           | 含义                                               |
+| -------------- | -------------------------------------------------- |
+| `<directory>`  | 应用根目录，或其中的 `main.js`                     |
+| `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
 | `types`        | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
-| `--watch`      | 源码变化时重载                              |
-| `--dev`        | 开发模式，隐含 `--watch`                    |
-| `--print-spec` | 配合 `check`，额外打印构建出的元素描述      |
+| `--watch`      | 源码变化时重载                                     |
+| `--dev`        | 开发模式，隐含 `--watch`                           |
+| `--print-spec` | 配合 `check`，额外打印构建出的元素描述             |

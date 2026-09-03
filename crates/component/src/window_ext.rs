@@ -39,7 +39,7 @@ pub trait WindowExt: Sized {
     /// # Examples
     ///
     /// ```ignore
-    /// use gpui_component::{AlertDialog, alert::AlertVariant};
+    /// use gpui_kit::component::{AlertDialog, alert::AlertVariant};
     ///
     /// window.open_alert_dialog(cx, |alert, _, _| {
     ///     alert.warning()

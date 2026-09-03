@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- tooltip
 ## 导入
 
 ```rust
-use gpui_base::{Tooltip};
+use gpui_kit::base::{Tooltip};
 ```
 
 ## 结构与 API

@@ -13,7 +13,7 @@ order: 11
 一个 `ShellRuntime` 拥有一个 VM。它是一个带内部可变性的 `Rc`——既不是 `Send` 也不是 `Sync`——所以它待在拥有 `App` 的那个线程上。
 
 ```rust
-gpui_shell::init(cx);                     // gpui-base、默认 token 调色板、样式表
+gpui_kit::shell::init(cx);                     // gpui-base、默认 token 调色板、样式表
 
 let runtime = ShellRuntime::new(cx)?;     // 一个 VM，并注册为当前 App 的默认 runtime
 ```
@@ -105,14 +105,14 @@ runtime 会先确认 `root` 装载的是它自己的应用，再让脚本 View �
 三项 Host 设置的生命周期不同。Capabilities 会在每个新 View 加载时冻结；store handle 与 HostModule registry 则是该 View 共享的实时 Host 配置，替换后会在下一次调用生效：
 
 ```rust
-gpui_shell::set_capabilities(
+gpui_kit::shell::set_capabilities(
     Capabilities::new()
         .read_roots([app_root.clone()])
         .write_roots([data_dir.clone()])
         .store(true),
 );
-gpui_shell::set_store_path(data_dir.join("store.json"));
-gpui_shell::export_module(market_module(&market))?;
+gpui_kit::shell::set_store_path(data_dir.join("store.json"));
+gpui_kit::shell::export_module(market_module(&market))?;
 ```
 
 三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 HostModule 。见 [Capabilities](./capabilities.md) 与 [HostModule](./host-module.md)。
@@ -145,11 +145,11 @@ Host 的 debug 构建，**单次脚本渲染大约比 release 慢三倍**，而�
 在一个实时应用上实测——一个每笔行情都重渲染的行情终端，用运行时自带的
 [`RuntimeMetrics`](#观察它花了多少)：
 
-| `[profile.dev.package]` | 平均脚本渲染 | 平均物化 |
-| --- | --- | --- |
-| 不配，或只写 `rquickjs` | 31.5 ms | 3.9 ms |
-| `rquickjs-sys` + `rquickjs-core` | **11.3 ms** | **1.2 ms** |
-| release（对照） | 11.0 ms | 1.2 ms |
+| `[profile.dev.package]`          | 平均脚本渲染 | 平均物化   |
+| -------------------------------- | ------------ | ---------- |
+| 不配，或只写 `rquickjs`          | 31.5 ms      | 3.9 ms     |
+| `rquickjs-sys` + `rquickjs-core` | **11.3 ms**  | **1.2 ms** |
+| release（对照）                  | 11.0 ms      | 1.2 ms     |
 
 所以：
 
@@ -176,7 +176,7 @@ rquickjs-core = { opt-level = 3 }
 脚本里的 `process.exit(code)` 是**一个请求，绝不是 `exit(2)`**。一个插件不能把 Host 进程带走，而 Host 可能还有未保存的状态。运行时把这个请求交给 Host，由 Host 决定怎么办：
 
 ```rust
-gpui_shell::on_exit_request(|request, window, cx| {
+gpui_kit::shell::on_exit_request(|request, window, cx| {
     match request.view() {
         Some(view) => close_the_panel_showing(view, window, cx),
         None => cx.quit(),
@@ -208,7 +208,7 @@ View 本身能挺过重载。`ScriptView::replace_object` 只换掉脚本产出�
 
 抛异常的脚本不会把界面一起带走。最后一份可用的 Snapshot 仍然挂在那里，失败信息报在它上面，读者的滚动位置、焦点、正在读的内容都还在。在有什么让 View 失效之前，运行时不会重跑那个失败的 `render`。
 
-记得装一个 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 与非法 phase 调用，target 是 `gpui_shell::script`；没有 subscriber 的话这些全部被丢弃，症状就是一个悄悄不再响应的 View。
+记得装一个 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 与非法 phase 调用，target 是 `gpui_kit::shell::script`；没有 subscriber 的话这些全部被丢弃，症状就是一个悄悄不再响应的 View。
 
 ## 还没有的东西
 

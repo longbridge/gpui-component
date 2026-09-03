@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- calendar
 ## Import
 
 ```rust
-use gpui_base::{Calendar, CalendarState};
+use gpui_kit::base::{Calendar, CalendarState};
 ```
 
 ## Anatomy and API

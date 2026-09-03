@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- radio-group
 ## Import
 
 ```rust
-use gpui_base::{Radio, RadioGroup};
+use gpui_kit::base::{Radio, RadioGroup};
 ```
 
 ## Anatomy and API

@@ -13,20 +13,20 @@ order: 2
 A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script View under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
 
 ```rust
-use gpui_shell::{Capabilities, ShellRuntime};
+use gpui_kit::shell::{Capabilities, ShellRuntime};
 
 gpui_platform::application()
-    .with_assets(gpui_shell::AppAssets::new(root.clone()))
+    .with_assets(gpui_kit::shell::AppAssets::new(root.clone()))
     .run(move |cx| {
         // Initializes gpui-base, the shell's default token palette, and the
         // style reflection table.
-        gpui_shell::init(cx);
+        gpui_kit::shell::init(cx);
 
         let runtime = ShellRuntime::new(cx).expect("script runtime");
 
         // Nothing is permitted until the host says so.
-        gpui_shell::set_store_path(store_directory.join("store.json"));
-        gpui_shell::set_capabilities(
+        gpui_kit::shell::set_store_path(store_directory.join("store.json"));
+        gpui_kit::shell::set_capabilities(
             Capabilities::new()
                 .read_roots([root.clone()])
                 .write_roots([store_directory.clone()])
@@ -69,7 +69,11 @@ export default class Hello extends View {
       .justify_center()
       .gap(12)
       .bg(cx.theme().colors.background)
-      .child(div().text_color(cx.theme().colors.foreground).child(`Clicked ${this.clicks} times`))
+      .child(
+        div()
+          .text_color(cx.theme().colors.foreground)
+          .child(`Clicked ${this.clicks} times`),
+      )
       .child(
         Button.new("click")
           .h(28)
@@ -185,11 +189,11 @@ gpui-shell types <directory>
 gpui-shell --help | --version
 ```
 
-| Argument       | Meaning                                                         |
-| -------------- | --------------------------------------------------------------- |
-| `<directory>`  | The application root, or the `main.js` inside it                |
-| `check`        | Load and render once without a window; exit `0` or `1`          |
+| Argument       | Meaning                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `<directory>`  | The application root, or the `main.js` inside it                         |
+| `check`        | Load and render once without a window; exit `0` or `1`                   |
 | `types`        | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
-| `--watch`      | Reload when the sources change                                  |
-| `--dev`        | Development mode; implies `--watch`                             |
-| `--print-spec` | With `check`, also print the element description that was built |
+| `--watch`      | Reload when the sources change                                           |
+| `--dev`        | Development mode; implies `--watch`                                      |
+| `--print-spec` | With `check`, also print the element description that was built          |

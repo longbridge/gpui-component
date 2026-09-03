@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- combobox
 ## 导入
 
 ```rust
-use gpui_base::{Combobox};
+use gpui_kit::base::{Combobox};
 ```
 
 ## 结构与 API

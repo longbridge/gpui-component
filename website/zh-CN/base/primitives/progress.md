@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- progress
 ## 导入
 
 ```rust
-use gpui_base::{Progress, ProgressIndicator, ProgressTrack};
+use gpui_kit::base::{Progress, ProgressIndicator, ProgressTrack};
 ```
 
 ## 结构与 API

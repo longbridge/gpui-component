@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- select
 ## 导入
 
 ```rust
-use gpui_base::{Select};
+use gpui_kit::base::{Select};
 ```
 
 ## 结构与 API

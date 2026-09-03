@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- table
 ## 导入
 
 ```rust
-use gpui_base::{Table, TableBody, TableCell, TableHead, TableHeader, TableRow};
+use gpui_kit::base::{Table, TableBody, TableCell, TableHead, TableHeader, TableRow};
 ```
 
 ## 结构与 API

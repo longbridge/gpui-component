@@ -10,8 +10,6 @@ use gpui_kit::component::{
     status_bar::StatusBar,
     v_flex,
 };
-use gpui_kit::{prelude::*, *};
-
 use crate::*;
 
 fn component_command(name: impl Into<SharedString>) -> CommandEntry {

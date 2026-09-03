@@ -42,20 +42,26 @@ jobs:
     # macOS verifies the Metal shader build script of gpui_apple, the one
     # part of the pipeline that only compiles on Apple platforms.
     runs-on: macos-latest
-    # A first publish of brand-new crates waits on the crates.io rate limit
-    # between batches; the default 6 hours is enough for a full run.
+    # The run builds and tests gpui-kit against the snapshot, and a first
+    # publish of brand-new crates waits on the crates.io rate limit between
+    # batches; 6 hours is enough for a full run.
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: oven-sh/setup-bun@v2
-      - name: Cache the staged workspace build
+      # The script builds and tests this repository against the staged crates
+      # before uploading, so the same system dependencies CI installs are
+      # needed here.
+      - name: Install system dependencies
+        run: script/bootstrap
+      - name: Cache the staged workspace and repository builds
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
-            target/gpui-pre/workspace/target/
+            target/
           key: release-gpui-${{ runner.os }}-${{ github.run_id }}
           restore-keys: release-gpui-${{ runner.os }}-
       - name: Publish

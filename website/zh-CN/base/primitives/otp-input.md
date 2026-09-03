@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- otp-input
 ## 导入
 
 ```rust
-use gpui_base::{OtpInput, OtpState};
+use gpui_kit::base::{OtpInput, OtpState};
 ```
 
 ## 结构与 API

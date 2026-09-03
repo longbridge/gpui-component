@@ -14,13 +14,13 @@ There is no registry, no package manager and no install step. A dependency is a 
 
 A dependency is any Git repository the manifest points at. `omarchy-ui` is a particular kind of one, and that kind has a name: **a shell package** — a JavaScript package written for gpui-shell rather than for Node or a browser, the way a crate is written for Cargo. Five things make a repository one:
 
-| A shell package                                                  | Because                                                                              |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Ships ES modules, and needs no build step                          | The runtime evaluates the checkout's files as they are, and `require` does not exist   |
-| Has a root `package.json` with `"type": "module"` and a `main`     | It makes the declaration one line, and names the entry for the runtime and the editor  |
-| Imports only the built-in modules and its own files                | Nothing else resolves — it cannot reach the application that imported it               |
-| Treats `gpui-kit` and `gpui-base` as provided, never as dependencies   | They come from the runtime that loaded it, at the version the host chose               |
-| Declares no capabilities of its own                                | Its `fs` and `fetch` calls run under the consuming application's grants                |
+| A shell package                                                      | Because                                                                               |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Ships ES modules, and needs no build step                            | The runtime evaluates the checkout's files as they are, and `require` does not exist  |
+| Has a root `package.json` with `"type": "module"` and a `main`       | It makes the declaration one line, and names the entry for the runtime and the editor |
+| Imports only the built-in modules and its own files                  | Nothing else resolves — it cannot reach the application that imported it              |
+| Treats `gpui-kit` and `gpui-base` as provided, never as dependencies | They come from the runtime that loaded it, at the version the host chose              |
+| Declares no capabilities of its own                                  | Its `fs` and `fetch` calls run under the consuming application's grants               |
 
 Nothing reads the name: a dependency is recognized by being declared, not by being labelled. It is what one author writes so another can find the package, and `gpui-shell` is the repository topic that spells it for a search engine.
 
@@ -68,7 +68,9 @@ export function render(cx) {
 
   const page = new PageColumn("projects-page").child(card).build(cx);
   return new AppShell()
-    .content(new CenteredWorkspace("projects-workspace").content(page).build(cx))
+    .content(
+      new CenteredWorkspace("projects-workspace").content(page).build(cx),
+    )
     .build(cx);
 }
 ```
@@ -77,13 +79,13 @@ Nothing else changes. The script is still the script from [Getting Started](./ge
 
 ## What resolves, and to what
 
-| Written                          | Resolves to                                                       |
-| -------------------------------- | ----------------------------------------------------------------- |
-| `"omarchy-ui"`                   | The package entry — see [Package entry](#package-entry)    |
-| `"omarchy-ui/src/style"`         | That file inside the checkout; the `.js` extension is optional     |
-| `"./theme.js"` inside a package  | A file inside that package's own checkout                          |
-| `"gpui-kit"` inside a package        | The built-in module, exactly as in application code                |
-| Another declared dependency name | The other package's entry — declared packages can see one another  |
+| Written                                                  | Resolves to                                                                |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `"omarchy-ui"`                                           | The package entry — see [Package entry](#package-entry)                    |
+| `"omarchy-ui/src/style"`                                 | That file inside the checkout; the `.js` extension is optional             |
+| `"./theme.js"` inside a package                          | A file inside that package's own checkout                                  |
+| `"gpui-kit"` inside a package                            | The built-in module, exactly as in application code                        |
+| Another declared dependency name                         | The other package's entry — declared packages can see one another          |
 | An application file, by bare name, from inside a package | Refused: a package cannot reach back into the application that imported it |
 
 A specifier that resolves outside the checkout it started in is refused before the module is loaded, so `../` cannot walk out of a package and into the cache beside it. Inside the application directory the same boundary is the application root, which is the rule [the sandbox](./capabilities.md#the-sandbox) already applies to relative imports.
@@ -105,12 +107,12 @@ The string form is a strict GitHub shorthand or a full Git URL, each with an opt
 }
 ```
 
-| Form                                     | Selects                       |
-| ---------------------------------------- | ----------------------------- |
-| `owner/repository`                       | `main`                        |
-| `owner/repository#ref`                   | That branch, tag or commit-ish |
-| `https://…/repository`                   | The remote's `HEAD`           |
-| `https://…/repository#ref`               | That branch, tag or commit-ish |
+| Form                       | Selects                        |
+| -------------------------- | ------------------------------ |
+| `owner/repository`         | `main`                         |
+| `owner/repository#ref`     | That branch, tag or commit-ish |
+| `https://…/repository`     | The remote's `HEAD`            |
+| `https://…/repository#ref` | That branch, tag or commit-ish |
 
 Shorthand is deliberately strict: exactly one `owner/repository` pair of alphanumerics, `.`, `-` and `_`, at most one `#`, no surrounding whitespace, and a fragment that is a valid Git ref name. Anything else is a manifest error rather than a URL guessed from a typo. A full URL may be any Git transport, `ssh://` and `git@host:owner/repo` included.
 
@@ -202,13 +204,13 @@ The directory is called `node_modules` because that is the one place every edito
 
 ## When fetching and linking happen
 
-| Invocation                                   | Fetches and links | On failure                              |
-| -------------------------------------------- | ----------------- | --------------------------------------- |
-| `gpui-shell <directory>`                      | Yes               | Load fails; linking alone is best-effort |
-| `gpui-shell check <directory>`                | Yes               | Reported as a check failure              |
-| `gpui-shell types <directory>`                | Yes               | Reported, with an exit status            |
-| An embedded host's `ShellRuntime::load`       | Yes               | Load fails; linking alone is best-effort |
-| `gpui_shell::write_dependency_links(root)`    | Yes               | Returned as an error to the caller       |
+| Invocation                                      | Fetches and links | On failure                               |
+| ----------------------------------------------- | ----------------- | ---------------------------------------- |
+| `gpui-shell <directory>`                        | Yes               | Load fails; linking alone is best-effort |
+| `gpui-shell check <directory>`                  | Yes               | Reported as a check failure              |
+| `gpui-shell types <directory>`                  | Yes               | Reported, with an exit status            |
+| An embedded host's `ShellRuntime::load`         | Yes               | Load fails; linking alone is best-effort |
+| `gpui_kit::shell::write_dependency_links(root)` | Yes               | Returned as an error to the caller       |
 
 Fetching is what a load depends on, so a dependency that cannot be materialized fails the load. Writing the editor links is not: a read-only application directory is a reason to lose editor types, not a reason to refuse to run. `gpui-shell types` exists for exactly the case where that difference matters — it does the same work and reports what it could not do.
 
@@ -218,16 +220,16 @@ Hot-reload picks up a package the same way it picks up an application file: each
 
 Every one of these is reported before the application's JavaScript is evaluated:
 
-| Message                                                       | Cause                                                          |
-| ------------------------------------------------------------- | -------------------------------------------------------------- |
-| `GitHub shorthand must contain exactly owner/repository …`     | A shorthand with a path, a scheme, or an invalid character      |
-| `a string dependency #Git ref must not be empty`               | A trailing `#`                                                  |
-| `could not clone Git dependency …`                             | Git failed: no such remote, no credentials, no network          |
-| `git timed out after 30 seconds …`                             | A hung fetch, usually an interactive credential prompt          |
-| `Git dependency … cache origin is …, expected …`               | Two manifests disagree about one cache entry; remove it and retry |
-| `Git dependency … package.json main must be a string`          | A `main` that is an object, or a path escaping the checkout     |
-| `Git dependency … has no entry …`                              | `main`, or an object form's `entry`, names nothing              |
-| `cannot resolve module … from …`                               | A subpath import with no such file, or one leaving the checkout |
+| Message                                                    | Cause                                                             |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| `GitHub shorthand must contain exactly owner/repository …` | A shorthand with a path, a scheme, or an invalid character        |
+| `a string dependency #Git ref must not be empty`           | A trailing `#`                                                    |
+| `could not clone Git dependency …`                         | Git failed: no such remote, no credentials, no network            |
+| `git timed out after 30 seconds …`                         | A hung fetch, usually an interactive credential prompt            |
+| `Git dependency … cache origin is …, expected …`           | Two manifests disagree about one cache entry; remove it and retry |
+| `Git dependency … package.json main must be a string`      | A `main` that is an object, or a path escaping the checkout       |
+| `Git dependency … has no entry …`                          | `main`, or an object form's `entry`, names nothing                |
+| `cannot resolve module … from …`                           | A subpath import with no such file, or one leaving the checkout   |
 
 ## Publishing a shell package
 
@@ -241,8 +243,8 @@ A shell package is a plain Git repository; `omarchy-ui` has no build output, no 
 
 ## Read next
 
-| Page                                              | What it covers                                                          |
-| ------------------------------------------------- | ----------------------------------------------------------------------- |
-| [Capabilities](./capabilities.md)                 | The rest of the manifest: identity, versions, and what a script may reach |
-| [Getting Started](./getting-started.md)           | `gpui-shell types`, `check`, and the declarations a dependency joins      |
-| [API Reference](./api.md)                         | The built-in modules a package imports alongside yours                    |
+| Page                                    | What it covers                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------- |
+| [Capabilities](./capabilities.md)       | The rest of the manifest: identity, versions, and what a script may reach |
+| [Getting Started](./getting-started.md) | `gpui-shell types`, `check`, and the declarations a dependency joins      |
+| [API Reference](./api.md)               | The built-in modules a package imports alongside yours                    |

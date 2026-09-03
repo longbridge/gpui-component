@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- toast
 ## Import
 
 ```rust
-use gpui_base::{Toast, ToastManager, ToastOptions, ToastStack};
+use gpui_kit::base::{Toast, ToastManager, ToastOptions, ToastStack};
 ```
 
 ## Anatomy and API

@@ -55,7 +55,7 @@ Neither the tree nor any node stores a GPUI entity handle.
 
 ```rust
 use std::rc::Rc;
-use gpui_base::dock::{DockArea, DockLayout, DockPlacement};
+use gpui_kit::base::dock::{DockArea, DockLayout, DockPlacement};
 
 let area = cx.new(|cx| {
     DockArea::new("workspace", Some(1), window, cx).with_renderer(Rc::new(MySkin))
@@ -296,7 +296,7 @@ match node.kind() {
 
 ## Supply the appearance
 
-Nothing in `gpui_base::dock` paints a color, a border, or a size. Three traits carry appearance in.
+Nothing in `gpui_kit::base::dock` paints a color, a border, or a size. Three traits carry appearance in.
 
 ### `DockAreaRenderer`
 
