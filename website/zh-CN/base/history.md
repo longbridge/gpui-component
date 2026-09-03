@@ -1,62 +1,93 @@
 ---
-title: History
-description: 带游标的线性历史：undo/redo、前进后退，或最近优先列表，适用于任何需要记住的条目。
+title: History 与 Undo History
+description: 用于应用状态的浏览器式导航轨迹和分组 undo/redo 事务。
 order: 7
 ---
 
-# History
+# History 与 Undo History
 
-`History<I>` 是一个带游标的条目列表。`push` 在游标处追加一条，`undo` 把游标退一格并返回跨过的条目，`redo` 再往前走。撤销之后再 `push` 会开启新分支：游标之前的条目被丢弃，就像浏览器打开新页面时丢掉前进页一样。
+`History<T>` 与 `UndoHistory<T>` 分别保存两种不同的应用状态。两者都不持有 GPUI 状态，且都由调用方把返回的值应用到模型；但它们的操作含义不同：
 
-它不持有任何 GPUI 状态，也不关心条目是什么。这正是它的价值：同一个类型可以是 undo manager、导航轨迹或最近列表，取决于你 push 进去的是什么。
+- `History<T>` 是浏览器式的线性导航轨迹，支持后退和前进。
+- `UndoHistory<T>` 将改动记录为 undo 事务，并能把多个改动合成一次用户操作。
 
 ## 引入
 
 ```rust
-use gpui_base::{History, HistoryItem};
+use gpui_base::{History, UndoHistory};
 ```
 
-条目是任意 `Clone + PartialEq` 且能携带版本号的类型：
+## 如何选择
+
+应根据状态的含义选择类型，而不是根据操作它的 UI 命令名称选择：
+
+- 当每个条目表示一个位置，后退或前进需要返回到达的位置，并且必须保留当前根条目时，使用 `History<T>`。
+- 当每个条目表示一项可逆改动，并且 undo 或 redo 需要返回一次用户事务中的全部改动时，使用 `UndoHistory<T>`。
+- 当分组依赖比时间或显式边界更丰富的领域语义时，使用领域专用的管理器。例如 Input 使用私有事务管理器来理解输入、删除、选择区和 IME 组合输入。
+
+在 gpui-component 内部，`NavStack` 使用 `History<NavEntry>` 进行页面导航；Dock 的 tiles canvas 使用 `UndoHistory<TileChange>` 回退分组的移动和缩放改动；Input 则有意保留其专用的私有 undo manager。
+
+## `History`：导航轨迹
+
+每到一个位置就 push 一条。当前条目是轨迹中的最后一个值。例如访问完 `A -> B -> C` 后，当前是 `C`；后退会返回新的当前条目 `B`：
 
 ```rust
-#[derive(Clone, PartialEq)]
-struct Visit {
-    symbol: String,
-    version: usize,
-}
+let mut history = History::new();
+history.push("A");
+history.push("B");
+history.push("C");
 
-impl HistoryItem for Visit {
-    fn version(&self) -> usize { self.version }
-    fn set_version(&mut self, version: usize) { self.version = version; }
-}
+assert_eq!(history.back(), Some("B"));
+assert_eq!(history.current(), Some(&"B"));
 ```
 
-版本号由 `push` 打上。同一个分组间隔内 push 的条目共享一个版本，`undo` 时一起返回，所以一次拖拽产生的许多小改动会作为一步撤销。
+`back()` 不会越过根条目，到根时返回 `None`。`forward()` 会恢复最近一个此前离开的条目。后退后再 push 新条目会丢弃前进分支，和浏览器打开新页面时的行为相同。`max_entries` 限制从根到当前的活动条目：降低上限会立即删除最旧的多余活动条目；达到上限时前进，会先删除最旧的活动条目，再恢复下一个条目。
 
-## 适用场景
-
-**改动的 undo 与 redo。** 每次改动 push 一条；`undo` 返回要回退的改动，`redo` 返回要重放的改动。Dock 的 tiles 画布就是这样记录 bounds 变化的，用一个很短的分组间隔把一次拖拽合成一步。边界明确时用 `start_grouping` 和 `end_grouping`，不用靠时间。
-
-**位置的前进与后退。** 每到一个地方 push 一条；`undo` 是后退，`redo` 是前进，`current()` 是当前所在。位置可能失效，比如所在的 tab 被关掉了，用 `retain` 在游标两侧一起剪枝。加载完成前就记下的位置，用 `replace_current` 原地更正，保留版本号、长度不变，和浏览器的 `replaceState` 一样。[Nav Stack](./primitives/nav-stack.md) 就建立在这之上：页面是条目，`pop` 是 `undo`，`forward` 是 `redo`。
-
-**最近优先列表。** 开启 `unique()` 后，push 一个已存在的条目会把它挪到最前而不是重复出现，`max_undos` 限制长度。用户打开过的股票、碰过的文件、执行过的命令：每次使用 push 一条，从后往前读 `undos()`。
-
-## API
+`entries()` 按从根到当前条目的顺序迭代。完整的 `A -> B -> C` 轨迹会依次得到 `A`、`B`、`C`；`entries().rev()` 则得到 `C`、`B`、`A`。`forward_entries()` 从最近的前进条目到最远的前进条目迭代。用 `retain` 删除已失效的位置，用 `replace_current` 原地更新当前的位置，用 `remove_current` 删除当前条目而不丢弃前进分支。
 
 | 方法 | 作用 |
 | --- | --- |
-| `new()` | 空历史。`max_undos` 默认 1000。 |
-| `max_undos(n)`、`unique()`、`group_interval(d)` | 构建器：限制长度、每个条目只保留一份、把间隔小于 `d` 的 push 合成一步。 |
-| `push(item)` | 在游标处记录 `item`，丢弃游标之前的所有条目。 |
-| `undo()`、`redo()` | 移动游标并返回跨过的条目，最新的在前；到头时返回 `None`。 |
-| `current()` | 游标处的条目。 |
-| `replace_current(item)` | 覆盖游标处的条目，保留其版本号。为空时等于 push。 |
-| `retain(keep)` | 丢弃 `keep` 拒绝的条目，游标两侧同时生效。 |
-| `undos()`、`redos()` | 游标之后与之前的条目，最旧的在前。 |
-| `start_grouping()`、`end_grouping()` | 冻结版本号，中间的 push 作为一步撤销。 |
-| `set_ignoring(bool)`、`is_ignoring()` | 供调用方在回放自己的历史时跳过记录的标志位。 |
-| `clear()` | 清空两侧。 |
+| `new()` | 创建空轨迹。`max_entries` 默认是 1000。 |
+| `max_entries(n)` | 限制从根到当前的条目数，并立即删除最旧的多余条目。 |
+| `push(entry)` | 让 `entry` 成为当前条目，并丢弃前进分支。 |
+| `back()`、`forward()` | 在轨迹中移动，返回移动后的当前条目。 |
+| `current()` | 返回当前条目。 |
+| `can_back()`、`can_forward()` | 判断对应方向是否可以移动。 |
+| `entries()`、`forward_entries()` | 按导航顺序迭代当前轨迹和前进分支。 |
+| `replace_current(entry)`、`remove_current()` | 更新或删除当前条目。 |
+| `retain(keep)`、`clear()` | 从两侧删除不保留的条目，或清空轨迹。 |
 
-## 说明
+## `UndoHistory`：分组 undo 与 redo
 
-`History` 从不修改你的模型。它只把条目交回来，由调用方去应用，所以同一个类型既能服务"必须回退的改动"，也能服务"要重新访问的位置"。先想清楚条目是什么，再决定是否分组或去重：改动需要分组，位置两者都不要，最近列表需要 `unique`。
+每次需要由应用回退的改动都 push 一条。要把一次拖拽作为一项可撤销操作，请显式地把它的所有更新分组。`undo()` 以最新在前的顺序返回一个组里的改动，确保最近的改动先被回退；`redo()` 按最旧在前的顺序返回同一组，以原始顺序重新应用：
+
+```rust
+let mut history = UndoHistory::new();
+history.start_grouping();
+history.push("从 x=0 移到 x=10");
+history.push("从 x=10 移到 x=20");
+history.end_grouping();
+
+assert_eq!(
+    history.undo(),
+    Some(vec!["从 x=10 移到 x=20", "从 x=0 移到 x=10"]),
+);
+assert_eq!(
+    history.redo(),
+    Some(vec!["从 x=0 移到 x=10", "从 x=10 移到 x=20"]),
+);
+```
+
+对于边界不明确的改动，`group_interval` 会把时间间隔足够短的连续 push 合成一个事务。成功 undo 或 redo 会结束这段定时分组窗口，下一次 push 会创建新事务。显式分组与此独立：只要显式分组仍在进行，push 就会继续追加到当前事务，包括刚完成 undo 之后。新的 push 会清空 redo 事务。回放改动时，用 `set_ignoring(true)` 防止回放本身被再次记录。
+
+| 方法 | 作用 |
+| --- | --- |
+| `new()` | 创建空 undo 历史。`max_undos` 默认是 1000。 |
+| `max_undos(n)` | 限制 undo 事务数并立即删除最旧的多余事务；redo 也会遵守该上限。 |
+| `group_interval(duration)` | 将相隔很近的连续 push 合并为一个事务。 |
+| `start_grouping()`、`end_grouping()` | 让后续 push 追加到当前事务；结束分组会停止这种显式追加行为。和上例一样，空历史中的第一个 push 会创建该事务。 |
+| `push(change)` | 在当前或一个新事务中记录改动，并清空 redo。 |
+| `undo()`、`redo()` | undo 时最新改动在前，redo 时最旧改动在前地返回最新事务。 |
+| `can_undo()`、`can_redo()` | 判断是否有可用事务。 |
+| `set_ignoring(bool)`、`is_ignoring()` | 控制是否记录 push。 |
+| `clear()` | 清空 undo 与 redo 事务。 |

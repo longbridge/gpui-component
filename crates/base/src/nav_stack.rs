@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use crate::{
-    History, HistoryItem, StyledExt as _,
+    History, StyledExt as _,
     motion::{Presence, PresencePhase, Transition},
 };
 
@@ -65,9 +65,9 @@ struct Transit {
 ///
 /// This is SwiftUI's `NavigationStack`, Qt's `StackView` and WinUI's
 /// `Frame`: navigation between pages. Underneath it is a [`History`] of
-/// views — the stack is the undo side, and a popped page waits on the redo
-/// side until a push discards it, which is what WinUI's `BackStack` and
-/// `ForwardStack` do.
+/// views from the root through the current page. A popped page becomes a
+/// forward entry until a push discards that forward branch, which is what
+/// WinUI's `BackStack` and `ForwardStack` do.
 ///
 /// The stack owns which view is current and the lifecycle of a change: after
 /// a push, pop or replace, the outgoing view stays mounted until the
@@ -83,36 +83,15 @@ pub struct NavStackState {
     transit: Option<Transit>,
 }
 
-/// A view on the stack. Equality is the view's identity, so a page pushed
-/// twice is two entries of the same view.
+/// A view on the stack. A page pushed twice is two separate entries.
 #[derive(Clone)]
 struct NavEntry {
     view: AnyView,
-    version: usize,
 }
 
 impl NavEntry {
     fn new(view: impl Into<AnyView>) -> Self {
-        Self {
-            view: view.into(),
-            version: 0,
-        }
-    }
-}
-
-impl PartialEq for NavEntry {
-    fn eq(&self, other: &Self) -> bool {
-        self.view == other.view
-    }
-}
-
-impl HistoryItem for NavEntry {
-    fn version(&self) -> usize {
-        self.version
-    }
-
-    fn set_version(&mut self, version: usize) {
-        self.version = version;
+        Self { view: view.into() }
     }
 }
 
@@ -134,11 +113,11 @@ impl NavStackState {
 
     /// The number of views on the stack.
     pub fn depth(&self) -> usize {
-        self.history.undos().len()
+        self.history.entries().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.history.undos().is_empty()
+        self.history.entries().len() == 0
     }
 
     /// The view on top of the stack, which is the one shown once any
@@ -149,13 +128,13 @@ impl NavStackState {
 
     /// Every view on the stack, root first.
     pub fn views(&self) -> impl ExactSizeIterator<Item = &AnyView> {
-        self.history.undos().iter().map(|entry| &entry.view)
+        self.history.entries().map(|entry| &entry.view)
     }
 
     /// The views popped since the last push, nearest first: the one
     /// `forward` would bring back is the first.
     pub fn forward_views(&self) -> impl ExactSizeIterator<Item = &AnyView> {
-        self.history.redos().iter().rev().map(|entry| &entry.view)
+        self.history.forward_entries().map(|entry| &entry.view)
     }
 
     /// Pushes `view` on top of the stack and discards the forward views.
@@ -184,16 +163,16 @@ impl NavStackState {
         if self.depth() <= 1 {
             return None;
         }
-        let popped = self.top();
-        self.undo_one()?;
+        let popped = self.top()?;
+        self.history.back()?;
         self.finish(
-            popped.clone(),
+            Some(popped.clone()),
             NavOperation::Pop,
             motion,
             NavStackEvent::Popped,
             cx,
         );
-        popped.map(|(view, _)| view)
+        Some(popped.0)
     }
 
     /// Pops every view above the root in one [`NavOperation::Pop`]
@@ -202,10 +181,13 @@ impl NavStackState {
         let outgoing = self.top();
         let mut popped = Vec::new();
         while self.depth() > 1 {
-            match self.undo_one() {
-                Some(view) => popped.push(view),
-                None => break,
+            let Some(view) = self.current().cloned() else {
+                break;
+            };
+            if self.history.back().is_none() {
+                break;
             }
+            popped.push(view);
         }
         if popped.is_empty() {
             return popped;
@@ -226,7 +208,7 @@ impl NavStackState {
     /// it. `None` when nothing has been popped since the last push.
     pub fn forward(&mut self, motion: NavMotion, cx: &mut Context<Self>) -> Option<AnyView> {
         let outgoing = self.top();
-        let view = self.history.redo()?.into_iter().next()?.view;
+        let view = self.history.forward()?.view;
         self.finish(
             outgoing,
             NavOperation::Push,
@@ -274,16 +256,6 @@ impl NavStackState {
     fn top(&self) -> Option<(AnyView, usize)> {
         let index = self.depth().checked_sub(1)?;
         self.current().cloned().map(|view| (view, index))
-    }
-
-    /// Takes the top view back onto the forward side. Every push has its own
-    /// version, so an undo step is one view.
-    fn undo_one(&mut self) -> Option<AnyView> {
-        self.history
-            .undo()?
-            .into_iter()
-            .next()
-            .map(|entry| entry.view)
     }
 
     /// Records the change: `outgoing` stays mounted until its exit
