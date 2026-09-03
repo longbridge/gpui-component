@@ -158,18 +158,23 @@ its original crate name as the library name, so `use gpui::*` works unchanged.
 ./script/bump-gpui.ts --rev 1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a
 ```
 
-Every crate is published at `<VERSION>-<YYMMDD>`, for example `0.3.0-0`:
-the `VERSION` constant at the top of `script/bump-gpui.ts` plus the UTC date of
-the run. Day-to-day snapshots differ by date alone; raise `VERSION` only when
-the crates should sort as a new release. crates.io never accepts the same
-version twice, so a second run on the same day is a no-op unless you pass an
-explicit version. The Zed commit each build came from is recorded in every
-crate's description and `[package.metadata.gpui-pre]`.
+Every crate is published at `<VERSION>-<N>`, for example `0.3.0-12`: the
+`VERSION` constant at the top of `script/bump-gpui.ts` plus a counter that
+continues from the highest number crates.io already has (`0.3.0-0` first).
+A run that stopped part-way resumes the same number. Raise `VERSION` only when
+the crates should sort as a new release. The Zed commit each build came from is
+recorded in every crate's description and `[package.metadata.gpui-pre]`.
+
+Cargo only matches pre-release versions when the requirement itself carries a
+pre-release tag, so `version = "0.3.0"` would find nothing while only
+`0.3.0-N` snapshots exist. Write `version = "0.3.0-0"`: it accepts `0.3.0-0`
+and every later `0.3.0-N`, and consumers pick up new snapshots with
+`cargo update`.
 
 The `Release GPUI` workflow (`.github/workflows/release-gpui.yml`) runs this
-script every other Sunday (even ISO weeks) at 18:00 Beijing time and can be started by hand from the
-Actions tab, optionally with a Zed revision or an explicit version. It uses the
-repository's `CARGO_REGISTRY_TOKEN` secret.
+script every other Sunday (even ISO weeks) at 18:00 Beijing time and can be
+started by hand from the Actions tab, optionally with a Zed revision or an
+explicit version. It uses the repository's `CARGO_REGISTRY_TOKEN` secret.
 
 Zed's [reqwest fork](https://github.com/zed-industries/reqwest) is not part of
 the Zed workspace and is published by hand as `gpui-pre-reqwest`. The published
