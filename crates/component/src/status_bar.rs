@@ -23,7 +23,7 @@ use crate::{ActiveTheme, StyledExt, h_flex};
 /// otherwise (only `right`, or neither — like a plain container).
 ///
 /// ```
-/// use gpui_kit::component::status_bar::StatusBar;
+/// use gpui_component::status_bar::StatusBar;
 ///
 /// let _ = StatusBar::new().left("Ln 1, Col 1").right("UTF-8");
 /// ```
