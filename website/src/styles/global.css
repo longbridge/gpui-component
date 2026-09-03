@@ -12,8 +12,8 @@ html.dark .alignment-light { display: none; }
 html.dark .alignment-dark { display: block; }
 
 /* ====================================================================
-   CSS Design Tokens — 58 tokens, light + dark. Do NOT change values.
-   Source: .vitepress/theme/style.css
+   CSS Design Tokens, light + dark. Do NOT change values — ported as-is
+   from the pre-Astro VitePress theme.
    ==================================================================== */
 
 :root {
