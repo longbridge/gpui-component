@@ -266,7 +266,6 @@ Tokens describe design semantics; they do not automatically style unstyled contr
 | API                               | Purpose                                                                 |
 | --------------------------------- | ----------------------------------------------------------------------- |
 | `History`                         | Browser-style navigation trail with back and forward entries             |
-| `UndoHistory`                     | Grouped undo and redo transactions                                      |
 | `SliderState`                     | Single or range values, linear or logarithmic scales, and slider events |
 | `IndexPath`                       | A section, row, and column index path                                   |
 | `Placement` / `Side`              | Placement and layout direction descriptions                             |

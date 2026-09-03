@@ -69,7 +69,6 @@ mod toggle;
 mod toggle_group;
 mod tooltip;
 mod tree;
-mod undo_history;
 mod virtual_list;
 
 pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
@@ -185,7 +184,6 @@ pub use tooltip::{Tooltip, TooltipOverlay, TooltipPositioner, TooltipRequest, To
 pub use tree::{Tree, TreeEntry, TreeEntryState, TreeEvent, TreeItem, TreeState};
 #[doc(hidden)]
 pub use tree::{init as init_tree, key_context as tree_key_context};
-pub use undo_history::UndoHistory;
 #[doc(hidden)]
 pub use virtual_list::virtual_list;
 pub use virtual_list::{VirtualList, VirtualListScrollHandle, h_virtual_list, v_virtual_list};

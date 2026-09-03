@@ -1,23 +1,20 @@
 ---
-title: History and Undo History
-description: Browser-style navigation trails and grouped undo/redo transactions for application state.
+title: History
+description: Browser-style navigation trails for application state.
 order: 7
 ---
 
-# History and Undo History
+# History
 
-`History<T>` and `UndoHistory<T>` keep two different kinds of application state. Both are independent of GPUI and leave applying a returned value to the caller, but their operations intentionally have different meanings:
-
-- `History<T>` is a browser-style linear trail of locations, with back and forward navigation.
-- `UndoHistory<T>` records changes as undo transactions, including changes grouped into one user action.
+`History<T>` is a browser-style linear trail of locations with back and forward navigation. It is independent of GPUI and leaves applying a returned value to the caller.
 
 ## Import
 
 ```rust
-use gpui_base::{History, UndoHistory};
+use gpui_base::History;
 ```
 
-## `History`: a navigation trail
+## Navigation trail
 
 Push every location the user visits. The current entry is the last value in the trail. For example, after visiting `A -> B -> C`, `C` is current and going back returns the new current entry, `B`:
 
@@ -46,38 +43,3 @@ assert_eq!(history.current(), Some(&"B"));
 | `entries()`, `forward_entries()` | Iterate the current trail and forward branch in navigation order. |
 | `replace_current(entry)`, `remove_current()` | Update or remove the current entry. |
 | `retain(keep)`, `clear()` | Remove rejected entries from both sides, or empty the trail. |
-
-## `UndoHistory`: grouped undo and redo
-
-Push a value for each change your application must reverse. To make a drag one undoable action, explicitly group all of its updates. `undo()` returns the group's changes newest first so the most recent change is reverted first; `redo()` returns the same group oldest first so it is applied in its original order:
-
-```rust
-let mut history = UndoHistory::new();
-history.start_grouping();
-history.push("move from x=0 to x=10");
-history.push("move from x=10 to x=20");
-history.end_grouping();
-
-assert_eq!(
-    history.undo(),
-    Some(vec!["move from x=10 to x=20", "move from x=0 to x=10"]),
-);
-assert_eq!(
-    history.redo(),
-    Some(vec!["move from x=0 to x=10", "move from x=10 to x=20"]),
-);
-```
-
-For changes whose boundary is not explicit, `group_interval` combines consecutive pushes close enough in time. A successful undo or redo ends that timed grouping window, so the next push starts a new transaction. Explicit grouping is separate: while it is active, a push still appends to the current transaction, including after an undo. A new push clears redo transactions. While replaying changes, use `set_ignoring(true)` to prevent the replay itself from being recorded.
-
-| Method | Does |
-| --- | --- |
-| `new()` | Creates an empty undo history. `max_undos` defaults to 1000. |
-| `max_undos(n)` | Caps undo transactions and immediately removes the oldest excess transactions. Redo preserves this cap. |
-| `group_interval(duration)` | Groups consecutive nearby pushes into one transaction. |
-| `start_grouping()`, `end_grouping()` | Make subsequent pushes append to the current transaction; ending grouping stops that explicit append behavior. On an empty history, as in the example above, the first push starts the transaction. |
-| `push(change)` | Records a change in the current or a new transaction and clears redo. |
-| `undo()`, `redo()` | Return the latest transaction newest-first for undo, oldest-first for redo. |
-| `can_undo()`, `can_redo()` | Report whether a transaction is available. |
-| `set_ignoring(bool)`, `is_ignoring()` | Control whether pushes are recorded. |
-| `clear()` | Empties undo and redo transactions. |
