@@ -78,8 +78,21 @@ pub fn run(story: Option<String>, dark: Option<bool>) -> Result<(), JsValue> {
         let emoji_font = Cow::Borrowed(include_bytes!("../fonts/NotoEmoji-Regular.ttf").as_slice());
         let jetbrains_mono =
             Cow::Borrowed(include_bytes!("../fonts/JetBrainsMono-Regular.ttf").as_slice());
+        // The web platform resolves GPUI's `.SystemUIFont` alias to IBM Plex
+        // Sans and ships no fonts of its own. Text measured before the first
+        // frame, such as the search input's initial value, still carries the
+        // window's default text style, so that family has to exist or the
+        // text system panics.
+        let system_font =
+            Cow::Borrowed(include_bytes!("../fonts/IBMPlexSans-Regular.ttf").as_slice());
         cx.text_system()
-            .add_fonts(vec![ui_font, cjk_font, emoji_font, jetbrains_mono])
+            .add_fonts(vec![
+                ui_font,
+                cjk_font,
+                emoji_font,
+                jetbrains_mono,
+                system_font,
+            ])
             .expect("Failed to load fonts");
 
         // Apply the embedding page's appearance before the first frame, so an
