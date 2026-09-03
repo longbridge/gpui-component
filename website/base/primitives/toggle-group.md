@@ -12,7 +12,7 @@ Like every `gpui-base` primitive, Toggle Group supplies behavior and semantic st
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
 cargo run -p gpui-base --example components -- toggle-group
@@ -21,14 +21,14 @@ cargo run -p gpui-base --example components -- toggle-group
 ## Import
 
 ```rust
-use gpui_base::{Toggle, ToggleGroup};
+use gpui_kit::base::{Toggle, ToggleGroup};
 ```
 
 ## Anatomy and API
 
 The example composes `Toggle`, `ToggleGroup`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/toggle_group.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/toggle_group.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/toggle_group.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/toggle_group.rs). Native and browser previews compile this same file.
 
 ## State and events
 

@@ -8,11 +8,18 @@
 use crate::{
     HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
-use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
-use std::{cell::Cell, path::PathBuf, rc::Rc};
+use gpui::{
+    AppContext as _, IntoElement as _, Modifiers, ParentElement as _, TestAppContext,
+    VisualTestContext, point, px,
+};
+use std::{
+    cell::{Cell, RefCell},
+    path::PathBuf,
+    rc::Rc,
+};
 
 const COUNTER: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
@@ -26,19 +33,19 @@ export default class Counter extends View {
       .items_center()
       .gap_2()
       .p(16)
-      .bg("background")
-      .child(div().text_color("foreground").child(`Count: ${this.count}`))
+      .bg(`#ffffff`)
+      .child(div().text_color(`#111111`).child(`Count: ${this.count}`))
       .child(
         Button.new("increment")
           .px(12)
           .py(6)
           .rounded(6)
-          .bg("primary")
+          .bg(`#2563eb`)
           .on_click((event, cx) => {
             this.count += 1;
             cx.notify();
           })
-          .child(div().text_color("primary_foreground").child("Increment")),
+          .child(div().text_color(`#ffffff`).child("Increment")),
       );
   }
 }
@@ -47,6 +54,192 @@ export default class Counter extends View {
 /// The entry name only affects diagnostics, but each engine has its own
 /// convention and the tests should read the way real code does.
 const ENTRY: &str = "counter.js";
+
+#[gpui::test]
+fn component_is_imported_by_name_and_receives_an_explicit_id(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let received = Rc::new(RefCell::new(None));
+    let received_by_builder = received.clone();
+    let module = HostModule::new("mail").component("Body", move |mut args, _, _| {
+        *received_by_builder.borrow_mut() = Some((
+            args.id().to_owned(),
+            args.props().clone(),
+            args.children().len(),
+        ));
+        gpui::div()
+            .children(args.take_children())
+            .into_any_element()
+    });
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(module)
+            .expect("component module"),
+    );
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { div, View } from "gpui-kit";
+import { Body } from "mail";
+
+export default class HostBody extends View {
+  render() {
+    return Body.new("message-body", { html: "<strong>Hello</strong>", zoom: 1.25 })
+      .child(div().child("fallback"));
+  }
+}
+
+"#;
+    let view_type = runtime.load_source("host-body.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+
+    assert!(
+        tree.contains("module_component mail.Body \"message-body\""),
+        "{tree}"
+    );
+    assert!(tree.contains("html"), "props missing from dump: {tree}");
+    assert!(tree.contains("text \"fallback\""), "child missing: {tree}");
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+    assert_eq!(
+        received.borrow().as_ref().map(|(_, _, children)| *children),
+        Some(1),
+        "the host owns the materialized children",
+    );
+    assert_eq!(
+        received.borrow().as_ref().map(|(id, _, _)| id.as_str()),
+        Some("message-body"),
+    );
+    assert_eq!(
+        received
+            .borrow()
+            .as_ref()
+            .and_then(|(_, props, _)| props.get("zoom"))
+            .and_then(HostValue::as_number),
+        Some(1.25),
+    );
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn component_requires_an_explicit_string_id(cx: &mut TestAppContext) {
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("mail").component("Body", |_, _, _| gpui::div().into_any_element()),
+            )
+            .expect("component module"),
+    );
+
+    for (name, expression) in [
+        ("missing-component-id.js", "Body.new()"),
+        ("numeric-component-id.js", "Body.new(42, {})"),
+    ] {
+        let source = format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ Body }} from "mail";
+export default class InvalidBody extends View {{
+  render() {{ return {expression}; }}
+}}
+"#,
+        );
+        let message = render_error(cx, name, &source);
+        assert!(
+            message.contains("non-empty string id"),
+            "unexpected error for {expression}: {message}"
+        );
+    }
+
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn revoking_a_component_module_releases_its_builder_while_the_view_lives(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let retained = Rc::new(());
+    let captured = retained.clone();
+    crate::policy::set_default(
+        Policy::new()
+            .with_host_module(
+                HostModule::new("extension").component("Leaf", move |_, _, _| {
+                    let _keep_alive = &captured;
+                    gpui::div().into_any_element()
+                }),
+            )
+            .expect("component module"),
+    );
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source(
+            "extension.js",
+            r#"
+import { View } from "gpui-kit";
+import { Leaf } from "extension";
+export default class Extension extends View {
+  render() { return Leaf.new("leaf", {}); }
+}
+"#,
+        )
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    draw(&mut context, &view);
+    assert_eq!(Rc::strong_count(&retained), 2);
+
+    crate::clear_exported_modules();
+    assert_eq!(
+        Rc::strong_count(&retained),
+        1,
+        "a live snapshot must not retain a revoked component factory"
+    );
+    drop(view);
+    crate::policy::set_default(Policy::new());
+}
+
+#[gpui::test]
+fn text_view_records_format_content_and_behavior(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui-kit";
+import { TextView } from "gpui-base";
+export default class RichText extends View {
+  render() {
+    return TextView.html("message", "<p>Hello <strong>world</strong></p>")
+      .selectable(true)
+      .scrollable(false)
+      .on_link_click((_url, _cx) => {});
+  }
+}
+"#;
+    let view_type = runtime.load_source("rich-text.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+    assert!(tree.contains("TextView html \"message\""), "{tree}");
+    assert!(tree.contains("<strong>world</strong>"), "{tree}");
+    assert!(tree.contains(":selectable"), "{tree}");
+    assert!(tree.contains(":on_link_click(fn)"), "{tree}");
+}
 
 #[gpui::test]
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
@@ -79,12 +272,1723 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppContext) {
+    use gpui::{AnyElement, IntoElement as _, ParentElement as _, div};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+        snapshot::RenderSnapshot,
+        spec::{Component, RegisteredComponentSpec, SpecArena},
+    };
+
+    struct TestBoxMaterializer(Arc<AtomicUsize>);
+
+    impl ComponentMaterializer for TestBoxMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            assert_eq!(request.payload().downcast_ref::<String>().unwrap(), "alpha");
+            let error = request
+                .with_window_app(|_, _| Err::<(), _>(anyhow::anyhow!("synthetic overlay failed")))
+                .expect_err("a scoped overlay error must cross the service seam");
+            assert_eq!(error.to_string(), "synthetic overlay failed");
+            let has_window = request.with_window_app(|window, cx| {
+                Ok(cx.has_global::<gpui_base::Theme>() && window.bounds().size.width > px(0.))
+            })?;
+            assert!(
+                has_window,
+                "registered overlays receive the active render window"
+            );
+            self.0.fetch_add(1, Ordering::SeqCst);
+            let children = request.take_children()?;
+            Ok(div()
+                .child("synthetic overlay")
+                .children(children)
+                .into_any_element())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    let id = registry
+        .register(
+            ComponentDescriptor::new("TestBox", Arc::new(TestBoxMaterializer(calls.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "TestBox",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+
+    let mut arena = SpecArena::new();
+    let child = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "TestBox",
+        ComponentPayload::new(String::from("alpha")),
+    )));
+    let root = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "TestBox",
+        ComponentPayload::new(String::from("alpha")),
+    )));
+    arena.attach(root, child).unwrap();
+    let snapshot = RenderSnapshot::new(&runtime, 0, root, arena, None, None);
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(snapshot.debug_tree(), "TestBox\n  TestBox\n");
+}
+
+#[gpui::test]
+fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_return(
+    cx: &mut TestAppContext,
+) {
+    use std::cell::RefCell;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::{AnyElement, IntoElement as _, div};
+
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentElementFactory,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest,
+        snapshot::RenderSnapshot,
+        spec::{Component, RegisteredComponentSpec, SpecArena, SpecOp},
+    };
+
+    thread_local! {
+        static DELAYED_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static FAILING_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static NESTED_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static SELF_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+    }
+
+    struct DelayedOverlay;
+    impl ComponentMaterializer for DelayedOverlay {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let factory = request
+                .take_slot_factory("content")
+                .ok_or_else(|| anyhow::anyhow!("missing content factory"))?;
+            assert!(request.take_slot("content").unwrap().is_none());
+            DELAYED_FACTORY.with(|held| *held.borrow_mut() = Some(factory));
+            let failing = request
+                .take_slot_factory("failing")
+                .ok_or_else(|| anyhow::anyhow!("missing failing factory"))?;
+            FAILING_FACTORY.with(|held| *held.borrow_mut() = Some(failing));
+            let nested = request
+                .take_slot_factory("nested")
+                .ok_or_else(|| anyhow::anyhow!("missing nested factory"))?;
+            NESTED_FACTORY.with(|held| *held.borrow_mut() = Some(nested));
+            request.finish(div())
+        }
+    }
+
+    struct FailingSlot(Arc<AtomicUsize>);
+    impl ComponentMaterializer for FailingSlot {
+        fn materialize(&self, _request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            anyhow::bail!("nested slot failed")
+        }
+    }
+
+    struct NestedFactorySlot;
+    impl ComponentMaterializer for NestedFactorySlot {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            request.with_window_app(|window, cx| {
+                FAILING_FACTORY.with(|held| {
+                    held.borrow()
+                        .as_ref()
+                        .expect("inner factory")
+                        .build(window, cx)
+                        .map(drop)
+                })
+            })?;
+            request.finish(div())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    let id = registry
+        .register(
+            ComponentDescriptor::new("DelayedOverlay", Arc::new(DelayedOverlay))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "DelayedOverlay",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let failing_calls = Arc::new(AtomicUsize::new(0));
+    let failing_id = registry
+        .register(
+            ComponentDescriptor::new("FailingSlot", Arc::new(FailingSlot(failing_calls.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "FailingSlot",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let nested_id = registry
+        .register(
+            ComponentDescriptor::new("NestedFactorySlot", Arc::new(NestedFactorySlot))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "NestedFactorySlot",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let mut arena = SpecArena::new();
+    let content = arena.push(Component::Div);
+    let failing = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        failing_id,
+        "FailingSlot",
+        ComponentPayload::new(()),
+    )));
+    let nested = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        nested_id,
+        "NestedFactorySlot",
+        ComponentPayload::new(()),
+    )));
+    let root = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "DelayedOverlay",
+        ComponentPayload::new(()),
+    )));
+    arena
+        .push_op(root, SpecOp::Slot("content", content))
+        .unwrap();
+    arena
+        .push_op(root, SpecOp::Slot("failing", failing))
+        .unwrap();
+    arena.push_op(root, SpecOp::Slot("nested", nested)).unwrap();
+    let snapshot = RenderSnapshot::new(&runtime, 7, root, arena, None, None);
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ))
+    });
+    assert_eq!(
+        failing_calls.load(Ordering::SeqCst),
+        0,
+        "slot factory must be lazy"
+    );
+    drop(snapshot);
+    context.update(|window, cx| {
+        DELAYED_FACTORY.with(|held| {
+            let factory = held.borrow().clone().expect("factory escaped request");
+            drop(factory.build(window, cx).expect("first delayed build"));
+            drop(factory.build(window, cx).expect("second delayed build"));
+        });
+        FAILING_FACTORY.with(|held| {
+            let factory = held
+                .borrow()
+                .clone()
+                .expect("failing factory escaped request");
+            for _ in 0..2 {
+                let error = match factory.build(window, cx) {
+                    Ok(_) => panic!("nested materializer failure must propagate"),
+                    Err(error) => error,
+                };
+                assert!(
+                    format!("{error:#}").contains("nested slot failed"),
+                    "{error:#}"
+                );
+            }
+        });
+        NESTED_FACTORY.with(|held| {
+            let error = match held.borrow().as_ref().unwrap().build(window, cx) {
+                Ok(_) => panic!("nested factory failure must cross both frames"),
+                Err(error) => error,
+            };
+            let chain = format!("{error:#}");
+            assert!(chain.contains("NestedFactorySlot"), "{chain}");
+            assert!(chain.contains("nested slot failed"), "{chain}");
+        });
+        let self_factory = ComponentElementFactory::new(|window, cx| {
+            SELF_FACTORY.with(|held| held.borrow().as_ref().unwrap().build(window, cx))
+        });
+        SELF_FACTORY.with(|held| *held.borrow_mut() = Some(self_factory.clone()));
+        for _ in 0..2 {
+            let error = match self_factory.build(window, cx) {
+                Ok(_) => panic!("self-recursive factory must fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "component element factory is already building"
+            );
+        }
+        SELF_FACTORY.with(|held| held.borrow_mut().take());
+
+        let panics = Rc::new(Cell::new(true));
+        let panic_flag = panics.clone();
+        let panic_factory = ComponentElementFactory::new(move |_, _| {
+            if panic_flag.replace(false) {
+                panic!("synthetic factory panic");
+            }
+            Ok(div().into_any_element())
+        });
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = panic_factory.build(window, cx);
+            }))
+            .is_err()
+        );
+        drop(
+            panic_factory
+                .build(window, cx)
+                .expect("guard resets after panic"),
+        );
+    });
+    assert_eq!(failing_calls.load(Ordering::SeqCst), 3);
+    drop(runtime);
+    context.update(|window, cx| {
+        DELAYED_FACTORY.with(|held| {
+            let error = match held.borrow().as_ref().unwrap().build(window, cx) {
+                Ok(_) => panic!("released runtime must invalidate the factory"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "component element factory runtime has been released"
+            );
+            held.borrow_mut().take();
+        });
+        FAILING_FACTORY.with(|held| {
+            held.borrow_mut().take();
+        });
+        NESTED_FACTORY.with(|held| {
+            held.borrow_mut().take();
+        });
+    });
+}
+
+#[gpui::test]
+fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
+    use std::sync::{Arc, Mutex};
+
+    use gpui::{AnyElement, IntoElement as _, div};
+
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+        ConstructorDescriptor, MaterializeRequest, MethodDescriptor,
+    };
+
+    struct TestBoxMaterializer(Arc<Mutex<Vec<String>>>);
+
+    impl ComponentMaterializer for TestBoxMaterializer {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let id = request.payload().downcast_ref::<String>().unwrap().clone();
+            let tone = request
+                .methods()
+                .find(|method| method.name() == "tone")
+                .unwrap()
+                .payload()
+                .downcast_ref::<String>()
+                .unwrap()
+                .clone();
+            self.0.lock().unwrap().extend([id, tone]);
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let materialized = Arc::new(Mutex::new(Vec::new()));
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new(
+                "TestBox",
+                Arc::new(TestBoxMaterializer(materialized.clone())),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "TestBox",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
+                    _ => Err("TestBox.new(id) expects a string".into()),
+                },
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "tone",
+                    vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => {
+                            Ok(ComponentPayload::new(value.clone()))
+                        }
+                        _ => Err("tone(value) expects a string".into()),
+                    },
+                )
+                .with_documentation("A test-only method.")
+                .with_documentation("Sets the visual tone."),
+            ])
+            .with_documentation("A test component."),
+        )
+        .unwrap();
+    let components = registry.freeze().unwrap();
+    let declarations = crate::typings::declarations_with_components(&components);
+    assert!(declarations.contains("declare module \"gpui-component\""));
+    // `disabled`, `selected` and `on_click` join the omission because this
+    // descriptor declares none of them, and the runtime refuses them for a
+    // registered component that does not.
+    assert!(declarations.contains(
+        "export type TestBoxElement = Omit<Element, \"tone\" | \"disabled\" | \"selected\" | \"on_click\"> & {"
+    ));
+    assert!(declarations.contains("import { ClickEvent, Context, Element } from \"gpui-kit\";"));
+    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
+    assert!(declarations.contains("tone(value: string): TestBoxElement;"));
+    assert!(declarations.contains("A test component."));
+    assert!(declarations.contains("Sets the visual tone."));
+
+    let runtime = ShellRuntime::new_isolated_with_components(components).unwrap();
+    let view_type = runtime
+        .load_source(
+            "registered.js",
+            r#"
+import { View } from "gpui-kit";
+import { TestBox } from "gpui-component";
+export default class Registered extends View {
+  render() { return new TestBox("alpha").tone("quiet"); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    let tree = snapshot.debug_tree();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert!(tree.starts_with("TestBox"), "unexpected tree: {tree}");
+    assert!(tree.contains(":tone(registered)"), "missing method: {tree}");
+    assert_eq!(*materialized.lock().unwrap(), ["alpha", "quiet"]);
+}
+
+#[gpui::test]
+fn registered_method_schema_overrides_legacy_dispatch(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("StrictBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "StrictBox",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "disabled",
+                        vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "strict.js",
+            r#"
+import { View } from "gpui-kit";
+import { StrictBox } from "gpui-component";
+export default class Strict extends View { render() { return new StrictBox().disabled("yes"); } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("disabled(value) expects a boolean"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn registered_argument_conversion_has_recursive_depth_and_aggregate_budgets(
+    cx: &mut TestAppContext,
+) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("BudgetBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "BudgetBox",
+                    vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    for (name, body, expected) in [
+        (
+            "deep.js",
+            "let value = 'x'; for (let i = 0; i < 40; i++) value = [value]; return new BudgetBox(value);",
+            "nested too deeply",
+        ),
+        (
+            "wide.js",
+            "let value = []; for (let i = 0; i < 101; i++) { let row = []; for (let j = 0; j < 100; j++) row.push('x'); value.push(row); } return new BudgetBox(value);",
+            "too many nested values",
+        ),
+    ] {
+        let source = format!(
+            "import {{ View }} from 'gpui-kit'; import {{ BudgetBox }} from 'gpui-component'; export default class Budgeted extends View {{ render() {{ {body} }} }}"
+        );
+        let view_type = runtime.load_source(name, &source).unwrap();
+        let object = context
+            .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+            .unwrap();
+        let error = context
+            .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error:#}");
+    }
+}
+
+#[gpui::test]
+fn failed_registered_factory_does_not_claim_elements_or_persist_callbacks(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("RejectBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![
+                    ConstructorDescriptor::new(
+                        "RejectBox",
+                        vec![
+                            ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                        ],
+                        |_| Err("RejectBox deliberately rejects its payload".into()),
+                    ),
+                    ConstructorDescriptor::new("MethodBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                    ConstructorDescriptor::new(
+                        "ValidateBox",
+                        vec![
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                            ArgumentDescriptor::new("enabled", ArgumentSchema::Boolean),
+                        ],
+                        |_| Ok(ComponentPayload::new(())),
+                    ),
+                ])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "reject",
+                        vec![
+                            ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                        ],
+                        |_| Err("reject deliberately rejects its payload".into()),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "transactional-component.js",
+            r#"
+import { View, div } from "gpui-kit";
+import { MethodBox, RejectBox, ValidateBox } from "gpui-component";
+export default class Transactional extends View {
+  render() {
+    const child = div();
+    try { new RejectBox(child, () => {}); } catch (_) {}
+    const methodChild = div();
+    try { new MethodBox().reject(methodChild, () => {}); } catch (_) {}
+    try { new ValidateBox(() => {}, "not boolean"); } catch (_) {}
+    return div().child(child).child(methodChild);
+  }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+
+    assert_eq!(snapshot.debug_tree(), "div\n  div\n  div\n");
+    assert_eq!(runtime.live_callbacks(), 0);
+}
+
+#[gpui::test]
+fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("FocusBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "FocusBox",
+                    vec![ArgumentDescriptor::new(
+                        "focus",
+                        ArgumentSchema::Entity("FocusHandle"),
+                    )],
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "disabled",
+                        vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                    MethodDescriptor::new(
+                        "selected",
+                        vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                    MethodDescriptor::new(
+                        "on_click",
+                        vec![ArgumentDescriptor::new(
+                            "handler",
+                            ArgumentSchema::Callback("(event, cx) => void"),
+                        )],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "wrong-entity-kind.js",
+            r#"
+import { View } from "gpui-kit";
+import { InputState } from "gpui-base";
+import { FocusBox } from "gpui-component";
+export default class WrongKind extends View {
+  init() { this.input = InputState.new(); }
+  render() { return new FocusBox(this.input); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("FocusBox(focus) expects a FocusHandle entity"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn materialize_request_resolves_opaque_component_arguments(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentCallback, ComponentDescriptor, ComponentMaterializer, ComponentPayload,
+        ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+    };
+    use gpui::{AnyElement, IntoElement as _, ParentElement as _, div};
+    use std::{cell::RefCell, sync::Arc};
+
+    thread_local! {
+        static CALLBACK: RefCell<Option<ComponentCallback>> = const { RefCell::new(None) };
+    }
+
+    struct ResolvingMaterializer;
+    impl ComponentMaterializer for ResolvingMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let arguments = request
+                .payload()
+                .downcast_ref::<Vec<ComponentArgument>>()
+                .unwrap()
+                .clone();
+            let child = request.resolve_element(&arguments[0])?;
+            let entity = request.resolve_entity(&arguments[1])?;
+            anyhow::ensure!(entity.kind() == "FocusHandle");
+            let callback = request.resolve_callback(&arguments[2])?;
+            CALLBACK.with(|stored| *stored.borrow_mut() = Some(callback));
+            Ok(div().child(child).into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("ResolvedBox", Arc::new(ResolvingMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "ResolvedBox",
+                    vec![
+                        ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                        ArgumentDescriptor::new("focus", ArgumentSchema::Entity("FocusHandle")),
+                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                    ],
+                    |arguments| Ok(ComponentPayload::new(arguments.to_vec())),
+                )])
+                .with_methods(Vec::new()),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "resolved-component.js",
+            r#"
+import { View, div } from "gpui-kit";
+import { ResolvedBox } from "gpui-component";
+export default class Resolved extends View {
+  init(_props, cx) { this.focus = cx.focus_handle(); }
+  render() {
+    return new ResolvedBox(div(), this.focus, (text, number, flag, cx) => {
+      throw new Error(`adapter callback ran: ${text}|${number}|${flag}|${typeof cx.notify}`);
+    });
+  }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+    let callback = CALLBACK.with(|stored| stored.borrow_mut().take().unwrap());
+    let error = context
+        .update(|window, cx| {
+            callback.invoke_with(
+                &[
+                    crate::ComponentCallbackArgument::String("alpha".into()),
+                    crate::ComponentCallbackArgument::Number(2.5),
+                    crate::ComponentCallbackArgument::Boolean(true),
+                ],
+                window,
+                cx,
+            )
+        })
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("adapter callback ran: alpha|2.5|true|function"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn registered_component_state_is_created_once_and_updated_during_materialization(
+    cx: &mut TestAppContext,
+) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+        ConstructorDescriptor, MaterializeRequest, StateDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::cell::RefCell;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    thread_local! {
+        static STATE_HANDLE: RefCell<Option<crate::ComponentState<usize>>> = const { RefCell::new(None) };
+    }
+
+    struct Adapter(Arc<AtomicUsize>);
+    impl ComponentMaterializer for Adapter {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let argument = request
+                .payload()
+                .downcast_ref::<ComponentArgument>()
+                .unwrap()
+                .clone();
+            let value = request.with_state::<usize, _>(&argument, |value| *value)?;
+            let handle = request.state_handle(&argument)?;
+            STATE_HANDLE.with(|stored| *stored.borrow_mut() = Some(handle));
+            self.0.store(value, Ordering::SeqCst);
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let created = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::new(AtomicUsize::new(0));
+    let factory_created = created.clone();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "CounterState",
+            "CounterState",
+            vec![],
+            move |_, _, _| {
+                factory_created.fetch_add(1, Ordering::SeqCst);
+                Ok(Box::new(40usize))
+            },
+        ))
+        .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "OtherState",
+            "OtherState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("StatefulBox", Arc::new(Adapter(observed.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "StatefulBox",
+                    vec![ArgumentDescriptor::new(
+                        "state",
+                        ArgumentSchema::Entity("CounterState"),
+                    )],
+                    |arguments| Ok(ComponentPayload::new(arguments[0].clone())),
+                )])
+                .with_methods(vec![]),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let class = runtime
+        .load_source(
+            "stateful.js",
+            r#"
+import { View } from "gpui-kit";
+import { CounterState, StatefulBox } from "gpui-component";
+export default class Stateful extends View {
+  init() { this.state = CounterState(); }
+  render() { return new StatefulBox(this.state); }
+}"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&class, window, cx))
+        .unwrap();
+    for expected in [40, 41] {
+        let snapshot = context
+            .update(|window, cx| {
+                runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+            })
+            .unwrap();
+        context.update(|window, cx| {
+            drop(crate::materialize::materialize(
+                &runtime, &snapshot, window, cx,
+            ))
+        });
+        assert_eq!(observed.load(Ordering::SeqCst), expected);
+        if expected == 40 {
+            context
+                .update(|window, cx| {
+                    STATE_HANDLE.with(|stored| {
+                        stored
+                            .borrow()
+                            .as_ref()
+                            .unwrap()
+                            .update(window, cx, |value, _, _| *value += 1)
+                    })
+                })
+                .unwrap();
+        }
+    }
+    assert_eq!(created.load(Ordering::SeqCst), 1);
+
+    let forged = runtime
+        .load_source(
+            "forged-state.js",
+            r#"
+import { View } from "gpui-kit";
+import { StatefulBox } from "gpui-component";
+export default class Forged extends View {
+  render() {
+    return new StatefulBox({ __componentStateHandle: 0, __componentStateProof: "guessed" });
+  }
+}"#,
+        )
+        .unwrap();
+    let forged = context
+        .update(|window, cx| runtime.instantiate(&forged, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&forged, None, crate::policy::default(), window, cx)
+        })
+        .err()
+        .expect("forged retained state must be rejected");
+    assert!(
+        error.to_string().contains("expects a CounterState entity"),
+        "{error:#}"
+    );
+
+    let wrong_kind = runtime
+        .load_source(
+            "wrong-state-kind.js",
+            r#"
+import { View } from "gpui-kit";
+import { OtherState, StatefulBox } from "gpui-component";
+export default class WrongKind extends View {
+  init() { this.state = OtherState(); }
+  render() { return new StatefulBox(this.state); }
+}"#,
+        )
+        .unwrap();
+    let wrong_kind = context
+        .update(|window, cx| runtime.instantiate(&wrong_kind, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&wrong_kind, None, crate::policy::default(), window, cx)
+        })
+        .err()
+        .expect("wrong retained state kind must be rejected");
+    assert!(
+        error.to_string().contains("expects a CounterState entity"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn failed_registered_state_factory_rolls_back_without_retaining_a_slot(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentRegistry,
+        StateDescriptor,
+    };
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "BrokenState",
+            "BrokenState",
+            vec![ArgumentDescriptor::new(
+                "callback",
+                ArgumentSchema::Callback("() => void"),
+            )],
+            |_, _, _| Err("state factory refused creation".into()),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let class = runtime
+        .load_source(
+            "broken-state.js",
+            r#"
+import { View } from "gpui-kit";
+import { BrokenState } from "gpui-component";
+export default class Broken extends View { init() { BrokenState(() => {}); } render() { return "never"; } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| runtime.instantiate(&class, window, cx))
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("state factory refused creation"),
+        "{error:#}"
+    );
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    assert_eq!(runtime.live_callbacks(), 0);
+}
+
+#[gpui::test]
+fn failed_application_load_releases_states_created_during_module_evaluation(
+    cx: &mut TestAppContext,
+) {
+    use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "LoadState",
+            "LoadState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-failed-state-load-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("main.js"),
+        r#"
+import { LoadState } from "gpui-component";
+LoadState();
+throw new Error("module load failed after state creation");
+export default class Never {}
+"#,
+    )
+    .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .err()
+        .expect("application load must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("module load failed after state creation"),
+        "{error:#}"
+    );
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[gpui::test]
+fn successful_application_reload_purges_old_state_and_keeps_new_generation(
+    cx: &mut TestAppContext,
+) {
+    use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "ReloadState",
+            "ReloadState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-successful-state-reload-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    let source = |version| {
+        format!(
+            r#"
+import {{ ReloadState }} from "gpui-component";
+ReloadState();
+export default class Reloaded {{ render() {{ return "version {version}"; }} }}
+"#
+        )
+    };
+    std::fs::write(directory.join("main.js"), source(1)).unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let first = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    std::fs::write(directory.join("main.js"), source(2)).unwrap();
+    let second = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    let first = context
+        .update(|window, cx| runtime.instantiate(&first, window, cx))
+        .unwrap();
+    let second = context
+        .update(|window, cx| runtime.instantiate(&second, window, cx))
+        .unwrap();
+    assert_eq!(runtime.retained_component_state_count(), 2);
+    let old = first.application_generation().unwrap();
+    let new = second.application_generation().unwrap();
+
+    context.update(|_, cx| runtime.release_application_generation(&old, cx));
+
+    assert_eq!(runtime.retained_component_state_count(), 1);
+    assert!(!old.is_active());
+    assert!(new.is_active());
+    context.update(|_, cx| runtime.release_application_generation(&new, cx));
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[gpui::test]
+fn registered_parent_can_inspect_and_materialize_a_registered_typed_child(cx: &mut TestAppContext) {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+    };
+    use gpui::{AnyElement, ParentElement as _, div};
+    use std::{cell::RefCell, sync::Arc};
+
+    thread_local! {
+        static CHILD_NAME: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    }
+
+    struct LeafMaterializer;
+    impl ComponentMaterializer for LeafMaterializer {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            request.finish(div().child("leaf"))
+        }
+    }
+
+    struct ParentMaterializer;
+    impl ComponentMaterializer for ParentMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let mut children = request.take_typed_children().unwrap();
+            anyhow::ensure!(children.len() == 1);
+            let mut child = children.pop().unwrap();
+            CHILD_NAME.with(|name| *name.borrow_mut() = child.component_name());
+            let child = request.materialize_child(&mut child)?;
+            request.finish(div().child(child))
+        }
+    }
+
+    fn descriptor(
+        name: &'static str,
+        materializer: Arc<dyn ComponentMaterializer>,
+    ) -> ComponentDescriptor {
+        ComponentDescriptor::new(name, materializer)
+            .with_constructors(vec![ConstructorDescriptor::new(name, Vec::new(), |_| {
+                Ok(ComponentPayload::new(()))
+            })])
+            .with_methods(Vec::new())
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(descriptor("TypedLeaf", Arc::new(LeafMaterializer)))
+        .unwrap();
+    registry
+        .register(descriptor("TypedParent", Arc::new(ParentMaterializer)))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "typed-child.js",
+            r#"
+import { View } from "gpui-kit";
+import { TypedLeaf, TypedParent } from "gpui-component";
+export default class TypedChildView extends View {
+  render() { return new TypedParent().child(new TypedLeaf()); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert_eq!(CHILD_NAME.with(|name| *name.borrow()), Some("TypedLeaf"));
+}
+
+#[gpui::test]
+fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestAppContext) {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::AnyElement;
+    use gpui_base::Button;
+
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor,
+    };
+
+    #[derive(Default)]
+    struct Observed {
+        states: Mutex<Vec<(String, bool, bool, usize)>>,
+        click_recordings: AtomicUsize,
+    }
+
+    struct AdapterButton(Arc<Observed>);
+
+    impl ComponentMaterializer for AdapterButton {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let id = request.payload().downcast_ref::<String>().unwrap().clone();
+            self.0.states.lock().unwrap().push((
+                id.clone(),
+                request.disabled(),
+                request.selected(),
+                request.children_len(),
+            ));
+            let mut button = Button::new(id).disabled(request.disabled());
+            if let Some(on_click) = request.on_click() {
+                button = button.on_click(move |event, window, cx| {
+                    on_click.invoke(event, window, cx);
+                });
+            }
+            request.finish(button)
+        }
+    }
+
+    cx.update(crate::init);
+    let observed = Arc::new(Observed::default());
+    let observed_clicks = Arc::clone(&observed);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new(
+                "AdapterButton",
+                Arc::new(AdapterButton(Arc::clone(&observed))),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "AdapterButton",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [crate::ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
+                    _ => unreachable!("argument schema validated before payload construction"),
+                },
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "disabled",
+                    vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                )
+                .with_documentation("A test-only method."),
+                MethodDescriptor::new(
+                    "selected",
+                    vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                )
+                .with_documentation("A test-only method."),
+                MethodDescriptor::new(
+                    "on_click",
+                    vec![ArgumentDescriptor::new(
+                        "handler",
+                        ArgumentSchema::Callback("(event, cx) => void"),
+                    )],
+                    move |_| {
+                        observed_clicks
+                            .click_recordings
+                            .fetch_add(1, Ordering::SeqCst);
+                        Ok(ComponentPayload::new(()))
+                    },
+                )
+                .with_documentation("A test-only method."),
+            ]),
+        )
+        .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new(
+                "RejectClick",
+                Arc::new(AdapterButton(Arc::clone(&observed))),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "RejectClick",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(String::from("reject"))),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "on_click",
+                    vec![ArgumentDescriptor::new(
+                        "handler",
+                        ArgumentSchema::Callback("(event, cx) => void"),
+                    )],
+                    |_| Err("click recorder refused the handler".into()),
+                )
+                .with_documentation("A test-only method."),
+            ]),
+        )
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { AdapterButton } from "gpui-component";
+export default class AdapterButtons extends View {
+  init() { this.clicks = 0; }
+  render() {
+    return div().w(300).h(100)
+      .child(new AdapterButton("disabled").disabled(true).selected(true).w(120).h(40).child("Disabled"))
+      .child(new AdapterButton("active").w(120).h(40).on_click((_event, cx) => {
+        this.clicks += 1;
+        cx.notify();
+      }).child("Clicks: " + this.clicks));
+  }
+}
+"#;
+    let view_type = runtime.load_source("adapter-button.js", source).unwrap();
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let refusing = runtime
+        .load_source(
+            "refusing-click.js",
+            r#"
+import { View } from "gpui-kit";
+import { RejectClick } from "gpui-component";
+export default class RefusingClick extends View {
+  render() { return new RejectClick().on_click(() => {}); }
+}
+"#,
+        )
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&refusing, window, cx))
+        .unwrap();
+    let callbacks_before = runtime.live_callbacks();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("click recorder refused the handler"),
+        "{error:#}"
+    );
+    assert_eq!(
+        runtime.live_callbacks(),
+        callbacks_before,
+        "a recorder failure must roll back the callback it validated"
+    );
+
+    let undeclared = runtime
+        .load_source(
+            "undeclared-common.js",
+            r#"
+import { View } from "gpui-kit";
+import { AdapterButton } from "gpui-component";
+export default class UndeclaredCommon extends View {
+  render() { return new AdapterButton("bad").checked(true); }
+}
+"#,
+        )
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&undeclared, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unknown element method `checked`")
+    );
+
+    let view = window.root(&mut context).unwrap();
+    context.update(|_, cx| view.update(cx, |_, cx| cx.notify()));
+    context.run_until_parked();
+    context.update(|window, _| window.refresh());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let initial_tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        !initial_tree.is_empty(),
+        "script view did not publish a snapshot"
+    );
+    let states = observed.states.lock().unwrap().clone();
+    assert!(
+        states.contains(&("disabled".into(), true, true, 1)),
+        "{states:?}"
+    );
+    assert!(
+        states.contains(&("active".into(), false, false, 1)),
+        "{states:?}"
+    );
+    assert_eq!(observed.click_recordings.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        runtime.live_callbacks(),
+        1,
+        "the descriptor transaction and common Behavior must share one callback"
+    );
+
+    context.simulate_click(point(px(20.), px(60.)), Modifiers::default());
+    context.run_until_parked();
+    let view = window.root(&mut context).unwrap();
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(tree.contains("Clicks: 1"), "{tree}");
+}
+
+#[gpui::test]
+fn deprecated_alias_constructs_the_same_component_and_warns_once(cx: &mut TestAppContext) {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
+    registry
+        .register(
+            ComponentDescriptor::new("TestBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![
+                    ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                    ConstructorDescriptor::new("OldTestBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    })
+                    .with_deprecation("TestBox", "Use TestBox instead."),
+                ])
+                .with_methods(Vec::new())
+                .with_documentation("A test box."),
+        )
+        .unwrap();
+    let components = registry.freeze().unwrap();
+    let declarations = crate::typings::declarations_with_components(&components);
+    assert!(declarations.contains("@deprecated Use TestBox instead."));
+    let runtime = ShellRuntime::new_isolated_with_components(components).unwrap();
+    let view_type = runtime
+        .load_source(
+            "alias.js",
+            r#"
+import { View } from "gpui-kit";
+import { OldTestBox } from "gpui-component";
+export default class Alias extends View { render() { return new OldTestBox(); } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    for _ in 0..2 {
+        let tree = context
+            .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+            .unwrap();
+        assert_eq!(tree, "TestBox\n");
+    }
+    assert_eq!(runtime.deprecation_warning_count("OldTestBox"), 1);
+}
+
+#[test]
+fn isolated_runtimes_write_their_own_component_declarations() {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    let runtime = |export: &'static str| {
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new(export, Arc::new(EmptyMaterializer))
+                    .with_constructors(vec![ConstructorDescriptor::new(export, Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    })])
+                    .with_methods(Vec::new()),
+            )
+            .unwrap();
+        ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap()
+    };
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("gpui-shell-component-types-{unique}"));
+    let first = root.join("first");
+    let second = root.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::write(first.join("main.js"), "export default class First {}").unwrap();
+    std::fs::write(second.join("main.js"), "export default class Second {}").unwrap();
+    let first_runtime = runtime("FirstBox");
+    let second_runtime = runtime("SecondBox");
+    first_runtime.load_app(&first, "main.js").unwrap();
+    second_runtime.load_app(&second, "main.js").unwrap();
+
+    let first_types = std::fs::read_to_string(first.join("gpui-kit.d.ts")).unwrap();
+    let second_types = std::fs::read_to_string(second.join("gpui-kit.d.ts")).unwrap();
+    assert!(first_types.contains("FirstBox"));
+    assert!(!first_types.contains("SecondBox"));
+    assert!(second_types.contains("SecondBox"));
+    assert!(!second_types.contains("FirstBox"));
+    assert_eq!(first_types, first_runtime.type_declarations());
+    assert_eq!(second_types, second_runtime.type_declarations());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[gpui::test]
 fn element_map_returns_the_transform_result(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class MappedElement extends View {
   render(cx) {
@@ -119,7 +2023,7 @@ fn flex_elements_record_pointer_handlers(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r##"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class PointerHandlers extends View {
   render(cx) {
@@ -161,7 +2065,7 @@ fn a_mouse_move_rebuild_keeps_later_callbacks_live(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class PointerRebuild extends View {
@@ -263,7 +2167,7 @@ fn flex_elements_dispatch_their_click_handlers(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 
 export default class ClickableFlexes extends View {
@@ -325,7 +2229,7 @@ fn a_full_color_image_survives_script_render_and_materialize(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View, image } from "gpui";
+import { div, View, image } from "gpui-kit";
 export default class BrandImage extends View {
   render(cx) { return image("assets/brand.svg").size(28); }
 }
@@ -351,7 +2255,7 @@ fn an_external_link_survives_the_script_render(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Link } from "gpui-base";
 export default class ExternalLink extends View {
   render() {
@@ -388,7 +2292,7 @@ fn an_external_link_requires_a_parseable_http_origin(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Link } from "gpui-base";
 export default class InvalidExternalLink extends View {
   render() { return Link.new("broken").href("https://"); }
@@ -418,7 +2322,7 @@ fn render_context_exposes_base_aligned_theme_tokens(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Themed extends View {
   render(cx) {
     return div()
@@ -454,12 +2358,72 @@ export default class Themed extends View {
 }
 
 #[gpui::test]
+fn repeated_theme_reads_cross_the_snapshot_boundary_once(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui-kit";
+
+let snapshotReads = 0;
+const readSnapshot = globalThis.__theme_snapshot;
+globalThis.__theme_snapshot = () => {
+  snapshotReads += 1;
+  return readSnapshot();
+};
+
+export default class Themed extends View {
+  render(cx) {
+    cx.theme();
+    cx.theme();
+    cx.theme();
+    return `${snapshotReads}:${cx.theme().appearance}`;
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("cached-context-theme.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let first = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("one render must transfer one theme snapshot");
+    assert!(
+        first.contains("text \"1:light\""),
+        "unexpected theme: {first}"
+    );
+    let unchanged = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("an unchanged later render must reuse the transferred theme snapshot");
+    assert!(
+        unchanged.contains("text \"1:light\""),
+        "unchanged theme crossed the snapshot boundary again: {unchanged}"
+    );
+
+    context.update(|_, cx| {
+        gpui_base::Theme::global_mut(cx).appearance = gpui_base::ThemeAppearance::Dark;
+    });
+    let changed = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("a changed appearance must refresh the transferred theme snapshot");
+    assert!(
+        changed.contains("text \"2:dark\""),
+        "changed theme did not cross the snapshot boundary exactly once: {changed}"
+    );
+}
+
+#[gpui::test]
 fn render_context_theme_snapshot_is_deeply_read_only(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Themed extends View {
   render(cx) {
     const theme = cx.theme();
@@ -493,7 +2457,7 @@ fn render_context_theme_rejects_a_stale_context(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Themed extends View {
   render(cx) {
     if (this.savedTheme) this.savedTheme();
@@ -525,7 +2489,8 @@ export default class Themed extends View {
 
 #[test]
 fn link_typings_expose_a_real_external_target() {
-    let types = crate::typings::declarations();
+    let types =
+        crate::typings::declarations_with_components(&crate::FrozenComponentRegistry::default());
     assert!(types.contains("export const Link: ComponentType;"));
     assert!(types.contains("href(url: string): Element;"));
 }
@@ -538,7 +2503,7 @@ fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Broken extends View {
@@ -575,7 +2540,7 @@ fn an_unknown_style_method_suggests_the_closest_name(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class Typo extends View {
   render() {
@@ -641,7 +2606,7 @@ fn nested_view_updates_and_callbacks_rebuild_only_the_child(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
@@ -789,7 +2754,7 @@ fn targeted_notify_accepts_a_child_created_in_the_same_init(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 
 class Child extends View {
   init(props) { this.shared = props.shared; }
@@ -840,7 +2805,7 @@ fn targeted_notify_rebuilds_the_child_without_running_update(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Checkbox } from "gpui-base";
 
 class Child extends View {
@@ -950,7 +2915,7 @@ fn targeted_notify_rejects_malformed_and_released_entities(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Checkbox } from "gpui-base";
 
 class Child extends View { render() { return "child"; } }
@@ -1045,7 +3010,7 @@ fn nested_view_operations_from_one_job_are_fifo_and_keep_descendant_ownership(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox } from "gpui-base";
 
 class Grandchild extends View {
@@ -1155,7 +3120,7 @@ fn a_release_during_nested_view_creation_retires_the_candidate(cx: &mut TestAppC
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
   init(_props, cx) {
@@ -1196,7 +3161,7 @@ fn failed_nested_update_rolls_back_script_fields_entities_and_tasks(cx: &mut Tes
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
@@ -1319,7 +3284,7 @@ fn nested_view_tokens_reject_foreign_application_mount_update_and_release(cx: &m
     std::fs::create_dir_all(&attacker_dir).expect("attacker directory");
     std::fs::write(
         victim_dir.join("main.js"),
-        r#"import { div, View } from "gpui";
+        r#"import { div, View } from "gpui-kit";
 class Child extends View {
   init(props) { this.label = props.label; }
   update(props) { this.label = props.label; }
@@ -1333,7 +3298,7 @@ export default class Victim extends View {
     .expect("victim source");
     std::fs::write(
         attacker_dir.join("main.js"),
-        r#"import { div, View } from "gpui";
+        r#"import { div, View } from "gpui-kit";
 export default class Attacker extends View {
   init() {
     this.results = [];
@@ -1415,7 +3380,7 @@ fn public_nested_release_retires_descendants_callbacks_tasks_snapshots_and_alias
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 class Grandchild extends View {
   init(_props, cx) {
@@ -1521,7 +3486,7 @@ fn child_render_failure_preserves_its_previous_good_snapshot(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox } from "gpui-base";
 class Child extends View {
   init() { this.fail = false; }
@@ -1607,7 +3572,7 @@ fn a_released_nested_view_cannot_be_mounted_again(cx: &mut TestAppContext) {
         cx,
         "released-nested-view.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
   init(_props, cx) {
@@ -1627,7 +3592,7 @@ fn a_nested_view_handle_can_only_be_mounted_once_per_snapshot(cx: &mut TestAppCo
         cx,
         "duplicate-nested-view.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
@@ -1650,7 +3615,7 @@ fn nested_view_creation_rejects_constructible_non_view_functions(cx: &mut TestAp
         cx,
         "nested-view-class-contract.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 function ConstructibleButNotAView() {}
 export default class Parent extends View {
   render(cx) {
@@ -1678,7 +3643,7 @@ fn public_nested_constructor_failure_reaches_the_host_boundary_and_rolls_back(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 class Child extends View {
   // `init` is where a view is handed a context, so it is where a view that
@@ -1720,7 +3685,7 @@ fn nested_view_creation_updates_and_release_are_rejected_during_render(cx: &mut 
         cx,
         "nested-view-created-in-render.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 class Child extends View { render(cx) { return "child"; } }
 export default class Parent extends View {
   render(cx) {
@@ -1739,7 +3704,7 @@ export default class Parent extends View {
         cx,
         "nested-view-updated-in-render.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
   init(_props, cx) { this.child = cx.new(Child); }
@@ -1759,7 +3724,7 @@ export default class Parent extends View {
         cx,
         "nested-view-released-in-render.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
   init(_props, cx) { this.child = cx.new(Child); }
@@ -1785,7 +3750,7 @@ fn nested_view_creation_updates_and_release_name_the_layout_phase(cx: &mut TestA
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, v_virtual_list, Button } from "gpui-base";
 class Child extends View { render() { return "child"; } }
 export default class Parent extends View {
@@ -1933,16 +3898,16 @@ fn state_styles_reuse_the_ordinary_style_methods(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Button } from "gpui-base";
 
 export default class Styled extends View {
   render(cx) {
     return div()
-      .hover((el) => el.bg("accent"))
+      .hover((el) => el.bg(`#eff6ff`))
       .child(
         Button.new("go")
-          .bg("primary")
+          .bg(`#2563eb`)
           .hover((el) => el.opacity(0.9))
           .active((el) => el.opacity(0.8))
           .child("Go"),
@@ -1980,7 +3945,7 @@ fn transition_declarations_survive_the_script_render(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class Motion extends View {
   render() {
@@ -2018,7 +3983,7 @@ fn native_overflow_scroll_behaviors_survive_script_render_and_materialize(cx: &m
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class ScrollableQuotes extends View {
@@ -2074,7 +4039,7 @@ fn a_scrollbar_drives_the_scroll_area_that_shares_its_name(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Scrollbar, v_flex } from "gpui-base";
 
 export default class Watchlist extends View {
@@ -2135,7 +4100,7 @@ fn a_tab_list_carries_selection_in_and_activation_out(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Tabs, Tab } from "gpui-base";
 
 export default class Settings extends View {
@@ -2203,7 +4168,7 @@ fn a_logarithmic_slider_that_reaches_zero_is_refused_rather_than_asserted(cx: &m
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
@@ -2235,7 +4200,7 @@ fn a_slider_rejects_numbers_that_do_not_fit_its_native_representation(cx: &mut T
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
@@ -2272,7 +4237,7 @@ fn a_slider_is_composed_by_the_script_and_positioned_by_the_shell(cx: &mut TestA
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { SliderState, Slider, SliderTrack, SliderIndicator, SliderThumb, v_flex } from "gpui-base";
 
 export default class Volume extends View {
@@ -2290,9 +4255,9 @@ export default class Volume extends View {
               .relative()
               .w_full()
               .h(6)
-              .bg("secondary")
-              .range_style((fill) => fill.bg("primary"))
-              .child(SliderThumb.new(this.volume).size(16).bg("primary")),
+              .bg(`#e5e7eb`)
+              .range_style((fill) => fill.bg(`#2563eb`))
+              .child(SliderThumb.new(this.volume).size(16).bg(`#2563eb`)),
           ),
         ),
       );
@@ -2372,7 +4337,7 @@ fn a_number_input_carries_three_slots_over_a_plain_input_state(cx: &mut TestAppC
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { NumberInput, InputState, h_flex } from "gpui-base";
 
 export default class Quantity extends View {
@@ -2438,7 +4403,7 @@ fn an_otp_length_outside_the_usable_range_is_refused(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { OtpState } from "gpui-base";
 
 export default class Code extends View {
@@ -2473,7 +4438,7 @@ fn an_otp_input_is_styled_by_the_script_and_filled_by_the_shell(cx: &mut TestApp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
@@ -2489,8 +4454,8 @@ export default class Code extends View {
           .flex()
           .gap(8)
           .cell_style((cell) => cell.size(40).border_1().rounded(6))
-          .cell_active_style((cell) => cell.border_color("ring"))
-          .caret_style((caret) => caret.w(2).h(18).bg("foreground")),
+          .cell_active_style((cell) => cell.border_color(`#2563eb`))
+          .caret_style((caret) => caret.w(2).h(18).bg(`#111111`)),
       );
   }
 }
@@ -2557,7 +4522,7 @@ fn typing_into_an_otp_input_reaches_the_state_without_the_script(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { OtpState, OtpInput } from "gpui-base";
 
 export default class Code extends View {
@@ -2615,7 +4580,7 @@ fn otp_change_and_complete_are_distinct_events(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
@@ -2693,7 +4658,7 @@ fn otp_setters_refresh_script_ui_and_same_event_subscription_is_replaced(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Button, OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
@@ -2778,7 +4743,7 @@ fn a_progress_bar_announces_a_value_the_script_draws_itself(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Progress, ProgressTrack, ProgressIndicator } from "gpui-base";
 
 export default class Download extends View {
@@ -2791,12 +4756,12 @@ export default class Download extends View {
         ProgressTrack.new()
           .w(200)
           .h(6)
-          .bg("secondary")
+          .bg(`#e5e7eb`)
           .child(
             ProgressIndicator.new()
               .w(`${this.percent}%`)
               .h(6)
-              .bg("primary")));
+              .bg(`#2563eb`)));
   }
 }
 
@@ -2849,12 +4814,17 @@ fn fps_monitor_is_available_as_a_native_overlay(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { fps_monitor } from "gpui-fps";
 
 export default class Monitor extends View {
   render(cx) {
-    return div().relative().size_full().child(fps_monitor().anchor("bottom_left"));
+    return div().relative().size_full().child(
+      fps_monitor()
+        .anchor("bottom_left")
+        .continuous(false)
+        .frame_budget(8.33)
+    );
   }
 }
 "#;
@@ -2869,8 +4839,10 @@ export default class Monitor extends View {
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
         .expect("render spec");
     assert!(
-        spec.contains("FpsMonitor :anchor"),
-        "the snapshot must retain the native monitor and its anchor: {spec}"
+        spec.contains("FpsMonitor :anchor")
+            && spec.contains(":continuous[Bool(false)]")
+            && spec.contains(":frame_budget[Number(8.33)]"),
+        "the snapshot must retain the native monitor and its performance options: {spec}"
     );
 
     let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
@@ -2888,7 +4860,7 @@ fn a_radio_group_and_a_toggle_carry_their_controlled_state_both_ways(cx: &mut Te
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Radio, Toggle, v_flex } from "gpui-base";
 
 export default class Preferences extends View {
@@ -2959,7 +4931,7 @@ fn a_table_describes_its_shape_and_its_accessibility_indices(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "gpui-base";
 
 export default class Positions extends View {
@@ -2981,7 +4953,7 @@ export default class Positions extends View {
         TableBody.new("positions-body").children(
           rows.map((cells, row) =>
             TableRow.new(`positions-row-${row}`, row + 2)
-              .hover((el) => el.bg("background"))
+              .hover((el) => el.bg(`#ffffff`))
               .on_click((_event, cx) => { this.picked = row; cx.notify(); })
               .children(
                 cells.map((value, column) =>
@@ -3050,7 +5022,7 @@ fn a_table_index_below_one_is_refused_at_the_call_site(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { TableCell } from "gpui-base";
 
 export default class BadTable extends View {
@@ -3113,7 +5085,7 @@ fn accessibility_counts_and_positions_reject_invalid_numbers(cx: &mut TestAppCon
     ] {
         let runtime = ShellRuntime::new_isolated().expect("runtime");
         let source = format!(
-            "import {{ View }} from 'gpui'; import {{ Tab, Table, Progress }} from 'gpui-base'; export default class Bad extends View {{ render() {{ return {expression}; }} }}"
+            "import {{ View }} from 'gpui-kit'; import {{ Tab, Table, Progress }} from 'gpui-base'; export default class Bad extends View {{ render() {{ return {expression}; }} }}"
         );
         let view_type = runtime.load_source(name, &source).expect("load");
         let window = cx.add_window(|_, _| Empty);
@@ -3139,7 +5111,7 @@ fn motion_rejects_properties_the_native_layer_cannot_interpolate(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class BadMotion extends View {
   render() {
@@ -3173,7 +5145,7 @@ fn spring_declarations_survive_the_script_render(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class Motion extends View {
   render() {
@@ -3209,7 +5181,7 @@ fn transition_rejects_an_unknown_native_easing(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 export default class BadMotion extends View {
   render() {
     return div().opacity(0.5).transition("opacity", { duration: 120, easing: "bounce" });
@@ -3265,7 +5237,7 @@ fn motion_rejects_non_finite_or_physically_invalid_policies(cx: &mut TestAppCont
     ] {
         let source = format!(
             r#"
-import {{ View, div }} from "gpui";
+import {{ View, div }} from "gpui-kit";
 export default class BadMotion extends View {{
   render() {{ return {declaration}; }}
 }}
@@ -3311,7 +5283,7 @@ fn javascript_can_replace_the_active_gpui_base_theme(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r##"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { set_theme } from "gpui-base";
 export default class ThemeSwitch extends View {
   init() {
@@ -3344,6 +5316,128 @@ export default class ThemeSwitch extends View {
         assert_eq!(
             gpui_base::Theme::global(cx).appearance,
             gpui_base::ThemeAppearance::Dark
+        );
+    });
+}
+
+/// A script states its type scale, and the chrome the shell draws follows it.
+///
+/// The regression this guards is a dense application with oversized
+/// notifications: everything `ShellRoot` draws for itself states no text size
+/// and inherited GPUI's 16px default, while the components an application
+/// builds set their own — so a window drawn at 12px got 16px toasts over it.
+/// `md` is the base, and it is an override: a theme that says nothing about
+/// type keeps the scale it was given.
+#[gpui::test]
+fn javascript_can_state_the_type_scale(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div } from "gpui-kit";
+import { set_theme } from "gpui-base";
+const color = "#111111";
+const base = {
+  colors: {
+    background: color, foreground: color, surface: color, surface_foreground: color,
+    primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
+    muted: color, muted_foreground: color, accent: color, accent_foreground: color,
+    destructive: color, destructive_foreground: color, border: color, input: color, ring: color,
+    selection: color,
+  },
+  spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+  radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
+};
+export default class TypeScale extends View {
+  init() {
+    // Only what this application has an opinion about. The line height, the
+    // weight and both font families are left as they are.
+    set_theme({ appearance: "light", tokens: { ...base, typography: { md: { size: 12 } } } });
+  }
+  render(cx) { return div(); }
+}
+"##;
+    let view_type = runtime.load_source("type-scale", source).expect("load");
+    let loaded = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let object = loaded.instantiate(&view_type, window, cx).unwrap();
+        ScriptView::new(loaded, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.update(|_, cx| {
+        let typography = gpui_base::Theme::global(cx).tokens.typography.clone();
+        assert_eq!(
+            typography.md.size,
+            gpui::px(12.),
+            "the size the script stated is the one the theme carries"
+        );
+        assert_eq!(
+            typography.md.line_height,
+            gpui_base::TypographyTokens::default().md.line_height,
+            "and an entry it left out keeps the value it had"
+        );
+        assert_eq!(
+            typography.sans,
+            gpui_base::TypographyTokens::default().sans,
+            "including the font families, which it never mentioned"
+        );
+        assert_eq!(
+            typography.sm.size,
+            gpui_base::TypographyTokens::default().sm.size,
+            "and the steps beside the one it named"
+        );
+    });
+}
+
+/// A size that cannot be drawn is refused rather than applied.
+#[gpui::test]
+fn a_type_scale_of_zero_is_refused(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div } from "gpui-kit";
+import { set_theme } from "gpui-base";
+const color = "#111111";
+export default class ZeroScale extends View {
+  init() {
+    this.refused = "";
+    try {
+      set_theme({ appearance: "light", tokens: {
+        colors: {
+          background: color, foreground: color, surface: color, surface_foreground: color,
+          primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
+          muted: color, muted_foreground: color, accent: color, accent_foreground: color,
+          destructive: color, destructive_foreground: color, border: color, input: color,
+          ring: color, selection: color,
+        },
+        spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+        radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
+        typography: { md: { size: 0 } },
+      }});
+    } catch (error) {
+      this.refused = String(error && error.message ? error.message : error);
+    }
+  }
+  render(cx) { return div().child(this.refused || "applied"); }
+}
+"##;
+    let view_type = runtime.load_source("zero-scale", source).expect("load");
+    let loaded = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let object = loaded.instantiate(&view_type, window, cx).unwrap();
+        ScriptView::new(loaded, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.update(|_, cx| {
+        assert_eq!(
+            gpui_base::Theme::global(cx).tokens.typography.md.size,
+            gpui_base::TypographyTokens::default().md.size,
+            "a refused scale leaves the one that was working alone"
         );
     });
 }
@@ -3407,7 +5501,7 @@ fn a_textarea_holds_multi_line_state_beside_an_input(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Input, InputState, Textarea, TextareaState } from "gpui-base";
 
 export default class Note extends View {
@@ -3461,7 +5555,7 @@ fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { InputState } from "gpui-base";
 
 export default class Bad extends View {
@@ -3507,7 +5601,7 @@ fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
     std::fs::write(
         directory.join("main.js"),
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { caption } from "./caption.js";
 
@@ -3606,7 +5700,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&directory).expect("a temporary application");
     let source = |caption: &str| {
         format!(
-            "import {{ div, View }} from \"gpui\";\n\
+            "import {{ div, View }} from \"gpui-kit\";\n\
              import {{ v_flex }} from \"gpui-base\";\n\
              export default class Panel extends View {{\n\
                render() {{ return v_flex().child(\"{caption}\"); }}\n\
@@ -3698,7 +5792,7 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
             "this.probe = [];"
         };
         format!(
-            "import {{ div, View }} from \"gpui\";\n\
+            "import {{ div, View }} from \"gpui-kit\";\n\
              import {{ v_flex }} from \"gpui-base\";\n\
              class Child extends View {{ render() {{ return \"{caption}\"; }} }}\n\
              export default class Parent extends View {{\n\
@@ -3789,7 +5883,7 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     let source = |caption: &str| {
         format!(
-            "import {{ div, View }} from \"gpui\";\n\
+            "import {{ div, View }} from \"gpui-kit\";\n\
              export default class Panel extends View {{\n\
                init(_props, cx) {{ cx.timer.every(60_000, () => {{}}); }}\n\
                render(cx) {{ return \"{caption}\"; }}\n\
@@ -3832,7 +5926,7 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     std::fs::write(
         directory.join("main.js"),
-        "import { with_cx } from \"gpui\";\n\
+        "import { with_cx } from \"gpui-kit\";\n\
          cx.timer.every(60_000, () => {});\n\
          throw new Error(\"reload failed\");",
     )
@@ -3850,7 +5944,7 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     std::fs::write(
         directory.join("main.js"),
-        "import { View } from \"gpui\";\n\
+        "import { View } from \"gpui-kit\";\n\
          export default class Broken extends View {\n\
            init(_props, cx) { cx.timer.every(60_000, () => {}); throw new Error(\"init failed\"); }\n\
            render(cx) { return \"unreachable\"; }\n\
@@ -3890,7 +5984,7 @@ fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestApp
     std::fs::create_dir_all(&directory).expect("application directory");
     let source = |caption: &str| {
         format!(
-            "import {{ div, View }} from \"gpui\";\n\
+            "import {{ div, View }} from \"gpui-kit\";\n\
              import {{ observe }} from \"audit\";\n\
              observe();\n\
              export default class Panel extends View {{\n\
@@ -3945,7 +6039,7 @@ fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut Tes
     .expect("first feature");
     std::fs::write(
         first.join("main.js"),
-        "import { View } from \"gpui\";\n\
+        "import { View } from \"gpui-kit\";\n\
          export default class First extends View {\n\
            init(_props, cx) {\n\
              this.label = 'waiting';\n\
@@ -3961,7 +6055,7 @@ fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut Tes
     .expect("first entry");
     std::fs::write(
         second.join("main.js"),
-        "import { View } from \"gpui\";\n\
+        "import { View } from \"gpui-kit\";\n\
          export default class Second extends View { render() { return 'second'; } }",
     )
     .expect("second entry");
@@ -4018,7 +6112,7 @@ fn an_unknown_built_in_module_names_the_ones_that_exist(cx: &mut TestAppContext)
     std::fs::create_dir_all(&directory).expect("application directory");
     std::fs::write(
         directory.join("main.js"),
-        "import { View } from \"gpui\";\n\
+        "import { View } from \"gpui-kit\";\n\
          import { Button } from \"gpui-future\";\n\
          export default class Panel extends View { render() { return Button.new(\"x\"); } }\n",
     )
@@ -4028,7 +6122,12 @@ fn an_unknown_built_in_module_names_the_ones_that_exist(cx: &mut TestAppContext)
         .load_app(&directory, "main.js")
         .expect_err("an unknown built-in must be refused");
     let message = error.to_string();
-    for expected in ["`gpui`", "`gpui-base`", "`gpui-fps`", "different versions"] {
+    for expected in [
+        "`gpui-kit`",
+        "`gpui-base`",
+        "`gpui-fps`",
+        "different versions",
+    ] {
         assert!(
             message.contains(expected),
             "the refusal must name {expected}: {message}"
@@ -4053,7 +6152,7 @@ fn child_names_what_it_will_not_accept(cx: &mut TestAppContext) {
         .load_source(
             "wrong-child.js",
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Wrong extends View {
@@ -4101,7 +6200,7 @@ fn work_starts_from_init_where_the_context_is(cx: &mut TestAppContext) {
     std::fs::write(
         directory.join("main.js"),
         r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 
 export default class Panel extends View {
   init(_props, cx) {
@@ -4161,7 +6260,7 @@ fn a_task_context_still_works_after_an_await(cx: &mut TestAppContext) {
         .load_source(
             "async-context.js",
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Panel extends View {
@@ -4231,7 +6330,7 @@ fn a_group_announces_its_axis_without_laying_its_children_out(cx: &mut TestAppCo
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { RadioGroup, ToggleGroup, Checkbox, Button } from "gpui-base";
 
 export default class Preferences extends View {
@@ -4304,7 +6403,7 @@ fn an_unknown_axis_is_rejected_at_the_call_site(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { ToggleGroup } from "gpui-base";
 
 export default class BadAxis extends View {
@@ -4336,7 +6435,7 @@ export default class BadAxis extends View {
 /// is a *render* decision: the description carries the content either way, so
 /// only something that has to exist on screen to work can tell the two apart.
 const COLLAPSIBLE: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Collapsible } from "gpui-base";
 
 export default class Section extends View {
@@ -4459,7 +6558,7 @@ fn an_element_given_to_a_slot_cannot_also_be_a_child(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Collapsible } from "gpui-base";
 
 export default class Reused extends View {
@@ -4511,7 +6610,7 @@ fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Quitter extends View {
@@ -4560,7 +6659,7 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&directory).expect("a temporary application");
     std::fs::write(
         directory.join("main.js"),
-        "import { View } from \"gpui\";\n\
+        "import { View } from \"gpui-kit\";\n\
          import { v_flex } from \"gpui-base\";\n\
          export default class Panel extends View { render(cx) { return v_flex(); } }\n",
     )
@@ -4694,7 +6793,7 @@ fn a_focus_handle_cannot_be_created_during_render(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class Late extends View {
   render(cx) {
@@ -4731,7 +6830,7 @@ fn an_existing_focus_handle_cannot_focus_during_render(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class LateFocus extends View {
   init(_props, cx) { this.focus = cx.focus_handle(); }
@@ -4780,7 +6879,7 @@ fn a_script_hears_the_keys_typed_at_a_focused_element(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Keys extends View {
@@ -4864,6 +6963,7 @@ export default class Keys extends View {
     );
 }
 
+/// A script receives modifier-only transitions on the focused element.
 #[gpui::test]
 fn a_script_hears_modifier_changes_at_a_focused_element(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
@@ -4871,7 +6971,7 @@ fn a_script_hears_modifier_changes_at_a_focused_element(cx: &mut TestAppContext)
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Modifiers extends View {
@@ -4969,7 +7069,7 @@ fn a_script_binds_a_chord_and_the_action_reaches_its_handler(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Pane extends View {
@@ -5061,7 +7161,7 @@ fn an_accordion_item_passes_its_open_state_down_to_its_trigger(cx: &mut TestAppC
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import {
   v_flex,
   Accordion,
@@ -5175,7 +7275,7 @@ fn a_single_calendar_date_is_not_stored_as_an_open_range(cx: &mut TestAppContext
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, CalendarState } from "gpui-base";
 
 export default class Picker extends View {
@@ -5224,7 +7324,7 @@ fn a_calendar_range_survives_the_round_trip_as_a_range(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, CalendarState } from "gpui-base";
 
 export default class Picker extends View {
@@ -5310,7 +7410,7 @@ fn every_added_script_api_is_reachable_under_its_documented_name(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import {
   v_flex,
   Avatar,
@@ -5452,7 +7552,7 @@ fn a_calendar_state_answers_the_month_grid_and_moves_it(cx: &mut TestAppContext)
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, CalendarState } from "gpui-base";
 
 export default class Month extends View {
@@ -5537,7 +7637,7 @@ fn pagination_items_lay_out_the_pages_and_their_gaps(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Pagination, pagination_items } from "gpui-base";
 
 const describe = (items) =>
@@ -5604,7 +7704,7 @@ fn an_avatar_renders_its_image_or_its_fallback(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Avatar, AvatarImage, AvatarFallback } from "gpui-base";
 
 export default class People extends View {
@@ -5670,7 +7770,7 @@ fn an_unclaimed_action_carries_on_to_an_outer_element(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Nested extends View {
@@ -5763,7 +7863,7 @@ fn the_window_answers_its_measurements_and_refuses_changes_during_render(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Metrics extends View {
@@ -5844,7 +7944,7 @@ fn a_script_hears_presses_releases_and_presses_outside(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Surface extends View {
@@ -5940,7 +8040,7 @@ fn input_reaches_a_base_control_not_only_a_plain_element(cx: &mut TestAppContext
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Button, Checkbox, Tab } from "gpui-base";
 
 export default class Toolbar extends View {
@@ -6065,7 +8165,7 @@ fn stop_propagation_keeps_a_key_event_at_the_element_that_handled_it(cx: &mut Te
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Nested extends View {
@@ -6155,7 +8255,7 @@ fn the_tab_key_walks_the_focus_order_a_script_declared(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Button, Checkbox, Toggle } from "gpui-base";
 
 export default class Form extends View {
@@ -6254,7 +8354,7 @@ fn a_tracked_handle_reports_the_focus_it_was_given(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Panel extends View {
@@ -6333,7 +8433,7 @@ fn accessibility_semantics_reach_the_description(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Options extends View {
@@ -6394,7 +8494,7 @@ fn an_unknown_role_fails_where_it_was_written(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 export default class Wrong extends View {
   render(cx) { return div().role("listbox"); }
@@ -6424,7 +8524,7 @@ export default class Wrong extends View {
 /// overhang: it is inside the content and outside the trigger, so a click there
 /// can only be reporting that the content is on screen.
 const POPOVER: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Popover } from "gpui-base";
 
 export default class Menu extends View {
@@ -6621,7 +8721,7 @@ fn an_unknown_anchor_is_rejected_at_the_call_site(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Popover } from "gpui-base";
 
 export default class BadAnchor extends View {
@@ -6657,7 +8757,7 @@ fn a_hover_card_opens_after_its_delay_and_closes_once_the_pointer_leaves(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, HoverCard } from "gpui-base";
 
 export default class Card extends View {
@@ -6753,7 +8853,7 @@ export default class Card extends View {
 /// — inside the list, below and beside the trigger — is the one place a click
 /// can only mean "the list is on screen".
 const SELECT: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, Select, Popup } from "gpui-base";
 
 export default class Picker extends View {
@@ -6989,7 +9089,7 @@ fn a_popup_without_a_trigger_is_refused_at_the_call_site(cx: &mut TestAppContext
         cx,
         "popup-trigger",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Popup } from "gpui-base";
 
 export default class NoTrigger extends View {
@@ -7012,7 +9112,7 @@ fn a_popup_with_an_unknown_anchor_is_refused_at_the_call_site(cx: &mut TestAppCo
         cx,
         "popup-anchor",
         r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Popup } from "gpui-base";
 
 export default class BadAnchor extends View {
@@ -7038,7 +9138,7 @@ fn a_date_picker_without_a_focus_handle_says_why_it_needs_one(cx: &mut TestAppCo
         cx,
         "date-picker-handle",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { DatePicker } from "gpui-base";
 
 export default class NoHandle extends View {
@@ -7068,7 +9168,7 @@ export default class NoHandle extends View {
 ///
 /// Enter and Escape are the part that is missing, and the reason is worth
 /// pinning down: base's `DatePicker` sets no key context, while every binding
-/// base installs is scoped to one. `crates/ui` supplies both — its own
+/// base installs is scoped to one. `crates/component` supplies both — its own
 /// `"DatePicker"` context and its own bindings — and the shell has no
 /// key-binding layer to supply either. So the assertion below is that Escape
 /// changes nothing. If it ever starts changing something, this test is the
@@ -7080,7 +9180,7 @@ fn a_date_picker_carries_focus_and_an_announced_open_state(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, DatePicker } from "gpui-base";
 
 export default class Due extends View {
@@ -7155,7 +9255,7 @@ fn a_tooltip_reaches_the_window_overlay_after_the_pointer_rests(cx: &mut TestApp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Toolbar extends View {
@@ -7258,7 +9358,7 @@ fn a_tooltip_that_is_not_a_string_is_refused_at_the_call_site(cx: &mut TestAppCo
         cx,
         "label.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Button } from "gpui-base";
 
 export default class Toolbar extends View {
@@ -7281,7 +9381,7 @@ export default class Toolbar extends View {
         cx,
         "label.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { Button } from "gpui-base";
 
 export default class Toolbar extends View {
@@ -7316,7 +9416,7 @@ fn render_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
         .to_string()
 }
 const RESIZABLE: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { h_resizable, resizable_panel } from "gpui-base";
 
 export default class Workspace extends View {
@@ -7440,7 +9540,7 @@ fn a_resizable_panel_outside_a_group_is_refused_at_the_call_site(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { resizable_panel } from "gpui-base";
 
 export default class Loose extends View {
@@ -7472,7 +9572,7 @@ fn a_resizable_panel_rejects_a_reversed_size_range(cx: &mut TestAppContext) {
         cx,
         "reversed-panel-range.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { h_resizable, resizable_panel } from "gpui-base";
 
 export default class Workspace extends View {
@@ -7500,7 +9600,7 @@ export default class Workspace extends View {
 fn virtual_list_source(extra: &str) -> String {
     format!(
         r#"
-import {{ div, View }} from "gpui";
+import {{ div, View }} from "gpui-kit";
 import {{ v_flex, v_virtual_list }} from "gpui-base";
 
 export default class Rows extends View {{
@@ -7538,6 +9638,98 @@ export default class Rows extends View {{
 }}
 "#
     )
+}
+
+#[gpui::test]
+fn a_secondary_press_on_a_row_reports_its_key_and_the_press(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { v_flex, v_virtual_list } from "gpui-base";
+
+export default class Rows extends View {
+  init() {
+    this.items = ["alpha", "beta", "gamma"];
+    this.pressed = "none";
+    this.clicked = "none";
+  }
+  render(cx) {
+    return v_flex()
+      .w(300)
+      .h(200)
+      .child(
+        v_virtual_list(
+          "rows",
+          this.items.length,
+          40,
+          (index) => this.items[index],
+          (range) => {
+            const rows = [];
+            for (let index = range.start; index < range.end; index++) {
+              rows.push(div().h(40).child(this.items[index]));
+            }
+            return rows;
+          },
+        )
+          .on_item_click((key, cx) => {
+            this.clicked = key;
+            cx.notify();
+          })
+          .on_item_secondary_click((key, event, cx) => {
+            this.pressed = `${key} ${event.button} at ${Math.round(event.local_position.y)} of ${Math.round(event.bounds.height)}`;
+            cx.notify();
+          }),
+      )
+      .child(`pressed ${this.pressed} clicked ${this.clicked}`);
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("pressed-list.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    // The second row spans 40..80; press ten pixels into it.
+    context.simulate_mouse_move(
+        point(px(150.), px(50.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    context.simulate_mouse_down(
+        point(px(150.), px(50.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    // The key names the row, the press is measured from that row's own box,
+    // and a right press is not a click.
+    assert!(
+        tree.contains("pressed beta right at 10 of 40 clicked none"),
+        "a right press must reach the list's secondary handler with the row it landed on:\n{tree}"
+    );
 }
 
 /// Rebuilds the description so that what the item renderer recorded during the
@@ -7743,7 +9935,7 @@ fn an_item_renderer_still_refuses_a_cx_from_an_earlier_render(cx: &mut TestAppCo
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, v_virtual_list } from "gpui-base";
 
 export default class Rows extends View {
@@ -7837,7 +10029,7 @@ fn a_virtual_list_click_keeps_the_stable_item_key_across_reordering(cx: &mut Tes
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, v_virtual_list } from "gpui-base";
 
 export default class Rows extends View {
@@ -7931,7 +10123,7 @@ fn item_sizes_are_taken_as_one_extent_or_one_per_item(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, v_virtual_list, h_virtual_list } from "gpui-base";
 
 export default class Both extends View {
@@ -7974,7 +10166,7 @@ fn item_sizes_that_disagree_with_the_item_count_are_refused(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_virtual_list } from "gpui-base";
 
 export default class Mismatched extends View {
@@ -8005,7 +10197,7 @@ fn virtual_lists_share_one_bounded_host_allocation_budget_per_render(cx: &mut Te
         cx,
         "oversized-lists.js",
         r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, v_virtual_list } from "gpui-base";
 
 export default class LargeLists extends View {
@@ -8035,7 +10227,7 @@ fn a_dialog_rebuilds_from_the_state_it_closes_over(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
@@ -8112,7 +10304,7 @@ fn a_virtual_list_rejects_a_sparse_item_size_array_without_allocating_it(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_virtual_list } from "gpui-base";
 
 export default class SparseSizes extends View {
@@ -8139,4 +10331,95 @@ export default class SparseSizes extends View {
         error.to_string().contains("item_sizes"),
         "the error must identify the oversized argument: {error}"
     );
+}
+
+/// An application effect installs native state that outlives the render that
+/// asked for it. Retiring the generation that asked must take that state back
+/// down: keys are scoped per generation, so a reload cannot replace the
+/// previous generation's install, and waiting for the root view to be released
+/// would leave a reloading application accumulating one install per reload.
+#[gpui::test]
+fn retiring_an_application_generation_runs_its_app_effect_cleanups(cx: &mut TestAppContext) {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-app-effect-retire-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("main.js"),
+        "export default class Effectful { render() { return \"effect\"; } }\n",
+    )
+    .unwrap();
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view_type = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let application = object.application_generation().unwrap();
+    let runtime_for_view = runtime.clone();
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime_for_view, object)));
+
+    let installs = Arc::new(AtomicUsize::new(0));
+    let cleanups = Arc::new(AtomicUsize::new(0));
+    let install_count = installs.clone();
+    let cleanup_count = cleanups.clone();
+    context
+        .update(|window, cx| {
+            runtime.schedule_component_app_effect(
+                application.clone(),
+                view.downgrade(),
+                "menu-bar".to_owned(),
+                "revision-1".to_owned(),
+                window,
+                cx,
+                Box::new(move |_| {
+                    install_count.fetch_add(1, Ordering::SeqCst);
+                    Box::new(move |_: &mut gpui::App| {
+                        cleanup_count.fetch_add(1, Ordering::SeqCst);
+                    })
+                }),
+            )
+        })
+        .unwrap();
+    context.run_until_parked();
+    assert_eq!(
+        installs.load(Ordering::SeqCst),
+        1,
+        "the effect must install"
+    );
+    assert_eq!(
+        cleanups.load(Ordering::SeqCst),
+        0,
+        "an installed effect stays installed while its generation is live"
+    );
+
+    context.update(|_, cx| runtime.release_application_generation(&application, cx));
+
+    assert_eq!(
+        cleanups.load(Ordering::SeqCst),
+        1,
+        "retiring the generation must run the cleanup, not wait for the view"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
 }

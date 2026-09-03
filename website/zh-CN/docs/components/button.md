@@ -10,7 +10,7 @@ description: 显示一个按钮，或外观表现为按钮的组件。
 ## 导入
 
 ```rust
-use gpui_component::button::{Button, ButtonGroup};
+use gpui_kit::component::button::{Button, ButtonGroup};
 ```
 
 ## 用法
@@ -99,7 +99,7 @@ Button::new("btn").large().label("Large")
 #### 基础图标
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Button::new("btn")
     .icon(IconName::Check)
@@ -116,7 +116,7 @@ Button::new("btn")
 #### Spinner
 
 ```rust
-use gpui_component::spinner::Spinner;
+use gpui_kit::component::spinner::Spinner;
 
 Button::new("btn")
     .icon(Spinner::new())
@@ -134,7 +134,7 @@ Button::new("btn")
 #### ProgressCircle
 
 ```rust
-use gpui_component::progress::ProgressCircle;
+use gpui_kit::component::progress::ProgressCircle;
 
 Button::new("btn")
     .icon(ProgressCircle::new("install-progress").value(45.0))
@@ -250,7 +250,7 @@ ButtonGroup::new("toggle-group")
 ## 自定义变体
 
 ```rust
-use gpui_component::button::ButtonCustomVariant;
+use gpui_kit::component::button::ButtonCustomVariant;
 
 let custom = ButtonCustomVariant::new(cx)
     .color(cx.theme().magenta)

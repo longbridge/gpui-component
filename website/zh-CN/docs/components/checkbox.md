@@ -10,7 +10,7 @@ Checkbox 是一个用于二元选择的复选框组件，支持标签、禁用�
 ## 导入
 
 ```rust
-use gpui_component::checkbox::Checkbox;
+use gpui_kit::component::checkbox::Checkbox;
 ```
 
 ## 用法

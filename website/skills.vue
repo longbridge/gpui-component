@@ -5,7 +5,7 @@
         <div class="skills-list">
             <div v-for="skill in skills" :key="skill.id" class="skill-card">
                 <a
-                    :href="`https://github.com/longbridge/gpui-component/tree/main/${skill.skillPath}`"
+                    :href="`https://github.com/longbridge/gpui-kit/tree/main/${skill.skillPath}`"
                     target="_blank"
                     class="skill-link"
                 >
@@ -29,12 +29,12 @@ const isZh = computed(() => localeIndex.value === "zh-CN");
 const skills = data;
 const expandedSkills = ref(new Set());
 const title = computed(() =>
-    isZh.value ? "GPUI Component 技能" : "GPUI Component Skills",
+    isZh.value ? "GPUI Kit 技能" : "GPUI Kit Skills",
 );
 const description = computed(() =>
     isZh.value
-        ? "这里汇总了适用于 GPUI Component 的开发技能、约定和最佳实践。"
-        : "Skills available for working with GPUI Component. These skills provide guidance and best practices for building GPUI applications.",
+        ? "这里汇总了适用于 GPUI Kit 的开发技能、约定和最佳实践。"
+        : "Skills available for working with GPUI Kit. These skills provide guidance and best practices for building GPUI applications.",
 );
 
 function toggleSkill(skillId) {

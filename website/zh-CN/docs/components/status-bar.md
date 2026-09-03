@@ -12,7 +12,7 @@ StatusBar 是一个水平栏，分为 `left`、`center`、`right` 三个区域�
 ## 引入
 
 ```rust
-use gpui_component::status_bar::StatusBar;
+use gpui_kit::component::status_bar::StatusBar;
 ```
 
 ## 区域

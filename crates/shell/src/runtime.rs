@@ -303,6 +303,18 @@ impl<T> Default for CallbackArena<T> {
 }
 
 impl<T: Clone> CallbackArena<T> {
+    pub(crate) fn checkpoint(&self) -> usize {
+        self.building
+            .as_ref()
+            .map_or(0, |(_, entries)| entries.len())
+    }
+
+    pub(crate) fn rollback_to(&mut self, checkpoint: usize) {
+        if let Some((_, entries)) = self.building.as_mut() {
+            entries.truncate(checkpoint);
+        }
+    }
+
     /// Opens a generation. Any generation left open by an earlier failed build
     /// is discarded rather than committed.
     pub(crate) fn begin(&mut self) -> u64 {

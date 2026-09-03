@@ -10,7 +10,7 @@ The resizable component system provides a flexible way to create layouts with re
 ## Import
 
 ```rust
-use gpui_component::resizable::{
+use gpui_kit::component::resizable::{
     h_resizable, v_resizable, resizable_panel,
     ResizablePanelGroup, ResizablePanel, ResizableState, ResizablePanelEvent
 };

@@ -10,7 +10,7 @@ A versatile component for displaying key-value pairs in a structured, organized 
 ## Import
 
 ```rust
-use gpui_component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
+use gpui_kit::component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
 ```
 
 ## Usage
@@ -19,7 +19,7 @@ use gpui_component::description_list::{DescriptionList, DescriptionItem, Descrip
 
 ```rust
 DescriptionList::new()
-    .item("Name", "GPUI Component", 1)
+    .item("Name", "GPUI Kit", 1)
     .item("Version", "0.1.0", 1)
     .item("License", "Apache-2.0", 1)
 ```
@@ -29,7 +29,7 @@ DescriptionList::new()
 ```rust
 DescriptionList::new()
     .children([
-        DescriptionItem::new("Name").value("GPUI Component"),
+        DescriptionItem::new("Name").value("GPUI Kit"),
         DescriptionItem::new("Description").value("UI components for building desktop applications"),
         DescriptionItem::new("Version").value("0.1.0"),
     ])
@@ -41,11 +41,11 @@ DescriptionList::new()
 // Horizontal layout (default)
 DescriptionList::horizontal()
     .item("Platform", "macOS, Windows, Linux", 1)
-    .item("Repository", "https://github.com/longbridge/gpui-component", 1)
+    .item("Repository", "https://github.com/longbridge/gpui-kit", 1)
 
 // Vertical layout
 DescriptionList::vertical()
-    .item("Name", "GPUI Component", 1)
+    .item("Name", "GPUI Kit", 1)
     .item("Description", "A comprehensive Rust desktop framework", 1)
 ```
 
@@ -54,7 +54,7 @@ DescriptionList::vertical()
 ```rust
 DescriptionList::new()
     .columns(3)
-    .child(DescriptionItem::new("Name").value("GPUI Component").span(1))
+    .child(DescriptionItem::new("Name").value("GPUI Kit").span(1))
     .children([
         DescriptionItem::new("Version").value("0.1.0").span(1),
         DescriptionItem::new("License").value("Apache-2.0").span(1),
@@ -62,7 +62,7 @@ DescriptionList::new()
             .value("Full-featured UI components for desktop applications")
             .span(3), // Spans all 3 columns
         DescriptionItem::new("Repository")
-            .value("https://github.com/longbridge/gpui-component")
+            .value("https://github.com/longbridge/gpui-kit")
             .span(2), // Spans 2 columns
     ])
 ```
@@ -71,7 +71,7 @@ DescriptionList::new()
 
 ```rust
 DescriptionList::new()
-    .item("Name", "GPUI Component", 1)
+    .item("Name", "GPUI Kit", 1)
     .item("Version", "0.1.0", 1)
     .separator() // Add a visual separator
     .item("Author", "Longbridge", 1)
@@ -101,14 +101,14 @@ DescriptionList::new()
 ```rust
 DescriptionList::new()
     .bordered(false) // Remove borders for a cleaner look
-    .item("Name", "GPUI Component", 1)
+    .item("Name", "GPUI Kit", 1)
     .item("Type", "UI Library", 1)
 ```
 
 ### Custom Label Width (Horizontal Layout)
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 DescriptionList::horizontal()
     .label_width(px(200.0)) // Set custom label width
@@ -119,12 +119,12 @@ DescriptionList::horizontal()
 ### Rich Content with Custom Elements
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 DescriptionList::new()
     .columns(2)
     .children([
-        DescriptionItem::new("Name").value("GPUI Component"),
+        DescriptionItem::new("Name").value("GPUI Kit"),
         DescriptionItem::new("Description").value(
             markdown(
                 "UI components for building **fantastic** desktop applications.",
@@ -140,7 +140,7 @@ DescriptionList::new()
     .columns(3)
     .label_width(px(150.0))
     .children([
-        DescriptionItem::new("Project Name").value("GPUI Component").span(1),
+        DescriptionItem::new("Project Name").value("GPUI Kit").span(1),
         DescriptionItem::new("Version").value("0.1.0").span(1),
         DescriptionItem::new("Status").value("Active").span(1),
 
@@ -151,7 +151,7 @@ DescriptionList::new()
         ).span(3),
 
         DescriptionItem::new("Repository").value(
-            "https://github.com/longbridge/gpui-component"
+            "https://github.com/longbridge/gpui-kit"
         ).span(2),
         DescriptionItem::new("License").value("Apache-2.0").span(1),
 

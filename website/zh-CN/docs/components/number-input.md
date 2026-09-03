@@ -10,7 +10,7 @@ NumberInput 是针对数值输入场景设计的组件，内置递增/递减按�
 ## 导入
 
 ```rust
-use gpui_component::input::{InputState, NumberInput, NumberInputEvent, StepAction};
+use gpui_kit::component::input::{InputState, NumberInput, NumberInputEvent, StepAction};
 ```
 
 ## 用法
@@ -93,7 +93,7 @@ NumberInput::new(&price_input)
 步进策略也可以在运行时通过 `set_step` 更新：
 
 ```rust
-use gpui_component::input::NumberStep;
+use gpui_kit::component::input::NumberStep;
 
 state.set_step(NumberStep::Fixed(0.01), window, cx);
 state.set_step(NumberStep::by_value(|v, _, _cx| if v < 1. { 0.01 } else { 0.1 }), window, cx);
@@ -103,7 +103,7 @@ state.set_step(None, window, cx); // 回退到 NumberInputEvent::Step 事件模�
 ### 数字格式化
 
 ```rust
-use gpui_component::input::MaskPattern;
+use gpui_kit::component::input::MaskPattern;
 
 let currency_input = cx.new(|cx|
     InputState::new(window, cx)
@@ -128,7 +128,7 @@ NumberInput::new(&input).small()
 ### 前缀与后缀
 
 ```rust
-use gpui_component::{button::{Button, ButtonVariants}, IconName};
+use gpui_kit::component::{button::{Button, ButtonVariants}, IconName};
 
 NumberInput::new(&input)
     .prefix(div().child("$"))

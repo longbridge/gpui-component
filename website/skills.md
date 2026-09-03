@@ -1,7 +1,7 @@
 ---
 title: Skills
 layout: home
-description: GPUI Component Skills - Available skills for working with GPUI Component
+description: GPUI Kit Skills - Available skills for working with GPUI Kit
 ---
 
 <script setup>

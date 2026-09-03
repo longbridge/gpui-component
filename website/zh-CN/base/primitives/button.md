@@ -19,12 +19,12 @@ cargo run -p gpui-base --example components -- button
 ## 导入
 
 ```rust
-use gpui_base::Button;
+use gpui_kit::base::Button;
 ```
 
 ## 结构与 API
 
-示例组合了 `Button`。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/button.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/button.rs)。
+示例组合了 `Button`。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/button.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/button.rs)。
 
 ## 状态与事件
 

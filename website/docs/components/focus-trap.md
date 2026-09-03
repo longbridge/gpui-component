@@ -12,7 +12,7 @@ Focus trap utility for constraining keyboard focus within a specific container. 
 ## Import
 
 ```rust
-use gpui_component::FocusTrapElement;
+use gpui_kit::component::FocusTrapElement;
 ```
 
 ## Usage

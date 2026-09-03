@@ -10,7 +10,7 @@
 //!
 //! # One module per crate
 //!
-//! The declarations are three ambient modules, not one: `"gpui"` for GPUI's own
+//! The declarations are three ambient modules, not one: `"gpui-kit"` for GPUI's own
 //! elements and what this runtime adds, `"gpui-base"` for gpui-base's layout
 //! helpers, components and theme, and `"gpui-fps"` for its performance overlay.
 //! A name belongs to exactly one of them.
@@ -24,7 +24,7 @@
 //! stops saying where it came from, which is the property being bought.
 //!
 //! The dependency runs upward only. `"gpui-base"` names what it borrows from
-//! `"gpui"` in an import at the top of its block; `"gpui"` refers down to a
+//! `"gpui-kit"` in an import at the top of its block; `"gpui-kit"` refers down to a
 //! component type only where one shared element prototype forces it — three
 //! builder methods and `cx.theme()` — and does it with an inline
 //! `import("gpui-base").X` rather than a top-level import.
@@ -72,7 +72,7 @@
 //!
 //! Every module the host registered is emitted here too, one `declare module`
 //! per name, so `import { quotes } from "market"` is checked the same way
-//! `import { div } from "gpui"` is. A module that described itself in
+//! `import { div } from "gpui-kit"` is. A module that described itself in
 //! TypeScript through [`crate::HostModule::declarations`] is emitted verbatim;
 //! one that did not gets `(...args: any[]) => any` signatures, which still
 //! check the module name and every export name.
@@ -96,7 +96,7 @@ use crate::value::Bridged;
 
 /// The declaration filename. Fixed because an editor finds the declarations by
 /// having them in the project, not by being told where.
-pub const FILE_NAME: &str = "gpui.d.ts";
+pub const FILE_NAME: &str = "gpui-kit.d.ts";
 
 /// The editor configuration filename, in the spelling a JavaScript project uses.
 pub const CONFIG_FILE_NAME: &str = "jsconfig.json";
@@ -104,7 +104,7 @@ pub const CONFIG_FILE_NAME: &str = "jsconfig.json";
 /// The configuration this one is written beside, and defers to.
 const TYPESCRIPT_CONFIG_FILE_NAME: &str = "tsconfig.json";
 
-/// What an editor has to be told before `gpui.d.ts` and the linked packages
+/// What an editor has to be told before `gpui-kit.d.ts` and the linked packages
 /// mean anything.
 ///
 /// The settings match the ones the applications in this repository were
@@ -128,7 +128,7 @@ const EDITOR_CONFIG: &str = r#"{
     "",
     "`lib` decides which globals exist. The default hands a script the",
     "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
-    "not have — and their declarations collide with the ones gpui.d.ts makes,",
+    "not have — and their declarations collide with the ones gpui-kit.d.ts makes,",
     "so the file describing the API is itself reported as the error.",
     "",
     "`strictNullChecks` is off, and this one is the runtime's shape rather than",
@@ -171,12 +171,22 @@ fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
 /// The output is deterministic — no timestamps, no reflection order — so
 /// regenerating it after a runtime upgrade produces a reviewable diff rather
 /// than a reshuffled file.
+#[cfg(test)]
 pub fn declarations() -> String {
+    declarations_with_components(&crate::FrozenComponentRegistry::default())
+}
+
+#[cfg(test)]
+fn base_declarations() -> String {
+    declarations()
+}
+
+pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRegistry) -> String {
     let (nullary, parametric) = style_methods();
 
     let mut out = String::with_capacity(160 * 1024);
     out.push_str(&PREAMBLE.replace("{version}", crate::plugin::SHELL_VERSION));
-    out.push_str("declare module \"gpui\" {\n");
+    out.push_str("declare module \"gpui-kit\" {\n");
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
     out.push_str(&role_type());
@@ -206,6 +216,106 @@ pub fn declarations() -> String {
     out.push_str(BASE_SHARED_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-component\" {\n");
+    out.push_str("  import { ClickEvent, Context, Element } from \"gpui-kit\";\n");
+    for state in components.states() {
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
+        out.push_str("  export interface ");
+        out.push_str(state.kind());
+        out.push_str(" { readonly __gpuiComponentState: unique symbol }\n");
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
+        out.push_str("  export function ");
+        out.push_str(state.export());
+        out.push('(');
+        push_arguments(&mut out, state.arguments());
+        out.push_str("): ");
+        out.push_str(state.kind());
+        out.push_str(";\n");
+    }
+    for descriptor in components.descriptors() {
+        push_jsdoc(&mut out, descriptor.documentation(), None, "  ");
+        out.push_str("  export type ");
+        out.push_str(descriptor.name());
+        out.push_str("Element = ");
+        // Two reasons a name leaves `Element`. A method the descriptor declares
+        // is re-declared below with the descriptor's own signature. And a common
+        // behavior the descriptor does *not* declare is refused at run time for
+        // a registered component — see the `registered_common_behavior` check in
+        // the engine — so leaving it inherited would have `gpui-kit.d.ts` promise a
+        // call that always throws.
+        let declared = descriptor
+            .methods()
+            .iter()
+            .map(|method| method.name())
+            .collect::<Vec<_>>();
+        let withheld = REGISTERED_COMMON_BEHAVIORS
+            .iter()
+            .copied()
+            .filter(|behavior| !declared.contains(behavior))
+            .collect::<Vec<_>>();
+        let removed = declared
+            .iter()
+            .copied()
+            .chain(withheld.iter().copied())
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            out.push_str("Element & {\n");
+        } else {
+            out.push_str("Omit<Element, ");
+            for (index, name) in removed.iter().enumerate() {
+                if index != 0 {
+                    out.push_str(" | ");
+                }
+                out.push('"');
+                out.push_str(name);
+                out.push('"');
+            }
+            out.push_str("> & {\n");
+        }
+        for method in descriptor.methods() {
+            push_jsdoc(&mut out, method.documentation(), None, "    ");
+            out.push_str("    ");
+            out.push_str(method.name());
+            out.push('(');
+            push_arguments(&mut out, &method.arguments());
+            out.push_str("): ");
+            out.push_str(descriptor.name());
+            out.push_str("Element;\n");
+        }
+        // Re-declared rather than simply removed. Dropping the member outright
+        // would also drop this type's assignability to `Element`, so a typed
+        // part could no longer be passed to a slot that takes one. A `never`
+        // parameter keeps the shape and still refuses every call.
+        for behavior in &withheld {
+            out.push_str("    /**\n     * Not available on this component: `");
+            out.push_str(descriptor.name());
+            out.push_str("` does not declare `");
+            out.push_str(behavior);
+            out.push_str("`, and the runtime refuses it.\n     */\n    ");
+            out.push_str(behavior);
+            out.push_str("(unavailable: never): never;\n");
+        }
+        out.push_str("  }\n");
+        for constructor in descriptor.constructors() {
+            push_jsdoc(
+                &mut out,
+                descriptor.documentation(),
+                constructor
+                    .deprecation()
+                    .as_ref()
+                    .map(|entry| entry.message()),
+                "  ",
+            );
+            out.push_str("  export const ");
+            out.push_str(constructor.export());
+            out.push_str(": { new(");
+            push_arguments(&mut out, &constructor.arguments());
+            out.push_str("): ");
+            out.push_str(descriptor.name());
+            out.push_str("Element };\n");
+        }
+    }
+    out.push_str("}\n\n");
     out.push_str("declare module \"gpui-shell\" {\n");
     out.push_str(&shell_types());
     out.push_str("}\n\n");
@@ -217,6 +327,72 @@ pub fn declarations() -> String {
     out.push_str(&host_modules());
     out.push_str(WINDOW_GLOBAL);
     out
+}
+
+/// The behaviors a registered component answers only when its descriptor
+/// declares them. Mirrors the engine's `registered_common_behavior` list; a
+/// test asserts the two agree.
+pub(crate) const REGISTERED_COMMON_BEHAVIORS: [&str; 3] = ["disabled", "selected", "on_click"];
+
+fn push_arguments(out: &mut String, arguments: &[crate::ArgumentDescriptor]) {
+    for (index, argument) in arguments.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(argument.name());
+        if matches!(argument.schema(), crate::ArgumentSchema::Optional(_)) {
+            out.push('?');
+        }
+        out.push_str(": ");
+        out.push_str(&argument_type(&argument.schema()));
+    }
+}
+
+fn argument_type(schema: &crate::ArgumentSchema) -> String {
+    match schema {
+        crate::ArgumentSchema::String => "string".into(),
+        crate::ArgumentSchema::Number => "number".into(),
+        crate::ArgumentSchema::Boolean => "boolean".into(),
+        crate::ArgumentSchema::Element => "Element".into(),
+        crate::ArgumentSchema::Entity(kind) => (*kind).into(),
+        crate::ArgumentSchema::Callback(signature) => (*signature).into(),
+        crate::ArgumentSchema::Enum(values) => values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect::<Vec<_>>()
+            .join(" | "),
+        crate::ArgumentSchema::Array(item) => format!("Array<{}>", argument_type(item)),
+        crate::ArgumentSchema::Optional(item) => argument_type(item),
+    }
+}
+
+fn push_jsdoc(
+    out: &mut String,
+    documentation: Option<&str>,
+    deprecated: Option<&str>,
+    indent: &str,
+) {
+    if documentation.is_none() && deprecated.is_none() {
+        return;
+    }
+    out.push_str(indent);
+    out.push_str("/**\n");
+    if let Some(documentation) = documentation {
+        for line in documentation.lines() {
+            out.push_str(indent);
+            out.push_str(" * ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if let Some(message) = deprecated {
+        out.push_str(indent);
+        out.push_str(" * @deprecated ");
+        out.push_str(message);
+        out.push('\n');
+    }
+    out.push_str(indent);
+    out.push_str(" */\n");
 }
 
 /// The modules this host registered, as `declare module` blocks.
@@ -269,7 +445,7 @@ fn host_modules() -> String {
                 // Rust type of that name carries, so `any` would be wider than
                 // the runtime: a script passing a function or a Symbol would
                 // type-check and then be refused at the call.
-                out.push_str("  import { HostValue } from \"gpui\";\n\n");
+                out.push_str("  import { Element, HostValue } from \"gpui-kit\";\n\n");
                 for function in module.function_names() {
                     // Permissive about shape, but not wrong about the one thing
                     // the caller has to get right: an asynchronous export is
@@ -282,6 +458,12 @@ fn host_modules() -> String {
                     let _ = writeln!(
                         out,
                         "  export function {function}(...args: HostValue[]): {returns};"
+                    );
+                }
+                for component in module.component_names() {
+                    let _ = writeln!(
+                        out,
+                        "  export const {component}: {{ new(id: string, props: HostValue): Element }};"
                     );
                 }
             }
@@ -303,7 +485,10 @@ fn host_modules() -> String {
 /// The explicit tooling API reports write failures. Ordinary application loads
 /// log them at debug level and continue, because an unwritable declaration is a
 /// worse editing experience, not a reason to refuse to run the application.
-pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+pub(crate) fn write_application_with_components(
+    root: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Vec<PathBuf>> {
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
@@ -315,7 +500,7 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut written = Vec::new();
     let mut first_error = None;
     // The application root only: one project, one configuration, and a nested
-    // directory that happens to import `gpui` is part of it rather than a
+    // directory that happens to import `gpui-kit` is part of it rather than a
     // second project.
     match write_editor_config(root) {
         Ok(Some(path)) => written.push(path),
@@ -325,7 +510,7 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
         }
     }
     for directory in directories {
-        match refresh(&directory) {
+        match refresh_with_components(&directory, components) {
             Ok(Some(path)) => written.push(path),
             Ok(None) => {}
             Err(error) => {
@@ -408,9 +593,15 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The specifiers one `gpui.d.ts` declares. A script importing any of them
+/// The specifiers one `gpui-kit.d.ts` declares. A script importing any of them
 /// wants the file beside it.
-const BUILTIN_SPECIFIERS: [&str; 4] = ["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
+const BUILTIN_SPECIFIERS: [&str; 5] = [
+    "gpui-kit",
+    "gpui-base",
+    crate::DEFAULT_COMPONENT_MODULE,
+    "gpui-shell",
+    "gpui-fps",
+];
 
 /// Whether a script imports one of the built-in modules.
 ///
@@ -433,7 +624,10 @@ fn imports_builtin(source: &str) -> bool {
 /// Nothing is written when the file already matches, so an editor watching the
 /// directory is not woken on every launch, and a read-only checkout is not an
 /// error worth reporting. Returns the path only when it actually wrote.
-pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+pub(crate) fn refresh_with_components(
+    directory: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Option<PathBuf>> {
     let path = directory.join(FILE_NAME);
     if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(std::io::Error::new(
@@ -441,7 +635,7 @@ pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
             format!("refusing to replace symlink {}", path.display()),
         ));
     }
-    let current = declarations();
+    let current = declarations_with_components(components);
 
     if std::fs::read_to_string(&path).is_ok_and(|committed| committed == current) {
         return Ok(None);
@@ -532,18 +726,11 @@ fn argument_of(name: &str) -> Argument {
 fn color_types() -> String {
     let mut out = String::new();
     out.push_str("  /**\n");
-    out.push_str("   * A color: a semantic token name, or a `#rgb`, `#rrggbb` or `#rrggbbaa`\n");
-    out.push_str("   * literal. Prefer a token; a literal bypasses the theme, and a theme\n");
-    out.push_str("   * switch will not reach it.\n");
-    out.push_str("   *\n");
-    out.push_str("   * The union is closed, so a mistyped token is a compile error. A token\n");
-    out.push_str("   * name that reaches a call through a variable widens to `string` and\n");
-    out.push_str("   * has to say what it is:\n");
-    out.push_str("   *\n");
-    out.push_str("   *     /** @type {{ bg: import(\"gpui\").Color }} *\\/\n");
-    out.push_str("   *     const palette = tone === \"blocking\" ? ... : ...;\n");
+    out.push_str("   * A concrete `#rgb`, `#rrggbb`, or `#rrggbbaa` color value.\n");
+    out.push_str("   * Read semantic colors from `cx.theme().colors`; bare token names are\n");
+    out.push_str("   * intentionally not accepted.\n");
     out.push_str("   */\n");
-    out.push_str("  export type Color = import(\"gpui-base\").ColorToken | `#${string}`;\n\n");
+    out.push_str("  export type Color = `#${string}`;\n\n");
     out
 }
 
@@ -676,7 +863,7 @@ fn doc_comment(documentation: Option<&str>, indent: usize) -> String {
 }
 
 const PREAMBLE: &str = "\
-// Auto-generated — add `gpui.d.ts` to your .gitignore.
+// Auto-generated — add `gpui-kit.d.ts` to your .gitignore.
 //
 // The built-in modules, as TypeScript declarations, for gpui-shell {version}.
 // Do not edit: gpui-shell rewrites this on every run, in every directory that
@@ -684,9 +871,9 @@ const PREAMBLE: &str = "\
 // committed copy could only ever be the stale one.
 //
 // Each built-in module names the public Rust layer it exposes, so an import
-// says which layer a script depends on. \"gpui\" also carries the shell bridge:
+// says which layer a script depends on. \"gpui-kit\" also carries the shell bridge:
 //
-//   \"gpui\"       GPUI's own elements, plus what this runtime adds: views,
+//   \"gpui-kit\"   GPUI's own elements, plus what this runtime adds: views,
 //                the style surface, the window, storage, scheduling.
 //   \"gpui-base\"  gpui-base's layout helpers, components and theme.
 //   \"gpui-fps\"   gpui-fps's performance overlay.
@@ -1104,6 +1291,8 @@ const ELEMENT_METHODS: &str = r#"    /**
     fallback(element: Element): Element;
     /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
     header(element: Element): Element;
+    /** Fills a component's named `footer` slot. */
+    footer(element: Element): Element;
     /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
     panel(element: Element): Element;
     /**
@@ -1293,6 +1482,27 @@ const ELEMENT_METHODS: &str = r#"    /**
      * against `on_item_click`.
      */
     on_item_click(handler: (key: string, cx: Context) => void): Element;
+    /**
+     * `handler(key, event, cx)` on a secondary press — the right button — over
+     * a row of a virtual list. `key` is what the list's `get_key(index)`
+     * returned for that row, and `event` is the press as `on_mouse_down`
+     * reports it: `position` in the window, `local_position` and `bounds`
+     * against the row's own box.
+     *
+     * A press rather than a click, because that is when a context menu opens:
+     * the row is still under the pointer, so the menu can name what it is for
+     * before it is drawn over it. And one handler for the list rather than one
+     * per row, for the reason `on_item_click` gives.
+     *
+     * It is delivered on the row, so a handler for the same button on an
+     * element around the list still fires after it, in the ordinary bubble
+     * order, with that element's own `local_position`. A menu drawn inside a
+     * pane learns which row was pressed from this handler and where in the
+     * pane to open from the pane's.
+     */
+    on_item_secondary_click(
+      handler: (key: string, event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
     /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
@@ -1602,6 +1812,10 @@ const ELEMENT_METHODS: &str = r#"    /**
      * edge is a preference rather than a promise.
      */
     anchor(value: Anchor): Element;
+    /** Whether an fps_monitor requests continuous whole-window redraws. Default false. */
+    continuous(value: boolean): Element;
+    /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
+    frame_budget(milliseconds: number): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
     mouse_button(value: MouseButton): Element;
     /**
@@ -1752,7 +1966,7 @@ const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentag
   export type Props = Record<string, any>;
 
   /** Element-local event bounds assembled by the shell. */
-  export interface ElementBounds extends import("gpui").Point {
+  export interface ElementBounds extends import("gpui-kit").Point {
     width: number;
     height: number;
   }
@@ -1772,7 +1986,7 @@ const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentag
 
   export interface TaskOptions {
     /** Defaults to the running view; `null` outlives every view. */
-    owner?: import("gpui").View | null;
+    owner?: import("gpui-kit").View | null;
   }
 
   export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
@@ -2050,6 +2264,17 @@ const BASE: &str = r#"  /** A row. */
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+  export interface TextViewElement extends Element {
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): TextViewElement;
+    selectable(value?: boolean): TextViewElement;
+    scrollable(value?: boolean): TextViewElement;
+  }
+  export const TextView: {
+    html(id: string, html: string): TextViewElement;
+    markdown(id: string, markdown: string): TextViewElement;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -2807,9 +3032,9 @@ const BASE: &str = r#"  /** A row. */
    * Slider.new(this.volume).child(
    *   SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
    *     SliderIndicator.new(this.volume)
-   *       .relative().w_full().h(6).rounded(3).bg("secondary")
-   *       .range_style((fill) => fill.rounded(3).bg("primary"))
-   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg("primary").ml(-8)),
+   *       .relative().w_full().h(6).rounded(3).bg(`#e5e7eb`)
+   *       .range_style((fill) => fill.rounded(3).bg(`#2563eb`))
+   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg(`#2563eb`).ml(-8)),
    *   ),
    * );
    * ```
@@ -2897,9 +3122,9 @@ const BASE: &str = r#"  /** A row. */
    *   .flex().gap(8)
    *   .cell_style((cell) =>
    *     cell.size(40).flex().items_center().justify_center()
-   *       .border_1().border_color("border").rounded("md"))
-   *   .cell_active_style((cell) => cell.border_color("ring"))
-   *   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+   *       .border_1().border_color(`#d1d5db`).rounded("md"))
+   *   .cell_active_style((cell) => cell.border_color(`#2563eb`))
+   *   .caret_style((caret) => caret.w(2).h(18).bg(`#111111`))
    * ```
    *
    * Alone among the bound components, its cells are not the script's to
@@ -3065,7 +3290,7 @@ const BASE: &str = r#"  /** A row. */
    */
   export interface DockArea {
     /** Docks `view` — a view from `cx.new(Class)`, not an element. */
-    add_panel(view: import("gpui").Entity, options: DockPanelOptions): void;
+    add_panel(view: import("gpui-kit").Entity, options: DockPanelOptions): void;
     /** Removes the panel with this id, wherever it sits. */
     remove_panel(id: number): void;
     /** Every panel in the area, in tree order. */
@@ -3124,7 +3349,7 @@ const BASE: &str = r#"  /** A row. */
      * Registering the same name twice replaces the class, which is what a hot
      * reload does.
      */
-    register_panel: (name: string, Class: import("gpui").ViewClass) => string;
+    register_panel: (name: string, Class: import("gpui-kit").ViewClass) => string;
   };
 
   /**
@@ -3189,19 +3414,62 @@ const BASE: &str = r#"  /** A row. */
     readonly none: number; readonly sm: number; readonly md: number;
     readonly lg: number; readonly xl: number; readonly full: number;
   }
+  /** One entry in the type scale, aligned with `gpui_base::TextStyleToken`. */
+  export interface TextStyleToken {
+    readonly size: number;
+    readonly line_height: number;
+    /** The CSS range: 100 is thin, 400 regular, 700 bold. */
+    readonly weight: number;
+  }
+  /**
+   * Semantic type scale, aligned with `gpui_base::TypographyTokens`.
+   *
+   * `md` is the window's base text size: everything the shell draws for itself
+   * — toasts, sheets, dialog chrome — inherits it, so an application that
+   * draws densely says so here rather than restating a size per component.
+   */
+  export interface TypographyTokens {
+    /** The face the scale is set in, and the scale itself. */
+    readonly sans: string;
+    readonly xs: TextStyleToken; readonly sm: TextStyleToken; readonly md: TextStyleToken;
+    readonly lg: TextStyleToken; readonly xl: TextStyleToken;
+    /**
+     * Code: a face and one size, not a sixth step of the scale. `mono_md` is
+     * the size `mono` is set at, and the two are read together.
+     */
+    readonly mono: string;
+    readonly mono_md: TextStyleToken;
+  }
   export interface SemanticThemeTokens {
     readonly colors: ColorTokens;
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
+    readonly typography: TypographyTokens;
   }
 
   /**
    * Replaces gpui-base's active semantic tokens for the current application.
    * Legal only from an event handler or task backed by a live host call.
+   *
+   * Colours, spacing and radius are stated in full: a palette with half its
+   * roles missing is a window drawn in two themes. Typography is an override —
+   * every entry is optional, and one left out keeps the value it has — so a
+   * theme that only wants a smaller base says `{ md: { size: 12 } }` rather
+   * than restating two font families and six line heights it has no opinion
+   * about. A theme that says nothing about type is drawn as it always was.
    */
   export function set_theme(theme: {
     readonly appearance: "light" | "dark";
-    readonly tokens: SemanticThemeTokens;
+    readonly tokens: Omit<SemanticThemeTokens, "typography"> & {
+      readonly typography?: {
+        readonly sans?: string;
+        readonly mono?: string;
+      } & {
+        readonly [Step in keyof Omit<TypographyTokens, "sans" | "mono">]?: {
+          readonly [Field in keyof TextStyleToken]?: number;
+        };
+      };
+    };
   }): void;
   /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {
@@ -3211,7 +3479,7 @@ const BASE: &str = r#"  /** A row. */
 
 "#;
 
-/// What `gpui-base`'s declarations borrow from `"gpui"`.
+/// What `gpui-base`'s declarations borrow from `"gpui-kit"`.
 ///
 /// A component is built out of this runtime's vocabulary and returns an
 /// `Element`, so the dependency runs upward only.
@@ -3220,20 +3488,52 @@ const BASE_IMPORTS: &str = r#"  import {
     Context,
     Element,
     FocusHandle,
-  } from "gpui";
+  } from "gpui-kit";
 
 "#;
 
-/// The `gpui-fps` performance overlay: one element, from the crate that draws it.
+/// The `gpui-fps` performance overlay: the element form, and the HUD the
+/// window root draws on a script's behalf.
 const FPS: &str = r#"  /**
    * The native `gpui-fps` performance HUD, shared once per window and pinned
    * to the top-right by default. Its parent must be `relative()`.
+   *
+   * Prefer `show_fps_monitor()`: a HUD placed inside the script's own tree is
+   * rebuilt with it, and what the tree does then counts against the reading.
    */
   export function fps_monitor(): Element;
+
+  /** Where the root-owned HUD sits and how it behaves. Every key is optional. */
+  export interface FpsMonitorOptions {
+    /** Corner or edge of the window. Default `top_right`. */
+    anchor?: Anchor;
+    /**
+     * Whether the HUD requests a redraw after every frame, so the rate it
+     * shows is the rate the window *can* sustain. Default `false`: the HUD
+     * observes the application's own frames and reads zero while it idles.
+     */
+    continuous?: boolean;
+    /** Frame budget in milliseconds, for the FRAME grading and the chart's scale. */
+    frame_budget?: number;
+  }
+
+  /**
+   * Draws the performance HUD over the whole window, above every overlay,
+   * until `hide_fps_monitor()`. The window root owns it: the script says
+   * whether and where, and nothing the script renders can move it, rebuild
+   * it, or count against it. Calling it again moves or reconfigures the HUD
+   * that is already up; the monitor behind it keeps its history across a hide
+   * and a show. Needs a live host call: `init()`, an event handler or a task.
+   */
+  export function show_fps_monitor(options?: FpsMonitorOptions): void;
+  /** Takes the HUD down. `true` if one was up. */
+  export function hide_fps_monitor(): boolean;
+  /** Whether the root-owned HUD is up. */
+  export function fps_monitor_visible(): boolean;
 "#;
 
-/// What `gpui-fps`'s one declaration borrows from `"gpui"`.
-const FPS_IMPORTS: &str = r#"  import { Element } from "gpui";
+/// What `gpui-fps`'s declarations borrow from `"gpui-kit"`.
+const FPS_IMPORTS: &str = r#"  import { Anchor, Element } from "gpui-kit";
 
 "#;
 
@@ -3435,7 +3735,7 @@ const WINDOW_GLOBAL: &str = r#"
  * `cx.notify()` re-renders this view, `window.open_dialog()` changes what the
  * user is looking at — which is why these are here and not on `Context`.
  */
-type GpuiShellWindow = import("gpui").Window;
+type GpuiShellWindow = import("gpui-kit").Window;
 interface Window extends GpuiShellWindow {}
 declare var window: Window & typeof globalThis;
 
@@ -3444,9 +3744,9 @@ declare var window: Window & typeof globalThis;
  * *is* the global object. Here `window` is an ordinary object, so both
  * spellings are installed rather than one falling out of the other.
  */
-declare const localStorage: import("gpui").Storage;
+declare const localStorage: import("gpui-kit").Storage;
 /** `window.sessionStorage`, bare, for the same reason. */
-declare const sessionStorage: import("gpui").Storage;
+declare const sessionStorage: import("gpui-kit").Storage;
 "#;
 
 const SCHEDULING: &str = r#"
@@ -3469,7 +3769,38 @@ const SCHEDULING: &str = r#"
 
 #[cfg(test)]
 mod tests {
+    use gpui::IntoElement as _;
+
     use super::*;
+
+    #[test]
+    fn registered_state_factories_are_declared_from_the_runtime_catalog() {
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register_state(
+                crate::StateDescriptor::new(
+                    "InputState",
+                    "InputState",
+                    vec![crate::ArgumentDescriptor::new(
+                        "text",
+                        crate::ArgumentSchema::String,
+                    )],
+                    |_, _, _| Ok(Box::new(())),
+                )
+                .with_documentation("Retained input state."),
+            )
+            .unwrap();
+
+        let declarations = declarations_with_components(&registry.freeze().unwrap());
+
+        assert!(declarations.contains("export interface InputState"));
+        assert!(declarations.contains("export function InputState(text: string): InputState;"));
+        assert!(declarations.contains("Retained input state."));
+    }
 
     /// The element methods that are not style methods, so a test can subtract
     /// them from the interface and compare what is left against the style
@@ -3500,10 +3831,12 @@ mod tests {
         "image",
         "fallback",
         "header",
+        "footer",
         "panel",
         "aria_level",
         "keep_mounted",
         "on_item_click",
+        "on_item_secondary_click",
         "on_change",
         "on_step",
         "on_open_change",
@@ -3567,6 +3900,8 @@ mod tests {
         "default_open",
         "overlay_closable",
         "anchor",
+        "continuous",
+        "frame_budget",
         "mouse_button",
         "open_delay",
         "close_delay",
@@ -3578,6 +3913,64 @@ mod tests {
     ];
 
     /// Every method name declared in the `Element` interface, in order.
+    /// A registered component answers `disabled`, `selected` and `on_click`
+    /// only when its descriptor declares them. The declarations have to say so,
+    /// or an editor green-lights a call that always throws — which is how
+    /// `Button.disabled(true)` reached a running application.
+    #[gpui::test]
+    fn withheld_common_behaviors_are_declared_uncallable_rather_than_removed() {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+            ConstructorDescriptor, MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Plain", Arc::new(Empty))
+                    .with_constructors(vec![ConstructorDescriptor::new(
+                        "Plain",
+                        Vec::new(),
+                        |_| Ok(ComponentPayload::new(())),
+                    )])
+                    .with_documentation("A component declaring no common behavior."),
+            )
+            .unwrap();
+        let _ = &registry as &ComponentRegistry;
+        let declarations = super::declarations_with_components(&registry.freeze().unwrap());
+
+        for behavior in super::REGISTERED_COMMON_BEHAVIORS {
+            assert!(
+                declarations.contains(&format!("{behavior}(unavailable: never): never;")),
+                "`{behavior}` must be declared uncallable on a component that does not declare it"
+            );
+        }
+        // Re-declared, not dropped: removing the member would cost the type its
+        // assignability to `Element`, so a typed part could no longer be passed
+        // to a slot that takes one.
+        assert!(
+            declarations.contains(
+                "export type PlainElement = Omit<Element, \"disabled\" | \"selected\" | \"on_click\">"
+            ),
+            "{declarations}"
+        );
+    }
+
     fn element_methods(declarations: &str) -> Vec<String> {
         declarations
             .lines()
@@ -3597,7 +3990,7 @@ mod tests {
 
     #[test]
     fn a_reflected_style_is_declared_with_no_arguments() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("\n    items_center(): Element;\n"));
         assert!(declarations.contains("\n    flex_col(): Element;\n"));
         // Reflection misses the macro-generated font weights; the runtime adds
@@ -3607,7 +4000,7 @@ mod tests {
 
     #[test]
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "    bg(value: Color): Element;",
             "    border_color(value: Color): Element;",
@@ -3639,23 +4032,21 @@ mod tests {
     }
 
     #[test]
-    fn every_color_token_is_in_the_color_union() {
-        let declarations = declarations();
+    fn colors_require_concrete_values_from_the_theme_api() {
+        let declarations = base_declarations();
         for name in color_token_names() {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
                 "`{name}` is missing from ColorToken"
             );
         }
-        assert!(
-            declarations
-                .contains("export type Color = import(\"gpui-base\").ColorToken | `#${string}`;")
-        );
+        assert!(declarations.contains("export type Color = `#${string}`;"));
+        assert!(!declarations.contains("ColorToken | `#${string}`"));
     }
 
     #[test]
     fn shared_types_are_declared_by_the_layer_that_owns_them() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let module = |specifier: &str| {
             let start = declarations
                 .find(&format!("declare module \"{specifier}\" {{"))
@@ -3666,7 +4057,7 @@ mod tests {
                     .expect("unterminated module");
             &declarations[start..end]
         };
-        let gpui = module("gpui");
+        let gpui = module("gpui-kit");
         let base = module("gpui-base");
         let shell = module("gpui-shell");
 
@@ -3715,7 +4106,7 @@ mod tests {
 
     #[test]
     fn no_internal_name_leaks_into_the_surface() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for internal in ["__id", "__apply", "__state", "__gpui", "__styleNames"] {
             assert!(
                 !declarations.contains(internal),
@@ -3727,7 +4118,7 @@ mod tests {
 
     #[test]
     fn compatibility_is_manifest_metadata_not_a_script_api() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(!declarations.contains("require_api"));
         assert!(
             declarations.contains(&format!("for gpui-shell {}.", crate::plugin::SHELL_VERSION))
@@ -3736,7 +4127,7 @@ mod tests {
 
     #[test]
     fn the_output_is_structurally_balanced() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let opened = declarations.matches('{').count();
         let closed = declarations.matches('}').count();
         assert_eq!(opened, closed, "unbalanced braces");
@@ -3744,7 +4135,7 @@ mod tests {
         for method in element_methods(&declarations) {
             assert!(!method.is_empty(), "a method line has no name");
         }
-        assert!(declarations.contains("declare module \"gpui\" {"));
+        assert!(declarations.contains("declare module \"gpui-kit\" {"));
         // The global declaration follows the module blocks, and has to stay
         // outside it: a `declare module` body cannot introduce a global, and
         // this file is only in script mode because it has no top-level import
@@ -3778,11 +4169,12 @@ mod tests {
         crate::export_module(
             crate::HostModule::new("audit")
                 .function("observe", |_| Ok(crate::HostValue::Null))
-                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) })),
+                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) }))
+                .component("AuditPanel", |_, _, _| gpui::div().into_any_element()),
         )
         .expect("`audit` is not reserved");
 
-        let declarations = declarations();
+        let declarations = base_declarations();
         // The point of the whole change: these names come from the registry,
         // not from a file someone maintains beside the script.
         assert!(
@@ -3807,7 +4199,7 @@ mod tests {
         // `HostValue` rather than `any`: the boundary is not wider than the
         // Rust type of that name, and the declarations should not claim it is.
         assert!(
-            declarations.contains("  import { HostValue } from \"gpui\";"),
+            declarations.contains("  import { Element, HostValue } from \"gpui-kit\";"),
             "the permissive signatures below need this import to resolve"
         );
         assert!(
@@ -3817,10 +4209,13 @@ mod tests {
             declarations
                 .contains("  export function drain(...args: HostValue[]): Promise<HostValue>;")
         );
+        assert!(declarations.contains(
+            "  export const AuditPanel: { new(id: string, props: HostValue): Element };"
+        ));
 
         crate::clear_exported_modules();
         assert!(
-            !super::declarations().contains("declare module \"market\""),
+            !super::base_declarations().contains("declare module \"market\""),
             "declarations are read from the registry at write time, so a \
              withdrawn module must stop being declared"
         );
@@ -3828,7 +4223,7 @@ mod tests {
 
     #[test]
     fn each_built_in_module_declares_only_what_its_crate_provides() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let module = |specifier: &str| {
             let start = declarations
                 .find(&format!("declare module \"{specifier}\" {{"))
@@ -3841,9 +4236,9 @@ mod tests {
 
         // A component is declared where it is implemented. Reading a name out
         // of the wrong module is the failure this guards: `Button` under
-        // `"gpui"` would say the runtime draws it, and the whole point of the
+        // `"gpui-kit"` would say the runtime draws it, and the whole point of the
         // split is that `gpui-base` does.
-        let gpui = module("gpui");
+        let gpui = module("gpui-kit");
         let base = module("gpui-base");
         for name in [
             "export const Button",
@@ -3863,8 +4258,8 @@ mod tests {
         assert!(module("gpui-fps").contains("export function fps_monitor(): Element;"));
 
         // The dependency runs upward only: a layer names what it borrows from
-        // `"gpui"`, and `"gpui"` imports nothing back.
-        assert!(base.contains("} from \"gpui\";"));
+        // `"gpui-kit"`, and `"gpui-kit"` imports nothing back.
+        assert!(base.contains("} from \"gpui-kit\";"));
         assert!(!gpui.contains("} from \"gpui-base\";"));
     }
 
@@ -3880,9 +4275,9 @@ mod tests {
     fn the_declarations_name_exactly_what_the_runtime_exports() {
         use crate::engine::quickjs::exports;
 
-        let declarations = declarations();
+        let declarations = base_declarations();
         for (specifier, names) in [
-            ("gpui", exports::GPUI),
+            ("gpui-kit", exports::GPUI),
             ("gpui-base", exports::GPUI_BASE),
             ("gpui-shell", exports::GPUI_SHELL),
             ("gpui-fps", exports::GPUI_FPS),
@@ -3942,7 +4337,7 @@ mod tests {
 
     #[test]
     fn standard_runtime_modules_are_declared_without_node_aliases() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in [
             "buffer",
             "path",
@@ -3971,7 +4366,7 @@ mod tests {
 
     #[test]
     fn standard_names_only_claim_standard_compatible_contracts() {
-        let declarations = declarations();
+        let declarations = base_declarations();
 
         assert!(!declarations.contains("declare module \"fs\""));
         assert!(declarations.contains("readFile(path: string): Promise<Uint8Array>;"));
@@ -4017,7 +4412,7 @@ mod tests {
 
     #[test]
     fn websocket_binary_and_text_messages_are_declared() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("export interface WebSocketSocket {"));
         assert!(declarations.contains("read(): Promise<string | Uint8Array>;"));
         assert!(declarations.contains("write(data: string | Uint8Array): Promise<void>;"));
@@ -4031,13 +4426,13 @@ mod tests {
 
     #[test]
     fn raw_tcp_reads_preserve_bytes_and_expose_eof() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("read(maxBytes?: number): Promise<Uint8Array | null>;"));
     }
 
     #[test]
     fn every_element_method_is_accounted_for() {
-        let declared = element_methods(&declarations());
+        let declared = element_methods(&base_declarations());
         let styles: Vec<&String> = declared
             .iter()
             .filter(|name| !NON_STYLE_METHODS.contains(&name.as_str()))
@@ -4069,7 +4464,7 @@ mod tests {
     /// out beside it.
     #[test]
     fn focus_and_accessibility_are_declared_from_the_runtime_tables() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "    role(name: Role): Element;",
             "    aria_selected(value: boolean): Element;",
@@ -4101,13 +4496,30 @@ mod tests {
 
     #[test]
     fn render_accepts_every_runtime_renderable_shape() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("abstract render(cx: Context): Element | Entity | string;"));
     }
 
     #[test]
-    fn view_lifecycle_declaration_matches_runtime_calls() {
+    fn text_view_behaviors_are_not_declared_on_every_element() {
         let declarations = declarations();
+        let element = declarations
+            .split_once("export interface Element")
+            .expect("Element declaration")
+            .1
+            .split_once("\n  }")
+            .expect("end of Element declaration")
+            .0;
+        assert!(!element.contains("on_link_click("));
+        assert!(!element.contains("selectable("));
+        assert!(!element.contains("scrollable("));
+        assert!(declarations.contains("export interface TextViewElement extends Element"));
+        assert!(declarations.contains("html(id: string, html: string): TextViewElement;"));
+    }
+
+    #[test]
+    fn view_lifecycle_declaration_matches_runtime_calls() {
+        let declarations = base_declarations();
         assert!(declarations.contains(
             "init?(props: import(\"gpui-shell\").Props | undefined, cx: AsyncContext): void;"
         ));
@@ -4120,7 +4532,7 @@ mod tests {
 
     #[test]
     fn retained_state_event_names_and_payloads_match_the_runtime() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let union = |names: &[&str]| {
             names
                 .iter()
@@ -4143,7 +4555,7 @@ mod tests {
 
     #[test]
     fn component_constructor_shapes_name_only_reusable_public_concepts() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let base = declarations
             .split_once("declare module \"gpui-base\" {")
             .expect("gpui-base declarations")
@@ -4164,7 +4576,7 @@ mod tests {
 
     #[test]
     fn public_types_name_script_concepts_not_declaration_scaffolding() {
-        let declarations = declarations();
+        let declarations = base_declarations();
 
         for name in [
             "PathBuilderHandle",
@@ -4211,7 +4623,7 @@ mod tests {
 
     #[test]
     fn retained_nested_views_are_declared() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "  export interface Entity {",
             "    set_props(props?: import(\"gpui-shell\").Props): void;",
@@ -4224,14 +4636,14 @@ mod tests {
     #[test]
     fn targeted_notify_is_declared() {
         assert!(
-            declarations().contains("    notify(target?: Entity): void;"),
+            base_declarations().contains("    notify(target?: Entity): void;"),
             "Context.notify must expose GPUI's targeted entity notification"
         );
     }
 
     #[test]
     fn nested_update_rollback_contract_names_its_supported_boundary() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "post-update descriptors remain legally redefinable or deletable",
             "including callable objects",
@@ -4254,7 +4666,7 @@ mod tests {
     /// so a corner an editor accepts is one `anchor(...)` accepts.
     #[test]
     fn the_anchored_surfaces_are_declared_from_the_runtime_anchor_table() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in crate::materialize::ANCHOR_NAMES {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
@@ -4276,7 +4688,7 @@ mod tests {
 
     #[test]
     fn motion_policies_are_declared_without_per_frame_callbacks() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains(
             "transition(property: import(\"gpui-shell\").MotionProperty, policy: number | import(\"gpui-shell\").TransitionPolicy): Element;"
         ));
@@ -4329,18 +4741,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a temporary directory");
 
-        let written = refresh(&directory).expect("the first refresh");
+        let written =
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the first refresh");
         assert_eq!(
             written.as_deref(),
             Some(directory.join(FILE_NAME).as_path())
         );
         assert_eq!(
             std::fs::read_to_string(directory.join(FILE_NAME)).expect("the file"),
-            declarations()
+            base_declarations()
         );
 
         assert_eq!(
-            refresh(&directory).expect("the second refresh"),
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the second refresh"),
             None,
             "an up-to-date file must not be rewritten"
         );
@@ -4348,7 +4763,11 @@ mod tests {
         // A stale one is replaced, which is the case this exists for.
         std::fs::write(directory.join(FILE_NAME), "// from an older runtime\n")
             .expect("overwriting");
-        assert!(refresh(&directory).expect("the third refresh").is_some());
+        assert!(
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the third refresh")
+                .is_some()
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -4357,7 +4776,11 @@ mod tests {
     fn write_application_creates_the_file_beside_an_application() {
         let directory =
             std::env::temp_dir().join(format!("gpui-shell-typings-{}", std::process::id()));
-        let written = write_application(&directory).expect("declarations are writable");
+        let written = write_application_with_components(
+            &directory,
+            &crate::FrozenComponentRegistry::default(),
+        )
+        .expect("declarations are writable");
         let path = directory.join(FILE_NAME);
 
         assert_eq!(
@@ -4365,7 +4788,7 @@ mod tests {
             vec![directory.join(CONFIG_FILE_NAME), path.clone()]
         );
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), base_declarations());
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -4381,7 +4804,8 @@ mod tests {
         std::fs::create_dir_all(&directory).expect("application root");
         std::fs::write(directory.join(TYPESCRIPT_CONFIG_FILE_NAME), "{}").expect("a tsconfig");
 
-        write_application(&directory).expect("declarations are writable");
+        write_application_with_components(&directory, &crate::FrozenComponentRegistry::default())
+            .expect("declarations are writable");
 
         assert!(!directory.join(CONFIG_FILE_NAME).exists());
         assert_eq!(
@@ -4404,11 +4828,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&outside);
         std::fs::create_dir_all(&root).expect("application root");
         std::fs::create_dir_all(&outside).expect("outside directory");
-        std::fs::write(outside.join("escape.js"), "import { View } from 'gpui';")
-            .expect("outside script");
+        std::fs::write(
+            outside.join("escape.js"),
+            "import { View } from 'gpui-kit';",
+        )
+        .expect("outside script");
         symlink(&outside, root.join("escape")).expect("directory symlink");
 
-        write_application(&root).expect("root declarations");
+        write_application_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect("root declarations");
 
         assert!(root.join(FILE_NAME).is_file());
         assert!(
@@ -4435,7 +4863,8 @@ mod tests {
         std::fs::write(&outside, "do not replace").expect("outside target");
         symlink(&outside, root.join(FILE_NAME)).expect("declaration symlink");
 
-        let error = refresh(&root).expect_err("a declaration symlink must be refused");
+        let error = refresh_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect_err("a declaration symlink must be refused");
         assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         assert_eq!(
             std::fs::read_to_string(&outside).expect("outside target"),

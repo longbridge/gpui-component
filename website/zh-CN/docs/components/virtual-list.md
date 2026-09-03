@@ -12,12 +12,12 @@ VirtualList 是一个面向大规模数据集的高性能列表组件。它只�
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     v_virtual_list, h_virtual_list, VirtualListScrollHandle,
     scroll::{Scrollbar, ScrollbarState, ScrollbarAxis},
 };
 use std::rc::Rc;
-use gpui::{px, size, ScrollStrategy, Size, Pixels};
+use gpui_kit::{px, size, ScrollStrategy, Size, Pixels};
 ```
 
 ## 用法

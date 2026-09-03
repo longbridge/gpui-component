@@ -37,7 +37,7 @@ html.dark .alignment-dark {
   --radius: var(--radius-control);
 
   /* Every colour below is taken from the library's own default theme
-     (crates/ui/src/theme/default-theme.json, "Default Light") so the site and
+     (crates/component/src/theme/default-theme.json, "Default Light") so the site and
      the components it documents are literally the same palette.
 
      primary.background / .hover / .foreground */

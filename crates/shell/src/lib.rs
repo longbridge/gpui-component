@@ -31,7 +31,7 @@
 // script may reach, `root` and `theme` for the window it lives in, `view` and
 // `snapshot` for the view itself, `metrics` to measure. Hot reload is exposed
 // through `ShellRuntime::watch`; its watcher implementation remains internal.
-// `write_type_declarations` is the explicit tooling hook for `gpui.d.ts`;
+// `write_type_declarations_with_components` is the explicit tooling hook for `gpui-kit.d.ts`;
 // ordinary application loading updates it automatically.
 //
 // **Crate-private, and why.** `engine` is the seam and its shape follows
@@ -56,11 +56,14 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+mod component;
+mod component_registry;
 pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
+pub mod host;
 pub mod host_modules;
 pub(crate) mod materialize;
 pub mod metrics;
@@ -71,6 +74,7 @@ pub(crate) mod process;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
+mod script_callback;
 pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
@@ -84,10 +88,24 @@ pub(crate) mod value;
 pub mod view;
 pub(crate) mod watch;
 
+pub use anyhow;
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
-pub use engine::ShellRuntime;
+pub use component::ComponentArgs;
+#[cfg(test)]
+pub(crate) use component_registry::ComponentState;
+pub use component_registry::{
+    ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+    ComponentCallback, ComponentCallbackArgument, ComponentDataCallback, ComponentDataValue,
+    ComponentDelegateSnapshot, ComponentDescriptor, ComponentElementCallback,
+    ComponentElementFactory, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, DEFAULT_COMPONENT_MODULE, FrozenComponentRegistry, MaterializeRequest,
+    MethodDescriptor, RegistryError, StateDescriptor,
+};
+pub(crate) use component_registry::{ComponentCallbackValue, ComponentId, RecordedComponentMethod};
+pub use engine::{LoadedApplication, ShellRuntime};
 pub use error::ShellError;
+pub use gpui;
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
@@ -106,18 +124,24 @@ use std::path::PathBuf;
 
 use gpui::App;
 
-/// Writes current `gpui.d.ts` declarations into an application tree.
-///
-/// [`ShellRuntime::load`] already performs this best-effort for ordinary hosts.
-/// This explicit operation exists for tooling such as `gpui-shell types` that
-/// must report a write failure to its caller.
-pub fn write_type_declarations(root: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
-    typings::write_application(root)
+/// Returns declarations for one frozen component registry without installing
+/// process-global component state.
+pub fn type_declarations(components: &FrozenComponentRegistry) -> String {
+    typings::declarations_with_components(components)
+}
+
+/// Writes declarations for one frozen component registry into an application
+/// tree without changing another runtime's catalog.
+pub fn write_type_declarations_with_components(
+    root: &std::path::Path,
+    components: &FrozenComponentRegistry,
+) -> std::io::Result<Vec<PathBuf>> {
+    typings::write_application_with_components(root, components)
 }
 
 /// Links an application's declared Git dependencies where an editor finds them.
 ///
-/// `gpui.d.ts` describes the runtime; this describes the packages the manifest
+/// `gpui-kit.d.ts` describes the runtime; this describes the packages the manifest
 /// adds to it. Without it `import { style } from "omarchy-ui"` is a module an
 /// editor cannot resolve, so the names behind it have no types, no parameter
 /// hints and no documentation even though the runtime resolves them fine.
@@ -235,10 +259,74 @@ pub fn set_development_mode(enabled: bool) {
 
 /// Initializes the base layer and style reflection table.
 ///
-/// Must be called once at application startup, before any script runs.
+/// Must be called once at application startup, before any script runs. This is
+/// enough for the bare runtime. A host carrying a component catalog calls
+/// [`init_with_components`] instead, so the catalog's own globals are
+/// installed too.
 pub fn init(cx: &mut App) {
     gpui_base::init(cx);
     style::init();
+}
+
+/// Initializes the runtime and the catalog it will render.
+///
+/// The runtime still knows nothing about any component library: it calls the
+/// startup function the catalog registered with
+/// [`ComponentRegistry::with_initializer`] and nothing else. A catalog that
+/// registered none behaves exactly like [`init`].
+pub fn init_with_components(cx: &mut App, components: &FrozenComponentRegistry) {
+    if let Some(initializer) = components.initializer() {
+        initializer(cx);
+    }
+    init(cx);
+}
+
+#[cfg(test)]
+mod init_tests {
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn shell_init_installs_the_base_globals_without_a_component_catalog(cx: &mut TestAppContext) {
+        cx.update(super::init);
+
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
+    }
+
+    /// A host that only holds a frozen catalog — the shipped command — has no
+    /// other way to install what that catalog's components need at run time.
+    #[gpui::test]
+    fn init_with_components_runs_the_catalog_initializer(cx: &mut TestAppContext) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        fn record(_: &mut gpui::App) {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+        }
+
+        let components = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap()
+        .with_initializer(record)
+        .freeze()
+        .unwrap();
+
+        cx.update(|cx| crate::init_with_components(cx, &components));
+
+        assert_eq!(CALLS.load(Ordering::SeqCst), 1);
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
+    }
+
+    #[gpui::test]
+    fn init_with_components_matches_init_for_a_catalog_without_one(cx: &mut TestAppContext) {
+        let components = crate::FrozenComponentRegistry::default();
+        assert!(components.initializer().is_none());
+
+        cx.update(|cx| crate::init_with_components(cx, &components));
+
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
+    }
 }
 
 /// Exports one Rust module for scripts to import by name.
@@ -265,7 +353,7 @@ pub fn init(cx: &mut App) {
 /// # Ok::<(), gpui_shell::HostError>(())
 /// ```
 ///
-/// A script imports that by name, the way it imports `gpui` or `path`:
+/// A script imports that by name, the way it imports `gpui-kit` or `path`:
 ///
 /// ```js
 /// import { project_name } from "workspace";
@@ -299,7 +387,7 @@ pub fn init(cx: &mut App) {
 /// # Give it a TypeScript face
 ///
 /// [`HostModule::declarations`] is optional but worth writing. With it, the
-/// generated `gpui.d.ts` describes the module exactly, and this function checks
+/// generated `gpui-kit.d.ts` describes the module exactly, and this function checks
 /// that description against the functions actually registered — so renaming one
 /// half is a sentence at start-up rather than an editor that keeps completing a
 /// function you deleted. Without it, the module is still declared, with

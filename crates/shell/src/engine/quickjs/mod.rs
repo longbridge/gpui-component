@@ -22,11 +22,11 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use gpui::{App, AppContext as _, ClickEvent, Entity, Global, WeakEntity, Window};
+use gpui::{App, AppContext as _, ClickEvent, Entity, Global, Subscription, WeakEntity, Window};
 use rquickjs::{
     Array, Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object,
     Persistent, Result as JsResult, Runtime as JsRuntime, Value,
-    function::{Func, Opt, This},
+    function::{Args as JsArgs, Func, Opt, This},
     loader::{BuiltinResolver, ImportAttributes, Loader, ModuleLoader, Resolver},
     module::Declared,
     module::{Declarations, Exports, Module, ModuleDef},
@@ -34,8 +34,11 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentCallbackValue, ComponentDataValue, ComponentPayload, FrozenComponentRegistry,
     dependencies::{GitDependencyStore, MaterializedDependency},
     entities::{EntityHandle, EntityStore},
+    host_modules::HostValue,
     metrics::Metrics,
     policy::Policy,
     runtime::{ApplicationGeneration, CallbackArena, CallbackEntry},
@@ -55,6 +58,746 @@ pub struct ViewType {
     value: Persistent<Object<'static>>,
     module_lease: Option<ApplicationModuleLease>,
     application: Option<Rc<ApplicationGeneration>>,
+}
+
+#[cfg(test)]
+mod retained_component_state_tests {
+    use super::*;
+    use gpui::{TestAppContext, VisualTestContext};
+
+    #[test]
+    fn immutable_state_lookup_reports_reentrant_mutable_borrow() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let _borrow = runtime.component_states.borrow_mut();
+
+        let error = runtime
+            .with_component_state::<usize, _>(handle, "State", |_| ())
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already mutably borrowed"));
+    }
+
+    #[test]
+    fn root_drop_release_path_purges_generation_owned_state() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(92);
+        runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(application.clone()), Box::new(()))
+            .unwrap();
+
+        runtime.release_application_generation_without_context(&application);
+
+        assert_eq!(runtime.retained_component_state_count(), 0);
+        assert!(!application.is_active());
+    }
+
+    #[test]
+    fn successful_reload_release_purges_old_generation_and_preserves_new() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let old = ApplicationGeneration::new(94);
+        let new = ApplicationGeneration::new(95);
+        let old_handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(old.clone()), Box::new(1usize))
+            .unwrap();
+        let new_handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(new.clone()), Box::new(2usize))
+            .unwrap();
+
+        runtime.release_application_generation_without_context(&old);
+
+        assert!(
+            runtime
+                .with_component_state::<usize, _>(old_handle, "State", |_| ())
+                .is_err()
+        );
+        assert_eq!(
+            runtime
+                .with_component_state::<usize, _>(new_handle, "State", |value| *value)
+                .unwrap(),
+            2
+        );
+        assert!(new.is_active());
+    }
+
+    #[gpui::test]
+    fn generation_release_during_state_update_is_deferred_then_guaranteed(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(93);
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(application.clone()), Box::new(1usize))
+            .unwrap();
+        for value in 1..crate::component_registry::MAX_RETAINED_COMPONENT_STATES {
+            runtime
+                .component_states
+                .borrow_mut()
+                .insert("State", Some(application.clone()), Box::new(value))
+                .unwrap();
+        }
+        assert!(
+            runtime
+                .component_states
+                .borrow_mut()
+                .insert("State", None, Box::new(()))
+                .is_err()
+        );
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        context
+            .update(|window, cx| {
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |value, _, _| {
+                        *value += 1;
+                        runtime.release_application_generation_without_context(&application);
+                    },
+                )
+            })
+            .unwrap();
+
+        assert_eq!(runtime.retained_component_state_count(), 0);
+        assert!(!application.is_active());
+        runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(()))
+            .expect("released generation must recover state capacity");
+    }
+
+    #[gpui::test]
+    fn state_update_reports_reentrant_immutable_borrow(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let _borrow = runtime.component_states.borrow();
+
+        let error = context
+            .update(|window, cx| {
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |_, _, _| (),
+                )
+            })
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already borrowed"));
+    }
+
+    #[gpui::test]
+    fn state_update_is_rejected_under_render_authority(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        let error = context
+            .update(|window, cx| {
+                let (_scope, _) =
+                    scope::enter_runtime(&runtime, window, cx, ScopePhase::Render, None);
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |_, _, _| (),
+                )
+            })
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be updated during render")
+        );
+    }
+}
+
+#[cfg(test)]
+mod component_callback_value_tests {
+    use super::*;
+    use gpui::{Empty, TestAppContext, VisualTestContext};
+    use std::ops::Deref;
+
+    #[test]
+    fn returning_to_the_installed_app_effect_cancels_a_pending_replacement() {
+        let key = "menu".to_owned();
+        let mut pending = HashMap::new();
+        let mut installed = HashMap::from([(
+            key.clone(),
+            InstalledAppEffect {
+                revision: "a".into(),
+                cleanup: None,
+            },
+        )]);
+
+        assert!(queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "b"
+        ));
+        assert_eq!(pending.get(&key).map(String::as_str), Some("b"));
+        assert!(!queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "a"
+        ));
+        assert!(!pending.contains_key(&key));
+
+        installed.get_mut(&key).unwrap().revision = "b".into();
+        assert!(queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "a"
+        ));
+    }
+
+    fn callback(
+        runtime: &Rc<ShellRuntime>,
+        source: &str,
+        application: Option<Rc<ApplicationGeneration>>,
+    ) -> (CallbackId, u64) {
+        let value = runtime
+            .with_js(|ctx| {
+                let function: Function<'_> = ctx.eval(source)?;
+                Ok(Persistent::save(&ctx, function))
+            })
+            .unwrap();
+        let mut callbacks = runtime.callbacks.borrow_mut();
+        let generation = callbacks.begin();
+        let id = callbacks.push(CallbackEntry {
+            value,
+            view: None,
+            application,
+            registered_in: None,
+        });
+        callbacks.commit();
+        (id, generation)
+    }
+
+    #[gpui::test]
+    fn component_callback_results_are_closed_and_jobs_are_drained(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (callback, _) = callback(
+            &runtime,
+            r#"(kind) => {
+                if (kind === "undefined") return undefined;
+                if (kind === "null") return null;
+                if (kind === "bool") return true;
+                if (kind === "number") return 2.5;
+                if (kind === "nan") return NaN;
+                if (kind === "infinity") return Infinity;
+                if (kind === "negative-infinity") return -Infinity;
+                if (kind === "function") return () => {};
+                if (kind === "element") return { __id: 7 };
+                if (kind === "promise") return Promise.resolve("later");
+                if (kind === "rejected-promise") return Promise.reject(new Error("later"));
+                Promise.resolve().then(() => { globalThis.__componentJobDrained = true; });
+                return "queued";
+            }"#,
+            None,
+        );
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let invoke = |kind: &str, context: &mut VisualTestContext| {
+            context.update(|window, cx| {
+                runtime.dispatch_component_callback_value(
+                    callback,
+                    &[ComponentCallbackArgument::String(kind.into())],
+                    window,
+                    cx,
+                )
+            })
+        };
+
+        assert_eq!(
+            invoke("undefined", &mut context).unwrap(),
+            ComponentCallbackValue::Null
+        );
+        assert_eq!(
+            invoke("null", &mut context).unwrap(),
+            ComponentCallbackValue::Null
+        );
+        assert_eq!(
+            invoke("bool", &mut context).unwrap(),
+            ComponentCallbackValue::Boolean(true)
+        );
+        assert_eq!(
+            invoke("number", &mut context).unwrap(),
+            ComponentCallbackValue::Number(2.5)
+        );
+        for kind in [
+            "nan",
+            "infinity",
+            "negative-infinity",
+            "function",
+            "element",
+            "promise",
+            "rejected-promise",
+        ] {
+            assert!(invoke(kind, &mut context).unwrap_err().to_string().contains(
+                "component callbacks may only return null, boolean, finite number, or string"
+            ));
+        }
+        assert_eq!(
+            invoke("queued", &mut context).unwrap(),
+            ComponentCallbackValue::String("queued".into())
+        );
+        assert!(
+            runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__componentJobDrained === true"))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn component_delegate_data_is_recursive_bounded_and_does_not_drain_jobs(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (id, _) = callback(
+            &runtime,
+            r#"() => { Promise.resolve().then(() => globalThis.__delegateJob = true); return {id: "a", cells: [1, true, null]}; }"#,
+            None,
+        );
+        let data_callback = crate::ComponentDataCallback::from_runtime(&runtime, id);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let value = context
+            .update(|window, cx| data_callback.snapshot_with(&[], window, cx))
+            .unwrap();
+        let crate::ComponentDataValue::Object(fields) = value else {
+            panic!("object")
+        };
+        assert_eq!(fields[0].0, "id");
+        assert!(
+            !runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__delegateJob === true"))
+                .unwrap()
+        );
+        let (leaky, _) = callback(&runtime, "() => { __div(); return {ok: true}; }", None);
+        let leaky = crate::ComponentDataCallback::from_runtime(&runtime, leaky);
+        let arena_len = runtime.arena.borrow().len();
+        for _ in 0..2 {
+            context
+                .update(|window, cx| leaky.snapshot_with(&[], window, cx))
+                .unwrap();
+            assert_eq!(runtime.arena.borrow().len(), arena_len);
+        }
+    }
+
+    #[gpui::test]
+    fn component_delegate_element_is_lazy_and_rejects_non_elements(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (good, _) = callback(&runtime, "(label) => label", None);
+        let (bad, _) = callback(&runtime, "() => ({row: 1})", None);
+        let good = crate::ComponentElementCallback::from_runtime(&runtime, good);
+        let bad = crate::ComponentElementCallback::from_runtime(&runtime, bad);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        assert!(
+            context
+                .update(|window, cx| good.build_with(
+                    &[ComponentCallbackArgument::String("row".into())],
+                    window,
+                    cx
+                ))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            context
+                .update(|window, cx| bad.build_with(&[], window, cx))
+                .is_err()
+        );
+        let row = ComponentDataValue::Object(vec![
+            ("label".into(), ComponentDataValue::String("Ada".into())),
+            (
+                "__proto__".into(),
+                ComponentDataValue::String("safe".into()),
+            ),
+        ]);
+        let (row_renderer, _) = callback(
+            &runtime,
+            "(row) => Object.getPrototypeOf(row) === null && Object.prototype.hasOwnProperty.call(row, '__proto__') && row.__proto__ === 'safe' ? row.label : ({bad: true})",
+            None,
+        );
+        let row_renderer = crate::ComponentElementCallback::from_runtime(&runtime, row_renderer);
+        assert!(
+            context
+                .update(|window, cx| row_renderer.build_data_with(&[row], window, cx))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[gpui::test]
+    fn temporary_delegate_arena_restores_after_panic_and_later_materializes(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let before = runtime.arena.borrow().len();
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.update(|window, cx| {
+                let (_scope, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Layout,
+                    None,
+                    crate::policy::default(),
+                    None,
+                );
+                let _temporary = TemporarySpecArena::enter(&runtime);
+                runtime
+                    .with_js(|ctx| {
+                        let div: Function = ctx.globals().get("__div")?;
+                        div.call::<_, ()>(())
+                    })
+                    .unwrap();
+                panic!("delegate dispatch scope panic probe");
+            })
+        }));
+        assert!(panic.is_err());
+        assert_eq!(scope::current_phase(), None);
+        assert_eq!(runtime.arena.borrow().len(), before);
+        drop(context);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let (id, _) = callback(&runtime, "() => 'still works'", None);
+        let callback = crate::ComponentElementCallback::from_runtime(&runtime, id);
+        assert!(
+            context
+                .update(|window, cx| callback.build_with(&[], window, cx))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[gpui::test]
+    fn component_delegate_capabilities_reject_invalid_data_and_stale_lifetimes(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(991);
+        let (invalid, _) = callback(
+            &runtime,
+            r#"(kind) => {
+                if (kind === "promise") return Promise.resolve(1);
+                if (kind === "function") return () => {};
+                if (kind === "element") return {__id: 7};
+                if (kind === "accessor") return Object.defineProperty({}, "value", {get() { globalThis.__delegateAccessorRan = true; throw new Error("getter ran"); }, enumerable: true});
+                if (kind === "prototype") return Object.create({inherited: true});
+                return Infinity;
+            }"#,
+            None,
+        );
+        let invalid = crate::ComponentDataCallback::from_runtime(&runtime, invalid);
+        let (stale, generation) = callback(&runtime, "()=>[]", None);
+        let stale = crate::ComponentDataCallback::from_runtime(&runtime, stale);
+        let (retired, _) = callback(&runtime, "()=>[]", Some(application.clone()));
+        let retired = crate::ComponentElementCallback::from_runtime(&runtime, retired);
+        let (notify, _) = callback(&runtime, "(cx)=>{ cx.notify(); return []; }", None);
+        let notify = crate::ComponentDataCallback::from_runtime(&runtime, notify);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        for kind in [
+            "promise",
+            "function",
+            "element",
+            "accessor",
+            "prototype",
+            "number",
+        ] {
+            assert!(
+                context
+                    .update(|window, cx| invalid.snapshot_with(
+                        &[ComponentCallbackArgument::String(kind.into())],
+                        window,
+                        cx
+                    ))
+                    .is_err()
+            );
+        }
+        assert!(
+            !runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__delegateAccessorRan === true"))
+                .unwrap(),
+            "delegate validation must reject accessors without invoking their getter"
+        );
+        let notify_error = context
+            .update(|window, cx| notify.snapshot_with(&[], window, cx))
+            .unwrap_err();
+        assert!(
+            notify_error.to_string().contains("layout"),
+            "{notify_error:#}"
+        );
+        runtime.callbacks.borrow_mut().retire(generation);
+        assert!(
+            context
+                .update(|window, cx| stale.snapshot_with(&[], window, cx))
+                .unwrap_err()
+                .to_string()
+                .contains("superseded render")
+        );
+        application.retire();
+        let retired_error = match context.update(|window, cx| retired.build_with(&[], window, cx)) {
+            Ok(_) => panic!("retired element callback must fail"),
+            Err(error) => error,
+        };
+        assert!(retired_error.to_string().contains("retired application"));
+        let snapshot =
+            crate::ComponentDelegateSnapshot::new(vec![ComponentDataValue::String("row".into())]);
+        assert_eq!(snapshot.len(), 1);
+        assert!(snapshot.row(1).is_err());
+    }
+
+    #[gpui::test]
+    fn component_callback_results_obey_snapshot_and_application_lifetimes(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(700);
+        let (retired_snapshot, generation) = callback(&runtime, "() => null", None);
+        let (retired_application, _) = callback(&runtime, "() => null", Some(application.clone()));
+        runtime.callbacks.borrow_mut().retire(generation);
+        application.retire();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let snapshot_error = context
+            .update(|window, cx| {
+                runtime.dispatch_component_callback_value(retired_snapshot, &[], window, cx)
+            })
+            .unwrap_err();
+        assert!(snapshot_error.to_string().contains("superseded render"));
+        let application_error = context
+            .update(|window, cx| {
+                runtime.dispatch_component_callback_value(retired_application, &[], window, cx)
+            })
+            .unwrap_err();
+        assert!(
+            application_error
+                .to_string()
+                .contains("retired application")
+        );
+    }
+
+    #[gpui::test]
+    fn window_effects_are_once_per_event_and_reset_after_errors(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (reporter_id, _) = callback(
+            &runtime,
+            "(message) => { globalThis.__effectError = message; }",
+            None,
+        );
+        let reporter =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id);
+        let effects = reporter.window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let runs = Cell::new(0);
+
+        context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| -> anyhow::Result<()> {
+                    assert!(
+                        event
+                            .run_once::<()>("retry", |_, _| anyhow::bail!("retry me"))
+                            .is_err()
+                    );
+                    assert!(
+                        event.run_once("retry", |_, _| Ok(()))?.executed(),
+                        "a failed keyed body must remain retryable in the same event"
+                    );
+                    assert!(
+                        event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    assert!(
+                        !event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    anyhow::bail!("candidate failed")
+                })
+            })
+            .unwrap_err();
+        assert_eq!(runs.get(), 1);
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.eval::<String, _>("globalThis.__effectError"))
+                .unwrap(),
+            "candidate failed"
+        );
+
+        context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| {
+                    assert!(
+                        event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    Ok(())
+                })
+            })
+            .unwrap();
+        assert_eq!(runs.get(), 2, "a later event may reuse the same key");
+    }
+
+    #[gpui::test]
+    fn window_effects_reject_reentry_and_stale_generations(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(701);
+        let (reporter_id, generation) = callback(
+            &runtime,
+            "(message) => { globalThis.__effectError = message; }",
+            Some(application.clone()),
+        );
+        let effects =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id)
+                .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let error = context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| {
+                    event
+                        .run_once("nested", |window, cx| effects.event(window, cx, |_| Ok(())))
+                        .map(|_| ())
+                })
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("already running"));
+
+        runtime.callbacks.borrow_mut().retire(generation);
+        let error = context
+            .update(|window, cx| effects.event(window, cx, |_| Ok(())))
+            .unwrap_err();
+        assert!(error.to_string().contains("superseded render"));
+
+        let (application_reporter, _) = callback(&runtime, "() => null", Some(application.clone()));
+        let application_effects = crate::component_registry::ComponentCallback::from_runtime(
+            &runtime,
+            application_reporter,
+        )
+        .window_effects();
+        application.retire();
+        let error = context
+            .update(|window, cx| application_effects.event(window, cx, |_| Ok(())))
+            .unwrap_err();
+        assert!(error.to_string().contains("retired application"));
+    }
+
+    #[gpui::test]
+    fn window_effect_panic_resets_the_event_guard(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (reporter_id, _) = callback(&runtime, "() => null", None);
+        let effects =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id)
+                .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.update(|window, cx| effects.event::<()>(window, cx, |_| panic!("effect panic")))
+        }));
+        assert!(panic.is_err());
+        assert!(!effects.is_active());
+    }
+
+    #[gpui::test]
+    fn window_effects_reject_render_and_allow_nested_distinct_handles(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (a_id, _) = callback(&runtime, "() => null", None);
+        let (b_id, _) = callback(&runtime, "() => null", None);
+        let a = crate::component_registry::ComponentCallback::from_runtime(&runtime, a_id)
+            .window_effects();
+        let b = crate::component_registry::ComponentCallback::from_runtime(&runtime, b_id)
+            .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let error = context
+            .update(|window, cx| {
+                let (_guard, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Render,
+                    None,
+                    crate::policy::default(),
+                    None,
+                );
+                a.event(window, cx, |_| Ok(()))
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("during the `render` phase"));
+
+        context
+            .update(|window, cx| {
+                a.event(window, cx, |event| {
+                    event
+                        .run_once("a", |window, cx| b.event(window, cx, |_| Ok(())))
+                        .map(|_| ())
+                })
+            })
+            .unwrap();
+    }
+}
+
+/// An application entry loaded by one [`ShellRuntime`].
+///
+/// The JavaScript class stays opaque so hosts cannot bypass initialization,
+/// policy, task ownership, or application-generation cleanup. It is a
+/// single-mount handle: the owning runtime consumes it on its first mount
+/// attempt, including an attempt whose construction or initialization fails.
+/// A foreign runtime is rejected before that consumption.
+pub struct LoadedApplication {
+    runtime: Weak<ShellRuntime>,
+    view_type: ViewType,
+    mounted: Cell<bool>,
 }
 
 impl ViewType {
@@ -265,7 +1008,7 @@ mod window_api;
 ///
 /// One module per crate that provides the capability, so an import says which
 /// layer a script depends on: `gpui-base`'s components come from `"gpui-base"`,
-/// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui"` carries only what GPUI
+/// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui-kit"` carries only what GPUI
 /// itself and this runtime provide. A name belongs to exactly one of them —
 /// nothing is re-exported for convenience, because a name reachable from two
 /// specifiers stops saying anything about where it came from, and the next
@@ -342,6 +1085,7 @@ pub(crate) mod exports {
         "InputState",
         "NumberInput",
         "Textarea",
+        "TextView",
         "TextareaState",
         "SliderState",
         "Slider",
@@ -360,10 +1104,17 @@ pub(crate) mod exports {
         "set_theme",
     ];
 
-    /// The performance overlay, owned by `gpui-fps`.
-    pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
+    /// The performance overlay, owned by `gpui-fps`: the element form, and
+    /// the root-owned HUD a script switches on and off.
+    pub(crate) const GPUI_FPS: &[&str] = &[
+        "fps_monitor",
+        "show_fps_monitor",
+        "hide_fps_monitor",
+        "fps_monitor_visible",
+    ];
 
-    /// Shell-owned shared types. This module currently has no run-time values.
+    /// Shell-owned shared types. Module components are exported from their
+    /// host modules rather than through a public generic dispatcher.
     pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
 
@@ -413,7 +1164,7 @@ macro_rules! builtin_modules {
         /// is told which it is talking to rather than only that the import
         /// failed.
         fn builtin_specifiers() -> String {
-            [$($module::SPECIFIER),+]
+            [$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
                 .map(|specifier| format!("`{specifier}`"))
                 .join(", ")
         }
@@ -426,7 +1177,7 @@ macro_rules! builtin_modules {
         /// [`crate::RESERVED_SPECIFIERS`] honest.
         #[cfg(test)]
         fn builtin_specifier_list() -> Vec<&'static str> {
-            vec![$($module::SPECIFIER),+]
+            vec![$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
         }
 
         /// Which module exports `name`, if any.
@@ -443,17 +1194,83 @@ macro_rules! builtin_modules {
 }
 
 builtin_modules![
-    (GpuiModule, "gpui", exports::GPUI),
+    (GpuiModule, "gpui-kit", exports::GPUI),
     (GpuiBaseModule, "gpui-base", exports::GPUI_BASE),
     (GpuiShellModule, "gpui-shell", exports::GPUI_SHELL),
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
 ];
+
+/// A value a script cannot derive, proving that a retained-state handle came
+/// from this runtime's own component module.
+///
+/// Retained state travels as an ordinary object, the way elements and entities
+/// already do, so the proof is what separates a handle the module produced from
+/// one a script wrote by hand. That means it must not be reconstructible from
+/// anything a script can observe — a process id, a clock, a counter — so it
+/// comes from `RandomState`'s OS-seeded keys, the same secret Rust relies on to
+/// keep hash maps from being collided on purpose.
+fn random_component_state_proof() -> String {
+    use std::hash::{BuildHasher as _, Hasher as _, RandomState};
+
+    let mut proof = String::from("gpui-shell-state-");
+    for round in 0..2u64 {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u64(round);
+        proof.push_str(&format!("{:016x}", hasher.finish()));
+    }
+    proof
+}
+
+type AppEffectInstall =
+    Box<dyn FnOnce(&mut App) -> crate::component_registry::ComponentAppEffectCleanup>;
+
+struct InstalledAppEffect {
+    revision: String,
+    cleanup: Option<crate::component_registry::ComponentAppEffectCleanup>,
+}
+
+struct ComponentAppEffectGeneration {
+    application: Rc<ApplicationGeneration>,
+    /// The root view the effects were installed for. Retiring a generation
+    /// runs its cleanups through this view, so a reload does not have to wait
+    /// for the window to close before native state is restored.
+    view: WeakEntity<ScriptView>,
+    pending: HashMap<String, String>,
+    installed: HashMap<String, InstalledAppEffect>,
+    _release: Subscription,
+}
+
+fn queue_component_app_effect(
+    pending: &mut HashMap<String, String>,
+    installed: &HashMap<String, InstalledAppEffect>,
+    key: &str,
+    revision: &str,
+) -> bool {
+    if pending.get(key).is_some_and(|value| value == revision) {
+        return false;
+    }
+    if installed
+        .get(key)
+        .is_some_and(|effect| effect.revision == revision)
+    {
+        pending.remove(key);
+        return false;
+    }
+    pending.insert(key.to_owned(), revision.to_owned());
+    true
+}
 
 pub struct ShellRuntime {
     /// Declared first because fields drop in declaration order and every
     /// `Persistent` handle must be released while the context still exists.
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
+    components: FrozenComponentRegistry,
+    component_state_proof: String,
+    component_states: RefCell<crate::component_registry::RetainedStateStore>,
+    pending_component_state_releases: RefCell<Vec<Rc<ApplicationGeneration>>>,
+    component_app_effects: RefCell<HashMap<usize, ComponentAppEffectGeneration>>,
+    warned_deprecated_exports: RefCell<HashSet<&'static str>>,
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
     ///
@@ -530,6 +1347,7 @@ pub struct ShellRuntime {
 
 impl Drop for ShellRuntime {
     fn drop(&mut self) {
+        self.flush_component_state_releases();
         // Both hold `Persistent` script values, and a persistent handle
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
@@ -558,15 +1376,71 @@ struct RuntimeGlobal(Weak<ShellRuntime>);
 impl Global for RuntimeGlobal {}
 
 impl ShellRuntime {
+    /// Loads an application's JavaScript entry without exposing engine values.
+    ///
+    /// Resolution, declaration refresh, module generations, capabilities and
+    /// watcher-compatible module leases are identical to the shell's own app
+    /// loading path.
+    pub fn load_application(
+        self: &Rc<Self>,
+        directory: &Path,
+        entry: &str,
+    ) -> Result<LoadedApplication> {
+        Ok(LoadedApplication {
+            runtime: Rc::downgrade(self),
+            view_type: self.load_app(directory, entry)?,
+            mounted: Cell::new(false),
+        })
+    }
+
+    /// Creates, initializes and mounts a loaded application as a [`ScriptView`].
+    ///
+    /// The owner consumes the handle before construction. This makes a failed
+    /// attempt terminal too, matching the application-generation cleanup that
+    /// construction and initialization failures perform.
+    pub fn mount_application(
+        self: &Rc<Self>,
+        application: &LoadedApplication,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Entity<ScriptView>> {
+        anyhow::ensure!(
+            application
+                .runtime
+                .upgrade()
+                .is_some_and(|runtime| Rc::ptr_eq(&runtime, self)),
+            "loaded application belongs to a different ShellRuntime"
+        );
+        anyhow::ensure!(
+            !application.mounted.replace(true),
+            "loaded application has already been mounted"
+        );
+        self.instantiate_view_with_policy(
+            &application.view_type,
+            crate::policy::default(),
+            window,
+            cx,
+        )
+    }
+
     /// Creates the application's default runtime and makes it available to
     /// shell callbacks registered on this [`App`].
     pub fn new(cx: &mut App) -> Result<Rc<Self>> {
+        Self::new_with_components(cx, FrozenComponentRegistry::default())
+    }
+
+    /// Creates the application's default runtime with a frozen external
+    /// component catalog and makes it available to shell callbacks.
+    pub fn new_with_components(
+        cx: &mut App,
+        components: FrozenComponentRegistry,
+    ) -> Result<Rc<Self>> {
         if Self::global(cx).is_some() {
             return Err(anyhow!(
                 "a default gpui-shell runtime is already installed; use ShellRuntime::new_isolated() for an additional VM"
             ));
         }
-        let runtime = Self::new_isolated()?;
+        let runtime = Self::new_isolated_with_components(components)?;
         runtime.set_global(cx);
         Ok(runtime)
     }
@@ -577,10 +1451,31 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
-        Self::new_isolated_with_dependency_store(GitDependencyStore::for_user()?)
+        Self::new_isolated_with_components_and_dependency_store(
+            FrozenComponentRegistry::default(),
+            GitDependencyStore::for_user()?,
+        )
     }
 
+    pub fn new_isolated_with_components(components: FrozenComponentRegistry) -> Result<Rc<Self>> {
+        Self::new_isolated_with_components_and_dependency_store(
+            components,
+            GitDependencyStore::for_user()?,
+        )
+    }
+
+    #[cfg(test)]
     fn new_isolated_with_dependency_store(
+        dependency_store: GitDependencyStore,
+    ) -> Result<Rc<Self>> {
+        Self::new_isolated_with_components_and_dependency_store(
+            FrozenComponentRegistry::default(),
+            dependency_store,
+        )
+    }
+
+    fn new_isolated_with_components_and_dependency_store(
+        components: FrozenComponentRegistry,
         dependency_store: GitDependencyStore,
     ) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
@@ -589,20 +1484,27 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
+        let component_state_proof = random_component_state_proof();
+        let component_module = RegisteredComponentModule {
+            specifier: components.module_specifier(),
+            source: components.javascript_module_source(&component_state_proof),
+        };
         // Order is the namespace policy. The runtime's own modules resolve
-        // first, so a host cannot take `gpui` or `path` from under a script;
+        // first, so a host cannot take `gpui-kit` or `path` from under a script;
         // the application's files resolve last, so a HostModule cannot be
         // shadowed by a file that happens to share its name. `host_modules`
         // refuses reserved names at registration, which is what turns the first
         // half of that from a silent shadowing into a sentence.
         js_runtime.set_loader(
             (
+                component_module.clone(),
                 standard::resolver(),
                 builtin_resolver(),
                 host_modules::HostModuleLoader,
                 app_modules.clone(),
             ),
             (
+                component_module,
                 standard::loader(),
                 builtin_loader(),
                 host_modules::HostModuleLoader,
@@ -620,6 +1522,12 @@ impl ShellRuntime {
 
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
+            components,
+            component_state_proof,
+            component_states: RefCell::new(Default::default()),
+            pending_component_state_releases: RefCell::new(Vec::new()),
+            component_app_effects: RefCell::new(HashMap::new()),
+            warned_deprecated_exports: RefCell::new(HashSet::new()),
             arena: RefCell::new(SpecArena::new()),
             templates: RefCell::new(Vec::new()),
             discovery: RefCell::new(None),
@@ -645,6 +1553,252 @@ impl ShellRuntime {
 
         runtime.install_globals()?;
         Ok(runtime)
+    }
+
+    pub fn component_registry(&self) -> &FrozenComponentRegistry {
+        &self.components
+    }
+
+    pub(crate) fn component_entity_kind(&self, handle: EntityHandle) -> Option<&'static str> {
+        self.entities.borrow().kind(handle)
+    }
+
+    pub(crate) fn with_component_state<T: std::any::Any, R>(
+        &self,
+        handle: u64,
+        kind: &'static str,
+        body: impl FnOnce(&T) -> R,
+    ) -> anyhow::Result<R> {
+        self.flush_component_state_releases();
+        let result = self
+            .component_states
+            .try_borrow()
+            .map_err(|_| anyhow!("retained component state is already mutably borrowed"))?
+            .with(handle, kind, body);
+        self.flush_component_state_releases();
+        result
+    }
+
+    pub(crate) fn update_component_state<T: std::any::Any, R>(
+        self: &Rc<Self>,
+        handle: u64,
+        kind: &'static str,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut T, &mut Window, &mut App) -> R,
+    ) -> anyhow::Result<R> {
+        anyhow::ensure!(
+            !matches!(
+                scope::current_phase(),
+                Some(ScopePhase::Render | ScopePhase::Layout)
+            ),
+            "retained component state cannot be updated during render or layout"
+        );
+        let (_scope, _) = scope::enter_runtime(self, window, cx, ScopePhase::Event, None);
+        self.flush_component_state_releases();
+        let result = self
+            .component_states
+            .try_borrow_mut()
+            .map_err(|_| anyhow!("retained component state is already borrowed"))?
+            .with_mut(handle, kind, |state| body(state, window, cx));
+        self.flush_component_state_releases();
+        result
+    }
+
+    fn release_component_states(&self, application: &Rc<ApplicationGeneration>) {
+        self.pending_component_state_releases
+            .borrow_mut()
+            .push(application.clone());
+        self.flush_component_state_releases();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn schedule_component_app_effect(
+        self: &Rc<Self>,
+        application: Rc<ApplicationGeneration>,
+        view: WeakEntity<ScriptView>,
+        key: String,
+        revision: String,
+        window: &mut Window,
+        cx: &mut App,
+        install: AppEffectInstall,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            application.is_active(),
+            "component app effect belongs to a retired application"
+        );
+        let view = view
+            .upgrade()
+            .ok_or_else(|| anyhow!("component app effects require a live root view"))?;
+        let application_key = Rc::as_ptr(&application) as usize;
+
+        let mut generations = self.component_app_effects.borrow_mut();
+        if let std::collections::hash_map::Entry::Vacant(slot) = generations.entry(application_key)
+        {
+            let runtime = Rc::downgrade(self);
+            let release = cx.observe_release(&view, move |_, cx| {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.cleanup_component_app_effects(application_key, cx);
+                }
+            });
+            slot.insert(ComponentAppEffectGeneration {
+                application: application.clone(),
+                view: view.downgrade(),
+                pending: HashMap::new(),
+                installed: HashMap::new(),
+                _release: release,
+            });
+        }
+        let generation = generations
+            .get_mut(&application_key)
+            .expect("inserted above");
+        if !queue_component_app_effect(
+            &mut generation.pending,
+            &generation.installed,
+            &key,
+            &revision,
+        ) {
+            return Ok(());
+        }
+        drop(generations);
+
+        let runtime = Rc::downgrade(self);
+        window.defer(cx, move |_, cx| {
+            let Some(runtime) = runtime.upgrade() else {
+                return;
+            };
+            runtime.apply_component_app_effect(application_key, key, revision, install, cx);
+        });
+        Ok(())
+    }
+
+    fn apply_component_app_effect(
+        &self,
+        application_key: usize,
+        key: String,
+        revision: String,
+        install: AppEffectInstall,
+        cx: &mut App,
+    ) {
+        let old_cleanup = {
+            let mut generations = self.component_app_effects.borrow_mut();
+            let Some(generation) = generations.get_mut(&application_key) else {
+                return;
+            };
+            if !generation.application.is_active()
+                || generation.pending.get(&key) != Some(&revision)
+            {
+                return;
+            }
+            generation.pending.remove(&key);
+            generation
+                .installed
+                .remove(&key)
+                .and_then(|mut effect| effect.cleanup.take())
+        };
+        if let Some(cleanup) = old_cleanup {
+            cleanup(cx);
+        }
+        let cleanup = install(cx);
+        if let Some(generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .get_mut(&application_key)
+        {
+            generation.installed.insert(
+                key,
+                InstalledAppEffect {
+                    revision,
+                    cleanup: Some(cleanup),
+                },
+            );
+        } else {
+            cleanup(cx);
+        }
+    }
+
+    /// Runs the cleanups an application generation installed, at the moment
+    /// that generation retires.
+    ///
+    /// Without this, a reload would leave the previous generation's native
+    /// state — menus, globals, window chrome — installed until the root view
+    /// was released, and the replacing generation could not reach it: keys are
+    /// scoped per generation, so the new install adds to the old rather than
+    /// replacing it. The release subscription remains the backstop for paths
+    /// that have no `App` to run cleanups against.
+    fn retire_component_app_effects(
+        &self,
+        application: &Rc<ApplicationGeneration>,
+        cx: &mut impl gpui::AppContext,
+    ) {
+        let application_key = Rc::as_ptr(application) as usize;
+        let Some(generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .remove(&application_key)
+        else {
+            return;
+        };
+        let Some(view) = generation.view.upgrade() else {
+            // The view is already gone, so the release subscription has run.
+            return;
+        };
+        let mut generation = generation;
+        view.update(cx, |_, cx| {
+            for (_, mut effect) in generation.installed.drain() {
+                if let Some(cleanup) = effect.cleanup.take() {
+                    cleanup(cx);
+                }
+            }
+        });
+    }
+
+    fn cleanup_component_app_effects(&self, application_key: usize, cx: &mut App) {
+        let Some(mut generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .remove(&application_key)
+        else {
+            return;
+        };
+        for (_, mut effect) in generation.installed.drain() {
+            if let Some(cleanup) = effect.cleanup.take() {
+                cleanup(cx);
+            }
+        }
+    }
+
+    fn flush_component_state_releases(&self) {
+        loop {
+            let pending = std::mem::take(&mut *self.pending_component_state_releases.borrow_mut());
+            if pending.is_empty() {
+                return;
+            }
+            let Ok(mut states) = self.component_states.try_borrow_mut() else {
+                self.pending_component_state_releases
+                    .borrow_mut()
+                    .extend(pending);
+                return;
+            };
+            for application in pending {
+                states.release_application(&application);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn retained_component_state_count(&self) -> usize {
+        self.component_states
+            .try_borrow()
+            .map_or(0, |states| states.len())
+    }
+
+    pub fn type_declarations(&self) -> String {
+        crate::typings::declarations_with_components(&self.components)
+    }
+
+    pub fn write_type_declarations(&self, root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+        crate::typings::write_application_with_components(root, &self.components)
     }
 
     pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {
@@ -747,6 +1901,8 @@ impl ShellRuntime {
         application: &Rc<ApplicationGeneration>,
         cx: &mut impl gpui::AppContext,
     ) {
+        self.retire_component_app_effects(application, cx);
+        self.release_component_states(application);
         let release = { self.entities().release_application(application) };
         self.purge_released_view_aliases(&release);
         release.retire(cx);
@@ -754,10 +1910,16 @@ impl ShellRuntime {
         self.retire_templates(application);
     }
 
+    /// The `Drop`-path counterpart of [`Self::release_application_generation`].
+    ///
+    /// Application effects are deliberately left to the release subscription
+    /// here: their cleanups need an `App`, and this path exists precisely for
+    /// callers that have none.
     pub(crate) fn release_application_generation_without_context(
         &self,
         application: &Rc<ApplicationGeneration>,
     ) {
+        self.release_component_states(application);
         let release = { self.entities().release_application(application) };
         self.purge_released_view_aliases(&release);
         release.retire_without_context();
@@ -808,7 +1970,7 @@ impl ShellRuntime {
     /// the first half of the sandbox's module policy (design doc §19.1).
     pub(crate) fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
-        if let Err(error) = crate::write_type_declarations(&root) {
+        if let Err(error) = self.write_type_declarations(&root) {
             tracing::debug!(
                 "could not update declarations in {}: {error}",
                 root.display()
@@ -863,7 +2025,7 @@ impl ShellRuntime {
             Some(application.clone()),
         );
         if loaded.is_err() {
-            cancel_application_tasks(&application);
+            self.release_application_generation_without_context(&application);
         }
         loaded
     }
@@ -1731,6 +2893,10 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<RenderSnapshot> {
+        // One theme sync per description makes cx.theme() a JS-only cache read.
+        // The native snapshot crosses the boundary only when this revision
+        // changes, rather than once per component asking for the theme.
+        crate::theme_tokens::sync(cx);
         self.arena.borrow_mut().reset();
         let callbacks = self.callbacks.borrow_mut().begin();
 
@@ -1764,7 +2930,14 @@ impl ShellRuntime {
         // arena behind, so the snapshot owns its nodes outright rather than
         // sharing them with the next build.
         let arena = std::mem::take(&mut *self.arena.borrow_mut());
-        let snapshot = RenderSnapshot::new(self, callbacks, root, arena);
+        let snapshot = RenderSnapshot::new(
+            self,
+            callbacks,
+            root,
+            arena,
+            object.application_generation(),
+            view.as_ref().map(Entity::downgrade),
+        );
 
         // Promise callbacks only run when the host drains QuickJS's job queue.
         // That drain is deferred to the event loop rather than run here: a
@@ -2237,8 +3410,47 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) {
+        self.dispatch_item(id, "item click", window, cx, |_, handler, context| {
+            handler.call::<_, ()>((key, context))
+        });
+    }
+
+    /// Delivers a secondary press on a virtual list row: the row's key, then
+    /// the press exactly as `on_mouse_down` would report it, with
+    /// `local_position` measured from the row's own box.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn dispatch_item_mouse_button(
+        self: &Rc<Self>,
+        id: CallbackId,
+        key: &str,
+        button: gpui::MouseButton,
+        position: gpui::Point<gpui::Pixels>,
+        click_count: usize,
+        modifiers: gpui::Modifiers,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.dispatch_item(id, "item press", window, cx, |ctx, handler, context| {
+            let event =
+                mouse_button_payload(ctx, button, position, click_count, modifiers, bounds)?;
+            handler.call::<_, ()>((key, event, context))
+        });
+    }
+
+    /// The lifetime checks, scope entry and job drain every row-level dispatch
+    /// shares. The call itself is the caller's, because the two row events
+    /// hand the handler different argument lists.
+    fn dispatch_item(
+        self: &Rc<Self>,
+        id: CallbackId,
+        what: &str,
+        window: &mut Window,
+        cx: &mut App,
+        call: impl for<'js> FnOnce(&Ctx<'js>, Function<'js>, Object<'js>) -> JsResult<()>,
+    ) {
         let Some(entry) = self.callbacks.borrow().get(id) else {
-            tracing::debug!("item callback {id} belongs to a superseded render pass");
+            tracing::debug!("{what} callback {id} belongs to a superseded render pass");
             return;
         };
 
@@ -2247,12 +3459,12 @@ impl ShellRuntime {
             .as_ref()
             .is_some_and(|application| !application.is_active())
         {
-            tracing::debug!("item callback {id} belongs to a retired application");
+            tracing::debug!("{what} callback {id} belongs to a retired application");
             return;
         }
 
         let Some(view) = entry.live_view() else {
-            tracing::debug!("item callback {id} owner has been released");
+            tracing::debug!("{what} callback {id} owner has been released");
             return;
         };
         let policy = view
@@ -2271,11 +3483,12 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((key, context_object(ctx, ContextBinding::Call(generation))?))
+            let context = context_object(ctx, ContextBinding::Call(generation))?;
+            call(ctx, handler, context)
         });
 
         if let Err(error) = result {
-            tracing::error!("error in item click handler: {error}");
+            tracing::error!("error in {what} handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -2728,19 +3941,7 @@ impl ShellRuntime {
         cx: &mut App,
     ) {
         self.dispatch_simple_event(id, "mouse button", window, cx, move |ctx| {
-            let payload = Object::new(ctx.clone())?;
-            payload.set(
-                "button",
-                match button {
-                    gpui::MouseButton::Right => "right",
-                    gpui::MouseButton::Middle => "middle",
-                    _ => "left",
-                },
-            )?;
-            payload.set("click_count", click_count as u32)?;
-            set_pointer_geometry(ctx, &payload, position, bounds)?;
-            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
-            Ok(payload)
+            mouse_button_payload(ctx, button, position, click_count, modifiers, bounds)
         });
     }
 
@@ -2994,6 +4195,54 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
+    pub(crate) fn dispatch_host_event(
+        self: &Rc<Self>,
+        id: CallbackId,
+        payload: HostValue,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("host component callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = host_modules::into_js(ctx, payload)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in host component handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
     /// Reports which way a `NumberInput` stepped, by the two names base's
     /// `StepAction` carries.
     ///
@@ -3113,6 +4362,286 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
+    pub(crate) fn dispatch_component_callback_value(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<ComponentCallbackValue> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let mut js_arguments = JsArgs::new(ctx.clone(), arguments.len() + 1);
+            for argument in arguments {
+                js_arguments.push_arg(callback_argument_to_js(ctx, argument)?)?;
+            }
+            js_arguments.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+            let value: Value<'_> = handler.call_arg(js_arguments)?;
+            if value.is_null() || value.is_undefined() {
+                Ok(ComponentCallbackValue::Null)
+            } else if let Some(value) = value.as_bool() {
+                Ok(ComponentCallbackValue::Boolean(value))
+            } else if let Some(value) = value.as_number().filter(|value| value.is_finite()) {
+                Ok(ComponentCallbackValue::Number(value))
+            } else if let Some(value) = value.as_string() {
+                Ok(ComponentCallbackValue::String(value.to_string()?))
+            } else {
+                Err(Exception::throw_type(
+                    &ctx,
+                    "component callbacks may only return null, boolean, finite number, or string",
+                ))
+            }
+        });
+        scheduler::drain_runtime_jobs(self, window, cx);
+        result
+    }
+
+    pub(crate) fn dispatch_component_data_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<ComponentDataValue> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let result = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                push_component_callback_arguments(ctx, &mut args, arguments)?;
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                component_data_from_js(&ctx, value, 0, &mut ComponentDataBudget::default())
+            });
+            drop(temporary.finish());
+            result.map_err(Into::into)
+        })
+    }
+
+    pub(crate) fn dispatch_component_element_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Option<gpui::AnyElement>> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                push_component_callback_arguments(ctx, &mut args, arguments)?;
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                if value.is_null() || value.is_undefined() {
+                    Ok(None)
+                } else {
+                    element_id(ctx, &value).map(Some)
+                }
+            });
+            let arena = temporary.finish();
+            match described {
+                Ok(Some(root)) => {
+                    crate::materialize::try_materialize_subtree(self, &arena, root, window, cx)
+                        .map(Some)
+                }
+                Ok(None) => Ok(None),
+                Err(error) => Err(error.into()),
+            }
+        })
+    }
+
+    pub(crate) fn dispatch_component_element_data_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentDataValue],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Option<gpui::AnyElement>> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                for argument in arguments {
+                    args.push_arg(component_data_into_js(ctx, argument)?)?;
+                }
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                if value.is_null() || value.is_undefined() {
+                    Ok(None)
+                } else {
+                    element_id(ctx, &value).map(Some)
+                }
+            });
+            let arena = temporary.finish();
+            match described {
+                Ok(Some(root)) => {
+                    crate::materialize::try_materialize_subtree(self, &arena, root, window, cx)
+                        .map(Some)
+                }
+                Ok(None) => Ok(None),
+                Err(error) => Err(error.into()),
+            }
+        })
+    }
+
+    pub(crate) fn with_component_callback_event<R>(
+        self: &Rc<Self>,
+        id: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut Window, &mut App) -> Result<R>,
+    ) -> Result<R> {
+        if let Some(phase) = scope::current_phase() {
+            anyhow::ensure!(
+                phase.allows_notify(),
+                "component window effects are not allowed during the `{}` phase",
+                phase.as_str()
+            );
+        }
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        anyhow::ensure!(
+            entry
+                .application
+                .as_ref()
+                .is_none_or(|application| application.is_active()),
+            "component callback {id} belongs to a retired application"
+        );
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application,
+        );
+        body(window, cx)
+    }
+
     /// Renders once, and on a "not a function" failure renders again with the
     /// diagnostic prototype installed so the error can name the method and
     /// suggest a correction. See the prelude for why this is two passes.
@@ -3143,6 +4672,8 @@ impl ShellRuntime {
 
     fn call_render_once(&self, object: &ViewObject, generation: u64) -> Result<SpecId> {
         self.with_js(|ctx| {
+            let prepare_theme: Function = ctx.globals().get("__prepare_theme")?;
+            prepare_theme.call::<_, ()>(())?;
             let instance = object.value.clone().restore(ctx)?;
             let render: Function = instance.get("render").map_err(|_| {
                 Exception::throw_message(ctx, "view class has no render(cx) method")
@@ -3256,6 +4787,7 @@ impl ShellRuntime {
             "image" => "image",
             "fallback" => "fallback",
             "header" => "header",
+            "footer" => "footer",
             "panel" => "panel",
             "trigger" => "trigger",
             // A number input's three. Unlike the two above, none of them is
@@ -3307,6 +4839,51 @@ impl ShellRuntime {
 /// never matches. Owning the resolver also puts the sandbox's module policy in
 /// one place — a module must live inside the application root, which is what
 /// stops `import "../../../etc/passwd"` before it reaches the filesystem.
+#[derive(Clone)]
+struct RegisteredComponentModule {
+    /// The name this catalog answers to, or `None` for the empty catalog, which
+    /// answers to nothing.
+    specifier: Option<&'static str>,
+    source: String,
+}
+
+impl Resolver for RegisteredComponentModule {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<String> {
+        if self.specifier == Some(name) {
+            Ok(name.to_owned())
+        } else {
+            Err(JsError::new_resolving_message(
+                base,
+                name,
+                "not the registered component module",
+            ))
+        }
+    }
+}
+
+impl Loader for RegisteredComponentModule {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<Module<'js, Declared>> {
+        if self.specifier != Some(name) {
+            return Err(JsError::new_loading_message(
+                name,
+                "not the registered component module",
+            ));
+        }
+        Module::declare(ctx.clone(), name, self.source.clone())
+    }
+}
+
 #[derive(Clone, Default)]
 struct AppModules {
     applications: Rc<RefCell<Vec<ApplicationModules>>>,
@@ -3688,6 +5265,7 @@ globalThis.__gpui = (() => {
   // An accordion item's two. Both are read back for their own type rather than
   // rendered, so both must be the part they name.
   methods.header = slot("header");
+  methods.footer = slot("footer");
   methods.panel = slot("panel");
 
   // Focus is held by handle, so the element records the handle rather than the
@@ -3891,7 +5469,7 @@ globalThis.__gpui = (() => {
 
   // Which corner of an anchored surface is pinned to its trigger. The names
   // come from the host so that the check here, the parser behind it and the
-  // union in gpui.d.ts cannot disagree. Checked at the call site because an
+  // union in gpui-kit.d.ts cannot disagree. Checked at the call site because an
   // unrecognized anchor would otherwise open the surface in the component's
   // default corner, which looks like a positioning bug rather than a typo.
   methods.anchor = function (value) {
@@ -3905,6 +5483,13 @@ globalThis.__gpui = (() => {
       );
     }
     __apply(this.__id, "anchor", [value]);
+    return this;
+  };
+
+  methods.frame_budget = function (milliseconds) {
+    __apply(this.__id, "frame_budget", [
+      finitePositive(milliseconds, "frame_budget"),
+    ]);
     return this;
   };
 
@@ -4664,7 +6249,11 @@ globalThis.__gpui = (() => {
 
   let cachedThemeSource;
   let cachedTheme;
-  const currentTheme = () => {
+  let cachedThemeRevision = -1;
+  globalThis.__theme_dirty = true;
+  const refreshTheme = () => {
+    const revision = __theme_revision();
+    if (!globalThis.__theme_dirty && revision === cachedThemeRevision) return;
     const source = __theme_snapshot();
     if (source !== cachedThemeSource) {
       cachedThemeSource = source;
@@ -4674,6 +6263,12 @@ globalThis.__gpui = (() => {
       Object.freeze(cachedTheme.radius);
       Object.freeze(cachedTheme);
     }
+    cachedThemeRevision = revision;
+    globalThis.__theme_dirty = false;
+  };
+  globalThis.__prepare_theme = refreshTheme;
+  const currentTheme = () => {
+    if (globalThis.__theme_dirty || cachedTheme === undefined) refreshTheme();
     return cachedTheme;
   };
 
@@ -4801,6 +6396,7 @@ globalThis.__gpui = (() => {
   globalThis.__template = template;
 
   return {
+    __element: element,
     View,
     div: () => element(__div()),
     h_flex: () => element(__h_flex()),
@@ -4839,6 +6435,14 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
+    component: (module, name) => ({
+      new: (id, props) => {
+        if (typeof id !== "string" || id.length === 0) {
+          throw new TypeError("a component needs a non-empty string id");
+        }
+        return element(__component(String(module), String(name), id, props ?? {}));
+      },
+    }),
     __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
@@ -4883,6 +6487,9 @@ globalThis.__gpui = (() => {
     ProgressTrack: { new: () => element(__progress_track()) },
     ProgressIndicator: { new: () => element(__progress_indicator()) },
     fps_monitor: () => element(__fps_monitor()),
+    show_fps_monitor: (options) => __show_fps_monitor(options),
+    hide_fps_monitor: () => __hide_fps_monitor(),
+    fps_monitor_visible: () => __fps_monitor_visible(),
     Radio: { new: (id) => element(__radio(String(id))) },
     Toggle: { new: (id) => element(__toggle(String(id))) },
     RadioGroup: { new: (id) => element(__radio_group(String(id))) },
@@ -4976,6 +6583,10 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    TextView: {
+      html: (id, text) => element(__text_view(String(id), String(text), "html")),
+      markdown: (id, text) => element(__text_view(String(id), String(text), "markdown")),
+    },
     CalendarState: { new: () => calendarState(__calendar_state_new()) },
     SliderState: {
       new: (options) => {
@@ -5090,8 +6701,10 @@ impl ShellRuntime {
             globals.set("__paramStyles", parametric)?;
 
             let behaviors = rquickjs::Array::new(ctx.clone())?;
+            let mut behavior_count = 0;
             for (index, name) in [
                 "on_click",
+                "on_link_click",
                 "on_mouse_move",
                 "on_hover",
                 "on_key_down",
@@ -5106,12 +6719,15 @@ impl ShellRuntime {
                 "aria_level",
                 "keep_mounted",
                 "on_item_click",
+                "on_item_secondary_click",
                 "on_change",
                 "on_open_change",
                 "on_confirm",
                 "on_dismiss",
                 "on_step",
                 "disabled",
+                "selectable",
+                "scrollable",
                 "selected",
                 "checked",
                 "accessibility_label",
@@ -5142,12 +6758,20 @@ impl ShellRuntime {
                 "open",
                 "default_open",
                 "overlay_closable",
+                "continuous",
                 "with_item_to_measure_index",
             ]
             .into_iter()
             .enumerate()
             {
                 behaviors.set(index, name)?;
+                behavior_count = index + 1;
+            }
+            for descriptor in self.components.descriptors() {
+                for method in descriptor.methods() {
+                    behaviors.set(behavior_count, method.name())?;
+                    behavior_count += 1;
+                }
             }
             globals.set("__behaviorNames", behaviors)?;
 
@@ -5163,7 +6787,47 @@ impl ShellRuntime {
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
+            let component_runtime = runtime.clone();
+            globals.set(
+                "__component",
+                Func::from(move |ctx: Ctx<'_>, module: String, name: String, id: String, props: host_modules::Argument| -> JsResult<SpecId> {
+                    let props = props.0;
+                    if id.is_empty() {
+                        return Err(Exception::throw_type(&ctx, "a component needs a non-empty string id"));
+                    }
+                    let registry = crate::host_modules::modules();
+                    registry
+                        .get(&module)
+                        .and_then(|found| found.resolve_component(&name))
+                        .map_err(|error| Exception::throw_message(&ctx, error.message()))?;
+                    Ok(upgrade(&component_runtime, &ctx)?.push_node(Component::Module(
+                        crate::spec::ModuleComponentSpec {
+                            module: module.into(),
+                            component: name.into(),
+                            id: id.into(),
+                            props,
+                            policy: crate::scope::policy(),
+                        },
+                    )))
+                }),
+            )?;
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
+            let text_view_runtime = runtime.clone();
+            globals.set(
+                "__text_view",
+                Func::from(move |ctx: Ctx<'_>, id: String, text: String, format: String| -> JsResult<SpecId> {
+                    let format = match format.as_str() {
+                        "html" => crate::spec::TextViewFormat::Html,
+                        "markdown" => crate::spec::TextViewFormat::Markdown,
+                        _ => return Err(Exception::throw_type(&ctx, "TextView format must be html or markdown")),
+                    };
+                    Ok(upgrade(&text_view_runtime, &ctx)?.push_node(Component::TextView {
+                        id: id.into(),
+                        text: text.into(),
+                        format,
+                    }))
+                }),
+            )?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
             text_constructor(
@@ -5630,8 +7294,58 @@ impl ShellRuntime {
 
             ctx.eval::<(), _>(PRELUDE)?;
 
-            // Subsystems extend the same module object the prelude built.
+            // Registered exports live apart from the built-in module object.
+            // Names such as `InputState` exist in both `gpui-base` and
+            // `gpui-component`; sharing `__gpui` would make the latter silently
+            // replace the former for every module that reads the global table.
             let module: Object = ctx.globals().get("__gpui")?;
+            let component_module = Object::new(ctx.clone())?;
+            ctx.globals()
+                .set("__gpui_components", component_module.clone())?;
+            for descriptor in self.components.states() {
+                let state_runtime = runtime.clone();
+                let descriptor = descriptor.clone();
+                component_module.set(
+                    descriptor.export(),
+                    Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<u64> {
+                        let runtime = upgrade(&state_runtime, &ctx)?;
+                        runtime.retained_state_transaction(&ctx, &descriptor, &arguments)
+                    }),
+                )?;
+            }
+            for (id, descriptor) in self.components.registered() {
+                for constructor_descriptor in descriptor.constructors() {
+                    let constructor_runtime = runtime.clone();
+                    let component_name = descriptor.name();
+                    let constructor = constructor_descriptor.clone();
+                    component_module.set(
+                        constructor_descriptor.export(),
+                        Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<SpecId> {
+                            let runtime = upgrade(&constructor_runtime, &ctx)?;
+                            if let Some(deprecation) = &constructor.deprecation() {
+                                runtime.warn_deprecated_export(
+                                    constructor.export(),
+                                    deprecation.replacement(),
+                                    deprecation.message(),
+                                );
+                            }
+                            let payload = runtime.component_payload_transaction(
+                                &ctx,
+                                constructor.export(),
+                                &constructor.arguments(),
+                                &arguments,
+                                |arguments| constructor.payload(arguments),
+                            )?;
+                            let component = crate::spec::RegisteredComponentSpec::new(
+                                id,
+                                component_name,
+                                payload,
+                            );
+                            Ok(runtime.push_node(Component::Registered(component)))
+                        }),
+                    )?;
+                }
+            }
             host::install(ctx, &module)?;
             host_modules::install(ctx)?;
             theme_api::install(ctx, &module)?;
@@ -5725,7 +7439,102 @@ impl ShellRuntime {
         // in is a slot. Checked before the dispatch below because the ordinary
         // path would reject the sentinel as neither a value nor a function.
         if let Some((position, argument)) = args.first_slot() {
+            if self.is_registered_component(id) {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!(
+                        "`{method}` cannot take a template argument yet; registered component methods are validated when their values are recorded"
+                    ),
+                ));
+            }
             return self.apply_slot(ctx, id, method, position, argument);
+        }
+
+        let registered_method = self.registered_method_descriptor(id, method);
+        // The declarations withhold these from a registered component that does
+        // not declare them, so the two lists must agree — see the test below.
+        let registered_common_behavior =
+            crate::typings::REGISTERED_COMMON_BEHAVIORS.contains(&method);
+        let registered_common_slot = matches!(
+            method,
+            "content"
+                | "trigger"
+                | "input"
+                | "decrement_button"
+                | "increment_button"
+                | "image"
+                | "fallback"
+                | "header"
+                | "footer"
+                | "panel"
+        );
+        if registered_common_behavior
+            && self.is_registered_component(id)
+            && registered_method.is_none()
+        {
+            return Err(Exception::throw_type(ctx, &unknown_method(method)));
+        }
+        if registered_common_behavior && let Some(descriptor) = registered_method.as_ref() {
+            self.arena
+                .borrow()
+                .check_live(id)
+                .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            let mut callback = None;
+            self.component_payload_transaction(
+                ctx,
+                descriptor.name(),
+                descriptor.arguments(),
+                &args,
+                |arguments| {
+                    if method == "on_click"
+                        && let [ComponentArgument::Callback(id)] = arguments
+                    {
+                        callback = Some(*id);
+                    }
+                    descriptor.record(arguments)
+                },
+            )?;
+            if method == "on_click" {
+                let callback = callback.ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        "on_click descriptor must declare exactly one callback argument",
+                    )
+                })?;
+                return self.push_op_checked(
+                    ctx,
+                    self.push_op(id, SpecOp::Callback("on_click", callback)),
+                );
+            }
+        }
+        if !registered_common_behavior && let Some(descriptor) = registered_method {
+            self.arena
+                .borrow()
+                .check_live(id)
+                .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            let payload = self.component_payload_transaction(
+                ctx,
+                descriptor.name(),
+                descriptor.arguments(),
+                &args,
+                |arguments| descriptor.record(arguments),
+            )?;
+            return self.push_op_checked(
+                ctx,
+                self.push_op(
+                    id,
+                    SpecOp::RegisteredMethod(crate::RecordedComponentMethod::new(
+                        descriptor.name(),
+                        payload,
+                    )),
+                ),
+            );
+        }
+        if self.is_registered_component(id)
+            && !registered_common_behavior
+            && !registered_common_slot
+        {
+            return Err(Exception::throw_type(ctx, &unknown_method(method)));
         }
 
         match method {
@@ -5739,7 +7548,7 @@ impl ShellRuntime {
                 self.attach(ctx, id, child)
             }
             "content" | "trigger" | "input" | "decrement_button" | "increment_button" | "image"
-            | "fallback" | "header" | "panel" => {
+            | "fallback" | "header" | "footer" | "panel" => {
                 let element = args
                     .first_value()
                     .and_then(|value| value.as_f32().ok())
@@ -5847,6 +7656,7 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "on_click"
+            | "on_link_click"
             | "on_resize"
             | "on_change"
             | "on_open_change"
@@ -5854,6 +7664,7 @@ impl ShellRuntime {
             | "on_dismiss"
             | "on_step"
             | "on_item_click"
+            | "on_item_secondary_click"
             | "on_mouse_move"
             | "on_hover"
             | "on_key_down"
@@ -5884,8 +7695,10 @@ impl ShellRuntime {
                             "`{method}` cannot be registered from a virtual list's item \
                              renderer: the rows are rebuilt every frame, so a handler \
                              registered there would pile up for as long as the view stood. \
-                             Use `on_item_click((key, cx) => ...)` on the list itself, and \
-                             read the row out of your own data with the stable key it gives you"
+                             Use `on_item_click((key, cx) => ...)` or \
+                             `on_item_secondary_click((key, event, cx) => ...)` on the list \
+                             itself, and read the row out of your own data with the stable key \
+                             it gives you"
                         ),
                     ));
                 }
@@ -5902,6 +7715,8 @@ impl ShellRuntime {
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "disabled"
+            | "selectable"
+            | "scrollable"
             | "selected"
             | "checked"
             | "accessibility_label"
@@ -5945,6 +7760,8 @@ impl ShellRuntime {
             | "default_open"
             | "overlay_closable"
             | "anchor"
+            | "continuous"
+            | "frame_budget"
             | "mouse_button"
             | "open_delay"
             | "close_delay"
@@ -5953,6 +7770,8 @@ impl ShellRuntime {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
+                    "selectable" => "selectable",
+                    "scrollable" => "scrollable",
                     "selected" => "selected",
                     "checked" => "checked",
                     "tooltip" => "tooltip",
@@ -5994,6 +7813,8 @@ impl ShellRuntime {
                     "default_open" => "default_open",
                     "overlay_closable" => "overlay_closable",
                     "anchor" => "anchor",
+                    "continuous" => "continuous",
+                    "frame_budget" => "frame_budget",
                     "mouse_button" => "mouse_button",
                     "open_delay" => "open_delay",
                     "close_delay" => "close_delay",
@@ -6091,7 +7912,7 @@ impl ShellRuntime {
                     let Some(named) = bridged.first().and_then(|value| value.as_str().ok()) else {
                         return Err(Exception::throw_type(
                             ctx,
-                            "role(name) expects a string; see the Role type in gpui.d.ts",
+                            "role(name) expects a string; see the Role type in gpui-kit.d.ts",
                         ));
                     };
                     if named == crate::a11y::FILTERED_ROLE {
@@ -6107,7 +7928,7 @@ impl ShellRuntime {
                             ctx,
                             &format!(
                                 "unknown accessibility role `{named}`; the names mirror \
-                                 gpui::Role in snake_case — see the Role type in gpui.d.ts"
+                                 gpui::Role in snake_case — see the Role type in gpui-kit.d.ts"
                             ),
                         ));
                     }
@@ -6210,6 +8031,289 @@ impl ShellRuntime {
                 Err(Exception::throw_type(ctx, &unknown_method(method)))
             }
         }
+    }
+
+    fn registered_component_id(&self, id: SpecId) -> Option<crate::ComponentId> {
+        let component_id = {
+            let arena = self.arena.borrow();
+            let Component::Registered(component) = arena.node(id)?.component()? else {
+                return None;
+            };
+            component.id()
+        };
+        Some(component_id)
+    }
+
+    fn warn_deprecated_export(
+        &self,
+        export: &'static str,
+        replacement: &'static str,
+        message: &'static str,
+    ) {
+        if self.warned_deprecated_exports.borrow_mut().insert(export) {
+            tracing::warn!(
+                "JavaScript component export `{export}` is deprecated; use `{replacement}`. {message}"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn deprecation_warning_count(&self, export: &str) -> usize {
+        usize::from(self.warned_deprecated_exports.borrow().contains(export))
+    }
+
+    fn is_registered_component(&self, id: SpecId) -> bool {
+        self.registered_component_id(id).is_some()
+    }
+
+    fn registered_method_descriptor(
+        &self,
+        id: SpecId,
+        method: &str,
+    ) -> Option<crate::MethodDescriptor> {
+        let component_id = self.registered_component_id(id)?;
+        self.components
+            .descriptor(component_id)?
+            .methods()
+            .iter()
+            .find(|descriptor| descriptor.name() == method)
+            .cloned()
+    }
+
+    fn validate_component_arguments(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptors: &[ArgumentDescriptor],
+        arguments: &Arguments,
+    ) -> JsResult<Vec<ComponentArgument>> {
+        if arguments.0.len() > descriptors.len() {
+            return Err(Exception::throw_type(
+                ctx,
+                &format!(
+                    "{api}(...) expects at most {} argument{}",
+                    descriptors.len(),
+                    if descriptors.len() == 1 { "" } else { "s" }
+                ),
+            ));
+        }
+        descriptors
+            .iter()
+            .enumerate()
+            .map(|(index, descriptor)| {
+                let argument = arguments.0.get(index);
+                self.validate_component_argument(ctx, api, descriptor, argument)
+            })
+            .collect()
+    }
+
+    fn component_payload_transaction(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptors: &[ArgumentDescriptor],
+        arguments: &Arguments,
+        factory: impl FnOnce(&[ComponentArgument]) -> Result<ComponentPayload, String>,
+    ) -> JsResult<ComponentPayload> {
+        self.flush_component_state_releases();
+        let callback_checkpoint = self.callbacks.borrow().checkpoint();
+        let result = (|| {
+            let arguments = self.validate_component_arguments(ctx, api, descriptors, arguments)?;
+            let mut element_ids = Vec::new();
+            for argument in &arguments {
+                collect_component_elements(argument, &mut element_ids);
+            }
+            let mut unique = HashSet::with_capacity(element_ids.len());
+            if let Some(duplicate) = element_ids
+                .iter()
+                .copied()
+                .find(|element| !unique.insert(*element))
+            {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!("{api}(...) cannot consume element {duplicate} twice"),
+                ));
+            }
+            let payload =
+                factory(&arguments).map_err(|error| Exception::throw_type(ctx, &error))?;
+            for element in element_ids {
+                self.arena
+                    .borrow_mut()
+                    .claim(element)
+                    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            }
+            Ok(payload)
+        })();
+        if result.is_err() {
+            self.callbacks.borrow_mut().rollback_to(callback_checkpoint);
+        }
+        self.flush_component_state_releases();
+        result
+    }
+
+    fn retained_state_transaction(
+        &self,
+        ctx: &Ctx<'_>,
+        descriptor: &crate::StateDescriptor,
+        arguments: &Arguments,
+    ) -> JsResult<u64> {
+        self.flush_component_state_releases();
+        let callback_checkpoint = self.callbacks.borrow().checkpoint();
+        let result = (|| {
+            let arguments = self.validate_component_arguments(
+                ctx,
+                descriptor.export(),
+                descriptor.arguments(),
+                arguments,
+            )?;
+            let state = scope::with_current(|window, cx| {
+                descriptor.create(&arguments, window, cx)
+            })
+            .ok_or_else(|| {
+                Exception::throw_type(
+                    ctx,
+                    "retained component state can only be created during a live Window/App call",
+                )
+            })?
+            .map_err(|error| Exception::throw_type(ctx, &error))?;
+            let owner = scope::current_application_generation();
+            self.component_states
+                .try_borrow_mut()
+                .map_err(|_| {
+                    Exception::throw_type(ctx, "retained component state is already borrowed")
+                })?
+                .insert(descriptor.kind(), owner, state)
+                .map_err(|error| Exception::throw_range(ctx, &error))
+        })();
+        if result.is_err() {
+            self.callbacks.borrow_mut().rollback_to(callback_checkpoint);
+        }
+        self.flush_component_state_releases();
+        result
+    }
+
+    fn validate_component_argument(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptor: &ArgumentDescriptor,
+        argument: Option<&Argument>,
+    ) -> JsResult<ComponentArgument> {
+        if let ArgumentSchema::Optional(inner) = &descriptor.schema() {
+            return match argument {
+                None | Some(Argument::Value(Bridged::Nil)) => Ok(ComponentArgument::Optional(None)),
+                Some(argument) => self
+                    .validate_component_argument_kind(ctx, api, descriptor.name(), inner, argument)
+                    .map(|argument| ComponentArgument::Optional(Some(Box::new(argument)))),
+            };
+        }
+        let argument = argument.ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                &format!(
+                    "{api}({}) expects {}",
+                    descriptor.name(),
+                    schema_name(&descriptor.schema())
+                ),
+            )
+        })?;
+        self.validate_component_argument_kind(
+            ctx,
+            api,
+            descriptor.name(),
+            &descriptor.schema(),
+            argument,
+        )
+    }
+
+    fn validate_component_argument_kind(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        name: &str,
+        schema: &ArgumentSchema,
+        argument: &Argument,
+    ) -> JsResult<ComponentArgument> {
+        let validated = match (schema, argument) {
+            (ArgumentSchema::String, Argument::Value(Bridged::Str(value))) => {
+                Some(ComponentArgument::String(value.clone()))
+            }
+            (ArgumentSchema::Number, Argument::Value(Bridged::Number(value)))
+                if value.is_finite() =>
+            {
+                Some(ComponentArgument::Number(*value))
+            }
+            (ArgumentSchema::Boolean, Argument::Value(Bridged::Bool(value))) => {
+                Some(ComponentArgument::Boolean(*value))
+            }
+            (ArgumentSchema::Element, Argument::Element(id)) => {
+                self.arena
+                    .borrow()
+                    .ensure_claimable(*id)
+                    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+                Some(ComponentArgument::Element(*id))
+            }
+            (ArgumentSchema::Entity(kind), Argument::Entity(handle))
+                if self.entities.borrow().kind(*handle) == Some(*kind) =>
+            {
+                Some(ComponentArgument::Entity {
+                    kind,
+                    handle: *handle,
+                })
+            }
+            (ArgumentSchema::Entity(kind), Argument::RetainedState { handle, proof }) => {
+                let matches = if proof != &self.component_state_proof {
+                    false
+                } else {
+                    self.component_states
+                        .try_borrow()
+                        .map_err(|_| {
+                            Exception::throw_type(
+                                ctx,
+                                "retained component state is already mutably borrowed",
+                            )
+                        })?
+                        .kind(*handle)
+                        == Some(*kind)
+                };
+                matches.then_some(ComponentArgument::Entity {
+                    kind,
+                    handle: *handle,
+                })
+            }
+            (ArgumentSchema::Callback(_), Argument::Handler(handler)) => {
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: handler.clone(),
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                Some(ComponentArgument::Callback(callback))
+            }
+            (ArgumentSchema::Enum(values), Argument::Value(Bridged::Str(value)))
+                if values.contains(&value.as_str()) =>
+            {
+                Some(ComponentArgument::Enum(value.clone()))
+            }
+            (ArgumentSchema::Array(item), Argument::Array(values)) => {
+                let mut validated = Vec::with_capacity(values.len());
+                for value in values {
+                    validated
+                        .push(self.validate_component_argument_kind(ctx, api, name, item, value)?);
+                }
+                Some(ComponentArgument::Array(validated))
+            }
+            (ArgumentSchema::Optional(inner), value) => Some(ComponentArgument::Optional(Some(
+                Box::new(self.validate_component_argument_kind(ctx, api, name, inner, value)?),
+            ))),
+            _ => None,
+        };
+        validated.ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                &format!("{api}({name}) expects {}", schema_name(schema)),
+            )
+        })
     }
 
     fn push_op_checked<E: std::fmt::Display>(
@@ -6521,6 +8625,230 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
         })
 }
 
+fn push_component_callback_arguments<'js>(
+    ctx: &Ctx<'js>,
+    arguments: &mut JsArgs<'js>,
+    values: &[ComponentCallbackArgument],
+) -> JsResult<()> {
+    for value in values {
+        arguments.push_arg(callback_argument_to_js(ctx, value)?)?;
+    }
+    Ok(())
+}
+
+const MAX_COMPONENT_DATA_DEPTH: usize = 16;
+const MAX_COMPONENT_DATA_NODES: usize = 4096;
+const MAX_COMPONENT_DATA_STRING_BYTES: usize = 1024 * 1024;
+const MAX_COMPONENT_DATA_OBJECT_KEYS: usize = 1024;
+
+#[derive(Default)]
+struct ComponentDataBudget {
+    nodes: usize,
+    string_bytes: usize,
+    keys: usize,
+}
+
+struct TemporarySpecArena {
+    runtime: Rc<ShellRuntime>,
+    outer: Option<SpecArena>,
+}
+
+impl TemporarySpecArena {
+    fn enter(runtime: &Rc<ShellRuntime>) -> Self {
+        let outer = std::mem::take(&mut *runtime.arena.borrow_mut());
+        Self {
+            runtime: runtime.clone(),
+            outer: Some(outer),
+        }
+    }
+
+    fn finish(mut self) -> SpecArena {
+        let generated = std::mem::replace(
+            &mut *self.runtime.arena.borrow_mut(),
+            self.outer.take().expect("temporary arena outer"),
+        );
+        generated
+    }
+}
+
+impl Drop for TemporarySpecArena {
+    fn drop(&mut self) {
+        if let Some(outer) = self.outer.take() {
+            *self.runtime.arena.borrow_mut() = outer;
+        }
+    }
+}
+
+fn component_data_from_js<'js>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    depth: usize,
+    budget: &mut ComponentDataBudget,
+) -> JsResult<ComponentDataValue> {
+    if depth > MAX_COMPONENT_DATA_DEPTH {
+        return Err(Exception::throw_range(
+            ctx,
+            "component delegate data is nested too deeply",
+        ));
+    }
+    budget.nodes = budget.nodes.checked_add(1).ok_or_else(|| {
+        Exception::throw_range(ctx, "component delegate data contains too many values")
+    })?;
+    if budget.nodes > MAX_COMPONENT_DATA_NODES {
+        return Err(Exception::throw_range(
+            ctx,
+            "component delegate data contains too many values",
+        ));
+    }
+    if value.is_null() || value.is_undefined() {
+        return Ok(ComponentDataValue::Null);
+    }
+    if let Some(v) = value.as_bool() {
+        return Ok(ComponentDataValue::Boolean(v));
+    }
+    if let Some(v) = value.as_number() {
+        if !v.is_finite() {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate numbers must be finite",
+            ));
+        }
+        return Ok(ComponentDataValue::Number(v));
+    }
+    if let Some(v) = value.as_string() {
+        let v = v.to_string()?;
+        budget.string_bytes = budget.string_bytes.saturating_add(v.len());
+        if budget.string_bytes > MAX_COMPONENT_DATA_STRING_BYTES {
+            return Err(Exception::throw_range(
+                ctx,
+                "component delegate strings exceed the byte limit",
+            ));
+        }
+        return Ok(ComponentDataValue::String(v));
+    }
+    if value.as_function().is_some() {
+        return Err(Exception::throw_type(
+            ctx,
+            "component delegate data cannot contain functions",
+        ));
+    }
+    if value.is_promise() {
+        return Err(Exception::throw_type(
+            ctx,
+            "component delegate data cannot contain promises",
+        ));
+    }
+    if let Some(array) = value.as_array() {
+        let len = host_modules::bridge_array_len(ctx, &array)?;
+        let mut out = Vec::new();
+        out.try_reserve_exact(len)
+            .map_err(|_| Exception::throw_range(ctx, "component delegate array is too large"))?;
+        for ix in 0..len {
+            out.push(component_data_from_js(
+                ctx,
+                array.get(ix)?,
+                depth + 1,
+                budget,
+            )?);
+        }
+        return Ok(ComponentDataValue::Array(out));
+    }
+    if let Some(object) = value.as_object() {
+        let object_constructor: Object = ctx.globals().get("Object")?;
+        let get_prototype: Function = object_constructor.get("getPrototypeOf")?;
+        let prototype: Value = get_prototype.call((object.clone(),))?;
+        let ordinary_prototype: Value = object_constructor.get("prototype")?;
+        if !prototype.is_null() && prototype != ordinary_prototype {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate objects must have Object.prototype or null prototype",
+            ));
+        }
+        let get_symbols: Function = object_constructor.get("getOwnPropertySymbols")?;
+        let symbols: Array = get_symbols.call((object.clone(),))?;
+        if host_modules::bridge_array_len(ctx, &symbols)? != 0 {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate objects cannot contain symbol keys",
+            ));
+        }
+        let get_descriptors: Function = object_constructor.get("getOwnPropertyDescriptors")?;
+        let descriptors: Object = get_descriptors.call((object.clone(),))?;
+        let mut out = Vec::new();
+        for key in object.keys::<String>() {
+            budget.keys += 1;
+            if budget.keys > MAX_COMPONENT_DATA_OBJECT_KEYS {
+                return Err(Exception::throw_range(
+                    ctx,
+                    "component delegate objects contain too many keys",
+                ));
+            }
+            let key = key?;
+            budget.string_bytes = budget.string_bytes.saturating_add(key.len());
+            if budget.string_bytes > MAX_COMPONENT_DATA_STRING_BYTES {
+                return Err(Exception::throw_range(
+                    ctx,
+                    "component delegate strings exceed the byte limit",
+                ));
+            }
+            let descriptor: Object = descriptors.get(key.as_str())?;
+            let getter: Value = descriptor.get("get")?;
+            let setter: Value = descriptor.get("set")?;
+            if !getter.is_undefined() || !setter.is_undefined() {
+                return Err(Exception::throw_type(
+                    ctx,
+                    "component delegate objects cannot contain accessors",
+                ));
+            }
+            if matches!(key.as_str(), "__id" | "__handle" | "__componentStateHandle") {
+                return Err(Exception::throw_type(
+                    ctx,
+                    "component delegate data cannot contain shell handles or elements",
+                ));
+            }
+            let value: Value = descriptor.get("value")?;
+            out.push((key, component_data_from_js(ctx, value, depth + 1, budget)?));
+        }
+        return Ok(ComponentDataValue::Object(out));
+    }
+    Err(Exception::throw_type(
+        ctx,
+        "component delegate callbacks may return only plain data",
+    ))
+}
+
+fn component_data_into_js<'js>(ctx: &Ctx<'js>, value: &ComponentDataValue) -> JsResult<Value<'js>> {
+    Ok(match value {
+        ComponentDataValue::Null => Value::new_null(ctx.clone()),
+        ComponentDataValue::Boolean(value) => Value::new_bool(ctx.clone(), *value),
+        ComponentDataValue::Number(value) => Value::new_number(ctx.clone(), *value),
+        ComponentDataValue::String(value) => {
+            rquickjs::String::from_str(ctx.clone(), value)?.into_value()
+        }
+        ComponentDataValue::Array(values) => {
+            let array = Array::new(ctx.clone())?;
+            for (index, value) in values.iter().enumerate() {
+                array.set(index, component_data_into_js(ctx, value)?)?;
+            }
+            array.into_value()
+        }
+        ComponentDataValue::Object(fields) => {
+            let object = Object::new(ctx.clone())?;
+            object.set_prototype(None)?;
+            for (key, value) in fields {
+                object.prop(
+                    key.as_str(),
+                    rquickjs::object::Property::from(component_data_into_js(ctx, value)?)
+                        .writable()
+                        .enumerable()
+                        .configurable(),
+                )?;
+            }
+            object.into_value()
+        }
+    })
+}
+
 /// How a `cx` reaches the host call it speaks for.
 ///
 /// GPUI draws this line with the borrow checker: `App` and `Context<T>` are
@@ -6669,6 +8997,32 @@ fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult
 /// that has not been prepainted yet, so a script reading `undefined` knows the
 /// geometry was unavailable instead of being told the press landed at its
 /// top-left corner.
+/// The object an `on_mouse_down` or `on_mouse_up` handler is handed, built in
+/// one place so a press reported through a row carries the same fields as one
+/// reported through the element it landed on.
+fn mouse_button_payload<'js>(
+    ctx: &Ctx<'js>,
+    button: gpui::MouseButton,
+    position: gpui::Point<gpui::Pixels>,
+    click_count: usize,
+    modifiers: gpui::Modifiers,
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+) -> JsResult<Object<'js>> {
+    let payload = Object::new(ctx.clone())?;
+    payload.set(
+        "button",
+        match button {
+            gpui::MouseButton::Right => "right",
+            gpui::MouseButton::Middle => "middle",
+            _ => "left",
+        },
+    )?;
+    payload.set("click_count", click_count as u32)?;
+    set_pointer_geometry(ctx, &payload, position, bounds)?;
+    payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+    Ok(payload)
+}
+
 fn set_pointer_geometry<'js>(
     ctx: &Ctx<'js>,
     payload: &Object<'js>,
@@ -6834,6 +9188,13 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
 enum Argument {
     Value(Bridged),
     Handler(Persistent<Function<'static>>),
+    Element(SpecId),
+    Entity(EntityHandle),
+    RetainedState {
+        handle: u64,
+        proof: String,
+    },
+    Array(Vec<Argument>),
     /// A template's sentinel: this position is filled per call rather than now.
     /// Only reachable while a template body is being discovered, because
     /// nothing else hands one out.
@@ -6922,6 +9283,14 @@ impl Arguments {
                          template is called and pass the result"
                     ),
                 )),
+                Argument::Element(_)
+                | Argument::Entity(_)
+                | Argument::RetainedState { .. }
+                | Argument::Array(_) => Err(JsError::new_from_js_message(
+                    "object",
+                    "value",
+                    format!("`{method}` does not take an object or array"),
+                )),
             })
             .collect()
     }
@@ -6965,19 +9334,144 @@ impl<'js> FromJs<'js> for Arguments {
             .into_array()
             .ok_or_else(|| Exception::throw_type(ctx, "expected an argument list"))?;
 
-        let mut converted = SmallVec::new();
-        for entry in array.iter::<Value>() {
-            let entry = entry?;
-            converted.push(match entry.as_function() {
-                Some(handler) => Argument::Handler(Persistent::save(ctx, handler.clone())),
-                None => match slot_index(&entry) {
-                    Some(slot) => Argument::Slot(slot),
-                    None => Argument::Value(bridge(ctx, &entry)?),
-                },
-            });
+        let length = host_modules::bridge_array_len(ctx, &array)?;
+        let mut converted = SmallVec::with_capacity(length);
+        let mut budget = ComponentArgumentBudget::default();
+        for index in 0..length {
+            converted.push(component_argument_from_js(
+                ctx,
+                array.get(index)?,
+                0,
+                &mut budget,
+            )?);
         }
 
         Ok(Self(converted))
+    }
+}
+
+const MAX_COMPONENT_ARGUMENT_DEPTH: usize = 32;
+const MAX_COMPONENT_ARGUMENT_NODES: usize = 10_000;
+
+#[derive(Default)]
+struct ComponentArgumentBudget {
+    nodes: usize,
+}
+
+fn component_argument_from_js<'js>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    depth: usize,
+    budget: &mut ComponentArgumentBudget,
+) -> JsResult<Argument> {
+    if depth > MAX_COMPONENT_ARGUMENT_DEPTH {
+        return Err(Exception::throw_range(
+            ctx,
+            "component arguments are nested too deeply",
+        ));
+    }
+    budget.nodes = budget.nodes.checked_add(1).ok_or_else(|| {
+        Exception::throw_range(ctx, "component arguments contain too many nested values")
+    })?;
+    if budget.nodes > MAX_COMPONENT_ARGUMENT_NODES {
+        return Err(Exception::throw_range(
+            ctx,
+            "component arguments contain too many nested values",
+        ));
+    }
+    if let Some(handler) = value.as_function() {
+        return Ok(Argument::Handler(Persistent::save(ctx, handler.clone())));
+    }
+    if let Some(slot) = slot_index(&value) {
+        return Ok(Argument::Slot(slot));
+    }
+    if let Some(array) = value.as_array() {
+        let length = host_modules::bridge_array_len(ctx, &array)?;
+        let mut converted = Vec::with_capacity(length);
+        for index in 0..length {
+            converted.push(component_argument_from_js(
+                ctx,
+                array.get(index)?,
+                depth + 1,
+                budget,
+            )?);
+        }
+        return Ok(Argument::Array(converted));
+    }
+    if let Some(object) = value.as_object() {
+        if let Ok(id) = object.get::<_, u32>("__id") {
+            return Ok(Argument::Element(id));
+        }
+        if let Ok(handle) = object.get::<_, u64>("__handle") {
+            return Ok(Argument::Entity(handle));
+        }
+        if let (Ok(handle), Ok(proof)) = (
+            object.get::<_, u64>("__componentStateHandle"),
+            object.get::<_, String>("__componentStateProof"),
+        ) {
+            return Ok(Argument::RetainedState { handle, proof });
+        }
+    }
+    Ok(Argument::Value(bridge(ctx, &value)?))
+}
+
+/// One callback argument as a JavaScript value.
+fn callback_argument_to_js<'js>(
+    ctx: &Ctx<'js>,
+    argument: &ComponentCallbackArgument,
+) -> JsResult<Value<'js>> {
+    use rquickjs::IntoJs as _;
+
+    match argument {
+        ComponentCallbackArgument::String(value) => value.clone().into_js(ctx),
+        ComponentCallbackArgument::Number(value) => (*value).into_js(ctx),
+        ComponentCallbackArgument::Boolean(value) => (*value).into_js(ctx),
+        ComponentCallbackArgument::Array(values) => {
+            let array = Array::new(ctx.clone())?;
+            for (index, value) in values.iter().enumerate() {
+                array.set(index, callback_argument_to_js(ctx, value)?)?;
+            }
+            array.into_js(ctx)
+        }
+    }
+}
+
+fn schema_name(schema: &ArgumentSchema) -> String {
+    match schema {
+        ArgumentSchema::String => "a string".into(),
+        ArgumentSchema::Number => "a finite number".into(),
+        ArgumentSchema::Boolean => "a boolean".into(),
+        ArgumentSchema::Element => "an Element".into(),
+        ArgumentSchema::Entity(kind) => format!("a {kind} entity"),
+        ArgumentSchema::Callback(_) => "a function".into(),
+        ArgumentSchema::Enum(values) => values
+            .iter()
+            .map(|value| format!("`{value}`"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        ArgumentSchema::Array(item) => format!("an array of {}", schema_name(item)),
+        ArgumentSchema::Optional(item) => format!("an optional {}", schema_name(item)),
+    }
+}
+
+fn collect_component_elements(argument: &ComponentArgument, elements: &mut Vec<SpecId>) {
+    match argument {
+        ComponentArgument::Element(element) => elements.push(*element),
+        ComponentArgument::Array(arguments) => {
+            for argument in arguments {
+                collect_component_elements(argument, elements);
+            }
+        }
+        ComponentArgument::Optional(Some(argument)) => {
+            collect_component_elements(argument, elements);
+        }
+        ComponentArgument::String(_)
+        | ComponentArgument::Number(_)
+        | ComponentArgument::Boolean(_)
+        | ComponentArgument::Entity { .. }
+        | ComponentArgument::Callback(_)
+        | ComponentArgument::Enum(_)
+        | ComponentArgument::Optional(None) => {}
     }
 }
 
@@ -7004,6 +9498,7 @@ fn instantiate_template_binding(
 fn callback_op_name(method: &str) -> Option<&'static str> {
     Some(match method {
         "on_click" => "on_click",
+        "on_link_click" => "on_link_click",
         "on_mouse_move" => "on_mouse_move",
         "on_hover" => "on_hover",
         "on_key_down" => "on_key_down",
@@ -7012,6 +9507,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_scroll_wheel" => "on_scroll_wheel",
         "on_item_click" => "on_item_click",
+        "on_item_secondary_click" => "on_item_secondary_click",
         "on_resize" => "on_resize",
         "tab_bar" => "tab_bar",
         "empty_group" => "empty_group",
@@ -7026,6 +9522,80 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_open_change" => "on_open_change",
         _ => return None,
     })
+}
+
+/// The element methods the prelude checks against a fixed vocabulary, read out
+/// of the prelude source itself.
+///
+/// Two lists of the same names would drift, and the drift is invisible: a
+/// descriptor method that disagrees simply stops working, for every value. So
+/// the list lives in `component_registry`, where registration can refuse the
+/// disagreement, and this reads the truth back out of the prelude to check it.
+#[cfg(test)]
+fn prelude_checked_vocabularies() -> Vec<(String, Vec<String>)> {
+    let mut found = Vec::new();
+    for (index, _) in PRELUDE.match_indices("\n  methods.") {
+        let rest = &PRELUDE[index + "\n  methods.".len()..];
+        let Some(end) = rest.find(" = function") else {
+            continue;
+        };
+        let name = rest[..end].to_owned();
+        // Only this method's own body: a fixed window spills into the next
+        // method's comment and reads its check as this one's.
+        let body = match rest.find("\n  };") {
+            Some(close) => &rest[..close],
+            None => rest,
+        };
+        if body.contains("__anchorNames.includes") {
+            found.push((
+                name,
+                crate::materialize::ANCHOR_NAMES
+                    .iter()
+                    .map(|value| (*value).to_owned())
+                    .collect(),
+            ));
+            continue;
+        }
+        let Some(open) = body.find('[') else { continue };
+        let Some(close) = body[open..].find("].includes(value)") else {
+            continue;
+        };
+        let literals = body[open + 1..open + close]
+            .split(',')
+            .filter_map(|part| {
+                let part = part.trim().trim_matches('"');
+                (!part.is_empty()).then(|| part.to_owned())
+            })
+            .collect::<Vec<_>>();
+        if !literals.is_empty() {
+            found.push((name, literals));
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+#[cfg(test)]
+fn prelude_owned_element_methods() -> Vec<&'static str> {
+    let generic_dispatch = PRELUDE
+        .find("for (const name of __behaviorNames) define(name);")
+        .expect("the prelude installs descriptor methods generically");
+    let mut names = Vec::new();
+    let mut rest = &PRELUDE[generic_dispatch..];
+    while let Some(at) = rest.find("\n  methods.") {
+        rest = &rest[at + "\n  methods.".len()..];
+        let Some(end) = rest.find(" = function") else {
+            continue;
+        };
+        let name = &rest[..end];
+        if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            names.push(name);
+        }
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
 }
 
 fn unknown_method(name: &str) -> String {
@@ -7479,7 +10049,7 @@ mod nested_view_lifecycle_tests {
         let mut view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View { render(cx) { return "child"; } }
 "#,
         );
@@ -7553,7 +10123,7 @@ export default class Child extends View { render(cx) { return "child"; } }
         let mut view_type = child_type(
             &runtime,
             r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 export default class Child extends View { render(cx) { return "child"; } }
 "#,
         );
@@ -7618,7 +10188,7 @@ export default class Child extends View { render(cx) { return "child"; } }
         let view_type = child_type(
             &runtime,
             r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 globalThis.child_hits = 0;
 
 export default class Child extends View {
@@ -7694,7 +10264,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
@@ -7782,7 +10352,7 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 // Takes a context, because module scope has none: the caller is a live host
@@ -7801,7 +10371,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class Child extends View {
@@ -7903,7 +10473,7 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 // Takes a context, because module scope has none: the caller is a live host
@@ -7922,7 +10492,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class BrokenChild extends View {
@@ -8022,7 +10592,7 @@ export default class BrokenChild extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Parent extends View {
   render() { return "parent"; }
 }
@@ -8031,7 +10601,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.successor_runs = 0;
 export default class BrokenChild extends View {
@@ -8125,7 +10695,7 @@ export default class BrokenChild extends View {
         std::fs::write(
             root.join("main.js"),
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   render(cx) { return "loaded child"; }
 }
@@ -8185,7 +10755,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
@@ -8262,7 +10832,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
@@ -8333,7 +10903,7 @@ export default class Child extends View {
         let view_type_a = child_type(
             &runtime_a,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
   render() { return "a"; }
@@ -8343,7 +10913,7 @@ export default class Child extends View {
         let view_type_b = child_type(
             &runtime_b,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
   render(cx) { return "b"; }
@@ -8412,7 +10982,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.failed_child_continuations = 0;
 
@@ -8485,5 +11055,59 @@ export default class BrokenChild extends View {
         assert_eq!(runtime.entities().len(), records_before);
 
         assert!(runtime.entities().release(application_focus));
+    }
+}
+
+#[cfg(test)]
+mod reserved_element_method_tests {
+    /// `typings.rs` withholds these from a registered component that does not
+    /// declare them. If the engine started accepting a fourth, the declarations
+    /// would keep offering it on every component and the call would throw.
+    #[test]
+    fn the_declarations_withhold_exactly_the_behaviors_the_engine_gates() {
+        assert_eq!(
+            crate::typings::REGISTERED_COMMON_BEHAVIORS,
+            ["disabled", "selected", "on_click"]
+        );
+    }
+
+    /// A descriptor method whose name the prelude also defines is unreachable:
+    /// the prototype entry wins and validates against a different vocabulary.
+    /// `RESERVED_ELEMENT_METHODS` is what stops one being registered, so it has
+    /// to say exactly what the prelude actually defines.
+    #[test]
+    fn the_checked_vocabularies_match_what_the_prelude_enforces() {
+        let found = super::prelude_checked_vocabularies();
+        let declared = crate::component_registry::prelude_checked_vocabularies_for_test();
+        assert_eq!(
+            found
+                .iter()
+                .map(|(name, values)| (name.as_str(), values.len()))
+                .collect::<Vec<_>>(),
+            declared
+                .iter()
+                .map(|(name, values)| (*name, values.len()))
+                .collect::<Vec<_>>(),
+            "the prelude and PRELUDE_CHECKED_VOCABULARIES have drifted; a check \
+             added to the prelude must be recorded there, or a registered \
+             component can declare a vocabulary that never runs"
+        );
+        for ((found_name, found_values), (name, values)) in found.iter().zip(declared) {
+            assert_eq!(found_name, name);
+            assert_eq!(found_values, values, "vocabulary for `{name}`");
+        }
+    }
+
+    /// The prelude has to keep defining these by hand for the built-in
+    /// components, which is what makes the vocabulary check necessary at all.
+    #[test]
+    fn the_prelude_still_owns_the_names_the_check_covers() {
+        let owned = super::prelude_owned_element_methods();
+        for (name, _) in crate::component_registry::prelude_checked_vocabularies_for_test() {
+            assert!(
+                owned.contains(&name),
+                "the prelude no longer defines `{name}`"
+            );
+        }
     }
 }

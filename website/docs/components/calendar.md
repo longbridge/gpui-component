@@ -13,7 +13,7 @@ A standalone calendar component that provides a rich interface for date selectio
 ## Import
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     calendar::{Calendar, CalendarState, CalendarEvent, Date, Matcher},
 };
 ```
@@ -287,7 +287,7 @@ Calendar::new(&state)
 ## Custom Styling
 
 ```rust
-use gpui::{px, relative};
+use gpui_kit::{px, relative};
 
 Calendar::new(&calendar)
     .p_4() // Custom padding

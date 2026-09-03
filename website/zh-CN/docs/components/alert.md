@@ -10,7 +10,7 @@ Alert 是一个通用提示组件，用于展示重要消息。它支持多种�
 ## 导入
 
 ```rust
-use gpui_component::alert::Alert;
+use gpui_kit::component::alert::Alert;
 ```
 
 ## 用法
@@ -47,7 +47,7 @@ Alert::error("error-alert", "An error occurred while processing your request.")
 ### Alert 尺寸
 
 ```rust
-use gpui_component::{alert::Alert, Sizable as _};
+use gpui_kit::component::{alert::Alert, Sizable as _};
 
 Alert::info("alert", "Message content")
     .xsmall()
@@ -97,7 +97,7 @@ Alert::error("banner-error", "Service temporarily unavailable.")
 ### 自定义图标
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Alert::new("custom-icon", "Meeting scheduled for tomorrow at 3 PM.")
     .title("Calendar Reminder")
@@ -109,7 +109,7 @@ Alert::new("custom-icon", "Meeting scheduled for tomorrow at 3 PM.")
 可以配合 `TextView` 渲染 Markdown 或 HTML 内容：
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 Alert::error(
     "error-with-markdown",
@@ -186,7 +186,7 @@ Alert::info("update-available", "A new version of the application is available."
 ### 多行格式化内容
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 Alert::warning(
     "security-alert",

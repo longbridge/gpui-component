@@ -10,7 +10,7 @@ A slider component for selecting numeric values within a specified range. Suppor
 ## Import
 
 ```rust
-use gpui_component::slider::{Slider, SliderState, SliderEvent, SliderValue};
+use gpui_kit::component::slider::{Slider, SliderState, SliderEvent, SliderValue};
 ```
 
 ## Usage

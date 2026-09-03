@@ -16,7 +16,7 @@
 //! # How a registered module becomes an importable one
 //!
 //! [`HostModuleLoader`] sits in the resolver chain after the built-ins and
-//! before the application's own files, so a host can neither shadow `gpui` nor
+//! before the application's own files, so a host can neither shadow `gpui-kit` nor
 //! be shadowed by a file the script happens to have. Resolving produces a
 //! generated source module — one `export const` per registered function:
 //!
@@ -269,6 +269,20 @@ impl Loader for HostModuleLoader {
                 )
             };
         }
+        for component in found.component_names() {
+            if !is_identifier(component) {
+                return Err(Exception::throw_message(
+                    ctx,
+                    &format!(
+                        "HostModule `{module}` component `{component}` is not a JavaScript identifier"
+                    ),
+                ));
+            }
+            let _ = writeln!(
+                source,
+                "export const {component} = globalThis.__gpui.component({module:?}, {component:?});"
+            );
+        }
 
         Module::declare(ctx.clone(), name, source)
     }
@@ -329,7 +343,7 @@ impl<'js> IntoJs<'js> for Binding {
 }
 
 /// One argument, converted on the way in.
-struct Argument(HostValue);
+pub(super) struct Argument(pub(super) HostValue);
 
 impl<'js> FromJs<'js> for Argument {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
@@ -337,7 +351,7 @@ impl<'js> FromJs<'js> for Argument {
     }
 }
 
-fn from_js<'js>(ctx: &Ctx<'js>, value: Value<'js>, depth: usize) -> JsResult<HostValue> {
+pub(super) fn from_js<'js>(ctx: &Ctx<'js>, value: Value<'js>, depth: usize) -> JsResult<HostValue> {
     if depth > MAX_DEPTH {
         return Err(Exception::throw_type(
             ctx,
@@ -404,7 +418,7 @@ impl<'js> IntoJs<'js> for Bridged {
     }
 }
 
-fn into_js<'js>(ctx: &Ctx<'js>, value: HostValue) -> JsResult<Value<'js>> {
+pub(super) fn into_js<'js>(ctx: &Ctx<'js>, value: HostValue) -> JsResult<Value<'js>> {
     Ok(match value {
         HostValue::Null => Value::new_null(ctx.clone()),
         HostValue::Bool(flag) => Value::new_bool(ctx.clone(), flag),

@@ -10,7 +10,7 @@ A versatile tooltip component that displays helpful information when hovering ov
 ## Import
 
 ```rust
-use gpui_component::tooltip::Tooltip;
+use gpui_kit::component::tooltip::Tooltip;
 ```
 
 ## Usage

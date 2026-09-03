@@ -10,7 +10,7 @@ A toast notification system for displaying temporary messages to users. Notifica
 ## Import
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     notification::{Notification, NotificationType},
     WindowExt
 };
@@ -25,7 +25,7 @@ You need to set up your application's root view to render the notification layer
 The [Root::render_notification_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_notification_layer) function handles rendering any active modals on top of your app content.
 
 ```rust
-use gpui_component::{TitleBar, Root};
+use gpui_kit::component::{TitleBar, Root};
 
 struct Example {}
 
@@ -109,6 +109,11 @@ Notification::new()
     .autohide(true) // default
 ```
 
+The countdown pauses while the pointer is over the notifications or one of them
+has keyboard focus, and resumes when the pointer leaves or focus moves on. It
+keeps running while the window is inactive, so a message that must not be missed
+should disable auto-hide or use system delivery.
+
 ### With Action Button
 
 ```rust
@@ -144,7 +149,7 @@ Notification::new()
 ### Custom Content
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 let markdown_content = r#"
 ## Custom Notification
@@ -201,7 +206,7 @@ in-app toast (`InApp`, the default), in the OS notification center (`System`),
 or both (`InAppAndSystem`).
 
 ```rust
-use gpui_component::notification::{Notification, NotificationDelivery};
+use gpui_kit::component::notification::{Notification, NotificationDelivery};
 
 // Per-notification override; `.system()` and `.in_app_and_system()` are
 // shorthands for `.delivery(NotificationDelivery::...)`.
@@ -225,7 +230,7 @@ closes the in-app toast (if any), and fires `on_click` with a default
 `ClickEvent`. With `NotificationDelivery::System` no toast exists, so
 `on_close` is never called.
 
-`gpui_component::init` registers the app-global
+`gpui_kit::component::init` registers the app-global
 `on_system_notification_response` handler, so do not register your own after
 it — gpui keeps only one. Notifications your application posts directly via
 `cx.show_system_notification` are left untouched.
@@ -301,7 +306,7 @@ Notification::warning("System maintenance will begin in 30 minutes.")
 ### Batch Operation Results
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 let results_content = r#"
 ## Batch Operation Complete

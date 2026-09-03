@@ -13,7 +13,7 @@ We can search by title, description, and custom keywords to filter the settings 
 ## Import
 
 ```rust
-use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_kit::component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 ```
 
 ## Usage
@@ -43,7 +43,7 @@ Settings
 ### Basic Settings
 
 ```rust
-use gpui_component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
+use gpui_kit::component::setting::{Settings, SettingPage, SettingGroup, SettingItem, SettingField};
 
 Settings::new("my-settings")
     .pages(vec![
@@ -88,7 +88,7 @@ Settings::new("app-settings")
 ### Group Variants
 
 ```rust
-use gpui_component::group_box::GroupBoxVariant;
+use gpui_kit::component::group_box::GroupBoxVariant;
 
 Settings::new("my-settings")
     .with_group_variant(GroupBoxVariant::Outline)
@@ -234,7 +234,7 @@ SettingItem::new(
 ### With Markdown Description
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 SettingItem::new(
     "Documentation",
@@ -383,7 +383,7 @@ SettingItem::new(
 ### NumberInput
 
 ```rust
-use gpui_component::setting::NumberFieldOptions;
+use gpui_kit::component::setting::NumberFieldOptions;
 
 SettingItem::new(
     "Font Size",
@@ -428,7 +428,7 @@ You may have a complex field that you want to reuse, you may want split the elem
 In this case, the [SettingFieldElement] trait can help you to create a custom field element.
 
 ```rust
-use gpui_component::setting::{SettingFieldElement, RenderOptions};
+use gpui_kit::component::setting::{SettingFieldElement, RenderOptions};
 
 struct OpenURLSettingField {
     label: SharedString,
@@ -458,7 +458,7 @@ SettingItem::new(
     "GitHub Repository",
     SettingField::element(OpenURLSettingField {
         label: "Repository...".into(),
-        url: "https://github.com/longbridge/gpui-component".into(),
+        url: "https://github.com/longbridge/gpui-kit".into(),
     })
 )
 ```
@@ -487,8 +487,8 @@ Implements [Sizable] trait:
 ### Complete Settings Example
 
 ```rust
-use gpui::{App, SharedString};
-use gpui_component::{
+use gpui_kit::{App, SharedString};
+use gpui_kit::component::{
     Settings, SettingPage, SettingGroup, SettingItem, SettingField,
     setting::NumberFieldOptions,
     group_box::GroupBoxVariant,

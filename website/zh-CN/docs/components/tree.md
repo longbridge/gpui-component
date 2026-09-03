@@ -10,7 +10,7 @@ Tree 是一个用于展示层级数据的通用组件，支持展开/折叠、�
 ## 导入
 
 ```rust
-use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
+use gpui_kit::component::tree::{tree, TreeState, TreeItem, TreeEntry};
 ```
 
 ## 用法

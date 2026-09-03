@@ -1,12 +1,12 @@
 ---
 title: 编码指南
-description: 构建可维护 GPUI Component 应用的架构、代码风格与命名规范
+description: 构建可维护 GPUI Kit 应用的架构、代码风格与命名规范
 order: -2.2
 ---
 
 # 编码指南
 
-本指南总结 GPUI Component 中经过长期实践验证的应用架构与代码模式，面向工程师和 coding agent。请先阅读[设计指南](./design-guides.md)：代码结构的职责是保存产品意图，而不是替代产品设计。
+本指南总结 GPUI Kit 中经过长期实践验证的应用架构与代码模式，面向工程师和 coding agent。请先阅读[设计指南](./design-guides.md)：代码结构的职责是保存产品意图，而不是替代产品设计。
 
 本文是一份规范性指南：**必须**表示生命周期、正确性或生态约束；**应该**表示默认架构，偏离时需要有具体理由。精确方法签名以当前源码和 API 文档为准。
 
@@ -73,7 +73,7 @@ crate 边界也是工程边界。它让 Cargo 只重编译和测试较小的依�
 
 ```rust
 app.run(move |cx| {
-    gpui_component::init(cx);
+    gpui_kit::init(cx);
 
     cx.spawn(async move |cx| {
         cx.open_window(WindowOptions::default(), |window, cx| {
@@ -298,7 +298,7 @@ Pointer-specific 行为使用 pointer callback；需要 key binding、menu 或�
 
 一个 logical desktop command 只建模一次。Toolbar Button、`DropdownMenu` item、`ContextMenu` item、menu-bar item 与 key binding 应 dispatch 同一个 Action 或调用同一 owner method，不能复制五份 mutation。条件允许时，label、icon、shortcut、enabled state 来自同一 command policy，避免不同入口互相矛盾。Menu 拥有 navigation 与 dismiss；feature owner 仍然拥有 command 是否允许以及实际执行内容。
 
-控件选择必须符合语义。命令即使需要降低强调，也应使用 `Button` 的 `outline`、`ghost` 或图标形式，不能换成 `Link`。GPUI Component 应用约定：`Link` 只用于交给浏览器或邮件客户端打开的 URL、网页文档和电子邮件地址；应用内目标使用相应的导航组件，命令使用 `Button` 或`Action`。这是产品设计约定，不是 `gpui_base::Link` 的能力限制；后者可以通过 `open_with`把目标交给其他导航实现。
+控件选择必须符合语义。命令即使需要降低强调，也应使用 `Button` 的 `outline`、`ghost` 或图标形式，不能换成 `Link`。GPUI Kit 应用约定：`Link` 只用于交给浏览器或邮件客户端打开的 URL、网页文档和电子邮件地址；应用内目标使用相应的导航组件，命令使用 `Button` 或`Action`。这是产品设计约定，不是 `gpui_kit::base::Link` 的能力限制；后者可以通过 `open_with`把目标交给其他导航实现。
 
 只有 nested interaction 确实必须阻止 parent 处理同一 event 时才 stop propagation。无差别阻止会破坏 menu、selection、drag 与 window command。
 
@@ -324,6 +324,19 @@ Async work 从 event、lifecycle hook 或具名 method 启动，不能作为 `re
 
 ## 布局、测量与滚动
 
+`h_flex` 会让子元素在交叉轴上居中；`v_flex` 保持 flexbox 的默认值 `stretch`。这与 Zed 的 `h_flex` 一致，
+也是一排控件想要的效果，所以图标加文字的一行什么都不用写。但一排等高的列不是这样：直接放进 `h_flex` 的列不会
+填满行的高度，比行更高的列会被居中，于是它的顶部（通常是 header）被裁到窗口之外，而列附近的代码看不出原因。
+子元素是列的一行，请显式写 `items_stretch()`：
+
+```rust
+h_flex()
+    .items_stretch()
+    .size_full()
+    .child(sidebar)
+    .child(content)
+```
+
 大多数 UI 使用 GPUI layout，不应自行 measurement。Measurement 是 popup、virtualization、editor、resize handle、chart 等依赖 resolved geometry 行为的深层工具。
 
 - measurement 与 geometry 放在拥有行为的层；
@@ -336,7 +349,9 @@ Alignment invariant 应通过构造保证，而不是事后校正：sibling regi
 
 精度评审要测量 resolved result，但不能把测得的差值写成 raw `px(...)` 微调。应继续追踪到重复 padding、nested inset、border ownership、font metric 或 rounding，并修复结构 owner。
 
-每个 scrollable region 只有一个 owner。Flex layout 中，可收缩 child 使用 `min_w_0()` /`min_h_0()`。避免意外 nested scroll；wheel input 应进入目标 axis，并在 API 不可移植时保留 platform/wasm 差异。
+`h_flex()` 与 `v_flex()` 并不对称：`h_flex()` 会把 child 在 cross axis 上居中，`v_flex()` 则保持拉伸。因此 row 里的 column 拿到的是自身内容高度，而不是 row 的高度；内容比 row 高时会被居中，header 被挤出上边缘并裁掉。只要 child 拥有 header、footer 或需要按 row 高度解析的 scroll region，就给这个 column 加 `h_full()`，或给 row 加 `items_start()` / `items_stretch()`。
+
+每个 scrollable region 只有一个 owner。Flex layout 中，可收缩 child 使用 `min_w_0()` /`min_h_0()`。Flex item 只有在自身 overflow 不是 visible 时才会放弃基于内容的 automatic minimum size，所以普通的可伸缩 child 在被明确要求之前不会围绕长内容收缩。`Scrollable` 已经为自己的 wrapper 处理了这一点，但夹在它与 flex container 之间的普通 `div` 仍需自行释放该最小值。避免意外 nested scroll；wheel input 应进入目标 axis，并在 API 不可移植时保留 platform/wasm 差异。
 
 `Scrollable` 应附着在拥有完整面板、编辑器或窗口 viewport 的 element 上，使滚动条解析到区域边缘。内容内边距放在 scroll owner 内部，不能用带内边距的容器包住 scroll owner。滚动条悬在内容与面板边界中间，通常说明 scroll owner 错误或内边距放错了层。
 

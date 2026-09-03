@@ -13,7 +13,7 @@ Calendar 是一个独立的日历组件，支持单日选择、日期区间选�
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     calendar::{Calendar, CalendarState, CalendarEvent, Date, Matcher},
 };
 ```

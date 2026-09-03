@@ -9,7 +9,7 @@ import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import ComponentExample from "./components/ComponentExample.vue";
 import SidebarFilter from "./components/SidebarFilter.vue";
 import { useThemeFavicon } from "./composables/favicon";
-import config from "../../../crates/ui/Cargo.toml";
+import config from "../../../crates/component/Cargo.toml";
 
 const Layout = defineComponent({
   name: "Layout",

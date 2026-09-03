@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_component_story::{Gallery, StoryRoot};
+use gpui_kit::assets::Assets;
+use gpui_kit::component::{
     Root,
     theme::{Theme, ThemeMode},
 };
-use gpui_component_assets::Assets;
-use gpui_component_story::{Gallery, StoryRoot};
+use gpui_kit::{prelude::*, *};
 use wasm_bindgen::prelude::*;
 
 thread_local! {
@@ -59,15 +59,13 @@ pub fn run(story: Option<String>, dark: Option<bool>) -> Result<(), JsValue> {
     tracing_wasm::set_as_global_default();
 
     #[cfg(target_family = "wasm")]
-    gpui_platform::web_init();
+    gpui_kit::platform::web_init();
     #[cfg(not(target_family = "wasm"))]
-    let app = gpui_platform::application();
+    let app = gpui_kit::application();
     #[cfg(target_family = "wasm")]
-    let app = gpui_platform::single_threaded_web();
+    let app = gpui_kit::platform::single_threaded_web();
 
-    let app = app.with_assets(Assets::new(
-        "https://longbridge.github.io/gpui-component/gallery/",
-    ));
+    let app = app.with_assets(Assets::new("https://gpui-kit.com/gallery/"));
     let launch = move |cx: &mut App| {
         gpui_component_story::init(cx);
 

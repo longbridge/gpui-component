@@ -275,6 +275,7 @@ impl Policy {
 mod tests {
     use super::*;
     use crate::capability::Capabilities;
+    use gpui::IntoElement as _;
 
     fn reading(root: &str) -> Policy {
         Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from(root)]))
@@ -324,6 +325,20 @@ mod tests {
             Rc::ptr_eq(&held.modules(), &default().modules()),
             "the registry is one live handle, not a copy per holder"
         );
+    }
+
+    #[test]
+    fn two_policies_do_not_share_components() {
+        let first = Policy::new()
+            .with_host_module(
+                crate::HostModule::new("cards")
+                    .component("Quote", |_, _, _| gpui::div().into_any_element()),
+            )
+            .expect("first policy");
+        let second = Policy::new();
+
+        assert!(first.modules().get("cards").is_ok());
+        assert!(second.modules().get("cards").is_err());
     }
 
     /// One file, one cache, one write queue. Two would answer `get` differently

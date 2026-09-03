@@ -10,11 +10,11 @@ Menu 组件同时提供上下文菜单和弹出菜单，支持图标、键盘快
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     menu::{PopupMenu, PopupMenuItem, ContextMenuExt, DropdownMenu},
     Button
 };
-use gpui::{actions, Action};
+use gpui_kit::{actions, Action};
 ```
 
 ## 用法
@@ -24,7 +24,7 @@ use gpui::{actions, Action};
 右键点击元素时显示上下文菜单：
 
 ```rust
-use gpui_component::menu::ContextMenuExt;
+use gpui_kit::component::menu::ContextMenuExt;
 
 div()
     .id("my-element")
@@ -42,7 +42,7 @@ div()
 下拉菜单通常由按钮或其它可交互元素触发：
 
 ```rust
-use gpui_component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
+use gpui_kit::component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
 
 let view = cx.entity();
 Button::new("menu-btn")
@@ -50,7 +50,7 @@ Button::new("menu-btn")
     .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
-            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .link("Documentation", "https://gpui-kit.com/")
             .separator()
             .item(PopupMenuItem::new("Custom Action")
                 .on_click(window.listener_for(&view, |this, _, window, cx| {
@@ -76,7 +76,7 @@ Button::new("menu-btn")
 控制下拉菜单相对触发器的显示位置：
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 Button::new("menu-btn")
     .label("Options")
@@ -89,7 +89,7 @@ Button::new("menu-btn")
 ### 图标
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 menu.menu_with_icon("Search", IconName::Search, Box::new(Search))
     .menu_with_icon("Settings", IconName::Settings, Box::new(OpenSettings))
@@ -169,7 +169,7 @@ menu.link("Documentation", "https://docs.example.com")
 ### 自定义元素
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 menu.menu_element(Box::new(CustomAction), |window, cx| {
         v_flex()
@@ -324,7 +324,7 @@ div()
 ### 不使用 action 添加菜单项
 
 ```rust
-use gpui_component::{menu::PopupMenuItem, Button};
+use gpui_kit::component::{menu::PopupMenuItem, Button};
 
 Button::new("custom-item-menu")
     .label("Options")

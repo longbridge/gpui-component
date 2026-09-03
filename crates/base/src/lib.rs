@@ -37,6 +37,7 @@ mod list_settings;
 mod macos_accessibility;
 mod measure;
 pub mod motion;
+mod nav_stack;
 mod number_input;
 mod otp_input;
 mod pagination;
@@ -68,6 +69,7 @@ mod toggle;
 mod toggle_group;
 mod tooltip;
 mod tree;
+mod undo_history;
 mod virtual_list;
 
 pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
@@ -102,7 +104,7 @@ pub use focus_trap::FocusTrapElement;
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
 pub use global_state::{DeferredPopover, GlobalState};
-pub use history::{History, HistoryItem};
+pub use history::History;
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
 pub use input::{Editor, Input, InputBase, InputStyles, Textarea};
@@ -121,6 +123,7 @@ pub use motion::{
     Spring, SpringError, Stagger, StaggerOrigin, StepPosition, Timing, TimingSample, Transition,
     TransitionId, animate_keyframes, spring, transition, transition_with_status,
 };
+pub use nav_stack::{NavMotion, NavOperation, NavPage, NavStack, NavStackEvent, NavStackState};
 pub use number_input::{
     Decrement, Increment, NumberInput, NumberInputEvent, NumberInputText, NumberStep, StepAction,
     step_value,
@@ -182,6 +185,7 @@ pub use tooltip::{Tooltip, TooltipOverlay, TooltipPositioner, TooltipRequest, To
 pub use tree::{Tree, TreeEntry, TreeEntryState, TreeEvent, TreeItem, TreeState};
 #[doc(hidden)]
 pub use tree::{init as init_tree, key_context as tree_key_context};
+pub use undo_history::UndoHistory;
 #[doc(hidden)]
 pub use virtual_list::virtual_list;
 pub use virtual_list::{VirtualList, VirtualListScrollHandle, h_virtual_list, v_virtual_list};

@@ -10,7 +10,7 @@ A checkbox component for binary choices. Supports labels, disabled state, and di
 ## Import
 
 ```rust
-use gpui_component::checkbox::Checkbox;
+use gpui_kit::component::checkbox::Checkbox;
 ```
 
 ## Usage

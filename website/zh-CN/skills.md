@@ -1,7 +1,7 @@
 ---
 title: Skills
 layout: home
-description: 适用于 GPUI Component 的开发技能与实践指南。
+description: 适用于 GPUI Kit 的开发技能与实践指南。
 ---
 
 <script setup>

@@ -10,7 +10,7 @@ The Skeleton component displays animated placeholder content while actual conten
 ## Import
 
 ```rust
-use gpui_component::skeleton::Skeleton;
+use gpui_kit::component::skeleton::Skeleton;
 ```
 
 ## Usage

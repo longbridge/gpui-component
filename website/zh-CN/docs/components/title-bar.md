@@ -10,7 +10,7 @@ TitleBar 用于替换系统默认标题栏，提供可定制的窗口标题区�
 ## 导入
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 ```
 
 ## 用法
@@ -95,7 +95,7 @@ TitleBar::new()
 全部选项，其中包括让标题栏（而不是系统）来处理拖动和双击。
 
 ```rust
-use gpui::WindowOptions;
+use gpui_kit::WindowOptions;
 
 WindowOptions {
     window_bounds: Some(window_bounds),
@@ -106,7 +106,7 @@ WindowOptions {
 如果自行构造 [`WindowOptions`]，需要同时设置这两个字段：
 
 ```rust
-use gpui::WindowOptions;
+use gpui_kit::WindowOptions;
 
 WindowOptions {
     titlebar: Some(TitleBar::title_bar_options()),
