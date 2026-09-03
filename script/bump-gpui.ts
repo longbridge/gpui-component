@@ -28,9 +28,10 @@
  *     script/bump-gpui.ts [VERSION] [--rev REV] [--zed PATH]
  *                         [--dry-run] [--stage-only] [--no-verify] [--no-wait]
  *
- * Every crate is published at `<VERSION>-<N>`, e.g. `0.3.0-12`: the
- * `VERSION` constant below plus a counter that continues from whatever
- * crates.io already has. A positional VERSION overrides that for one run.
+ * Every crate is published at `<VERSION>.<N>`, e.g. `0.3.12`: the
+ * `VERSION` constant below (major.minor) plus a patch number that continues
+ * from whatever crates.io already has. A positional VERSION overrides that
+ * for one run.
  */
 
 import {
@@ -47,13 +48,13 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 /**
- * The base version of every `gpui-pre-*` crate. Each run publishes
- * `<VERSION>-<N>` with the next unused counter (see `nextVersion`), so a new
- * base is only needed when the crates should sort as a new release. The Zed
+ * The major.minor version of every `gpui-pre-*` crate. Each run publishes
+ * `<VERSION>.<N>` with the next unused patch number (see `nextVersion`), so
+ * this only moves when the crates should start a new minor series. The Zed
  * commit each build came from is recorded in every crate's description and
  * `[package.metadata.gpui-pre]`.
  */
-const VERSION = "0.3.0";
+const VERSION = "0.3";
 
 /**
  * Workspace dependencies swapped for a crate that is published by hand.
@@ -811,15 +812,15 @@ async function cratesIoGet(path: string): Promise<Toml | undefined> {
 }
 
 /**
- * The next `<base>-<N>` to publish, from what crates.io already holds.
+ * The next `<base>.<N>` to publish, from what crates.io already holds.
  *
- * The counter continues from the highest number any of the crates has; if a
- * previous run stopped part-way (the rate limit, a crash) some crates lack
+ * The patch number continues from the highest one any of the crates has; if
+ * a previous run stopped part-way (the rate limit, a crash) some crates lack
  * that number, and the run resumes at it instead of starting a new one.
  * Yanked versions still occupy their number.
  */
 async function nextVersion(base: string, crates: Crate[]): Promise<string> {
-  const pattern = new RegExp(`^${base.replaceAll(".", "\\.")}-(\\d+)$`);
+  const pattern = new RegExp(`^${base.replaceAll(".", "\\.")}\\.(\\d+)$`);
   const numbers = new Map<Crate, Set<number>>();
   let highest = -1;
   for (const crate of crates) {
@@ -833,13 +834,13 @@ async function nextVersion(base: string, crates: Crate[]): Promise<string> {
     highest = Math.max(highest, ...published);
     await Bun.sleep(200); // be polite to the crates.io API
   }
-  if (highest < 0) return `${base}-0`;
+  if (highest < 0) return `${base}.0`;
   const incomplete = crates.filter((crate) => !numbers.get(crate)!.has(highest));
   if (incomplete.length > 0) {
-    logInfo(`Resuming ${base}-${highest}: ${incomplete.length} crates are still missing it`);
-    return `${base}-${highest}`;
+    logInfo(`Resuming ${base}.${highest}: ${incomplete.length} crates are still missing it`);
+    return `${base}.${highest}`;
   }
-  return `${base}-${highest + 1}`;
+  return `${base}.${highest + 1}`;
 }
 
 async function versionIsPublished(name: string, version: string): Promise<boolean> {
@@ -924,7 +925,7 @@ const USAGE = `Usage: script/bump-gpui.ts [VERSION] [options]
 Publish Zed's GPUI crates to crates.io as ${PUBLISH_PREFIX}-*.
 
 Arguments:
-  VERSION           publish exactly this version instead of ${VERSION}-<N>,
+  VERSION           publish exactly this version instead of ${VERSION}.<N>,
                     where N continues from what crates.io already has
 
 Options:

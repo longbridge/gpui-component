@@ -50,8 +50,8 @@ To follow the repository's development branch, use a Git dependency instead:
 ```toml
 [dependencies]
 gpui-base = { git = "https://github.com/longbridge/gpui-component" }
-gpui = { package = "gpui-pre", version = "0.3.0-0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
 ```
 
 `gpui-base` uses the same `gpui-pre` version as the repository. If Cargo reports incompatible GPUI types, check whether your application is pulling GPUI from a different `gpui-pre` version or straight from the Zed repository.

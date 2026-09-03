@@ -94,8 +94,8 @@ GPUI Kit 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/
 ## Usage
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0-0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 

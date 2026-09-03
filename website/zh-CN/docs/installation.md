@@ -44,7 +44,7 @@ order: -1
 安装库时，只需要在 `Cargo.toml` 的 `[dependencies]` 中加入：
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0-0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```

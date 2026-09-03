@@ -160,14 +160,14 @@ its original crate name as the library name, so `use gpui::*` works unchanged.
 
 Every crate is published at `<VERSION>-<N>`, for example `0.3.0-12`: the
 `VERSION` constant at the top of `script/bump-gpui.ts` plus a counter that
-continues from the highest number crates.io already has (`0.3.0-0` first).
+continues from the highest number crates.io already has (`0.3.0` first).
 A run that stopped part-way resumes the same number. Raise `VERSION` only when
 the crates should sort as a new release. The Zed commit each build came from is
 recorded in every crate's description and `[package.metadata.gpui-pre]`.
 
 Cargo only matches pre-release versions when the requirement itself carries a
 pre-release tag, so `version = "0.3.0"` would find nothing while only
-`0.3.0-N` snapshots exist. Write `version = "0.3.0-0"`: it accepts `0.3.0-0`
+`0.3.0-N` snapshots exist. Write `version = "0.3.0"`: it accepts `0.3.0`
 and every later `0.3.0-N`, and consumers pick up new snapshots with
 `cargo update`.
 
@@ -192,7 +192,7 @@ the generated workspace.
 Depend on the result with:
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0-0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-0" }
-gpui_macros = { package = "gpui-pre-macros", version = "0.3.0-0" }
+gpui = { package = "gpui-pre", version = "0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0" }
+gpui_macros = { package = "gpui-pre-macros", version = "0.3.0" }
 ```
