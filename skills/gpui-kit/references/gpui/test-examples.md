@@ -12,24 +12,24 @@ mod tests {
     mod entity_tests {
         use super::*;
 
-        #[gpui::test]
+        #[gpui_kit::test]
         fn test_creation() { /* ... */ }
 
-        #[gpui::test]
+        #[gpui_kit::test]
         fn test_updates() { /* ... */ }
     }
 
     mod async_tests {
         use super::*;
 
-        #[gpui::test]
+        #[gpui_kit::test]
         async fn test_async_ops() { /* ... */ }
     }
 
     mod distributed_tests {
         use super::*;
 
-        #[gpui::test]
+        #[gpui_kit::test]
         fn test_multi_app() { /* ... */ }
     }
 }
@@ -44,7 +44,7 @@ fn create_test_counter(cx: &mut TestAppContext) -> Entity<Counter> {
     cx.new(|cx| Counter::new(cx))
 }
 
-#[gpui::test]
+#[gpui_kit::test]
 fn test_counter_operations(cx: &mut TestAppContext) {
     let counter = create_test_counter(cx);
 
@@ -57,7 +57,7 @@ fn test_counter_operations(cx: &mut TestAppContext) {
 Use descriptive assertions:
 
 ```rust
-#[gpui::test]
+#[gpui_kit::test]
 fn test_counter_bounds(cx: &mut TestAppContext) {
     let counter = create_test_counter(cx);
 
@@ -88,7 +88,7 @@ fn test_counter_bounds(cx: &mut TestAppContext) {
 Test performance characteristics:
 
 ```rust
-#[gpui::test]
+#[gpui_kit::test]
 fn test_operation_performance(cx: &mut TestAppContext) {
     let component = cx.new(|cx| MyComponent::new(cx));
 

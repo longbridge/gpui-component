@@ -18,7 +18,7 @@ GPUI provides CSS-like styling with Rust type safety.
 ### Basic Styling
 
 ```rust
-use gpui::*;
+use gpui_kit::*;
 
 div()
     .w(px(200.))
@@ -150,7 +150,7 @@ div()
 gpui-component provides shorthand helpers (import from `gpui_component`):
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 // h_flex() = div().flex().flex_row().items_center()
 h_flex()
@@ -258,7 +258,7 @@ div()
 ## Conditional Styling
 
 ```rust
-use gpui::prelude::FluentBuilder as _;
+use gpui_kit::prelude::FluentBuilder as _;
 
 div()
     .when(is_active, |el| el.bg(cx.theme().primary))

@@ -385,9 +385,9 @@ Test that layout calculations are correct:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::TestAppContext;
+    use gpui_kit::TestAppContext;
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn test_element_layout(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let mut window = cx.open_window(Default::default(), |_, _| ()).unwrap();
@@ -416,7 +416,7 @@ mod tests {
 Test that interactions work correctly:
 
 ```rust
-#[gpui::test]
+#[gpui_kit::test]
 fn test_element_click(cx: &mut TestAppContext) {
     cx.update(|cx| {
         let mut window = cx.open_window(Default::default(), |_, cx| {

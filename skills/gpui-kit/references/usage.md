@@ -41,7 +41,7 @@ fn main() {
 Used directly in `render`, no stored state:
 
 ```rust
-use gpui_component::button::Button;
+use gpui_kit::component::button::Button;
 
 impl Render for MyView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -56,7 +56,7 @@ impl Render for MyView {
 Require an `Entity<State>` stored in your view:
 
 ```rust
-use gpui_component::input::{Input, InputState};
+use gpui_kit::component::input::{Input, InputState};
 
 struct MyView {
     name: Entity<InputState>,
@@ -84,7 +84,7 @@ impl Render for MyView {
 ### Button
 
 ```rust
-use gpui_component::button::{Button, ButtonGroup};
+use gpui_kit::component::button::{Button, ButtonGroup};
 
 // Variants
 Button::new("btn").label("Default")
@@ -118,7 +118,7 @@ ButtonGroup::new("group")
 ### Input
 
 ```rust
-use gpui_component::input::{Input, InputState};
+use gpui_kit::component::input::{Input, InputState};
 
 // State setup (in new/init)
 let input = cx.new(|cx| InputState::new(window, cx)
@@ -152,7 +152,7 @@ cx.subscribe_in(&input, window, |view, state, event, window, cx| {
 ### Select
 
 ```rust
-use gpui_component::select::{Select, SelectState};
+use gpui_kit::component::select::{Select, SelectState};
 
 // Simple string list
 let state = cx.new(|cx| {
@@ -170,7 +170,7 @@ let selected = state.read(cx).selected_item();
 ### Checkbox / Switch / Radio
 
 ```rust
-use gpui_component::{Checkbox, Switch};
+use gpui_kit::component::{Checkbox, Switch};
 
 // Stateless (controlled)
 Checkbox::new("cb").checked(self.checked)
@@ -183,7 +183,7 @@ Switch::new("sw").checked(self.enabled)
 ### Icon
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Icon::new(IconName::Check)
 Icon::new(IconName::Search).small()
@@ -193,7 +193,7 @@ Icon::new(IconName::Plus).large().text_color(cx.theme().primary)
 ### Dialog
 
 ```rust
-use gpui_component::dialog::{Dialog, DialogAction, DialogClose, DialogFooter};
+use gpui_kit::component::dialog::{Dialog, DialogAction, DialogClose, DialogFooter};
 
 // Open from window context. `footer` takes an element, not a closure.
 // DialogClose dismisses the dialog, so no manual close call is needed.
@@ -222,7 +222,7 @@ object in the title and the result on the confirming button; see the Design
 Guides for the copy rules.
 
 ```rust
-use gpui_component::{button::ButtonVariant, dialog::DialogButtonProps};
+use gpui_kit::component::{button::ButtonVariant, dialog::DialogButtonProps};
 
 window.open_alert_dialog(cx, |alert, _, _| {
     alert
@@ -253,7 +253,7 @@ window.push_notification(
 ### Tabs
 
 ```rust
-use gpui_component::tab::{Tab, TabBar};
+use gpui_kit::component::tab::{Tab, TabBar};
 
 TabBar::new("tabs")
     .child(Tab::new("tab1").child("Overview"))
@@ -277,7 +277,7 @@ Button::new("btn").icon(IconName::Trash).tooltip("Delete")
 ### Form
 
 ```rust
-use gpui_component::form::{v_form, h_form, field};
+use gpui_kit::component::form::{v_form, h_form, field};
 
 // Vertical form
 v_form()
@@ -293,7 +293,7 @@ h_form()
 ### List (searchable, virtualized)
 
 ```rust
-use gpui_component::list::{List, ListState, ListDelegate, ListItem, ListEvent};
+use gpui_kit::component::list::{List, ListState, ListDelegate, ListItem, ListEvent};
 
 // Implement ListDelegate for your data type, then:
 let list_state = cx.new(|cx| ListState::new(MyDelegate::new(), window, cx));
@@ -313,7 +313,7 @@ cx.subscribe(&list_state, |this, _, event, cx| {
 ## Theming
 
 ```rust
-use gpui_component::ActiveTheme as _;
+use gpui_kit::component::ActiveTheme as _;
 
 // Access colors
 cx.theme().primary
@@ -334,7 +334,7 @@ div()
 ### Switch Theme
 
 ```rust
-use gpui_component::Theme;
+use gpui_kit::component::Theme;
 
 // Toggle light/dark
 cx.update_global::<Theme, _>(|theme, cx| {

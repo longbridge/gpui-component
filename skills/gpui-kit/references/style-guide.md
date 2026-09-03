@@ -12,7 +12,7 @@ Based on analysis of `Button`, `Checkbox`, `Input`, `Select`, and other componen
 use std::rc::Rc;
 
 use crate::{ActiveTheme, Disableable, Sizable, Size, StyledExt as _, /* ... */};
-use gpui::{
+use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
     StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
@@ -78,7 +78,7 @@ impl MyComponent {
 Components with mouse interactions (hover, click tracking) use `Stateful<Div>`:
 
 ```rust
-use gpui::{Stateful, StatefulInteractiveElement as _, /* ... */};
+use gpui_kit::{Stateful, StatefulInteractiveElement as _, /* ... */};
 
 #[derive(IntoElement)]
 pub struct Button {
@@ -243,7 +243,7 @@ use crate::{
 };
 
 // 3. gpui imports
-use gpui::{
+use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
     StyleRefinement, Styled, Window, div,
@@ -312,7 +312,7 @@ div()
     })
 ```
 
-Always `use gpui::prelude::FluentBuilder as _;` for `.when()` / `.when_some()`.
+Always `use gpui_kit::prelude::FluentBuilder as _;` for `.when()` / `.when_some()`.
 
 ---
 
