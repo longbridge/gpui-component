@@ -9,7 +9,7 @@ repository = "https://github.com/longbridge/gpui-component"
 readme = "README.md"
 edition.workspace = true
 publish = true
-version = "0.5.1"
+version = "0.6.0"
 
 # `links` is the documented cargo mechanism for sharing build-time metadata
 # across the dep graph: every dependent (regular OR build-dep) receives the
