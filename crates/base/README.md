@@ -47,12 +47,12 @@ For example, `Button::new("save")` has no padding, background, radius, or size b
 
 Depend on `gpui-kit`, which pins the GPUI crates `gpui-base` was built
 against and re-exports them as `gpui_kit::gpui` and `gpui_kit::platform`, with
-`gpui-base` itself at `gpui_kit::base`. Turn off the default features to skip
-the styled layers:
+`gpui-base` itself always available at `gpui_kit::base`. Turn off the default
+features to skip the styled layers:
 
 ```toml
 [dependencies]
-gpui-kit = { version = "0.6", default-features = false, features = ["base"] }
+gpui-kit = { version = "0.6", default-features = false }
 ```
 
 If Cargo reports incompatible GPUI types, check whether your application pulls

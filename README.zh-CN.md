@@ -100,7 +100,7 @@ GPUI Kit 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/
 gpui-kit = "0.6"
 ```
 
-`gpui-kit` 会一并引入 GPUI 以及 `gpui-base`、`gpui-component`、`gpui-shell` 和默认图标集，这些默认全部开启。需要 WebView 元素时加上 `webview` feature；只想保留部分层时关闭默认 feature 按需选择即可。`gpui-component` 的 feature（`inspector`、`decimal`、`tree-sitter` 及各 `tree-sitter-<language>`）在 `gpui-kit` 上同名可用。
+`gpui-kit` 始终引入 GPUI 和 `gpui-base`；`gpui-component`、`gpui-shell` 和默认图标集默认开启。需要 WebView 元素时加上 `webview` feature；只想保留部分层时关闭默认 feature 按需选择即可。`gpui-component` 的 feature（`inspector`、`decimal`、`tree-sitter` 及各 `tree-sitter-<language>`）在 `gpui-kit` 上同名可用。
 
 ### 基础示例
 

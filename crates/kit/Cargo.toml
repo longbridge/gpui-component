@@ -16,9 +16,7 @@ edition.workspace = true
 workspace = true
 
 [features]
-default = ["base", "component", "assets", "shell"]
-# The unstyled foundation, `gpui_kit::base`: behavior, focus, overlays, tokens.
-base = ["dep:gpui-base"]
+default = ["component", "assets", "shell"]
 # The styled component library, `gpui_kit::component`. Initializes `gpui-base` too.
 component = ["dep:gpui-component"]
 # JavaScript extensions for a Rust host, `gpui_kit::shell`.
@@ -27,7 +25,7 @@ shell = ["dep:gpui-shell"]
 assets = ["dep:gpui-kit-assets"]
 # The WebView element, `gpui_kit::webview`.
 webview = ["dep:gpui-wry"]
-inspector = ["gpui/inspector", "gpui-base?/inspector", "gpui-component?/inspector"]
+inspector = ["gpui/inspector", "gpui-base/inspector", "gpui-component?/inspector"]
 decimal = ["component", "gpui-component/decimal"]
 tree-sitter = ["component", "gpui-component/tree-sitter"]
 tree-sitter-languages = ["component", "gpui-component/tree-sitter-languages"]
@@ -71,7 +69,7 @@ tree-sitter-zig = ["component", "gpui-component/tree-sitter-zig"]
 [dependencies]
 gpui.workspace = true
 gpui_platform.workspace = true
-gpui-base = { workspace = true, optional = true }
+gpui-base.workspace = true
 gpui-component = { workspace = true, optional = true }
 gpui-kit-assets = { workspace = true, optional = true }
 gpui-shell = { workspace = true, optional = true }

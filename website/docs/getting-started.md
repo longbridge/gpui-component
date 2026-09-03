@@ -17,7 +17,7 @@ anyhow = "1.0"
 ```
 
 :::tip
-`gpui-kit` pulls in GPUI itself and, by default, `gpui-base`, `gpui-component`, `gpui-shell` and the default icon set. To manage your own assets, keep only the features you need:
+`gpui-kit` always pulls in GPUI and `gpui-base`, and by default `gpui-component`, `gpui-shell` and the default icon set. To manage your own assets, keep only the features you need:
 
 ```toml
 gpui-kit = { version = "0.6", default-features = false, features = ["component"] }

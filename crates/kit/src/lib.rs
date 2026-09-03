@@ -8,7 +8,7 @@
 //! | ------------- | ----------------------- | ------------- |
 //! | [`gpui`]      | `gpui`                  | always        |
 //! | [`platform`]  | `gpui_platform`         | always        |
-//! | [`base`]      | `gpui-base`             | `base` (on)      |
+//! | [`base`]      | `gpui-base`             | always           |
 //! | [`component`] | `gpui-component`        | `component` (on) |
 //! | [`assets`]    | `gpui-kit-assets` | `assets` (on)    |
 //! | [`shell`]     | `gpui-shell`            | `shell` (on)     |
@@ -50,7 +50,6 @@ pub use gpui_platform as platform;
 #[cfg(target_family = "wasm")]
 pub use gpui_web as web;
 
-#[cfg(feature = "base")]
 pub use gpui_base as base;
 /// The styled component library, with `gpui_kit::init` initializing it.
 ///
@@ -94,18 +93,16 @@ pub use gpui_platform::application;
 /// Initializes every enabled layer. Call it once, before using anything else.
 ///
 /// With the `component` feature (on by default) this is
-/// `gpui_component::init`, which also initializes `gpui-base`; with only
-/// `base` it is `gpui_base::init`. The
+/// `gpui_component::init`, which also initializes `gpui-base`; otherwise it
+/// is `gpui_base::init`. The
 /// `shell` runtime has its own [`shell::init`](gpui_shell::init) and
 /// [`shell::init_with_components`](gpui_shell::init_with_components), which
 /// the host calls when it registers its component catalog.
 pub fn init(cx: &mut gpui::App) {
     #[cfg(feature = "component")]
     gpui_component::init(cx);
-    #[cfg(all(feature = "base", not(feature = "component")))]
+    #[cfg(not(feature = "component"))]
     gpui_base::init(cx);
-    #[cfg(not(any(feature = "component", feature = "base")))]
-    let _ = cx;
 }
 
 /// Everything an application file usually needs, plus the underlying crate
@@ -125,9 +122,8 @@ pub mod prelude {
     #[cfg(feature = "component")]
     pub use gpui_component::*;
 
-    #[cfg(feature = "base")]
     pub use gpui_base;
-    #[cfg(all(feature = "base", not(feature = "component")))]
+    #[cfg(not(feature = "component"))]
     pub use gpui_base::*;
 
     #[cfg(feature = "assets")]

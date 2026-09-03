@@ -14,7 +14,7 @@ layer under a short name, so an application never lists GPUI itself:
 | --------------------- | ----------------------- | ---------------- |
 | `gpui_kit::gpui`      | `gpui`                  | always           |
 | `gpui_kit::platform`  | `gpui_platform`         | always           |
-| `gpui_kit::base`      | `gpui-base`             | `base` (on)      |
+| `gpui_kit::base`      | `gpui-base`             | always           |
 | `gpui_kit::component` | `gpui-component`        | `component` (on) |
 | `gpui_kit::assets`    | `gpui-kit-assets` | `assets` (on)    |
 | `gpui_kit::shell`     | `gpui-shell`            | `shell` (on)     |
