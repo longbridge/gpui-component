@@ -1,3 +1,3 @@
-.vitepress/cache
-.vitepress/dist
+dist/
+.astro/
 bun.lockb

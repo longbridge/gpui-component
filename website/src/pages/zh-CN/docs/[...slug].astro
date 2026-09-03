@@ -1,5 +1,5 @@
 ---
-import { getCollection } from 'astro:content';
+import { getCollection, render } from 'astro:content';
 import DocsLayout from '../../../layouts/DocsLayout.astro';
 import { zhDocsSidebar } from '../../../lib/sidebar';
 import ComponentExample from '../../../components/ComponentExample.vue';
@@ -16,7 +16,7 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await entry.render();
+const { Content } = await render(entry);
 const pathname = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
 const devVersion = import.meta.env.DEV ? 'dev' : undefined;
