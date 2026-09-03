@@ -48,13 +48,14 @@ const moreText = computed(() =>
     isZh.value ? "这里没有展示全部贡献者，完整列表请查看 GitHub 上的 " : "More contributors not shown here. See the full ",
 );
 const contributorsLinkText = computed(() => (isZh.value ? "贡献者列表" : "Contributors"));
+const bgUrl = `${import.meta.env.BASE_URL}contributors.svg`.replace(/\/+/g, '/');
 const suffixText = computed(() => (isZh.value ? "。" : " on GitHub."));
 </script>
 
 <style>
 .contributors-page {
     padding: 2.5rem 0 4rem;
-    background: url("/gpui-component/contributors.svg") no-repeat top 20px right 20px;
+    background: url(v-bind(bgUrl)) no-repeat top 20px right 20px;
 }
 
 .contributors-page h1 {
