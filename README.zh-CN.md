@@ -214,7 +214,6 @@ cargo run -p window_title
 
 Apache-2.0
 
-- 基于 [GPUI](https://github.com/zed-industries/zed) 构建。GPUI 由 Zed Industries 创建并以 Apache-2.0 许可证发布；`gpui-pre-*` 是它的快照，保留了 Zed 的许可证、版权声明与署名。
-- GPUI Kit 是独立项目，与 Zed Industries 没有隶属关系，也未获得其背书。
+- 基于 Zed Industries 的 [GPUI](https://github.com/zed-industries/zed) 构建，GPUI 同样采用 Apache-2.0。`gpui-pre-*` 是它的快照，发布时保留 Zed 的许可证与声明。
 - UI 设计基于 [shadcn/ui](https://ui.shadcn.com)，部分来自 [Reui](https://reui.io)。
 - 图标来自 [Lucide](https://lucide.dev)。
