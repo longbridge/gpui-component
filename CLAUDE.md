@@ -173,11 +173,13 @@ Layout behavior lives in `crates/base/src/dock`; `crates/ui/src/dock` is a
 presentation skin (`DockSkin`) over it. See `docs/ARCHITECTURE.md`.
 
 - **`LayoutTree`**: Pure-data layout tree, the single source of truth.
-  - `NodeKind::Split` / `Tabs` / `Tiles`: containers, addressed by `NodeId`
+  - `NodeKind::Split` / `Tabs`: containers, addressed by `NodeId`
   - Panels are addressed by `PanelId`; the tree holds no entity handles
 - **`DockArea`**: Owns the center and dock trees, reconciles them into a
   cache of container entities keyed by `NodeId`
-- **`TabGroup`** / **`TilesState`**: The `Tabs`/`Tiles` container entities
+- **`TabGroup`**: The `Tabs` container entity
+- **`Tiles`** (`crates/ui/src/dock/tiles`): A canvas of freely placed panels
+  that is itself a panel, so it sits in a tab group and base never sees it
 - **`Panel`**: Split at the seam — `gpui_base::dock::Panel` for behavior,
   `gpui_component::dock::Panel` for presentation; a panel implements both
 - **`PanelRegistry`**: Resolves a persisted `panel_name` back to a panel type
@@ -250,7 +252,7 @@ Text input system based on Rope data structure:
   already infer from `enum`. Name the type after what its variants *are*
   instead. Keep `Kind` only when no honest name covers the variant set —
   `NodeKind`'s variants straddle two levels (`Split` is an interior node,
-  `Tabs` and `Tiles` are leaves), and every domain word for the leaf level
+  `Tabs` is a leaf), and every domain word for the leaf level
   (`Pane`, most of all) would misdescribe `Split`; a vaguer name is better
   than a precise wrong one. Prefer confining such a type to `pub(crate)`.
   This governs new code; existing `Kind` names are not a rewrite target on

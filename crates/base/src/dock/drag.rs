@@ -125,9 +125,6 @@ impl AnyDrag {
 /// Where a host-owned drag landed.
 #[derive(Clone, Debug)]
 pub enum DropTarget {
-    /// A tiles canvas, where the cursor position is the landing position and
-    /// the host can read it directly.
-    Canvas,
     /// A tab group in a split layout. A split layout has no free coordinates,
     /// so the container reports the group and the edge it resolved instead.
     ///

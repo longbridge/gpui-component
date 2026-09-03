@@ -3,66 +3,59 @@
 //! record for a tile change.
 //!
 //! This module decides *where* a tile lands. It draws nothing: the tile
-//! frame, the drag-bar chrome, and the resize-handle visuals are appearance
-//! and live in `crates/ui`.
+//! frame, the drag-bar chrome, and the resize-handle visuals live beside it
+//! in [`super`].
 
-use gpui::{Bounds, EntityId, Pixels, Point, Size, px, size};
+use gpui::{Bounds, Pixels, Point, Size, px, size};
+use gpui_base::dock::PanelId;
 
 /// A tile smaller than this on either axis cannot be usefully manipulated.
-/// This is behavior, not presentation: it bounds what resize/drag arithmetic
-/// will produce.
-pub const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
+pub(super) const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
 
-/// Height of the tile's drag bar. This is hit-target geometry the skin must
-/// agree with when it paints the drag bar, not a visual constant, so it
-/// lives here rather than in `crates/ui`.
-pub const DRAG_BAR_HEIGHT: Pixels = px(30.);
+/// Height of the tile's drag bar. The snapping arithmetic and the painted bar
+/// have to agree on it.
+pub(super) const DRAG_BAR_HEIGHT: Pixels = px(30.);
 
-/// Size of the resize-handle hit target at a tile's corner/edge. Same
-/// reasoning as [`DRAG_BAR_HEIGHT`].
-pub const HANDLE_SIZE: Pixels = px(5.0);
+/// Size of the resize-handle hit target at a tile's edge.
+pub(super) const HANDLE_SIZE: Pixels = px(5.0);
 
-/// A recorded change to one tile's bounds or z-order, for undo/redo.
-///
-/// Exactly one of the bounds pair or the order pair is populated per change,
-/// mirroring the two ways a tile can be edited (move/resize vs. reorder).
+/// A recorded change to one tile's bounds, for undo/redo.
 #[derive(Clone, PartialEq, Debug)]
-pub struct TileChange {
-    tile_id: EntityId,
-    old_bounds: Option<Bounds<Pixels>>,
-    new_bounds: Option<Bounds<Pixels>>,
+pub(super) struct TileChange {
+    panel: PanelId,
+    old_bounds: Bounds<Pixels>,
+    new_bounds: Bounds<Pixels>,
 }
 
 impl TileChange {
-    /// A change record for a tile whose bounds moved or resized.
-    pub fn bounds_change(
-        tile_id: EntityId,
+    pub(super) fn new(
+        panel: PanelId,
         old_bounds: Bounds<Pixels>,
         new_bounds: Bounds<Pixels>,
     ) -> Self {
         Self {
-            tile_id,
-            old_bounds: Some(old_bounds),
-            new_bounds: Some(new_bounds),
+            panel,
+            old_bounds,
+            new_bounds,
         }
     }
 
-    pub fn tile_id(&self) -> EntityId {
-        self.tile_id
+    pub(super) fn panel(&self) -> PanelId {
+        self.panel
     }
 
-    pub fn old_bounds(&self) -> Option<Bounds<Pixels>> {
+    pub(super) fn old_bounds(&self) -> Bounds<Pixels> {
         self.old_bounds
     }
 
-    pub fn new_bounds(&self) -> Option<Bounds<Pixels>> {
+    pub(super) fn new_bounds(&self) -> Bounds<Pixels> {
         self.new_bounds
     }
 }
 
 /// Which edge (or corner) of a tile a resize drag is manipulating.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ResizeSide {
+pub(super) enum ResizeSide {
     Left,
     Right,
     Top,
@@ -79,14 +72,14 @@ pub enum ResizeSide {
 /// meaningful across the two: how far the pointer has travelled since the
 /// drag began.
 #[derive(Clone, Copy, Debug)]
-pub struct ResizeDrag {
+pub(super) struct ResizeDrag {
     side: ResizeSide,
     start_position: Point<Pixels>,
     last_bounds: Bounds<Pixels>,
 }
 
 impl ResizeDrag {
-    pub fn new(
+    pub(super) fn new(
         side: ResizeSide,
         start_position: Point<Pixels>,
         last_bounds: Bounds<Pixels>,
@@ -98,19 +91,19 @@ impl ResizeDrag {
         }
     }
 
-    pub fn side(&self) -> ResizeSide {
+    pub(super) fn side(&self) -> ResizeSide {
         self.side
     }
 
-    pub fn start_position(&self) -> Point<Pixels> {
+    pub(super) fn start_position(&self) -> Point<Pixels> {
         self.start_position
     }
 
-    pub fn last_bounds(&self) -> Bounds<Pixels> {
+    pub(super) fn last_bounds(&self) -> Bounds<Pixels> {
         self.last_bounds
     }
 
-    pub fn with_last_bounds(mut self, last_bounds: Bounds<Pixels>) -> Self {
+    pub(super) fn with_last_bounds(mut self, last_bounds: Bounds<Pixels>) -> Self {
         self.last_bounds = last_bounds;
         self
     }
@@ -118,7 +111,7 @@ impl ResizeDrag {
 
 /// Snap `edge` to the nearest value in `candidates` whose distance is strictly
 /// below `threshold`. Returns `None` when nothing is close enough.
-pub fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<Pixels> {
+pub(super) fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<Pixels> {
     let mut best: Option<Pixels> = None;
     let mut best_dist = threshold;
     for &candidate in candidates {
@@ -135,13 +128,12 @@ pub fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Opti
 /// neighboring panels and falling back to grid rounding when no neighbor edge
 /// is within `grid_size`.
 ///
-/// Which edges move is inferred from the provided `Option`s, mirroring the
-/// original `Tiles::resize`:
+/// Which edges move is inferred from the provided `Option`s:
 /// - `new_x` set                  => left edge moves (right edge pinned)
 /// - `new_width` set, `new_x` not => right edge moves (left edge pinned)
 /// - `new_y` set                  => top edge moves (bottom edge pinned)
 /// - `new_height` set, `new_y` not => bottom edge moves (top edge pinned)
-pub fn compute_resized_bounds(
+pub(super) fn compute_resized_bounds(
     previous: Bounds<Pixels>,
     new_x: Option<Pixels>,
     new_y: Option<Pixels>,
@@ -218,15 +210,7 @@ pub fn compute_resized_bounds(
 }
 
 /// Round `value` to the nearest multiple of `grid_size`.
-///
-/// This is the original `round_to_nearest_ten_with` (already grid-size
-/// parameterized, not `cx`-dependent), renamed to match the split described
-/// below and exposed directly rather than duplicated under two names.
-///
-/// The original `round_to_nearest_ten` and `round_point_to_nearest_ten` read
-/// the grid size off the theme via `cx`; base cannot see a theme, so the
-/// skin reads the grid size and passes it in here instead.
-pub fn round_to_grid(value: Pixels, grid_size: Pixels) -> Pixels {
+pub(super) fn round_to_grid(value: Pixels, grid_size: Pixels) -> Pixels {
     (value / grid_size).round() * grid_size
 }
 
@@ -237,7 +221,7 @@ pub fn round_to_grid(value: Pixels, grid_size: Pixels) -> Pixels {
 /// the same canvas. The returned point keeps `moving.origin`'s coordinate on
 /// any axis that did not snap, so the result can be assigned directly as the
 /// tile's new origin.
-pub fn magnetic_snap(
+pub(super) fn magnetic_snap(
     moving: Bounds<Pixels>,
     others: &[Bounds<Pixels>],
     threshold: Pixels,
@@ -259,7 +243,6 @@ pub fn magnetic_snap(
     let mut min_x_dist = threshold;
     let mut min_y_dist = threshold;
 
-    // Pre-calculate dragging bounds edges to avoid repeated method calls
     let drag_left = moving.left();
     let drag_right = moving.right();
     let drag_top = moving.top();
@@ -291,7 +274,6 @@ pub fn magnetic_snap(
                 break;
             }
 
-            // Pre-calculate other bounds edges
             let other_left = other.left();
             let other_right = other.right();
             let other_top = other.top();
@@ -357,12 +339,10 @@ pub fn magnetic_snap(
 /// most `dragging_width - 64px` of the tile may hang off the left edge,
 /// keeping 64px of it visible. There is no boundary on the right or bottom:
 /// the canvas scrolls.
-///
-/// `dragging_width` is the width of the tile being dragged, not a canvas
-/// size — the original `Tiles::apply_boundary_constraints` reads it from
-/// `self.dragging_initial_bounds.size.width`, the entity's own drag-tracking
-/// state, not a container/tile-list argument.
-pub fn apply_boundary_constraints(origin: Point<Pixels>, dragging_width: Pixels) -> Point<Pixels> {
+pub(super) fn apply_boundary_constraints(
+    origin: Point<Pixels>,
+    dragging_width: Pixels,
+) -> Point<Pixels> {
     let mut origin = origin;
 
     // Top boundary
@@ -382,12 +362,11 @@ pub fn apply_boundary_constraints(origin: Point<Pixels>, dragging_width: Pixels)
 /// The scrollable extent a set of tiles occupies, measured from the canvas
 /// origin.
 ///
-/// Reproduces the fold the old `Tiles::render` did before handing the result
-/// to its scrollbar: the union runs from `min(0, left)` to `max(0, right)` on
-/// each axis, so a canvas whose tiles all sit at positive coordinates reports
-/// the far edge, and one with a tile dragged past the origin reports the
-/// distance across both.
-pub fn content_size(tiles: &[Bounds<Pixels>]) -> Size<Pixels> {
+/// The union runs from `min(0, left)` to `max(0, right)` on each axis, so a
+/// canvas whose tiles all sit at positive coordinates reports the far edge,
+/// and one with a tile dragged past the origin reports the distance across
+/// both.
+pub(super) fn content_size(tiles: &[Bounds<Pixels>]) -> Size<Pixels> {
     let mut left = px(0.);
     let mut top = px(0.);
     let mut right = px(0.);

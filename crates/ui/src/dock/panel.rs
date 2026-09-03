@@ -137,6 +137,17 @@ pub trait Panel: gpui_base::dock::Panel {
     fn inner_padding(&self, cx: &App) -> bool {
         true
     }
+
+    /// Whether the tab group draws a title bar over the panel while it is the
+    /// group's only panel.
+    ///
+    /// A panel that carries its own chrome — a [`Tiles`](super::Tiles) canvas
+    /// gives every tile a title bar of its own — answers `false`, and the
+    /// group draws nothing above it. Tabs are still drawn once a second panel
+    /// joins the group: a bar with two tabs is the only way to reach either.
+    fn title_bar_visible(&self, cx: &App) -> bool {
+        true
+    }
 }
 
 /// Object-safe counterpart of [`Panel`], and the presentation half of the
@@ -150,6 +161,7 @@ pub trait PanelView: gpui_base::dock::PanelView {
     fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu;
     fn zoom_control(&self, cx: &App) -> Option<PanelControl>;
     fn inner_padding(&self, cx: &App) -> bool;
+    fn title_bar_visible(&self, cx: &App) -> bool;
 }
 
 impl<T: Panel> PanelView for Entity<T> {
@@ -186,6 +198,10 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn inner_padding(&self, cx: &App) -> bool {
         self.read(cx).inner_padding(cx)
+    }
+
+    fn title_bar_visible(&self, cx: &App) -> bool {
+        self.read(cx).title_bar_visible(cx)
     }
 }
 
@@ -300,16 +316,15 @@ impl gpui_base::dock::PanelView for PanelHandle {
 ///
 /// This is what every entry point into the dock wants:
 /// `DockLayout::tabs().panel_view(panel_handle(story), cx)`,
-/// `DockLayout::tiles().tile_view(panel_handle(story), bounds, cx)`,
 /// `DockArea::add_panel_view(panel_handle(story), ..)`,
-/// `DockArea::add_tile_view(panel_handle(story), ..)`, and the closure a
+/// `Tiles::add_panel_view(panel_handle(story), ..)`, and the closure a
 /// [`register_panel`](gpui_base::dock::register_panel) builder returns.
 ///
-/// Base's own `DockLayout::panel` / `tile` and `DockArea::add_panel` /
-/// `add_tile` also accept a panel — a `gpui_component::dock::Panel` is a
-/// `gpui_base::dock::Panel` — but they store the bare entity, and a skin
-/// cannot recover presentation from one. Such a panel still docks, drags and
-/// persists; it just draws its `panel_name` where its title would be.
+/// Base's own `DockLayout::panel` and `DockArea::add_panel` also accept a
+/// panel — a `gpui_component::dock::Panel` is a `gpui_base::dock::Panel` —
+/// but they store the bare entity, and a skin cannot recover presentation
+/// from one. Such a panel still docks, drags and persists; it just draws its
+/// `panel_name` where its title would be.
 pub fn panel_handle<P: Panel>(panel: Entity<P>) -> Arc<dyn gpui_base::dock::PanelView> {
     Arc::new(PanelHandle::new(panel))
 }
@@ -319,12 +334,11 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use gpui::{
-        AppContext as _, Bounds, Div, Empty, EventEmitter, Focusable, InteractiveElement as _,
-        ParentElement as _, Render, Stateful, Styled as _, TestAppContext, div, point, px, size,
+        AppContext as _, Div, Empty, EventEmitter, Focusable, InteractiveElement as _,
+        ParentElement as _, Render, Stateful, Styled as _, TestAppContext, div,
     };
     use gpui_base::dock::{
         DockArea, DockAreaRenderer, DockLayout, PanelEvent, TabGroupContext, TabGroupRenderer,
-        TileContext, TilesRenderer,
     };
 
     use super::*;
@@ -378,8 +392,6 @@ mod tests {
         /// What the tab bar read off each panel while it drew, or `None` for a
         /// panel it could not recover.
         tab_names: Vec<Option<SharedString>>,
-        /// The same, read by the tiles drag bar rather than the tab bar.
-        drag_bar_names: Vec<Option<SharedString>>,
         /// A read the tab bar deferred, the way an ellipsis menu defers
         /// building its items.
         deferred: Option<DeferredRead>,
@@ -426,38 +438,12 @@ mod tests {
         }
     }
 
-    impl TilesRenderer for Skin {
-        fn render_drag_bar(
-            &self,
-            tile: &TileContext,
-            window: &mut Window,
-            cx: &mut App,
-        ) -> AnyElement {
-            let handle = PanelHandle::of(tile.panel());
-            self.recovered
-                .borrow_mut()
-                .drag_bar_names
-                .push(handle.and_then(|handle| handle.tab_name(cx)));
-
-            match handle {
-                Some(handle) => div().child(handle.title(window, cx)).into_any_element(),
-                None => Empty.into_any_element(),
-            }
-        }
-    }
-
     impl DockAreaRenderer for Skin {
         fn frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
             div().id("skin-dock-area").size_full()
         }
 
         fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
-            Rc::new(Skin {
-                recovered: self.recovered.clone(),
-            })
-        }
-
-        fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
             Rc::new(Skin {
                 recovered: self.recovered.clone(),
             })
@@ -546,46 +532,6 @@ mod tests {
             recovered.borrow().tab_names,
             vec![Some(SharedString::from("Restored Tab"))],
             "the rebuilt panel reached the tab bar as a handle, not a bare entity"
-        );
-    }
-
-    /// A tile's drag bar is its title bar, so it has to reach the same
-    /// presentation the tab bar does. It does: [`TileContext::panel`] hands
-    /// over the same base handle, and the same downcast recovers it.
-    ///
-    /// This also exercises `DockLayout::tile_view`, the tiles half of the new
-    /// entry points.
-    #[gpui::test]
-    fn a_tile_drag_bar_reaches_the_same_presentation(cx: &mut TestAppContext) {
-        cx.update(|cx| {
-            let _ = gpui_base::Theme::global_mut(cx);
-        });
-        let recovered = Rc::new(RefCell::new(Recovered::default()));
-        let skin = Rc::new(Skin {
-            recovered: recovered.clone(),
-        });
-
-        let (area, cx) = cx.add_window_view(|window, cx| {
-            DockArea::new("seam", None, window, cx).with_renderer(skin)
-        });
-
-        cx.update(|window, cx| {
-            let panel = PanelHandle::new(Probe::new("Tile Tab", cx));
-            let bounds = Bounds {
-                origin: point(px(0.), px(0.)),
-                size: size(px(200.), px(150.)),
-            };
-            let layout = DockLayout::tiles().tile_view(Arc::new(panel), bounds, cx);
-            area.update(cx, |area, cx| area.set_center(layout, window, cx));
-        });
-        cx.run_until_parked();
-        recovered.borrow_mut().drag_bar_names.clear();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        assert_eq!(
-            recovered.borrow().drag_bar_names,
-            vec![Some(SharedString::from("Tile Tab"))],
-            "the drag bar can draw a title and a menu off the panel"
         );
     }
 

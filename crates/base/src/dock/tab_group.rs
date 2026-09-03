@@ -53,7 +53,7 @@ pub enum TabGroupEvent {
 ///
 /// Pushed as one value rather than one setter per fact. These are read
 /// together, and a container that updates one while leaving another stale
-/// describes a dock that cannot exist — a group on a tiles canvas that still
+/// describes a dock that cannot exist — a group in a locked dock that still
 /// reports itself droppable, or a group beside siblings that still reports
 /// itself alone. Choosing a constructor forces the container kind to be
 /// stated; anything a constructor does not grant stays off, so a container
@@ -117,9 +117,9 @@ impl TabGroupConstraints {
     /// Whether the group's place in the dock is fixed.
     ///
     /// The dock-wide lock is the whole of it. A tab group only ever sits
-    /// inside a split — a tiles canvas holds panels directly and never a tab
-    /// group — so there is no second way for a container to pin one down, and
-    /// no separate `is_dock_locked` reader that would answer identically.
+    /// inside a split, so there is no second way for a container to pin one
+    /// down, and no separate `is_dock_locked` reader that would answer
+    /// identically.
     pub fn is_locked(&self) -> bool {
         self.dock_locked
     }
@@ -353,7 +353,7 @@ impl TabGroup {
     ///
     /// One value rather than a setter per fact, because these are read
     /// together and a container that updates one while leaving another stale
-    /// describes a dock that cannot exist — a group on a tiles canvas that
+    /// describes a dock that cannot exist — a group in a locked dock that
     /// still reports itself droppable, or a group beside siblings that still
     /// reports itself alone.
     pub(crate) fn set_constraints(
@@ -731,10 +731,9 @@ impl Render for TabGroup {
                     .overflow_hidden()
                     // Both drag kinds hang off `droppable` alone. The old
                     // `TabPanel` nested a second guard inside the same
-                    // droppable test for the host-item handlers, asking
-                    // whether it sat on a tiles canvas; it never did anything,
-                    // because such a group was already locked and `droppable`
-                    // was therefore false.
+                    // droppable test for the host-item handlers; it never did
+                    // anything, because such a group was already locked and
+                    // `droppable` was therefore false.
                     .when(droppable, |this| {
                         this.on_drag_move(cx.listener(Self::on_panel_drag_move))
                             .on_drop(cx.listener(|this, drag: &DragPanel, _, cx| {
@@ -1039,13 +1038,11 @@ mod tests {
                     node.as_u64(),
                     placement
                 ),
-                InsertTarget::Tile { .. } => "drop tile".into(),
             },
             TabGroupEvent::DragDrop { target, .. } => match target {
                 DropTarget::Group { node, placement } => {
                     format!("item onto {} at {:?}", node.as_u64(), placement)
                 }
-                DropTarget::Canvas => "item onto canvas".into(),
             },
             TabGroupEvent::ClosePanel { panel } => format!("close {}", panel.as_u64()),
             TabGroupEvent::ActiveChanged { ix } => format!("active {ix}"),

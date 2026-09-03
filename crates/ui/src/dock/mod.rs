@@ -4,7 +4,9 @@
 //! state machine and the container entities all live in
 //! [`gpui_base::dock`]. This module is the skin over them: it re-exports the
 //! types a consumer needs, adds the presentation half of the panel traits
-//! (see [`panel`]), and implements base's three renderer traits.
+//! (see [`panel`]), implements base's two renderer traits, and adds the one
+//! container base deliberately does not have — [`Tiles`], a canvas of freely
+//! placed panels that is itself a panel.
 //!
 //! ```ignore
 //! let area = cx.new(|cx| {
@@ -27,8 +29,6 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{App, AppContext as _, Context, Entity, SharedString, WeakEntity, Window, actions};
 
-use crate::scroll::ScrollbarMode;
-
 /// The behavior half of the panel traits, which every panel implements
 /// alongside [`Panel`]. Exported under this name because `Panel` in this
 /// module is the presentation half that extends it.
@@ -49,16 +49,16 @@ pub use gpui_base::dock::PanelView as BasePanelView;
 /// crate and handing it back with a different meaning is worse than dropping
 /// it. A skin reads a dock through [`DockContext`].
 pub use gpui_base::dock::{
-    AnyDrag, DRAG_BAR_HEIGHT, DockArea, DockAreaRenderer, DockAreaState, DockContext, DockEvent,
-    DockLayout, DockPlacement, DockSizing, DockState, DragPanel, DropIndicator,
-    DropPlaceholderBounds, DropTarget, EditResult, HANDLE_SIZE, InsertTarget, NodeId, PaneNode,
-    PaneRef, PaneTree, PanelBuildContext, PanelBuilder, PanelEvent, PanelId, PanelInfo,
-    PanelRegistry, PanelSource, PanelState, ResizeSide, RootKind, TabGroup, TabGroupConstraints,
-    TabGroupContext, TabGroupEvent, TabGroupRenderer, TileContext, TileMeta, TilePanel, TilesEvent,
-    TilesRenderer, TilesState, register_panel,
+    AnyDrag, DockArea, DockAreaRenderer, DockAreaState, DockContext, DockEvent, DockLayout,
+    DockPlacement, DockSizing, DockState, DragPanel, DropIndicator, DropPlaceholderBounds,
+    DropTarget, EditResult, InsertTarget, NodeId, PaneNode, PaneRef, PaneTree, PanelBuildContext,
+    PanelBuilder, PanelEvent, PanelId, PanelInfo, PanelRegistry, PanelSource, PanelState, RootKind,
+    TabGroup, TabGroupConstraints, TabGroupContext, TabGroupEvent, TabGroupRenderer, TileMeta,
+    register_panel,
 };
 pub use panel::*;
 pub use tab_panel::DragPanelPreview;
+pub use tiles::{Tile, Tiles, TilesEvent};
 
 actions!(dock, [ToggleZoom, ClosePanel]);
 
@@ -70,6 +70,13 @@ pub(crate) fn init(cx: &mut App) {
     if cx.try_global::<PanelRegistry>().is_none() {
         cx.set_global(PanelRegistry::new());
     }
+    // A canvas persists like any other panel, so it is restored like one: by
+    // name, through the registry, with its own children rebuilt inside.
+    register_panel(cx, tiles::TILES_PANEL_NAME, |context, window, cx| {
+        let dock_area = context.dock_area();
+        let state = context.state().clone();
+        panel_handle(cx.new(|cx| Tiles::from_state(&state, dock_area, window, cx)))
+    });
 }
 
 /// What every part of the skin reads, and the dock area it belongs to.
@@ -83,7 +90,6 @@ pub(crate) struct SkinShared {
     area: WeakEntity<DockArea>,
     panel_style: Cell<PanelStyle>,
     toggle_button_visible: Cell<bool>,
-    tiles_scrollbar_mode: Cell<Option<ScrollbarMode>>,
     /// The dock whose resize handle is being dragged, if any. Only one can be.
     resizing_dock: Cell<Option<DockPlacement>>,
 }
@@ -99,10 +105,6 @@ impl SkinShared {
 
     pub(crate) fn is_toggle_button_visible(&self) -> bool {
         self.toggle_button_visible.get()
-    }
-
-    pub(crate) fn tiles_scrollbar_mode(&self) -> Option<ScrollbarMode> {
-        self.tiles_scrollbar_mode.get()
     }
 
     pub(crate) fn resizing_dock(&self) -> &Cell<Option<DockPlacement>> {
@@ -163,7 +165,6 @@ impl DockSkin {
                 area: cx.weak_entity(),
                 panel_style: Cell::new(PanelStyle::default()),
                 toggle_button_visible: Cell::new(true),
-                tiles_scrollbar_mode: Cell::new(None),
                 resizing_dock: Cell::new(None),
             }),
         })
@@ -193,16 +194,6 @@ impl DockSkin {
         self.shared.toggle_button_visible.set(visible);
         self.shared.notify(cx);
     }
-
-    /// When a tiles canvas shows its scrollbar. `None` follows the theme.
-    pub fn tiles_scrollbar_mode(&self) -> Option<ScrollbarMode> {
-        self.shared.tiles_scrollbar_mode()
-    }
-
-    pub fn set_tiles_scrollbar_mode(&self, mode: Option<ScrollbarMode>, cx: &mut App) {
-        self.shared.tiles_scrollbar_mode.set(mode);
-        self.shared.notify(cx);
-    }
 }
 
 #[cfg(test)]
@@ -214,8 +205,8 @@ mod tests {
     /// This reads both export lists rather than naming them, because the way
     /// this went wrong was checking the list against a description of base
     /// instead of against base itself: a hand-written list cannot notice a
-    /// name base gained after it was written. `TilesState` and `TilesEvent`
-    /// were missing when this was added.
+    /// name base gained after it was written. Two container names were
+    /// missing when this was added.
     ///
     /// The parse is deliberately crude — it takes the braces of each
     /// `pub use ...::{..}` and the tail of each single-name `pub use a::b;` —

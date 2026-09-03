@@ -68,7 +68,7 @@ init(_props, cx) {
 }
 ```
 
-`layout_changed` fires on every edit, including each step of a tile drag, so save on a timer rather than on the event.
+`layout_changed` fires on every edit, including each step of a dock resize, so save on a timer rather than on the event.
 
 ## Panels
 
@@ -141,7 +141,7 @@ The same holds one step further in. A panel that *is* registered but whose class
 
 ## Drawing the chrome
 
-Six handlers, all optional, hung on the `dock_area(...)` element:
+Four handlers, all optional, hung on the `dock_area(...)` element:
 
 | Handler | Draws |
 | --- | --- |
@@ -149,8 +149,6 @@ Six handlers, all optional, hung on the `dock_area(...)` element:
 | `empty_group(group => …)` | What a group with no displayed panel shows |
 | `drop_indicator(drop => …)` | Where a dragged panel would land |
 | `dock(dock => …)` | One dock's frame around its content |
-| `tile_drag_bar(tile => …)` | The strip a tile is dragged by |
-| `tile_resize_handles(tile => …)` | A tile's resize affordances |
 
 Each is first called from inside GPUI's layout pass and is given base's **resolved** state — never a drag event, a mouse position or a hit test, because base attaches all of that to the elements it gets back. The resulting description is cached by handler and resolved state, so unchanged frames replay it in Rust without entering JavaScript.
 
@@ -194,11 +192,6 @@ A **command** carries no script value at all. It names a container in the area a
 | `drop_tab(group, index?)` | drop | Accepts a dragged panel here; no index appends |
 | `toggle_dock(dock)` | click | Opens or closes the dock |
 | `resize_dock(dock)` | drag | Drags the dock's edge |
-| `move_tile(tile)` | drag | Moves the tile around its canvas |
-| `resize_tile(tile, side)` | drag | Drags one edge or corner |
-| `raise_tile(tile)` | press | Brings the tile above the others |
-| `toggle_tile_zoom(tile)` | click | Zooms the tile to fill its dock |
-| `close_tile(tile)` | click | Closes the tile |
 
 Every one takes the object its handler was given as its first argument. They belong on a `div`, an `h_flex` or a `v_flex`: a `Button` builds its own interior and has nowhere to put one.
 
@@ -227,20 +220,6 @@ Base clamps, snaps and rounds everything a drag produces before the next frame s
 
 A handler that forgets `dock_content()` still shows its panels — they are drawn after what it returned, with a warning — rather than silently losing them.
 
-## Tiles
-
-A region can be a free-floating canvas instead of a tab group. Pass `bounds` and the panel becomes a tile:
-
-```js
-this.dock.add_panel(cx.new(Chart), {
-  name: "chart",
-  placement: "center",
-  bounds: { x: 40, y: 40, width: 320, height: 240 },
-});
-```
-
-Tiles need their own two handlers, because base draws nothing there either: `tile_drag_bar` (whose height is fixed at base's drag-bar height, which the snapping arithmetic assumes) and `tile_resize_handles`. Both get a `tile` with **already-resolved** bounds.
-
 ## The whole surface
 
 ```js
@@ -255,7 +234,7 @@ area.is_zoomed();                       area.zoom_out();
 area.on("layout_changed", handler);     area.release();
 ```
 
-A locked area cannot be rearranged or dropped into. Dock and tile resizing stays available, so “lock layout” freezes where panels live without freezing their usable size.
+A locked area cannot be rearranged or dropped into. Dock resizing stays available, so “lock layout” freezes where panels live without freezing their usable size.
 
 ## A complete example
 

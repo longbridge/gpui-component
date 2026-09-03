@@ -104,9 +104,31 @@ self.dock_area.update(cx, |area, cx| {
 });
 ```
 
-用 `h_split()` 和 `v_split()` 创建横向与纵向分割，用 `tabs()` 创建标签组，用 `tiles()` 创建可自由定位的画布。分割尺寸为 `None` 时会填满剩余空间。
+用 `h_split()` 和 `v_split()` 创建横向与纵向分割，用 `tabs()` 创建标签组。分割尺寸为 `None` 时会填满剩余空间。
 
 DockArea 还通过 `DockPlacement` 支持左、右和底部区域。运行时可以添加、移除、激活、最大化或移动 Panel；用户操作会触发 `DockEvent`，其中 `LayoutChanged` 可用于持久化。
+
+## 自由摆放的画布
+
+`Tiles` 是一块承载其他 Panel 的 Panel，子 Panel 以自由坐标摆放：每个 tile 都能通过标题栏拖动、从边缘调整大小、吸附到相邻 tile 和主题网格，并可放大到占满整个 Dock。先创建画布、往里添加 Panel，再像普通 Panel 一样停靠：
+
+```rust
+use gpui_component::dock::{DockLayout, Tiles, panel_handle};
+
+let tiles = cx.new(|cx| Tiles::new(dock_area.downgrade(), window, cx));
+tiles.update(cx, |tiles, cx| {
+    tiles.set_scrollbar_mode(Some(ScrollbarMode::Auto), cx);
+    tiles.add_panel(
+        chart,
+        Bounds::new(point(px(20.), px(20.)), size(px(380.), px(280.))),
+        window,
+        cx,
+    );
+});
+let layout = DockLayout::tabs().panel_view(panel_handle(tiles), cx);
+```
+
+只放着一块画布的标签组不会在画布上方再画标题栏，因为每个 tile 都自带标题栏。画布会随整个布局一起持久化，并按名字恢复，无需额外注册；宿主自定义的拖拽物落到画布上时，会以 `TilesEvent::DragDrop` 从画布 entity 发出。
 
 ## 恢复与持久化
 
@@ -144,8 +166,6 @@ Dock 状态兼容旧版本保存的布局。对于已经从应用移除的 Panel
 ```rust
 self.dock_skin.set_panel_style(PanelStyle::default(), cx);
 self.dock_skin.set_toggle_button_visible(true, cx);
-self.dock_skin
-    .set_tiles_scrollbar_mode(Some(ScrollbarMode::Auto), cx);
 ```
 
 如果需要完全不同的视觉，可以实现 `gpui-base` 的渲染器 traits；同一份布局数据和操作逻辑仍然可以复用。

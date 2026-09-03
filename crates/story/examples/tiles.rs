@@ -4,8 +4,8 @@ use gpui_component::{
     ActiveTheme, Root, Sizable, TitleBar,
     dock::{
         BasePanel, BasePanelView, DockArea, DockAreaState, DockEvent, DockLayout, DockSkin, Panel,
-        PanelBuildContext, PanelEvent, PanelHandle, PanelInfo, PanelRegistry, PanelState,
-        panel_handle, register_panel,
+        PanelBuildContext, PanelEvent, PanelHandle, PanelInfo, PanelRegistry, PanelState, Tiles,
+        TilesEvent, panel_handle, register_panel,
     },
     input::{Input, InputState},
     scroll::ScrollbarMode,
@@ -154,13 +154,12 @@ struct DockAreaTab {
 
 impl StoryTiles {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let (dock_area, skin) = DockSkin::dock_area(
+        let (dock_area, _skin) = DockSkin::dock_area(
             TILES_DOCK_AREA.id,
             Some(TILES_DOCK_AREA.version),
             window,
             cx,
         );
-        skin.set_tiles_scrollbar_mode(Some(ScrollbarMode::Always), cx);
         let weak_dock_area = dock_area.downgrade();
 
         match Self::load_tiles(dock_area.clone(), window, cx) {
@@ -177,6 +176,7 @@ impl StoryTiles {
             &dock_area,
             window,
             |this, dock_area, ev: &DockEvent, window, cx| match ev {
+                // A tile move or resize reports here too, through the canvas.
                 DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
                 DockEvent::DragDrop { item, target } => {
                     println!("drag drop: {:?} on {:?}", item, target);
@@ -283,14 +283,21 @@ impl StoryTiles {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let dock_item = Self::init_default_layout(window, cx);
+        let dock_item = Self::init_default_layout(dock_area.clone(), window, cx);
         _ = dock_area.update(cx, |dock_area, cx| {
             dock_area.set_center(dock_item, window, cx);
             Self::save_tiles(&dock_area.dump(cx)).unwrap();
         });
     }
 
-    fn init_default_layout(window: &mut Window, cx: &mut App) -> DockLayout {
+    /// The center is one `Tiles` canvas, which is a panel like any other: it
+    /// sits in a tab group, and the group draws no title over it because the
+    /// canvas titles every tile itself.
+    fn init_default_layout(
+        dock_area: WeakEntity<DockArea>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> DockLayout {
         const PANELS: usize = 4;
 
         // Panel size: 380x280, Gap: 20px, Starting position: (20, 20)
@@ -301,23 +308,38 @@ impl StoryTiles {
         let start_y = px(20.);
         let cols = 4;
 
-        (0..PANELS).fold(DockLayout::tiles(), |layout, i| {
-            let story = if i % 2 == 0 {
-                panel_handle(StoryContainer::panel::<ButtonStory>(window, cx))
-            } else {
-                panel_handle(StoryContainer::panel::<IconStory>(window, cx))
-            };
-            let row = i / cols;
-            let col = i % cols;
-            let x = start_x + (panel_width + gap) * col as f32;
-            let y = start_y + (panel_height + gap) * row as f32;
+        let tiles = cx.new(|cx| Tiles::new(dock_area, window, cx));
+        tiles.update(cx, |tiles, cx| {
+            tiles.set_scrollbar_mode(Some(ScrollbarMode::Always), cx);
+            for i in 0..PANELS {
+                let story = if i % 2 == 0 {
+                    panel_handle(StoryContainer::panel::<ButtonStory>(window, cx))
+                } else {
+                    panel_handle(StoryContainer::panel::<IconStory>(window, cx))
+                };
+                let row = i / cols;
+                let col = i % cols;
+                let x = start_x + (panel_width + gap) * col as f32;
+                let y = start_y + (panel_height + gap) * row as f32;
 
-            layout.tile_view(
-                panel_handle(ContainerPanel::new(story, window, cx)),
-                Bounds::new(point(x, y), size(panel_width, panel_height)),
-                cx,
-            )
+                tiles.add_panel(
+                    ContainerPanel::new(story, window, cx),
+                    Bounds::new(point(x, y), size(panel_width, panel_height)),
+                    window,
+                    cx,
+                );
+            }
+        });
+        // A host-owned drag dropped on the canvas is the canvas's to report;
+        // the area only hears about drops on its tab groups.
+        cx.subscribe(&tiles, |_, _, event: &TilesEvent, _| {
+            if let TilesEvent::DragDrop { item } = event {
+                println!("drag drop: {:?} on the canvas", item);
+            }
         })
+        .detach();
+
+        DockLayout::tabs().panel_view(panel_handle(tiles), cx)
     }
 
     pub fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {

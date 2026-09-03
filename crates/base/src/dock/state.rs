@@ -105,6 +105,13 @@ pub enum PanelInfo {
     Tabs { active_index: usize },
     #[serde(rename = "panel")]
     Panel(serde_json::Value),
+    /// The placement of each child of a tiles canvas, parallel to
+    /// `PanelState::children`.
+    ///
+    /// Schema only. The layout tree reads a node carrying this as an opaque
+    /// leaf and hands it, children and all, to the panel builder registered
+    /// under its `panel_name`; `gpui_component::dock::Tiles` is that panel
+    /// and the one writer and reader of these metas.
     #[serde(rename = "tiles")]
     Tiles { metas: Vec<TileMeta> },
 }

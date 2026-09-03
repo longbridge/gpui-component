@@ -104,9 +104,31 @@ self.dock_area.update(cx, |area, cx| {
 });
 ```
 
-Use `h_split()` and `v_split()` for rows and columns, `tabs()` for a tab group, and `tiles()` for a free-positioning canvas. A `None` split size fills the remaining space.
+Use `h_split()` and `v_split()` for rows and columns and `tabs()` for a tab group. A `None` split size fills the remaining space.
 
 The Dock area also supports left, right, and bottom regions through `DockPlacement`. Panels can be added, removed, activated, zoomed, and moved at runtime; user operations emit `DockEvent`, including `LayoutChanged` for persistence.
+
+## Free-positioning canvas
+
+`Tiles` is a panel that holds other panels at free positions. Each tile is dragged by its title bar, resized from its edges, snapped to its neighbours and to the theme's grid, and zoomed to fill the dock. Build one, add panels to it, and dock it like any other panel:
+
+```rust
+use gpui_component::dock::{DockLayout, Tiles, panel_handle};
+
+let tiles = cx.new(|cx| Tiles::new(dock_area.downgrade(), window, cx));
+tiles.update(cx, |tiles, cx| {
+    tiles.set_scrollbar_mode(Some(ScrollbarMode::Auto), cx);
+    tiles.add_panel(
+        chart,
+        Bounds::new(point(px(20.), px(20.)), size(px(380.), px(280.))),
+        window,
+        cx,
+    );
+});
+let layout = DockLayout::tabs().panel_view(panel_handle(tiles), cx);
+```
+
+A tab group holding only a canvas draws no title bar over it, because every tile carries its own. The canvas persists with the rest of the layout and is restored by name, so nothing has to be registered for it; a host-owned drag dropped on it arrives as `TilesEvent::DragDrop` on the canvas entity.
 
 ## Restore and persist layouts
 
@@ -144,8 +166,6 @@ Dock state retains compatibility with layouts saved by earlier releases. Keep a 
 ```rust
 self.dock_skin.set_panel_style(PanelStyle::default(), cx);
 self.dock_skin.set_toggle_button_visible(true, cx);
-self.dock_skin
-    .set_tiles_scrollbar_mode(Some(ScrollbarMode::Auto), cx);
 ```
 
 For complete control, implement the renderer traits in `gpui-base`. The same layout data and operations can then drive an entirely different Dock style.

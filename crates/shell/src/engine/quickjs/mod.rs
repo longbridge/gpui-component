@@ -5860,7 +5860,7 @@ globalThis.__gpui = (() => {
     const handle = value?.__dock;
     if (typeof handle !== "number") {
       throw new TypeError(
-        api + " expects the group, dock or tile your chrome handler was given as its first argument",
+        api + " expects the group or dock your chrome handler was given as its first argument",
       );
     }
     return handle;
@@ -5871,13 +5871,6 @@ globalThis.__gpui = (() => {
       throw new TypeError(api + " expects a tab group, which is what tab_bar and empty_group are given");
     }
     return group.node;
-  };
-
-  const tilePanel = (tile, api) => {
-    if (typeof tile?.panel?.id !== "number") {
-      throw new TypeError(api + " expects a tile, which is what tile_drag_bar and tile_resize_handles are given");
-    }
-    return tile.panel.id;
   };
 
   // Commands, not callbacks. A chrome handler runs once per frame for as long
@@ -5923,44 +5916,7 @@ globalThis.__gpui = (() => {
     __apply(this.__id, "resize_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
     return this;
   };
-  methods.move_tile = function (tile) {
-    const api = "move_tile(tile)";
-    __apply(this.__id, "move_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
-    return this;
-  };
-  methods.resize_tile = function (tile, side) {
-    const api = "resize_tile(tile, side)";
-    const name = String(side ?? "");
-    if (!["left", "right", "top", "bottom", "bottom_right"].includes(name)) {
-      throw new TypeError(api + ' expects "left", "right", "top", "bottom" or "bottom_right"');
-    }
-    __apply(this.__id, "resize_tile", [dockTarget(tile, api), tilePanel(tile, api), name]);
-    return this;
-  };
-  methods.raise_tile = function (tile) {
-    const api = "raise_tile(tile)";
-    __apply(this.__id, "raise_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
-    return this;
-  };
-  methods.toggle_tile_zoom = function (tile) {
-    const api = "toggle_tile_zoom(tile)";
-    __apply(this.__id, "toggle_tile_zoom", [dockTarget(tile, api), tilePanel(tile, api)]);
-    return this;
-  };
-  methods.close_tile = function (tile) {
-    const api = "close_tile(tile)";
-    __apply(this.__id, "close_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
-    return this;
-  };
-
-  const DOCK_CHROME = [
-    "tab_bar",
-    "empty_group",
-    "drop_indicator",
-    "dock",
-    "tile_drag_bar",
-    "tile_resize_handles",
-  ];
+  const DOCK_CHROME = ["tab_bar", "empty_group", "drop_indicator", "dock"];
 
   // The six hooks are own properties of the one element that has them, rather
   // than prototype methods: every other element in the tree would otherwise
@@ -7675,9 +7631,7 @@ impl ShellRuntime {
             | "tab_bar"
             | "empty_group"
             | "drop_indicator"
-            | "dock"
-            | "tile_drag_bar"
-            | "tile_resize_handles" => {
+            | "dock" => {
                 // A handler registered from inside a virtual list's item
                 // renderer has nowhere to live. Callbacks belong to the
                 // snapshot that registered them and are retired with it; the
@@ -7969,8 +7923,7 @@ impl ShellRuntime {
             // as the dock is on screen, so a callback registered inside one
             // would pile up the way a virtual list's row handlers would.
             "select_tab" | "close_panel" | "toggle_zoom" | "drag_tab" | "drop_tab"
-            | "toggle_dock" | "resize_dock" | "move_tile" | "resize_tile" | "raise_tile"
-            | "toggle_tile_zoom" | "close_tile" => {
+            | "toggle_dock" | "resize_dock" => {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "select_tab" => "select_tab",
@@ -7979,12 +7932,7 @@ impl ShellRuntime {
                     "drag_tab" => "drag_tab",
                     "drop_tab" => "drop_tab",
                     "toggle_dock" => "toggle_dock",
-                    "resize_dock" => "resize_dock",
-                    "move_tile" => "move_tile",
-                    "resize_tile" => "resize_tile",
-                    "raise_tile" => "raise_tile",
-                    "toggle_tile_zoom" => "toggle_tile_zoom",
-                    _ => "close_tile",
+                    _ => "resize_dock",
                 };
                 if !bridged
                     .first()
@@ -7994,7 +7942,8 @@ impl ShellRuntime {
                     return Err(Exception::throw_type(
                         ctx,
                         &format!(
-                            "{name}(...) expects the group, dock or tile its chrome handler was                              given as its first argument"
+                            "{name}(...) expects the group or dock its chrome handler was given \
+                             as its first argument"
                         ),
                     ));
                 }
@@ -9513,8 +9462,6 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "empty_group" => "empty_group",
         "drop_indicator" => "drop_indicator",
         "dock" => "dock",
-        "tile_drag_bar" => "tile_drag_bar",
-        "tile_resize_handles" => "tile_resize_handles",
         "on_change" => "on_change",
         "on_confirm" => "on_confirm",
         "on_dismiss" => "on_dismiss",

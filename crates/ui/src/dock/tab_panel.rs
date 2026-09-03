@@ -160,7 +160,6 @@ fn left_top_group(node: &PaneNode) -> Option<NodeId> {
     match node.kind() {
         PaneRef::Tabs { .. } => Some(node.id()),
         PaneRef::Split { children, .. } => children.first().and_then(left_top_group),
-        PaneRef::Tiles { .. } => None,
     }
 }
 
@@ -175,7 +174,6 @@ fn right_top_group(node: &PaneNode) -> Option<NodeId> {
             gpui::Axis::Horizontal => children.last(),
         }
         .and_then(right_top_group),
-        PaneRef::Tiles { .. } => None,
     }
 }
 
@@ -705,7 +703,15 @@ impl TabGroupRenderer for TabGroupSkin {
         match visible.as_slice() {
             [] => Empty.into_any_element(),
             [ix] if self.shared.panel_style() == PanelStyle::Auto => {
-                self.render_title(group, *ix, window, cx)
+                // A panel that draws its own chrome — a `Tiles` canvas — asks
+                // for no title over it. A bare entity has no presentation to
+                // ask, and gets the title its name is drawn in.
+                let wants_title = PanelHandle::of(&group.panels()[*ix])
+                    .is_none_or(|handle| handle.title_bar_visible(cx));
+                match wants_title {
+                    true => self.render_title(group, *ix, window, cx),
+                    false => Empty.into_any_element(),
+                }
             }
             _ => self.render_tabs(group, window, cx),
         }
@@ -782,10 +788,7 @@ mod tests {
     use gpui::{
         Entity, EventEmitter, FocusHandle, Focusable, Pixels, TestAppContext, VisualTestContext,
     };
-    use gpui_base::dock::{
-        DockArea, DockAreaRenderer, DockLayout, DockPlacement, PanelEvent, TileContext,
-        TilesRenderer,
-    };
+    use gpui_base::dock::{DockArea, DockAreaRenderer, DockLayout, DockPlacement, PanelEvent};
 
     use super::*;
     use crate::dock::{
@@ -853,24 +856,12 @@ mod tests {
         }
     }
 
-    impl TilesRenderer for Recorder {
-        fn render_drag_bar(&self, _: &TileContext, _: &mut Window, _: &mut App) -> AnyElement {
-            Empty.into_any_element()
-        }
-    }
-
     impl DockAreaRenderer for Recorder {
         fn frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
             div().id("recorder").size_full()
         }
 
         fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
-            Rc::new(Recorder {
-                log: self.log.clone(),
-            })
-        }
-
-        fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
             Rc::new(Recorder {
                 log: self.log.clone(),
             })
