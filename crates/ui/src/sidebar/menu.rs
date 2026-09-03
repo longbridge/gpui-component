@@ -1,7 +1,5 @@
 use crate::{
-    ActiveTheme as _, Collapsible, Icon, IconName, Placement, Sizable as _, StyledExt,
-    button::{Button, ButtonVariants as _},
-    h_flex,
+    ActiveTheme as _, Collapsible, Icon, IconName, Placement, StyledExt, h_flex,
     menu::{ContextMenuExt, PopupMenu},
     sidebar::SidebarItem,
     tooltip::{ManagedTooltipExt as _, Tooltip},
@@ -9,9 +7,11 @@ use crate::{
 };
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, div, percentage, prelude::FluentBuilder,
+    ParentElement as _, SharedString, StyleRefinement, Styled, Window, div, percentage,
+    prelude::FluentBuilder,
 };
+use gpui_base::Button as BaseButton;
+use rust_i18n::t;
 use std::rc::Rc;
 
 /// Menu for the [`super::Sidebar`]
@@ -260,126 +260,141 @@ impl SidebarItem for SidebarMenuItem {
             .as_ref()
             .map_or(false, |s| !is_collapsed && *s.read(cx));
 
+        let item = BaseButton::new("item")
+            .accessibility_label(self.label.clone())
+            .disabled(is_disabled)
+            .h_full()
+            .flex_1()
+            .min_w_0()
+            .overflow_x_hidden()
+            .p_2()
+            .gap_x_2()
+            .rounded(cx.theme().radius)
+            .text_sm()
+            .when(is_hoverable, |this| {
+                this.hover(|this| {
+                    this.bg(cx.theme().sidebar_accent.opacity(0.8))
+                        .text_color(cx.theme().sidebar_accent_foreground)
+                })
+            })
+            .when(is_active, |this| {
+                this.font_medium()
+                    .bg(cx.theme().tokens.sidebar_accent)
+                    .text_color(cx.theme().sidebar_accent_foreground)
+            })
+            .focus_visible(|this| {
+                this.bg(cx.theme().sidebar_accent)
+                    .text_color(cx.theme().sidebar_accent_foreground)
+            })
+            .when_some(self.icon.clone(), |this, icon| this.child(icon))
+            .when(is_collapsed, |this| {
+                this.justify_center().when(is_active, |this| {
+                    this.bg(cx.theme().tokens.sidebar_accent)
+                        .text_color(cx.theme().sidebar_accent_foreground)
+                })
+            })
+            .when(!is_collapsed, |this| {
+                this.h_7().child(
+                    h_flex()
+                        .flex_1()
+                        .gap_x_2()
+                        .justify_between()
+                        .overflow_x_hidden()
+                        .child(
+                            h_flex()
+                                .flex_1()
+                                .overflow_x_hidden()
+                                .child(self.label.clone()),
+                        )
+                        .when_some(self.suffix.clone(), |this, suffix| {
+                            this.child(suffix(window, cx).into_any_element())
+                        }),
+                )
+            })
+            .when(is_disabled, |this| {
+                this.text_color(cx.theme().muted_foreground)
+            })
+            .when(!is_disabled, |this| {
+                this.on_click({
+                    let open_state = open_state.clone();
+                    move |ev, window, cx| {
+                        if click_to_open {
+                            if let Some(ref s) = open_state {
+                                s.update(cx, |is_open: &mut bool, cx| {
+                                    *is_open = true;
+                                    cx.notify();
+                                });
+                            }
+                        } else if click_to_toggle {
+                            if let Some(ref s) = open_state {
+                                s.update(cx, |is_open: &mut bool, cx| {
+                                    *is_open = !*is_open;
+                                    cx.notify();
+                                });
+                            }
+                        }
+                        handler(ev, window, cx)
+                    }
+                })
+            })
+            .map(|this| {
+                if let Some(tooltip) = collapsed_tooltip {
+                    this.managed_tooltip_at(Placement::Right, move |window, cx| {
+                        Tooltip::new(tooltip.clone()).build(window, cx)
+                    })
+                } else {
+                    this
+                }
+            })
+            .map(|this| {
+                if let Some(context_menu) = self.context_menu {
+                    this.context_menu(move |menu, window, cx| context_menu(menu, window, cx))
+                        .into_any_element()
+                } else {
+                    this.into_any_element()
+                }
+            });
+
         div()
             .id(id.clone())
             .w_full()
-            .child(
-                h_flex()
-                    .size_full()
-                    .id("item")
-                    .overflow_x_hidden()
-                    .flex_shrink_0()
-                    .p_2()
-                    .gap_x_2()
-                    .rounded(cx.theme().radius)
-                    .text_sm()
-                    .when(is_hoverable, |this| {
-                        this.hover(|this| {
-                            this.bg(cx.theme().sidebar_accent.opacity(0.8))
-                                .text_color(cx.theme().sidebar_accent_foreground)
-                        })
-                    })
-                    .when(is_active, |this| {
-                        this.font_medium()
-                            .bg(cx.theme().tokens.sidebar_accent)
-                            .text_color(cx.theme().sidebar_accent_foreground)
-                    })
-                    .when_some(self.icon.clone(), |this, icon| this.child(icon))
-                    .when(is_collapsed, |this| {
-                        this.justify_center().when(is_active, |this| {
-                            this.bg(cx.theme().tokens.sidebar_accent)
-                                .text_color(cx.theme().sidebar_accent_foreground)
-                        })
-                    })
-                    .when(!is_collapsed, |this| {
-                        this.h_7()
+            .child(h_flex().size_full().gap_x_1().child(item).when_some(
+                open_state.clone(),
+                |this, open_state| {
+                    let action = if is_open {
+                        t!("Dock.Collapse")
+                    } else {
+                        t!("Dock.Expand")
+                    };
+                    this.child(
+                        BaseButton::new("caret")
+                            .accessibility_label(format!("{action} {}", self.label))
+                            .disabled(is_disabled)
+                            .size_5()
+                            .flex_shrink_0()
+                            .justify_center()
+                            .rounded(cx.theme().radius)
+                            .hover(|this| this.bg(cx.theme().sidebar_accent.opacity(0.8)))
+                            .focus_visible(|this| this.bg(cx.theme().sidebar_accent))
                             .child(
-                                h_flex()
-                                    .flex_1()
-                                    .gap_x_2()
-                                    .justify_between()
-                                    .overflow_x_hidden()
-                                    .child(
-                                        h_flex()
-                                            .flex_1()
-                                            .overflow_x_hidden()
-                                            .child(self.label.clone()),
-                                    )
-                                    .when_some(self.suffix.clone(), |this, suffix| {
-                                        this.child(suffix(window, cx).into_any_element())
-                                    }),
+                                Icon::new(IconName::ChevronRight)
+                                    .size_4()
+                                    .when(is_open, |this| this.rotate(percentage(90. / 360.))),
                             )
-                            .when_some(open_state.clone(), |this, open_state| {
-                                this.child(
-                                    Button::new("caret")
-                                        .xsmall()
-                                        .ghost()
-                                        .icon(
-                                            Icon::new(IconName::ChevronRight)
-                                                .size_4()
-                                                .when(is_open, |this| {
-                                                    this.rotate(percentage(90. / 360.))
-                                                }),
-                                        )
-                                        .on_click({
-                                            move |_, _, cx| {
-                                                // Avoid trigger item click, just expand/collapse submenu
-                                                cx.stop_propagation();
-                                                open_state.update(cx, |is_open, cx| {
-                                                    *is_open = !*is_open;
-                                                    cx.notify();
-                                                })
-                                            }
-                                        }),
-                                )
-                            })
-                    })
-                    .when(is_disabled, |this| {
-                        this.text_color(cx.theme().muted_foreground)
-                    })
-                    .when(!is_disabled, |this| {
-                        this.on_click({
-                            let open_state = open_state.clone();
-                            move |ev, window, cx| {
-                                if click_to_open {
-                                    if let Some(ref s) = open_state {
-                                        s.update(cx, |is_open: &mut bool, cx| {
-                                            *is_open = true;
-                                            cx.notify();
-                                        });
-                                    }
-                                } else if click_to_toggle {
-                                    if let Some(ref s) = open_state {
-                                        s.update(cx, |is_open: &mut bool, cx| {
-                                            *is_open = !*is_open;
-                                            cx.notify();
-                                        });
-                                    }
+                            .on_click({
+                                move |_, _, cx| {
+                                    // Keep expanding/collapsing independent from
+                                    // activating the parent menu item.
+                                    cx.stop_propagation();
+                                    open_state.update(cx, |is_open, cx| {
+                                        *is_open = !*is_open;
+                                        cx.notify();
+                                    })
                                 }
-                                handler(ev, window, cx)
-                            }
-                        })
-                    })
-                    .map(|this| {
-                        if let Some(tooltip) = collapsed_tooltip {
-                            this.managed_tooltip_at(Placement::Right, move |window, cx| {
-                                Tooltip::new(tooltip.clone()).build(window, cx)
-                            })
-                        } else {
-                            this
-                        }
-                    })
-                    .map(|this| {
-                        if let Some(context_menu) = self.context_menu {
-                            this.context_menu(move |menu, window, cx| {
-                                context_menu(menu, window, cx)
-                            })
-                            .into_any_element()
-                        } else {
-                            this.into_any_element()
-                        }
-                    }),
-            )
+                            }),
+                    )
+                },
+            ))
             .when(is_open, |this| {
                 this.child(
                     v_flex()

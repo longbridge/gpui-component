@@ -4,11 +4,12 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use gpui::TextAlign;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    AccessibleAction, Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement as _, Pixels, Point, Render, Role, ScrollHandle, ScrollWheelEvent, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, UTF16Selection, Window, actions,
+    div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -349,6 +350,7 @@ pub struct InputBaseState<M: InputModeKind> {
     /// colours once and then never see them as unset again, which is the same
     /// freeze in a different place.
     projected_editor_style: InputEditorStyle,
+    accessibility: InputAccessibility,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -400,6 +402,79 @@ pub struct InputBaseState<M: InputModeKind> {
     _subscriptions: Vec<Subscription>,
 
     pub(super) auto_scroll: AutoScroll,
+}
+
+/// Accessibility metadata projected by an input's presentation facade.
+///
+/// The editing state owns focus, so its rendered node must also own the role,
+/// name, value, and actions that assistive technology associates with that
+/// focus target.
+#[derive(Clone, Default)]
+pub struct InputAccessibility {
+    role: Option<Role>,
+    author_id: Option<SharedString>,
+    label: Option<SharedString>,
+    placeholder: Option<SharedString>,
+    value: Option<String>,
+    editable: bool,
+}
+
+impl InputAccessibility {
+    pub fn new(role: Option<Role>) -> Self {
+        Self {
+            role,
+            ..Self::default()
+        }
+    }
+
+    pub fn with_author_id(mut self, author_id: Option<SharedString>) -> Self {
+        self.author_id = author_id;
+        self
+    }
+
+    pub fn with_label(mut self, label: Option<SharedString>) -> Self {
+        self.label = label;
+        self
+    }
+
+    pub fn with_placeholder(mut self, placeholder: Option<SharedString>) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    pub fn with_value(mut self, value: Option<String>) -> Self {
+        self.value = value;
+        self
+    }
+
+    pub fn editable(mut self, editable: bool) -> Self {
+        self.editable = editable;
+        self
+    }
+
+    pub fn role(&self) -> Option<Role> {
+        self.role
+    }
+
+    pub fn author_id(&self) -> Option<&SharedString> {
+        self.author_id.as_ref()
+    }
+
+    pub fn label(&self) -> Option<&SharedString> {
+        self.label.as_ref()
+    }
+
+    pub fn placeholder(&self) -> Option<&SharedString> {
+        self.placeholder.as_ref()
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.value.as_deref()
+    }
+
+    pub fn is_editable(&self) -> bool {
+        self.editable
+    }
 }
 
 /// Read-only styling data exposed to presentation facades.
@@ -660,6 +735,11 @@ impl<M: InputModeKind> InputBaseState<M> {
             mask_pattern_set: false,
             editor_style: InputEditorStyle::default(),
             projected_editor_style: InputEditorStyle::default(),
+            accessibility: InputAccessibility::new(Some(if M::MULTI_LINE {
+                Role::MultilineTextInput
+            } else {
+                Role::TextInput
+            })),
             diagnostic_popover: None,
             context_menu_handler: None,
             pending_context_menu: None,
@@ -750,6 +830,18 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
         self.editor_style = style.clone();
         self.projected_editor_style = style;
+    }
+
+    /// Project accessibility metadata onto the node that owns input focus.
+    #[doc(hidden)]
+    pub fn set_accessibility(&mut self, accessibility: InputAccessibility) {
+        self.accessibility = accessibility;
+    }
+
+    /// Read the metadata currently projected onto the focused input node.
+    #[doc(hidden)]
+    pub fn accessibility(&self) -> &InputAccessibility {
+        &self.accessibility
     }
 
     /// Set presentation padding for multi-line text and its scrollbar layout.
@@ -3070,6 +3162,15 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
             .projected_editor_style
             .resolved(&crate::Theme::global(cx).tokens);
         let entity = cx.entity();
+        let InputAccessibility {
+            role,
+            author_id,
+            label,
+            placeholder,
+            value,
+            editable,
+        } = self.accessibility.clone();
+        let accessibility_entity = entity.clone();
         if self._pending_update {
             self.mode.update_highlighter::<M>(
                 super::mode::HighlighterUpdate {
@@ -3090,6 +3191,25 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
 
         let element = div()
             .id("input-state")
+            .when_some(role, |this, role| this.role(role))
+            .when_some(author_id, |this, author_id| {
+                this.accessibility_id(author_id)
+            })
+            .when_some(label, |this, label| this.aria_label(label))
+            .when_some(placeholder, |this, placeholder| {
+                this.aria_placeholder(placeholder)
+            })
+            .when_some(value, |this, value| this.aria_value(value))
+            .when(editable, |this| {
+                this.on_a11y_action(AccessibleAction::SetValue, move |data, window, cx| {
+                    let Some(gpui::accesskit::ActionData::Value(value)) = data else {
+                        return;
+                    };
+                    accessibility_entity.update(cx, |state, cx| {
+                        state.replace_all(value.to_string(), window, cx);
+                    });
+                })
+            })
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .when(self.is_editable(), |this| {

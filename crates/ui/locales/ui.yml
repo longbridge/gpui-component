@@ -174,12 +174,14 @@ Dock:
     it: Zoom Out
   Collapse:
     en: Collapse
+    pl: Zwiń
     zh-CN: 隐藏
     zh-HK: 隱藏
     zh-TW: 收合
     it: Nascondi
   Expand:
     en: Expand
+    pl: Rozwiń
     zh-CN: 展开
     zh-HK: 展開
     zh-TW: 展開
@@ -308,6 +310,7 @@ Input:
 Settings:
   search_placeholder:
     en: Search...
+    pl: Szukaj...
     zh-CN: 搜索...
     zh-HK: 搜索...
     zh-TW: 搜尋...

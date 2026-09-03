@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Edges, Entity, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement as _, Rems, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    AnyElement, App, DefiniteLength, Edges, Entity, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Rems, RenderOnce, Role, SharedString, StyleRefinement, Styled, TextAlign,
+    Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonRounded, ButtonVariants as _};
@@ -15,7 +15,7 @@ use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{RoleOverride, Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
-use gpui_base::InputBase as BaseInput;
+use gpui_base::{InputBase as BaseInput, input::InputAccessibility};
 use rust_i18n::t;
 
 use super::state::{TextInputState, sync_focused_input_registry};
@@ -331,18 +331,6 @@ impl Input {
             })
     }
 
-    fn handle_accessibility_set_value(
-        state: &TextInputState,
-        data: Option<&gpui::accesskit::ActionData>,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let Some(gpui::accesskit::ActionData::Value(value)) = data else {
-            return;
-        };
-        state.replace_all(value.to_string(), window, cx);
-    }
-
     /// This method must after the refine_style.
     fn render_editor(
         input_state: TextInputState,
@@ -481,7 +469,6 @@ impl RenderOnce for Input {
         let disabled = self.disabled;
         let is_multi_line = presentation.is_multi_line();
         let accessibility_role = accessibility_role(is_multi_line, content_type, self.role);
-        let accessibility_state = state.clone();
         // Materializing the whole rope is only observable through the
         // accessibility tree, so skip it when no client is listening.
         let accessibility_value = (window.is_a11y_active()
@@ -492,14 +479,7 @@ impl RenderOnce for Input {
         if input_focused {
             sync_native_content_type(window, content_type, presentation.is_editable());
         }
-        let frame_focus_handle = window
-            .use_keyed_state(("input-frame-focus", state.entity_id()), cx, |_, cx| {
-                cx.focus_handle()
-            })
-            .read(cx)
-            .clone();
-        let focused = input_focused
-            || (frame_focus_handle.contains_focused(window, cx) && !presentation.is_disabled());
+        let focused = input_focused;
 
         let gap_x = match self.size {
             Size::Small => px(4.),
@@ -538,10 +518,18 @@ impl RenderOnce for Input {
             None if placeholder_is_mask => None,
             None => placeholder.clone(),
         };
+        state.set_accessibility(
+            InputAccessibility::new(accessibility_role)
+                .with_author_id(self.accessibility_id)
+                .with_label(aria_label)
+                .with_placeholder(placeholder)
+                .with_value(accessibility_value)
+                .editable(presentation.is_editable()),
+            cx,
+        );
         BaseInput::new(("input", state.entity_id()))
             .focused(focused)
             .disabled(disabled)
-            .track_focus(&frame_focus_handle)
             .styles(|styles| {
                 styles.focused(|style| {
                     style.when(
@@ -550,18 +538,7 @@ impl RenderOnce for Input {
                     )
                 })
             })
-            .role(accessibility_role)
-            .when_some(self.accessibility_id, |this, id| this.accessibility_id(id))
-            .when_some(aria_label, |this, label| this.aria_label(label))
-            .when_some(placeholder, |this, placeholder| {
-                this.aria_placeholder(placeholder)
-            })
-            .when_some(accessibility_value, |this, value| this.aria_value(value))
-            .when(!disabled, |this| {
-                this.on_a11y_action(AccessibleAction::SetValue, move |data, window, cx| {
-                    Self::handle_accessibility_set_value(&accessibility_state, data, window, cx);
-                })
-            })
+            .role(Role::Group)
             .flex()
             .size_full()
             .line_height(LINE_HEIGHT)
@@ -778,120 +755,57 @@ mod tests {
     }
 
     #[gpui::test]
-    fn editable_input_offers_accessibility_write_action(cx: &mut gpui::TestAppContext) {
-        use crate::ElementExt as _;
-        use gpui::{AppContext as _, Element as _, IntoElement as _, Render};
-        use std::sync::{Arc, Mutex};
+    fn input_projects_accessibility_onto_focused_state(cx: &mut gpui::TestAppContext) {
+        use gpui::{AppContext as _, Render};
 
-        type EmittedState = Option<(Option<String>, bool)>;
-
-        struct InputA11yProbe {
+        struct Probe {
             state: Entity<InputState>,
-            emitted: Arc<Mutex<EmittedState>>,
         }
 
-        impl Render for InputA11yProbe {
+        impl Render for Probe {
             fn render(
                 &mut self,
                 _window: &mut Window,
                 _cx: &mut gpui::Context<Self>,
             ) -> impl IntoElement {
-                let state = self.state.clone();
-                let emitted = self.emitted.clone();
-                div().on_prepaint(move |_, window, cx| {
-                    let input = Input::new(&state).render(window, cx).into_element();
-                    let mut node = gpui::accesskit::Node::new(Role::TextInput);
-                    input.write_a11y_info(&mut node);
-                    *emitted.lock().unwrap() = Some((
-                        node.value().map(ToOwned::to_owned),
-                        node.supports_action(AccessibleAction::SetValue),
-                    ));
-                })
+                Input::new(&self.state)
+                    .accessibility_id("search.query")
+                    .aria_label("Search")
             }
         }
 
         cx.update(crate::init);
-        let emitted = Arc::new(Mutex::new(None));
-        let captured = emitted.clone();
-        let (probe, cx) = cx.add_window_view(move |window, cx| InputA11yProbe {
-            state: cx.new(|cx| InputState::new(window, cx).default_value("initial")),
-            emitted,
+        let (probe, cx) = cx.add_window_view(|window, cx| Probe {
+            state: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder("Find settings")
+                    .default_value("initial")
+            }),
         });
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
-        // No assistive technology is attached in tests, so the value stays
-        // unmaterialized while `SetValue` is still advertised.
-        assert_eq!(*captured.lock().unwrap(), Some((None, true)));
 
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
-        let base: TextInputState = state.clone().into();
-        cx.update(|window, cx| {
-            Input::handle_accessibility_set_value(&base, None, window, cx);
+        state.read_with(cx, |state, _| {
+            let accessibility = state.accessibility();
+            assert_eq!(accessibility.role(), Some(Role::TextInput));
+            assert_eq!(
+                accessibility.author_id().map(SharedString::as_ref),
+                Some("search.query")
+            );
+            assert_eq!(
+                accessibility.label().map(SharedString::as_ref),
+                Some("Search")
+            );
+            assert_eq!(
+                accessibility.placeholder().map(SharedString::as_ref),
+                Some("Find settings")
+            );
+            // Values are only materialized while an accessibility client is active.
+            assert_eq!(accessibility.value(), None);
+            assert!(accessibility.is_editable());
         });
-        assert_eq!(state.read_with(cx, |state, _| state.value()), "initial");
-
-        let action = gpui::accesskit::ActionData::Value("updated".into());
-        cx.update(|window, cx| {
-            Input::handle_accessibility_set_value(&base, Some(&action), window, cx);
-        });
-        assert_eq!(state.read_with(cx, |state, _| state.value()), "updated");
-    }
-
-    #[gpui::test]
-    fn input_emits_accessibility_id(cx: &mut gpui::TestAppContext) {
-        use crate::ElementExt as _;
-        use gpui::{AppContext as _, Element as _, IntoElement as _, Render};
-        use std::sync::{Arc, Mutex};
-
-        type EmittedIds = Vec<Option<String>>;
-
-        struct InputA11yProbe {
-            state: Entity<InputState>,
-            emitted: Arc<Mutex<EmittedIds>>,
-        }
-
-        impl Render for InputA11yProbe {
-            fn render(
-                &mut self,
-                _window: &mut Window,
-                _cx: &mut gpui::Context<Self>,
-            ) -> impl IntoElement {
-                let state = self.state.clone();
-                let emitted = self.emitted.clone();
-                div().on_prepaint(move |_, window, cx| {
-                    let mut author_id_of = |input: Input| {
-                        let mut node = gpui::accesskit::Node::new(Role::TextInput);
-                        input
-                            .render(window, cx)
-                            .into_element()
-                            .write_a11y_info(&mut node);
-                        node.author_id().map(ToOwned::to_owned)
-                    };
-
-                    *emitted.lock().unwrap() = vec![
-                        author_id_of(Input::new(&state)),
-                        author_id_of(Input::new(&state).accessibility_id("search.query")),
-                    ];
-                })
-            }
-        }
-
-        cx.update(crate::init);
-        let emitted = Arc::new(Mutex::new(Vec::new()));
-        let captured = emitted.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| InputA11yProbe {
-            state: cx.new(|cx| InputState::new(window, cx)),
-            emitted,
-        });
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-
-        assert_eq!(
-            *captured.lock().unwrap(),
-            vec![None, Some("search.query".into())]
-        );
     }
 
     #[test]
