@@ -54,10 +54,20 @@ import { parseArgs } from "node:util";
  */
 const VERSION = "0.3.0";
 
+/**
+ * Workspace dependencies swapped for a crate that is published by hand.
+ *
+ * Zed's reqwest fork (https://github.com/zed-industries/reqwest) is published
+ * separately as `gpui-pre-reqwest`; the version here must match that publish.
+ */
+const DEPENDENCY_OVERRIDES: Record<string, { package: string; version: string }> = {
+  reqwest: { package: "gpui-pre-reqwest", version: "0.12.15" },
+};
+
 const ZED_GIT_URL = "https://github.com/zed-industries/zed";
 const ZED_DEFAULT_REV = "main";
 const PUBLISH_PREFIX = "gpui-pre";
-const ROOT_CRATES = ["gpui", "gpui_platform", "gpui_macros"];
+const ROOT_CRATES = ["gpui", "gpui_platform", "gpui_macros", "reqwest_client"];
 const CRATES_IO_API = "https://crates.io/api/v1/crates";
 const USER_AGENT = "gpui-kit bump-gpui (https://github.com/longbridge/gpui-component)";
 const RATE_LIMIT_FALLBACK_MS = (10 * 60 + 30) * 1000;
@@ -220,7 +230,34 @@ function loadWorkspace(zed: string): Workspace {
       }
     }
   }
-  return { root: zed, manifest, members, pruned: new Map() };
+  const ws: Workspace = { root: zed, manifest, members, pruned: new Map() };
+  applyDependencyOverrides(ws);
+  return ws;
+}
+
+/** Point overridden workspace dependencies at their hand-published crates. */
+function applyDependencyOverrides(ws: Workspace) {
+  const dependencies = workspaceDependencies(ws);
+  for (const [name, override] of Object.entries(DEPENDENCY_OVERRIDES)) {
+    const spec = dependencies[name];
+    if (spec === undefined) {
+      logWarn(`workspace dependency \`${name}\` is not defined in Zed; override ignored`);
+      continue;
+    }
+    const rest = isPlainObject(spec) ? withoutSource(spec) : {};
+    dependencies[name] = { package: override.package, version: override.version, ...rest };
+    logInfo(`${name}: using ${override.package} ${override.version} instead of ${describeSource(spec)}`);
+  }
+}
+
+function describeSource(spec: unknown): string {
+  if (typeof spec === "string") return `crates.io ${spec}`;
+  if (isPlainObject(spec)) {
+    if (spec.git !== undefined) return `${spec.package ?? "git"} from ${spec.git}`;
+    if (spec.path !== undefined) return `path ${spec.path}`;
+    if (spec.version !== undefined) return `crates.io ${spec.version}`;
+  }
+  return "an unknown source";
 }
 
 /** `gpui` -> `gpui-pre`, `gpui_macros` -> `gpui-pre-macros`, `collections` -> `gpui-pre-collections`. */
@@ -549,8 +586,9 @@ function tomlDump(document: Toml): string {
   return `${lines.join("\n")}\n`;
 }
 
-const withoutSource = (spec: Toml) =>
-  Object.fromEntries(Object.entries(spec).filter(([k]) => !["path", "package", "version"].includes(k)));
+const SOURCE_KEYS = ["path", "package", "version", "git", "rev", "branch", "tag", "registry"];
+
+const withoutSource = (spec: Toml) => Object.fromEntries(Object.entries(spec).filter(([k]) => !SOURCE_KEYS.includes(k)));
 
 function crateManifest(crate: Crate, cratesByDir: Map<string, Crate>, version: string, zedSha: string): Toml {
   const source = crate.manifest;

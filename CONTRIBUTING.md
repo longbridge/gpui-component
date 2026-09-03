@@ -140,10 +140,11 @@ GPUI from crates.io, publish a snapshot of any Zed commit under our own names:
 | `gpui`          | `gpui-pre`                        |
 | `gpui_platform` | `gpui-pre-platform`               |
 | `gpui_macros`   | `gpui-pre-macros`                 |
+| `reqwest_client` | `gpui-pre-reqwest-client`        |
 | `gpui_<x>`      | `gpui-pre-<x>` (e.g. `gpui-pre-macos`) |
 | other internal  | `gpui-pre-<x>` (e.g. `gpui-pre-collections`) |
 
-Every crate `gpui` needs is published together at one version, and each keeps
+Every crate those four need is published together at one version, and each keeps
 its original crate name as the library name, so `use gpui::*` works unchanged.
 
 ```bash
@@ -161,6 +162,11 @@ The version is the `VERSION` constant at the top of `script/bump-gpui.ts`
 (`0.3.0` to begin with). crates.io never accepts the same version twice, so
 bump that constant before each publish; the Zed commit each build came from is
 recorded in every crate's description and `[package.metadata.gpui-pre]`.
+
+Zed's [reqwest fork](https://github.com/zed-industries/reqwest) is not part of
+the Zed workspace and is published by hand as `gpui-pre-reqwest`. The published
+`gpui-pre-reqwest-client` depends on it through the `DEPENDENCY_OVERRIDES`
+constant in the script; keep that version in step with the hand-published one.
 
 The script runs on [Bun](https://bun.sh) and needs Cargo 1.90+ (for `cargo publish --workspace`)
 and a crates.io token from `cargo login`. It stages a standalone workspace in
