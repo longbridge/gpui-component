@@ -37,7 +37,7 @@ impl DescriptionListStory {
             ("Name", "GPUI Component", 1),
             (
                 "Description",
-                "UI components for building fantastic desktop application by using [GPUI](https://gpui.rs).\
+                "UI components for building fantastic desktop application by using GPUI.\
                 \n\n \
                 Contains a lot of useful UI components, such as **Button**, **Input**, **Table**, **List**, **Select**, **DatePicker** ... \
                 \n\n \

@@ -5,7 +5,7 @@ use gpui_component::{
     text::{TextView, TextViewState},
     v_flex,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 pub struct Example {
     markdown_state: Entity<TextViewState>,

@@ -6,7 +6,7 @@ use gpui_component::{
     Root,
     theme::{Theme, ThemeMode},
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 use gpui_component_story::{Gallery, StoryRoot};
 use wasm_bindgen::prelude::*;
 

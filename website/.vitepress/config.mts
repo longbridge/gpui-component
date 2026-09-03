@@ -146,8 +146,6 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   return {
     message,
     copyright: `
-      <a href="https://gpui.rs">GPUI</a>
-      |
       <a href="${prefix}/docs/design-guides">${designGuidesText}</a>
       |
       <a href="${prefix}/docs/coding-guides">${codingGuidesText}</a>

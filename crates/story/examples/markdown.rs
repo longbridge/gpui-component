@@ -28,8 +28,8 @@ use gpui_component::{
     },
     v_flex,
 };
-use gpui_component_assets::Assets;
 use gpui_component_story::Open;
+use gpui_kit_assets::Assets;
 use lsp_types::{SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend};
 use regex::{Captures, Regex};
 

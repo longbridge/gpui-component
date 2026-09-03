@@ -9,7 +9,7 @@ use gpui_component::{
     },
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 pub struct Example {
     collapsible: SidebarCollapsible,

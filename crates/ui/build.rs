@@ -1,7 +1,7 @@
 use std::env;
 
 fn main() {
-    // `gpui-component-assets` exposes the absolute path of its default
+    // `gpui-kit-assets` exposes the absolute path of its default
     // icons directory via cargo's `links` mechanism (see its `Cargo.toml`
     // and `build.rs`). We receive that path as
     // `DEP_GPUI_COMPONENT_DEFAULT_ICONS_ICONS_DIR` here, then re-publish
@@ -14,12 +14,12 @@ fn main() {
     //
     // Cargo only propagates `DEP_<name>_<key>` through *regular*
     // dependencies, not through build-deps — see the `dependencies`
-    // (not `build-dependencies`) entry for `gpui-component-assets` in
+    // (not `build-dependencies`) entry for `gpui-kit-assets` in
     // `Cargo.toml`.
     let icons_dir = env::var("DEP_GPUI_COMPONENT_DEFAULT_ICONS_ICONS_DIR").expect(
-        "DEP_GPUI_COMPONENT_DEFAULT_ICONS_ICONS_DIR is set by gpui-component-assets's \
+        "DEP_GPUI_COMPONENT_DEFAULT_ICONS_ICONS_DIR is set by gpui-kit-assets's \
          build.rs via its `links` field; make sure the regular dependency on \
-         gpui-component-assets is intact in Cargo.toml",
+         gpui-kit-assets is intact in Cargo.toml",
     );
 
     println!("cargo:rustc-env=GPUI_COMPONENT_DEFAULT_ICONS_DIR={icons_dir}");

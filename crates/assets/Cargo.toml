@@ -1,9 +1,9 @@
 [package]
-name = "gpui-component-assets"
-description = "Default bundled assets for GPUI Component."
+name = "gpui-kit-assets"
+description = "Default bundled assets for GPUI Kit."
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
 license = "Apache-2.0"
-documentation = "https://docs.rs/gpui-component"
+documentation = "https://docs.rs/gpui-kit-assets"
 homepage = "https://gpui-kit.com"
 repository = "https://github.com/longbridge/gpui-component"
 readme = "README.md"

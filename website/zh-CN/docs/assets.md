@@ -9,7 +9,7 @@ GPUI Component 中的 [IconName] 和 [Icon] 提供了一套可直接在 GPUI 应
 
 但为了尽量减小应用体积，`gpui-component` 默认 **不会内置任何图标资源**。
 
-因此仓库把图标资源拆分到了独立的 [gpui-component-assets] crate 中。这样你可以自行决定：
+因此仓库把图标资源拆分到了独立的 [gpui-kit-assets] crate 中。这样你可以自行决定：
 
 - 直接使用默认内置图标资源
 - 完全不引入图标资源
@@ -17,21 +17,21 @@ GPUI Component 中的 [IconName] 和 [Icon] 提供了一套可直接在 GPUI 应
 
 ## 使用默认内置资源
 
-[gpui-component-assets] 提供了一个默认的资源实现，包含 `assets/icons` 目录下的全部图标文件。
+[gpui-kit-assets] 提供了一个默认的资源实现，包含 `assets/icons` 目录下的全部图标文件。
 
 如果要使用默认资源，需要在 `Cargo.toml` 中添加：
 
 ```toml
 [dependencies]
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit-assets = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
 然后在创建 GPUI 应用时，通过 `with_assets` 注册资源源：
 
 ```rs
 use gpui::*;
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 let app = gpui_platform::application().with_assets(Assets);
 ```
@@ -138,4 +138,4 @@ impl Render for Example {
 [IconName]: https://docs.rs/gpui_component/latest/gpui_component/icon/enum.IconName.html
 [Icon]: https://docs.rs/gpui_component/latest/gpui_component/icon/struct.Icon.html
 [assets]: https://github.com/longbridge/gpui-component/tree/main/crates/assets/assets/
-[gpui-component-assets]: https://crates.io/crates/gpui-component-assets
+[gpui-kit-assets]: https://crates.io/crates/gpui-kit-assets

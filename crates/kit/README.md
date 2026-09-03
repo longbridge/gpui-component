@@ -1,0 +1,55 @@
+# GPUI Kit
+
+One dependency for building desktop applications with GPUI:
+
+```toml
+[dependencies]
+gpui-kit = "0.6"
+```
+
+`gpui-kit` depends on the matching set of GPUI crates and re-exports every
+layer under a short name, so an application never lists GPUI itself:
+
+| Path                  | Crate                   | Feature          |
+| --------------------- | ----------------------- | ---------------- |
+| `gpui_kit::gpui`      | `gpui`                  | always           |
+| `gpui_kit::platform`  | `gpui_platform`         | always           |
+| `gpui_kit::base`      | `gpui-base`             | `base` (on)      |
+| `gpui_kit::component` | `gpui-component`        | `component` (on) |
+| `gpui_kit::assets`    | `gpui-kit-assets` | `assets` (on)    |
+| `gpui_kit::shell`     | `gpui-shell`            | `shell` (on)     |
+| `gpui_kit::webview`   | `gpui-wry`              | `webview`        |
+
+`gpui_kit::prelude::*` also brings the crate names into scope, so code written
+against `gpui::…` and `gpui_component::…` works unchanged:
+
+```rust
+use gpui_kit::prelude::*;
+use gpui_kit::component::button::*;
+
+struct Hello;
+
+impl Render for Hello {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().child(Button::new("ok").primary().label("Let's Go!"))
+    }
+}
+
+fn main() {
+    gpui_kit::application().run(|cx| {
+        gpui_kit::init(cx);
+        cx.spawn(async move |cx| {
+            cx.open_window(WindowOptions::default(), |window, cx| {
+                let view = cx.new(|_| Hello);
+                cx.new(|cx| Root::new(view, window, cx))
+            })
+            .expect("failed to open window");
+        })
+        .detach();
+    });
+}
+```
+
+The `gpui-component` features (`inspector`, `decimal`, `tree-sitter`,
+`tree-sitter-languages`, and each `tree-sitter-<language>`) are available on
+`gpui-kit` under the same names. See <https://gpui-kit.com> for the guides.

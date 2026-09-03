@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/gpui-base/badge.svg)](https://docs.rs/gpui-base)
 [![License](https://img.shields.io/crates/l/gpui-base.svg)](../../LICENSE-APACHE)
 
-`gpui-base` is the reusable foundation of the [GPUI Component](https://github.com/longbridge/gpui-component) Rust desktop application framework, built on [GPUI](https://gpui.rs). It is intended for applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
+`gpui-base` is the reusable foundation of the [GPUI Component](https://github.com/longbridge/gpui-component) Rust desktop application framework, built on GPUI. It is intended for applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
 
 > Use [`gpui-component`](https://crates.io/crates/gpui-component) if you want ready-to-use components with a complete visual design. Use `gpui-base` if your application should own its component source and visual styles while reusing stable, shared behavior.
 
@@ -28,7 +28,7 @@ The GPUI Component ecosystem follows the same layering idea as [shadcn](https://
 
 | GPUI ecosystem | shadcn ecosystem |
 | --- | --- |
-| [GPUI](https://gpui.rs) | HTML + Tailwind CSS |
+| GPUI | HTML + Tailwind CSS |
 | `gpui-base` | [Base UI](https://base-ui.com) |
 | `gpui-component` | shadcn |
 | `crates/ui` in GPUI Component | shadcn's default UI |
@@ -45,16 +45,18 @@ For example, `Button::new("save")` has no padding, background, radius, or size b
 
 ## Installation
 
-To follow the repository's development branch, use a Git dependency instead:
+Depend on `gpui-kit`, which pins the GPUI crates `gpui-base` was built
+against and re-exports them as `gpui_kit::gpui` and `gpui_kit::platform`, with
+`gpui-base` itself at `gpui_kit::base`. Turn off the default features to skip
+the styled layers:
 
 ```toml
 [dependencies]
-gpui-base = { git = "https://github.com/longbridge/gpui-component" }
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
+gpui-kit = { version = "0.6", default-features = false, features = ["base"] }
 ```
 
-`gpui-base` uses the same `gpui-pre` version as the repository. If Cargo reports incompatible GPUI types, check whether your application is pulling GPUI from a different `gpui-pre` version or straight from the Zed repository.
+If Cargo reports incompatible GPUI types, check whether your application pulls
+GPUI in from somewhere other than `gpui-kit`.
 
 ### Optional Features
 
@@ -325,7 +327,7 @@ style and motion contracts.
 - [GPUI Kit documentation](https://gpui-kit.com)
 - [`gpui-component` crate](https://crates.io/crates/gpui-component)
 - [`gpui-base` API documentation](https://docs.rs/gpui-base)
-- [GPUI](https://gpui.rs)
+- GPUI
 - [Contributing guide](../../CONTRIBUTING.md)
 
 ## License

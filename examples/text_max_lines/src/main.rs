@@ -18,7 +18,7 @@ use gpui_component::{
     text::{TextView, TextViewState},
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 const DEFAULT_MAX_LINES: usize = 5;
 

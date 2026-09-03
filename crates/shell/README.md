@@ -1,6 +1,6 @@
 # gpui-shell
 
-`gpui-shell` exists to make a Rust [GPUI](https://gpui.rs) application
+`gpui-shell` exists to make a Rust GPUI application
 **extensible in JavaScript**.
 
 **The primary goal is plugin extension.** A host application compiles and ships
@@ -600,7 +600,7 @@ long that render's output lives.
 - [GPUI Shell design document](../../docs/gpui-shell.md)
 - [`gpui-base`](../base/README.md), the foundation this runtime binds
 - [Architecture](../../docs/ARCHITECTURE.md) and [Styling and Motion](../../docs/STYLING-AND-MOTION.md)
-- [GPUI](https://gpui.rs)
+- GPUI
 
 ## License
 

@@ -6,7 +6,7 @@ use gpui_component::{
     input::{self, Input, InputEvent, InputState, TabSize, Textarea, TextareaState},
     v_flex,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 pub struct Example {
     editor: Entity<TextareaState>,

@@ -11,13 +11,13 @@ use gpui_component::{
     status_bar::StatusBar,
 };
 
-use gpui_component_assets::Assets;
 use gpui_component_story::{
     AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DataTableStory, DialogStory,
     FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
     StoryContainer, SwitchStory, TooltipStory,
 };
+use gpui_kit_assets::Assets;
 use serde::Deserialize;
 use std::{rc::Rc, time::Duration};
 

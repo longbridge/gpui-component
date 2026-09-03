@@ -16,7 +16,7 @@ use gpui_component::{
     text::TextView,
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 struct ChatExample {
     input: Entity<InputState>,

@@ -103,7 +103,7 @@
             <div class="hero__grid" aria-hidden="true"></div>
             <div class="hero__inner">
                 <div class="hero__copy">
-                    <a href="https://gpui.rs" target="_blank" class="eyebrow">
+                    <span class="eyebrow">
                         <span class="eyebrow__pulse" aria-hidden="true"></span>
                         {{ copy.eyebrow }}
                         <ArrowRight />
@@ -358,7 +358,6 @@
             </p>
         </div>
         <nav :aria-label="copy.footerNav">
-            <a href="https://gpui.rs" target="_blank">GPUI</a>
             <a :href="contributorsHref">{{ copy.contributors }}</a>
             <a :href="skillsHref" target="_blank">Skills</a>
             <a :href="llmsHref" target="_blank">llms-full.txt</a>
@@ -500,7 +499,7 @@ const installSnippet = [
     'gpui = { git = "https://github.com/zed-industries/zed" }',
     'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
     'gpui-component = { git = "https://github.com/longbridge/gpui-component" }',
-    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }',
+    'gpui-kit-assets = { git = "https://github.com/longbridge/gpui-component" }',
 ].join("\n");
 
 const copied = ref(false);

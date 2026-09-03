@@ -5,10 +5,11 @@ description: A comprehensive Rust framework for building fantastic, high-perform
 
 # GPUI Kit Introduction
 
-GPUI Kit is a comprehensive Rust desktop application framework built on [GPUI](https://gpui.rs).
+GPUI Kit is a comprehensive Rust desktop application framework built on GPUI.
 
 It combines a complete UI system with application-grade data, layout, content,
-and editing capabilities, and it ships as three crates that build on each other:
+and editing capabilities, and it ships as three crates that build on each other,
+all reachable through the single `gpui-kit` dependency:
 
 - **`gpui-base`**: Unstyled behavior, controlled state, focus, overlays,
   virtual lists, dock infrastructure, and semantic design tokens.
@@ -39,19 +40,18 @@ and [GPUI Shell](/shell/) for the other two layers.
 
 ## Quick Example
 
-Add `gpui` and `gpui-component` to your `Cargo.toml`:
+Add `gpui-kit` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 ```
 
 Then create a simple "Hello, World!" application with a button:
 
 ```rust
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::prelude::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {
@@ -73,9 +73,9 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    gpui_platform::application().run(move |cx| {
+    gpui_kit::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

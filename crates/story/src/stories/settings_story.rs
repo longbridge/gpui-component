@@ -144,9 +144,7 @@ impl SettingsStory {
                         .icon(IconName::Info)
                         .ghost()
                         .xsmall()
-                        .on_click(|_, _, cx| {
-                            cx.open_url("https://gpui-kit.com/")
-                        })
+                        .on_click(|_, _, cx| cx.open_url("https://gpui-kit.com/"))
                 })
                 .groups(vec![
                     SettingGroup::new().title("Appearance").items(vec![

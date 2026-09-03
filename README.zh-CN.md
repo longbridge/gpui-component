@@ -4,7 +4,7 @@
 
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
 
-使用 Rust 和 [GPUI](https://gpui.rs) 构建出色、高性能的桌面应用。
+使用 Rust 和 GPUI 构建出色、高性能的桌面应用。
 
 GPUI Kit 是一个综合性的 Rust 桌面应用开发框架。它将生产级 UI
 系统、应用级数据与布局能力、编辑能力，以及可复用的行为、状态和基础设施整合在一起，
@@ -76,7 +76,7 @@ gpui-kit
 
 | GPUI Kit 生态                        | Web 生态                       |
 | ------------------------------------ | ------------------------------ |
-| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
+| GPUI              | HTML + Tailwind CSS            |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
 | `gpui-component`                     | shadcn 的完整样式组件层        |
 
@@ -94,16 +94,15 @@ GPUI Kit 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/
 ## Usage
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+[dependencies]
+gpui-kit = "0.6"
 ```
 
 ### 基础示例
 
 ```rs
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::prelude::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {
@@ -125,9 +124,9 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    gpui_platform::application().run(move |cx| {
+    gpui_kit::application().run(move |cx| {
         // 使用任何 GPUI Component 功能之前必须先调用此函数。
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

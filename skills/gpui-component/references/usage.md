@@ -8,20 +8,17 @@
 
 ```toml
 [dependencies]
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" } # optional icons
+gpui-kit = "0.6" # re-exports gpui, gpui_platform, gpui-base, gpui-component, gpui-shell and the default icons
 ```
 
 ### 2. Initialization
 
 ```rust
 fn main() {
-    gpui_platform::application()
-        .with_assets(gpui_component_assets::Assets)
+    gpui_kit::application()
+        .with_assets(gpui_kit::assets::Assets)
         .run(move |cx| {
-            gpui_component::init(cx); // MUST be first
+            gpui_kit::init(cx); // MUST be first
 
             cx.spawn(async move |cx| {
                 cx.open_window(WindowOptions::default(), |window, cx| {

@@ -25,8 +25,8 @@ use gpui_component::{
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
-use gpui_component_assets::Assets;
 use gpui_component_story::Open;
+use gpui_kit_assets::Assets;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,

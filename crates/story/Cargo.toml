@@ -16,7 +16,7 @@ gpui.workspace = true
 gpui-base.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
-gpui-component-assets.workspace = true
+gpui-kit-assets.workspace = true
 gpui-fps.workspace = true
 
 async-channel = "2.3.1"

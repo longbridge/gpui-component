@@ -64,7 +64,7 @@ jobs:
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo clippy -p gpui-component -p gpui-component-story -p gpui-component-assets -- --deny warnings
+          cargo clippy -p gpui-component -p gpui-component-story -p gpui-kit-assets -- --deny warnings
       - name: Check without default features (tree-sitter disabled)
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |

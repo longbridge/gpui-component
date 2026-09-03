@@ -1,6 +1,6 @@
 # gpui-fps
 
-A realtime performance HUD for [GPUI](https://gpui.rs) applications: frames per
+A realtime performance HUD for GPUI applications: frames per
 second, frame time, dropped frame rate, and this process' GPU, CPU and memory
 usage.
 

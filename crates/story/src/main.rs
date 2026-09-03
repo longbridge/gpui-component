@@ -1,5 +1,5 @@
-use gpui_component_assets::Assets;
 use gpui_component_story::{Gallery, create_new_window, init};
+use gpui_kit_assets::Assets;
 
 fn main() {
     let app = gpui_platform::application().with_assets(Assets);

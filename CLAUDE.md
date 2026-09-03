@@ -25,10 +25,11 @@ natural Chinese rather than word-for-word translation.
 
 ## Project Overview
 
-GPUI Kit is a Rust desktop application framework built on [GPUI](https://gpui.rs), published at <https://gpui-kit.com>. It ships as three crates: `gpui-base` (unstyled behavior and infrastructure), `gpui-shell` (JavaScript extensions for a Rust host), and `gpui-component` (GPUI Component, the styled component library with 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design).
+GPUI Kit is a Rust desktop application framework built on GPUI, published at <https://gpui-kit.com>. It ships as three crates: `gpui-base` (unstyled behavior and infrastructure), `gpui-shell` (JavaScript extensions for a Rust host), and `gpui-component` (GPUI Component, the styled component library with 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design). Applications depend on the umbrella crate `gpui-kit` (`crates/kit`), which pins the matching `gpui-pre-*` snapshot of GPUI and re-exports every layer (`gpui_kit::gpui`, `gpui_kit::platform`, and by default `gpui_kit::base`, `gpui_kit::component`, `gpui_kit::shell` and `gpui_kit::assets`), so they never list GPUI itself.
 
 This is a Rust workspace project with the following main crates:
 
+- `crates/kit` - Umbrella crate applications depend on (published as `gpui-kit`)
 - `crates/ui` - Core UI component library (published as `gpui-component`)
 - `crates/story` - Gallery application for showcasing and testing components
 - `crates/story-web` - Web version of the story gallery (using WebAssembly)

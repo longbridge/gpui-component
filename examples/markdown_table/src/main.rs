@@ -17,7 +17,7 @@ use gpui_component::{
     text::{TextView, TextViewStyle},
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 const SOURCE: &str = include_str!("report.md");
 

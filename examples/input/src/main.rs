@@ -3,7 +3,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,

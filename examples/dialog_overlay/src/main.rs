@@ -1,6 +1,6 @@
 use gpui::*;
 use gpui_component::{button::*, menu::ContextMenuExt, text::TextView, *};
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 actions!(class_menu, [Open, Delete, Export, Info]);
 

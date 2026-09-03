@@ -9,25 +9,25 @@ The [IconName] and [Icon] in GPUI Component provide a comprehensive set of icons
 
 But for minimal size applications, **we have not embedded any icon assets by default** in `gpui-component` crate.
 
-We split the icon assets into a separate crate [gpui-component-assets] to allow developers to choose whether to include the icon assets in their applications or if you don't need the icons at all, you can build your own assets.
+We split the icon assets into a separate crate [gpui-kit-assets] to allow developers to choose whether to include the icon assets in their applications or if you don't need the icons at all, you can build your own assets.
 
 ## Use default bundled assets
 
-The [gpui-component-assets] crate provides a default bundled assets implementation that includes all the icon files in the `assets/icons` folder.
+The [gpui-kit-assets] crate provides a default bundled assets implementation that includes all the icon files in the `assets/icons` folder.
 
-To use the default bundled assets, you need to add the `gpui-component-assets` crate as a dependency in your `Cargo.toml`:
+To use the default bundled assets, you need to add the `gpui-kit-assets` crate as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit-assets = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
 Then we need call the `with_assets` method when creating the GPUI application to register the asset source:
 
 ```rs
 use gpui::*;
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 let app = gpui_platform::application().with_assets(Assets);
 ```
@@ -135,4 +135,4 @@ impl Render for Example {
 [IconName]: https://docs.rs/gpui_component/latest/gpui_component/icon/enum.IconName.html
 [Icon]: https://docs.rs/gpui_component/latest/gpui_component/icon/struct.Icon.html
 [assets]: https://github.com/longbridge/gpui-component/tree/main/crates/assets/assets/
-[gpui-component-assets]: https://crates.io/crates/gpui-component-assets
+[gpui-kit-assets]: https://crates.io/crates/gpui-kit-assets

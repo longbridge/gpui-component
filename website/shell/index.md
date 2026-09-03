@@ -6,7 +6,7 @@ order: 1
 
 # GPUI Shell
 
-`gpui-shell` exists to make a Rust [GPUI](https://gpui.rs) application **extensible in JavaScript**.
+`gpui-shell` exists to make a Rust GPUI application **extensible in JavaScript**.
 
 **The primary goal is plugin extension.** A host application compiles and ships once. After that, a new panel, a side tool or a piece of business logic arrives as a script loaded into the same process — no rebuild, no binary to redistribute, and no fork for a contributor who only wants to add a panel.
 

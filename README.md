@@ -8,7 +8,7 @@
 
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
 
-Build fantastic, high-performance desktop apps with Rust and [GPUI](https://gpui.rs).
+Build fantastic, high-performance desktop apps with Rust and GPUI.
 
 GPUI Kit is a comprehensive Rust desktop application framework. It combines a
 production-ready UI system with application-grade data, layout, and editing
@@ -89,7 +89,7 @@ The layering follows the same separation that makes the
 
 | GPUI Kit ecosystem                   | Web ecosystem                   |
 | ------------------------------------ | ------------------------------- |
-| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS             |
+| GPUI              | HTML + Tailwind CSS             |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com)  |
 | `gpui-component`                     | shadcn's styled component layer |
 
@@ -108,16 +108,15 @@ commercial desktop application rather than designed in isolation.
 ## Usage
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+[dependencies]
+gpui-kit = "0.6"
 ```
 
 ### Basic Example
 
 ```rs
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::prelude::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {
@@ -139,9 +138,9 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    gpui_platform::application().run(move |cx| {
+    gpui_kit::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

@@ -21,7 +21,7 @@ impl<T: IconNamed> From<T> for Icon {
     }
 }
 
-// Generate `IconName` from the icons that `gpui-component-assets` ships.
+// Generate `IconName` from the icons that `gpui-kit-assets` ships.
 // The `$VAR` form resolves to the absolute path published by the assets
 // crate's `build.rs` (via cargo's `links` mechanism) and re-exported by
 // our own `build.rs`. See `gpui_component_macros::icon_named!`'s doc

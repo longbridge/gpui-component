@@ -44,7 +44,7 @@ order: -1
 安装库时，只需要在 `Cargo.toml` 的 `[dependencies]` 中加入：
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 ```
+
+`gpui-kit` 会替你引入配套的 GPUI crate，并以 `gpui_kit::gpui`、`gpui_kit::platform`、`gpui_kit::component` 的形式重新导出。文档其余部分使用的 `gpui::…` 与 `gpui_component::…` 路径，通过 `use gpui_kit::prelude::*;` 即可解析，它会把这些 crate 名字引入作用域。

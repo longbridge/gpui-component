@@ -14,7 +14,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish -p gpui-component-assets
+          cargo publish -p gpui-kit-assets
           cargo publish -p gpui-component-macros
           cargo publish -p gpui-base
           cargo publish -p gpui-wry
@@ -23,6 +23,17 @@ jobs:
           # dependencies to the index used while packaging the facade crate.
           for attempt in {1..12}; do
             if cargo publish -p gpui-component; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              exit 1
+            fi
+            sleep 10
+          done
+
+          # gpui-kit depends on every layer above, so it goes last.
+          for attempt in {1..12}; do
+            if cargo publish -p gpui-kit; then
               exit 0
             fi
             if [ "$attempt" -eq 12 ]; then

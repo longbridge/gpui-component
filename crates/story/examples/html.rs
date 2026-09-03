@@ -9,7 +9,7 @@ use gpui_component::{
     text::{SelectionFormat, html},
     v_flex,
 };
-use gpui_component_assets::Assets;
+use gpui_kit_assets::Assets;
 
 pub struct Example {
     input_state: Entity<EditorState>,

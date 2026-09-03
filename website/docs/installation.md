@@ -42,7 +42,7 @@ We use Rust programming language to build the `gpui-component` library. Make sur
 To install the `gpui-component` library, you can use Cargo, the Rust package manager. Add the following line to your `Cargo.toml` file under the `[dependencies]` section:
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 ```
+
+`gpui-kit` depends on the matching GPUI crates for you and re-exports them as `gpui_kit::gpui`, `gpui_kit::platform` and `gpui_kit::component`. The rest of these docs write `gpui::…` and `gpui_component::…` paths; they resolve through `use gpui_kit::prelude::*;`, which brings those crate names into scope.

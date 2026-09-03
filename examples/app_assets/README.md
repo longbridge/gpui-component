@@ -63,20 +63,20 @@ fn main() {
 
 ## Use default bundled assets.
 
-The `gpui-component-assets` crate provide a default bundled assets implementation that include all the icon files in the `assets/icons` folder.
+The `gpui-kit-assets` crate provide a default bundled assets implementation that include all the icon files in the `assets/icons` folder.
 
 If you don't want to manage your own icon files, you can just use the default bundled assets.
 
-Just add `gpui-component-assets` as a dependency in your `Cargo.toml`:
+Just add `gpui-kit-assets` as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
 gpui-component = "*"
-gpui-component-assets = "*"
+gpui-kit-assets = "*"
 ```
 
 And then use it in your application:
 
 ```rs
-let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+let app = gpui_platform::application().with_assets(gpui_kit_assets::Assets);
 ```

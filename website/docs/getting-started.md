@@ -12,18 +12,16 @@ Add dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-# Optional, for default bundled assets
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 anyhow = "1.0"
 ```
 
 :::tip
-The `gpui-component-assets` crate is optional.
+`gpui-kit` pulls in GPUI itself and, by default, `gpui-base`, `gpui-component`, `gpui-shell` and the default icon set. To manage your own assets, keep only the features you need:
 
-It provides a default set of icon assets. If you want to manage your own assets, you can skip adding this dependency.
+```toml
+gpui-kit = { version = "0.6", default-features = false, features = ["component"] }
+```
 
 See [Icons & Assets](./assets.md) for more details.
 :::
@@ -33,8 +31,8 @@ See [Icons & Assets](./assets.md) for more details.
 Here's a simple example to get you started:
 
 ```rust
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::prelude::*;
 
 pub struct HelloWorld;
 
@@ -57,11 +55,11 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
 
     app.run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {
@@ -77,7 +75,7 @@ fn main() {
 ```
 
 :::info
-Make sure to call `gpui_component::init(cx);` at first line inside the `app.run` closure. This initializes the GPUI Component system.
+Make sure to call `gpui_kit::init(cx);` at first line inside the `app.run` closure. This initializes the GPUI Component system.
 
 This is required for theming and other global settings to work correctly.
 :::

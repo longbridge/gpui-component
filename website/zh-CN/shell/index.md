@@ -6,7 +6,7 @@ order: 1
 
 # GPUI Shell
 
-`gpui-shell` 的存在，是为了让一个用 Rust 写的 [GPUI](https://gpui.rs) 应用**能被 JavaScript 扩展**。
+`gpui-shell` 的存在，是为了让一个用 Rust 写的 GPUI 应用**能被 JavaScript 扩展**。
 
 **首要目标是插件扩展。** Host 应用编译一次、发布一次，此后新增一块面板、一个侧边工具或一段业务逻辑，都以脚本的形式加载进同一个进程——不必重新编译，不必重新分发二进制，想加一块面板的人也不必 fork 整个 Host。
 
