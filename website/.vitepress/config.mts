@@ -148,12 +148,19 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const skillsText = "Skills";
   const reportBugText = locale === "zh" ? "报告问题" : "Report Bug";
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
+  const iconCreditsText = locale === "zh" ? "图标资源来自" : "Icons by";
+  const andText = locale === "zh" ? "与" : "and";
+  const periodText = locale === "zh" ? "。" : ".";
+  // GPUI's origin is stated once, here and in the landing page footer, in
+  // one plain line. Everywhere else the product is GPUI Kit.
   const message =
     locale === "zh"
       ? `GPUI Kit 是一个基于 Apache-2.0 许可证的开源项目，
-        由 <a href='https://longbridge.com' target='_blank'>Longbridge</a> 开发。`
+        由 <a href='https://longbridge.com' target='_blank'>Longbridge</a> 开发，
+        基于 Zed Industries 的 <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a> 构建。`
       : `GPUI Kit is an open source project under the Apache-2.0 License,
-        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.`;
+        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>
+        and built on <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a> from Zed Industries.`;
 
   return {
     message,
@@ -174,8 +181,8 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
       |
       <a href="https://github.com/longbridge/gpui-kit/discussions" target="_blank">${discussionText}</a>
       <br />
-      Icon resources are used <a href="https://lucide.dev" target="_blank">Lucide</a>,
-      <a href="https://isocons.app" target="_blank">Isocons</a>.
+      ${iconCreditsText} <a href="https://lucide.dev" target="_blank">Lucide</a>
+      ${andText} <a href="https://isocons.app" target="_blank">Isocons</a>${periodText}
     `,
   };
 }
