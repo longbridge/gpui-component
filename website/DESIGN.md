@@ -30,7 +30,7 @@ single screen, what this project is — and then prove it is real.
 
 ## Colour
 
-Defined in `.vitepress/theme/style.css`, mapped from the default theme so the
+Defined in `src/styles/global.css`, mapped from the default theme so the
 site and the documented components share one palette.
 
 | Token | Light | Dark | Theme source |
@@ -75,7 +75,7 @@ Rules that follow from this:
   from the same macos-classic theme shiki applies in the docs. Never invent
   highlighting for a snippet.
 - Links are distinguished by a rule, not a hue, since the brand colour equals
-  the text colour. See `.vp-doc a`.
+  the text colour. See `.doc-content a`.
 
 ## Typography
 
@@ -111,17 +111,10 @@ Two constraints that are easy to get wrong:
   width** (x=80, w=1280 at 1440px). Check this after any layout change.
 - Navigation is a **toolbar**: brand, a hairline divider, then the sections on
   the left; search, stars, language and appearance collected on the right.
-  Height 3.5rem/56px. The docs navbar is the same toolbar — VitePress's own
-  navbar is reordered by CSS, and the language and star controls are injected
-  through the `nav-bar-content-after` slot rather than living in `nav` items, so
-  the real search keeps working. The controls are that one set at every width:
-  VitePress would otherwise move the appearance switch into a `…` flyout on
-  mid-size screens and into the hamburger screen on phones.
-- The docs navbar's blur belongs on `.VPNavBar`, never on `.VPNav`. `.VPNav`
-  wraps both the bar and the phone menu screen, and a `backdrop-filter` makes
-  its element the containing block for fixed descendants — on `.VPNav` it
-  collapses the screen, which is anchored `top: nav-height; bottom: 0`, to zero
-  height, and the hamburger opens onto nothing.
+  Height 3.5rem/56px. The docs navbar (`Nav.astro`) is the same toolbar, hand
+  built rather than a theme default reordered by CSS: search, GitHub star,
+  language and appearance controls are all rendered directly in its markup, in
+  that fixed left/right layout, at every width down to the mobile breakpoint.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
 - Live WASM examples belong to their component documentation, next to the API
@@ -141,16 +134,18 @@ Two constraints that are easy to get wrong:
   else to live — hiding it outright is a dead end for phone users. The window
   title is dropped there too, since the segmented control already names the
   current view.
-- The docs navbar collapses on VitePress's own 768px breakpoint, and the same
-  rule applies: the sections and the language menu move into the hamburger
-  screen (`nav-screen-content-after`), while the star count is only a label
-  beside an icon that stays. A 360px phone leaves about 180px next to the
-  title, which is four 2rem controls — measure before adding a fifth.
+- The docs navbar collapses at its own 767px breakpoint (`Nav.astro`): the
+  links and the Resources dropdown move into a drawer behind a burger button
+  (`#nav-burger` toggles `.is-open` on `#site-nav-links`), the dropdown
+  flattens into stacked items instead of overlaying, and the star badge drops
+  its numeric label, keeping only the icon. A 360px phone leaves about 180px
+  next to the title, which is four 2rem controls — measure before adding a
+  fifth.
 
 ## Surfaces and the window language
 
 Anything showing the library running is framed as a **macOS window** — the
-`.mac-window` class in `style.css`. It is the closest visual analogue to what
+`.mac-window` class in `global.css`. It is the closest visual analogue to what
 the library actually produces, so it reads as a native application rather than
 a screenshot card.
 
@@ -195,11 +190,11 @@ static image cannot keep current. Its content is shifted toward the top of the
 frame, leaving the bottom clear for source labels and other overlays added by
 social clients.
 
-Per-page `og:title`, `og:description`, `og:url` and the canonical link come from
-`transformPageData` in `config.mts`. Note it uses `||`, not `??`: the home page
-supplies empty strings rather than undefined. A per-page image would need a
-server to render it — shadcn and reui use a dynamic `/og?title=` route — and
-GitHub Pages has none, so one shared image is the right trade.
+Per-page `og:title`, `og:description`, `og:url` and the canonical link are
+props passed into `BaseLayout.astro` (`SITE_URL` lives once in `src/lib/site.ts`).
+A per-page image would need a server to render it — shadcn and reui use a
+dynamic `/og?title=` route — and GitHub Pages has none, so one shared image is
+the right trade.
 
 ## Motion
 
@@ -220,7 +215,7 @@ through motion alone.
 - Capability previews are **diagrams**, not product mocks: they share one
   padding box and one gap, and they may use `--data-*` to read as UI. A diagram
   that needs a scrollbar needs its track too, or it looks like a glitch.
-- Landing-page copy lives in one bilingual `copy` object in `index.vue`. Both
+- Landing-page copy lives in one bilingual `copy` object in `HomeApp.vue`. Both
   locales must be updated together, matching the site-wide rule that
   `website/docs/` and `website/zh-CN/docs/` stay in sync.
 - Live examples should demonstrate the documented component's real behavior
@@ -228,7 +223,7 @@ through motion alone.
 
 ## App Stories
 
-`apps.vue` lists the applications people have shipped with the library — the
+`AppsApp.vue` lists the applications people have shipped with the library — the
 strongest available answer to "is this real?", and the reason it sits in the
 navbar rather than inside the Resources menu. Submissions come from
 [discussion #989](https://github.com/longbridge/gpui-kit/discussions/989).
@@ -243,9 +238,9 @@ navbar rather than inside the Resources menu. Submissions come from
   hand when an entry is added.
 - **No star counts.** A hard-coded number goes stale, and resolving one
   repository per app at build time would exhaust the unauthenticated GitHub
-  rate limit that `repo.data.js` already draws on. The facts a card does carry —
-  platforms, open source or commercial, whether it is still in development —
-  do not expire.
+  rate limit that `src/lib/github.ts` already draws on for the single nav-bar
+  count. The facts a card does carry — platforms, open source or commercial,
+  whether it is still in development — do not expire.
 - Copy for both locales lives in one `copy` object plus a per-app
   `blurb: { en, zh }`, so an entry cannot be added in one language only.
 
@@ -253,10 +248,11 @@ navbar rather than inside the Resources menu. Submissions come from
 
 | File | Role |
 | --- | --- |
-| `.vitepress/theme/style.css` | Tokens, `.mac-window`, VitePress overrides, doc typography |
-| `index.vue` | Landing page: markup, bilingual copy, page-scoped styles |
-| `apps.vue` | App Stories page: the showcase list, bilingual copy, page-scoped styles |
-| `.vitepress/theme/index.ts` | Theme entry; injects nav controls and the example window |
-| `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages |
-| `.vitepress/config.mts` | Navigation, sidebar generation, locales |
-| `src/*.theme.json` | shiki syntax themes; the source of `--code-*` |
+| `src/styles/global.css` | Tokens, `.mac-window`, docs-nav/doc-content typography |
+| `src/components/HomeApp.vue` | Landing page: markup, bilingual copy, page-scoped styles |
+| `src/components/AppsApp.vue` | App Stories page: the showcase list, bilingual copy, page-scoped styles |
+| `src/components/Nav.astro` | Docs/base/shell navbar: search, GitHub star, language, appearance, mobile drawer |
+| `src/components/ComponentExample.vue` | Windowed live example on component pages |
+| `src/lib/sidebar.ts` | Sidebar generation from the docs content collection |
+| `src/lib/site.ts` | Shared `SITE_URL` for canonical links and OG tags |
+| `src/light.theme.json` / `src/dark.theme.json` | Shiki syntax themes; the source of `--code-*` |
