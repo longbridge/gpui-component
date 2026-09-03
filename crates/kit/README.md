@@ -7,25 +7,26 @@ One dependency for building desktop applications with GPUI:
 gpui-kit = "0.6"
 ```
 
-`gpui-kit` depends on the matching set of GPUI crates and re-exports every
-layer under a short name, so an application never lists GPUI itself:
+`gpui-kit` depends on the matching set of GPUI crates, so an application
+never lists GPUI itself. `use gpui_kit::*;` is GPUI, and each layer is
+reachable by name:
 
-| Path                  | Crate                   | Feature          |
-| --------------------- | ----------------------- | ---------------- |
-| `gpui_kit::gpui`      | `gpui`                  | always           |
-| `gpui_kit::platform`  | `gpui_platform`         | always           |
-| `gpui_kit::base`      | `gpui-base`             | always           |
-| `gpui_kit::component` | `gpui-component`        | `component` (on) |
+| Path                  | Crate             | Feature          |
+| --------------------- | ----------------- | ---------------- |
+| `gpui_kit::*`         | `gpui`            | always           |
+| `gpui_kit::platform`  | `gpui_platform`   | always           |
+| `gpui_kit::base`      | `gpui-base`       | always           |
+| `gpui_kit::component` | `gpui-component`  | `component` (on) |
 | `gpui_kit::assets`    | `gpui-kit-assets` | `assets` (on)    |
-| `gpui_kit::shell`     | `gpui-shell`            | `shell` (on)     |
-| `gpui_kit::webview`   | `gpui-wry`              | `webview`        |
+| `gpui_kit::shell`     | `gpui-shell`      | `shell` (on)     |
 
-`gpui_kit::prelude::*` also brings the crate names into scope, so code written
-against `gpui::…` and `gpui_component::…` works unchanged:
+`gpui_kit::application()` opens the platform and `gpui_kit::init()`
+initializes the enabled layers:
 
 ```rust
-use gpui_kit::prelude::*;
 use gpui_kit::component::button::*;
+use gpui_kit::component::Root;
+use gpui_kit::*;
 
 struct Hello;
 

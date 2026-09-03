@@ -21,7 +21,7 @@ version = "0.6.0"
 # conventionally a native-library name; we use a unique identifier scoped
 # to this crate's purpose. Cargo enforces uniqueness across the build
 # graph, which also prevents accidental double-linkage in dependents.
-links = "gpui-component-default-icons"
+links = "gpui-kit-default-icons"
 
 [lib]
 doctest = false

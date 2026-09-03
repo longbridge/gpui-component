@@ -45,7 +45,7 @@ cx.open_window(options, move |window, cx| {
 If `gpui-shell.json` exists, `load` validates its identity metadata and applies
 its entry. Its capabilities are requests, not approval: both paths run
 under the host's current default policy, and without a manifest the entry is
-`main.js`. Either path refreshes `gpui.d.ts`; a load failure renders the
+`main.js`. Either path refreshes `gpui-kit.d.ts`; a load failure renders the
 selectable error surface instead of panicking the host. A host that needs to
 handle the structured error itself uses `try_load`. A failure root has no
 application to watch, so `watch` returns `Err`; ignoring that error here keeps

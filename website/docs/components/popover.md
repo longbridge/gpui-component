@@ -10,7 +10,7 @@ Popover component for displaying floating content that appears when interacting 
 ## Import
 
 ```rust
-use gpui_component::popover::{Popover};
+use gpui_kit::component::popover::{Popover};
 ```
 
 ## Usage
@@ -24,8 +24,8 @@ Any element that implements [RenderOnce] or [Render] can be used as popover cont
 :::
 
 ```rust
-use gpui::ParentElement as _;
-use gpui_component::{button::Button, popover::Popover};
+use gpui_kit::ParentElement as _;
+use gpui_kit::component::{button::Button, popover::Popover};
 
 Popover::new("basic-popover")
     .trigger(Button::new("trigger").label("Click me").outline())
@@ -49,7 +49,7 @@ For example, `Anchor::TopLeft` places the popover just below the trigger, left-a
 ```
 
 ```rust
-use gpui_component::Anchor;
+use gpui_kit::component::Anchor;
 
 // Anchored to the trigger's top corners
 Popover::new("top-left")
@@ -114,8 +114,8 @@ or other heavy operations that may impact performance.
 And `content` will works with `child`, `children` methods together.
 
 ```rust
-use gpui::ParentElement as _;
-use gpui_component::popover::Popover;
+use gpui_kit::ParentElement as _;
+use gpui_kit::component::popover::Popover;
 
 Popover::new("complex-popover")
     .anchor(Anchor::BottomLeft)
@@ -136,7 +136,7 @@ Popover::new("complex-popover")
 Sometimes you may want to show a popover on right-click, for example, to create a special your ownen context menu. The `mouse_button` method allows you to specify which mouse button triggers the popover.
 
 ```rust
-use gpui::MouseButton;
+use gpui_kit::MouseButton;
 
 Popover::new("context-menu")
     .anchor(Anchor::BottomRight)
@@ -152,7 +152,7 @@ Popover::new("context-menu")
 If you want to dismiss the popover programmatically from within the content, you can emit a `DismissEvent`. In this case, you should use `content` method to create the popover content so you have access to the `cx: &mut Context<PopoverState>`.
 
 ```rust
-use gpui_component::{DismissEvent, popover::Popover};
+use gpui_kit::component::{DismissEvent, popover::Popover};
 
 Popover::new("dismiss-popover")
     .trigger(Button::new("dismiss").label("Dismiss Popover").outline())
@@ -201,7 +201,7 @@ so you need to update the state in `on_open_change` callback to keep the popover
 :::
 
 ```rust
-use gpui_component::popover::Popover;
+use gpui_kit::component::popover::Popover;
 
 struct MyView {
     popover_open: bool,
@@ -224,7 +224,7 @@ The `default_open` method allows you to set the initial open state of the popove
 Please note that if you use the `open` method to control the popover's open state, the `default_open` setting will be ignored.
 
 ```rust
-use gpui_component::popover::Popover;
+use gpui_kit::component::popover::Popover;
 
 Popover::new("default-open-popover")
     .default_open(true)

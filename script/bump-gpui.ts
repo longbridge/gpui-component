@@ -67,6 +67,9 @@ const DEPENDENCY_OVERRIDES: Record<
   { package: string; version: string }
 > = {
   reqwest: { package: "gpui-pre-reqwest", version: "0.12.15" },
+  // Zed pins a git revision; `test-support` compiles against the crates.io
+  // release, which has the `attr-macro` feature Zed enables.
+  proptest: { package: "proptest", version: "1" },
 };
 
 const ZED_GIT_URL = "https://github.com/zed-industries/zed";

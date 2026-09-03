@@ -19,8 +19,8 @@ with application state and existing controls such as `Button`, `Link`,
 ## Import
 
 ```rust
-use gpui::{div, ParentElement as _, Styled as _};
-use gpui_component::{
+use gpui_kit::{div, ParentElement as _, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Colorize as _, Sizable as _,
     bubble::{
         Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions,
@@ -48,7 +48,7 @@ Bubble::new()
     .alignment(MessageAlignment::Start)
     .content(
         BubbleContent::new().child(
-            gpui_component::h_flex()
+            gpui_kit::component::h_flex()
                 .gap_2()
                 .child("Can you review this draft?")
                 .child("📎"),
@@ -142,8 +142,8 @@ Bubble children are arbitrary GPUI elements. Compose text, code, files,
 buttons, or custom layouts without a bubble-specific content enum:
 
 ```rust
-use gpui::{div, Styled as _};
-use gpui_component::{h_flex, v_flex, Icon, IconName};
+use gpui_kit::{div, Styled as _};
+use gpui_kit::component::{h_flex, v_flex, Icon, IconName};
 
 Bubble::new()
     .content(
@@ -278,7 +278,7 @@ radius or surface treatment.
 
 ```rust
 BubbleReactions::new().p_0().child(
-    gpui_component::popover::Popover::new("bubble-more")
+    gpui_kit::component::popover::Popover::new("bubble-more")
         .trigger(
             Button::new("bubble-more-trigger")
                 .ghost()

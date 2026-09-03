@@ -106,8 +106,7 @@
                     <span class="eyebrow">
                         <span class="eyebrow__pulse" aria-hidden="true"></span>
                         {{ copy.eyebrow }}
-                        <ArrowRight />
-                    </a>
+                    </span>
                     <h1>{{ copy.title }}</h1>
                     <p class="hero__lead">{{ copy.lead }}</p>
                     <div class="hero__actions">

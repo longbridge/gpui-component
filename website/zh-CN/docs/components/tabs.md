@@ -10,7 +10,7 @@ Tabs 用于把内容组织成多个独立分区，一次只显示一个标签面
 ## 导入
 
 ```rust
-use gpui_component::tab::{Tab, TabBar};
+use gpui_kit::component::tab::{Tab, TabBar};
 ```
 
 ## 用法
@@ -76,7 +76,7 @@ TabBar::new("outline-tabs")
 #### Segmented
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 TabBar::new("segmented-tabs")
     .segmented()
@@ -106,7 +106,7 @@ TabBar::new("tabs").large()
 ### 带图标的标签
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 TabBar::new("icon-tabs")
     .child(Tab::default().icon(IconName::User).with_variant(TabVariant::Tab))
@@ -117,8 +117,8 @@ TabBar::new("icon-tabs")
 ### 前缀和后缀
 
 ```rust
-use gpui_component::button::Button;
-use gpui_component::{h_flex, IconName};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::{h_flex, IconName};
 
 TabBar::new("tabs-with-controls")
     .prefix(
@@ -194,7 +194,7 @@ TabBar::new("tabs-with-menu")
 通过 `.child()` 传入自定义内容的标签只会应用宽度限制，需要自行在应当收缩的部分调用 `truncate()`。
 
 ```rust
-use gpui::{div, px};
+use gpui_kit::{div, px};
 
 TabBar::new("tabs-with-max-width")
     .max_width(px(100.))

@@ -6,10 +6,7 @@ publish = false
 edition.workspace = true
 
 [dependencies]
-gpui.workspace = true
-gpui_platform.workspace = true
-gpui-component = { workspace = true }
-gpui-kit-assets.workspace = true
+gpui-kit.workspace = true
 
 [lints]
 workspace = true

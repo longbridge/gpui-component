@@ -2710,7 +2710,7 @@ fn checked_milliseconds(ms: f64) -> Option<Duration> {
 /// Written out rather than derived: GPUI has no name table for `Anchor`, and
 /// the script API is the snake_case spelling of the variant. One list serves
 /// the parser below, the check the prelude makes at the call site, and the
-/// union `gpui.d.ts` declares — so the three cannot drift.
+/// union `gpui-kit.d.ts` declares — so the three cannot drift.
 pub(crate) const ANCHOR_NAMES: [&str; 8] = [
     "top_left",
     "top_right",
@@ -3285,7 +3285,7 @@ mod motion_identity_tests {
     }
 
     /// One written list of anchors serves the parser, the check the prelude
-    /// makes at the call site and the union in `gpui.d.ts`. A declared name
+    /// makes at the call site and the union in `gpui-kit.d.ts`. A declared name
     /// that does not parse is a name a script could type and the runtime would
     /// silently drop.
     #[test]

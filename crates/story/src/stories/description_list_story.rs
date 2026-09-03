@@ -1,16 +1,16 @@
-use gpui::*;
-use gpui::{
-    Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
-};
-use gpui_component::AxisExt;
-use gpui_component::{
+use gpui_kit::component::AxisExt;
+use gpui_kit::component::{
     Sizable as _, Size,
     button::Button,
     description_list::{DescriptionItem, DescriptionList},
     dock::PanelControl,
     text::TextView,
     v_flex,
+};
+use gpui_kit::*;
+use gpui_kit::{
+    Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement, Render, Styled, Window,
 };
 use serde::Deserialize;
 

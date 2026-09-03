@@ -6,8 +6,7 @@ publish = false
 edition.workspace = true
 
 [dependencies]
-gpui.workspace = true
-gpui_platform.workspace = true
+gpui-kit.workspace = true
 gpui-fps.workspace = true
 
 [lints]

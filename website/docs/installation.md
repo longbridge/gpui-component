@@ -45,4 +45,4 @@ To install the `gpui-component` library, you can use Cargo, the Rust package man
 gpui-kit = "0.6"
 ```
 
-`gpui-kit` depends on the matching GPUI crates for you and re-exports them as `gpui_kit::gpui`, `gpui_kit::platform` and `gpui_kit::component`. The rest of these docs write `gpui::…` and `gpui_component::…` paths; they resolve through `use gpui_kit::prelude::*;`, which brings those crate names into scope.
+`gpui-kit` depends on the matching GPUI crates for you and puts GPUI and `gpui-component` at its root: `use gpui_kit::*;` replaces `use gpui_kit::*; use gpui_kit::component::*;`. The rest of these docs write `gpui::…` and `gpui_kit::component::…` paths; they resolve after that import, which also brings those crate names into scope.

@@ -10,7 +10,7 @@ Popover 用于在触发元素附近展示浮动内容。它支持多种定位方
 ## 导入
 
 ```rust
-use gpui_component::popover::{Popover};
+use gpui_kit::component::popover::{Popover};
 ```
 
 ## 用法
@@ -24,8 +24,8 @@ use gpui_component::popover::{Popover};
 :::
 
 ```rust
-use gpui::ParentElement as _;
-use gpui_component::{button::Button, popover::Popover};
+use gpui_kit::ParentElement as _;
+use gpui_kit::component::{button::Button, popover::Popover};
 
 Popover::new("basic-popover")
     .trigger(Button::new("trigger").label("Click me").outline())
@@ -49,7 +49,7 @@ Popover::new("basic-popover")
 ```
 
 ```rust
-use gpui_component::Anchor;
+use gpui_kit::component::Anchor;
 
 Popover::new("top-center")
     .anchor(Anchor::TopCenter)
@@ -75,8 +75,8 @@ Popover::new("form-popover")
 如果你需要根据状态动态构造内容，或者希望在闭包中拿到 Popover 的上下文，可以使用 `content`：
 
 ```rust
-use gpui::ParentElement as _;
-use gpui_component::popover::Popover;
+use gpui_kit::ParentElement as _;
+use gpui_kit::component::popover::Popover;
 
 Popover::new("complex-popover")
     .anchor(Anchor::BottomLeft)
@@ -101,7 +101,7 @@ Popover::new("complex-popover")
 如果你想把 Popover 当作自定义上下文菜单来用，可以指定鼠标按键：
 
 ```rust
-use gpui::MouseButton;
+use gpui_kit::MouseButton;
 
 Popover::new("context-menu")
     .anchor(Anchor::BottomRight)
@@ -117,7 +117,7 @@ Popover::new("context-menu")
 如果你希望在内容内部主动关闭 Popover，可以发出 `DismissEvent`：
 
 ```rust
-use gpui_component::{DismissEvent, popover::Popover};
+use gpui_kit::component::{DismissEvent, popover::Popover};
 
 Popover::new("dismiss-popover")
     .trigger(Button::new("dismiss").label("Dismiss Popover").outline())
@@ -155,7 +155,7 @@ Popover::new("custom-popover")
 通过 `open` 和 `on_open_change`，你可以把 Popover 的开关状态交给外部状态管理：
 
 ```rust
-use gpui_component::popover::Popover;
+use gpui_kit::component::popover::Popover;
 
 struct MyView {
     popover_open: bool,
@@ -176,7 +176,7 @@ Popover::new("controlled-popover")
 如果只想设置首次渲染时默认打开，可以使用 `default_open(true)`：
 
 ```rust
-use gpui_component::popover::Popover;
+use gpui_kit::component::popover::Popover;
 
 Popover::new("default-open-popover")
     .default_open(true)

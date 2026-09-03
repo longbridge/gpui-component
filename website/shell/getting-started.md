@@ -54,7 +54,7 @@ One file is enough. Create a directory with a `main.js` in it:
 
 ```js
 // hello/main.js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Hello extends View {
@@ -96,7 +96,7 @@ cargo run -p gpui-shell -- hello
 
 Four things in that file are worth naming now, because everything else builds on them.
 
-**One module per crate that provides it.** `"gpui"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. A name belongs to exactly one of them, so an import line says which layer a script depends on. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
+**One module per crate that provides it.** `"gpui-kit"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. A name belongs to exactly one of them, so an import line says which layer a script depends on. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
 **`main.js` must `export default` a class extending `View`.** `init` runs once when the View is created; `render` returns one element, retained `Entity` or string, and runs when the View is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
@@ -149,7 +149,7 @@ That output is the arena's own debug dump — the tree of components and recorde
 cargo run -p gpui-shell -- types hello
 ```
 
-This writes `gpui.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
+This writes `gpui-kit.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
 
 It also sets up everything else the editor needs: each Git dependency the manifest declares is fetched and linked into `node_modules` under its declared name, so `import { style } from "omarchy-ui"` resolves to the same files the runtime will execute and carries the package's own types, parameters and JSDoc; and a `jsconfig.json` is scaffolded when the directory has neither that nor a `tsconfig.json`. See [Dependencies](./dependencies.md).
 
@@ -189,7 +189,7 @@ gpui-shell --help | --version
 | -------------- | --------------------------------------------------------------- |
 | `<directory>`  | The application root, or the `main.js` inside it                |
 | `check`        | Load and render once without a window; exit `0` or `1`          |
-| `types`        | Write `gpui.d.ts`, link the manifest's dependencies, scaffold config |
+| `types`        | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
 | `--watch`      | Reload when the sources change                                  |
 | `--dev`        | Development mode; implies `--watch`                             |
 | `--print-spec` | With `check`, also print the element description that was built |

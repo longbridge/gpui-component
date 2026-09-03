@@ -1,9 +1,9 @@
-use gpui::{
+use gpui_kit::{
     Anchor, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
     IntoElement, ParentElement, Render, Styled, Window,
 };
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Theme, WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
@@ -53,7 +53,7 @@ impl NotificationStory {
 }
 
 impl Focusable for NotificationStory {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui_kit::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }

@@ -19,8 +19,8 @@ components.
 ## Import
 
 ```rust
-use gpui::{ParentElement as _, StyleRefinement, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, StyleRefinement, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _,
     badge::Badge,
     button::{Button, ButtonVariants as _},

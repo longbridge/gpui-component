@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
-use gpui::{
-    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, Styled, Window, div, prelude::FluentBuilder,
-    px, relative,
-};
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::*;
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Icon, IconName, Side, Sizable, StyledExt, ThemeStyled as _,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
@@ -47,7 +44,7 @@ pub struct SidebarStory {
     side: Side,
     click_to_open_submenu: bool,
     show_dynamic_children: bool,
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     checked: bool,
 }
 
@@ -427,7 +424,7 @@ impl super::Story for SidebarStory {
 }
 
 impl Focusable for SidebarStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &gpui_kit::App) -> gpui_kit::FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -435,9 +432,9 @@ impl Focusable for SidebarStory {
 impl Render for SidebarStory {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
+        window: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
         let groups: [Vec<Item>; 2] = [
             vec![
                 Item::Playground,

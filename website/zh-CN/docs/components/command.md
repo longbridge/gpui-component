@@ -12,7 +12,7 @@ description: 命令面板 —— 经过过滤的命令与快捷操作列表。
 ## 引入
 
 ```rust
-use gpui_component::command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState};
+use gpui_kit::component::command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState};
 ```
 
 ## 组合方式
@@ -40,7 +40,7 @@ CommandState                    // 查询、焦点、选择、滚动
 在应用初始化时定义 Action 和绑定。默认行会先在 Command 焦点作用域、再在应用作用域解析 Action 的当前绑定；只有找到绑定时才渲染 `Kbd` 提示。
 
 ```rust
-use gpui::{actions, KeyBinding};
+use gpui_kit::{actions, KeyBinding};
 
 actions!(my_app, [OpenProfile, OpenBilling]);
 
@@ -109,7 +109,7 @@ Command::new(&actions)
 使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。`header` 渲染在可选搜索框和列表之上；`footer` 渲染在列表之下。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——Command 会调用 `on_cancel`，然后传播 Cancel。应由宿主 Dialog 完成关闭——不要在 `on_cancel` 中再次关闭它。
 
 ```rust
-use gpui_component::WindowExt as _;
+use gpui_kit::component::WindowExt as _;
 
 let state = self.command_state.clone();
 window.open_dialog(cx, move |dialog, _, _| {

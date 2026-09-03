@@ -7,8 +7,9 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use gpui::{prelude::FluentBuilder as _, *};
-use gpui_component::{
+use gpui_component_story::Open;
+use gpui_kit::assets::Assets;
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _,
     avatar::Avatar,
     button::{Button, ButtonVariants as _},
@@ -28,8 +29,7 @@ use gpui_component::{
     },
     v_flex,
 };
-use gpui_component_story::Open;
-use gpui_kit_assets::Assets;
+use gpui_kit::{prelude::FluentBuilder as _, *};
 use lsp_types::{SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend};
 use regex::{Captures, Regex};
 
@@ -1457,7 +1457,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         gpui_component_story::init(cx);

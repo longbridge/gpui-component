@@ -10,7 +10,7 @@ A comprehensive charting library providing Line, Bar, Area, Pie, Radar, Candlest
 ## Import
 
 ```rust
-use gpui_component::chart::{
+use gpui_kit::component::chart::{
     LineChart, BarChart, AreaChart, PieChart, RadarChart, CandlestickChart, SankeyChart,
 };
 ```
@@ -140,7 +140,7 @@ BarChart::new(data)
 For gradient fills aligned to the bar's orientation, use `fill_gradient`. The closure receives the datum, the chart's full data range, and a `chart_to_bar` helper that maps a chart-value coordinate to a bar-local gradient position (`0.0` is the bar's base, `1.0` is its tip). The gradient angle is derived from the bar's `BarAlignment` so stop-0 sits at the base and stop-1 at the tip.
 
 ```rust
-use gpui::linear_color_stop;
+use gpui_kit::linear_color_stop;
 
 // Per-bar gradient: every bar fades from a translucent base to its full color
 // at the tip, regardless of its value.
@@ -174,10 +174,10 @@ BarChart::new(data)
 
 #### Bar Chart Alignment
 
-`BarAlignment` controls the bar orientation and the side where the baseline sits. Import it from `gpui_component::plot::shape`.
+`BarAlignment` controls the bar orientation and the side where the baseline sits. Import it from `gpui_kit::component::plot::shape`.
 
 ```rust
-use gpui_component::plot::shape::BarAlignment;
+use gpui_kit::component::plot::shape::BarAlignment;
 
 // Default: vertical bars growing upward from the bottom
 BarChart::new(data)
@@ -211,7 +211,7 @@ use a single `px(..)` for uniform rounding, or construct `Corners` manually to
 round only specific corners (e.g. just the tip end of each bar).
 
 ```rust
-use gpui::{px, Corners};
+use gpui_kit::{px, Corners};
 
 // Uniform 4px rounded corners on every bar
 BarChart::new(data)
@@ -299,7 +299,7 @@ AreaChart::new(data)
 #### Area Chart Styling
 
 ```rust
-use gpui::{linear_gradient, linear_color_stop};
+use gpui_kit::{linear_gradient, linear_color_stop};
 
 // With gradient fill
 AreaChart::new(data)
@@ -505,7 +505,7 @@ A sankey diagram visualizes flows between nodes, ideal for financial statements,
 #### Basic Sankey Chart
 
 ```rust
-use gpui_component::plot::shape::SankeyLink;
+use gpui_kit::component::plot::shape::SankeyLink;
 
 #[derive(Clone)]
 struct FlowNode {
@@ -534,7 +534,7 @@ The value label is drawn above the name label. Its closure receives the node's c
 #### Node Alignment
 
 ```rust
-use gpui_component::plot::shape::SankeyAlign;
+use gpui_kit::component::plot::shape::SankeyAlign;
 
 // Justify (default): nodes without outgoing links move to the last column
 SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
@@ -565,7 +565,7 @@ Link ribbons are filled with a horizontal gradient from the source node color to
 For full control over the label lines, use `labels` — one `SankeyLabel` per line, top to bottom, each with its own color and font size. It takes precedence over `node_label`/`value_label` when set. For example, a financial-statement label with a year-over-year change line:
 
 ```rust
-use gpui_component::chart::SankeyLabel;
+use gpui_kit::component::chart::SankeyLabel;
 
 SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
     let arrow = if d.growth >= 0. { "▲" } else { "▼" };
@@ -585,7 +585,7 @@ Line color defaults to the theme foreground and font size to 10; the chart keeps
 Node heights are linear in flow value by default, so a large value range (e.g. 200:1) leaves the small flows nearly invisible and the dominant flow oversized. Set `value_scale(SankeyValueScale::Sqrt)` to compress the range — the component sizes nodes by the square root of the value, so small flows stay visible without pre-transforming the data, and labels still receive the raw values:
 
 ```rust
-use gpui_component::plot::shape::SankeyValueScale;
+use gpui_kit::component::plot::shape::SankeyValueScale;
 
 SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
 ```
@@ -630,7 +630,7 @@ struct StockPrice {
     pub volume: u64,
 }
 
-// Sankey flow: nodes are referenced by index (from gpui_component::plot::shape)
+// Sankey flow: nodes are referenced by index (from gpui_kit::component::plot::shape)
 pub struct SankeyLink {
     pub source: usize,
     pub target: usize,

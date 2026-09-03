@@ -10,7 +10,7 @@ A flexible date picker component with calendar interface that supports single da
 ## Import
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     date_picker::{DatePicker, DatePickerState, DateRangePreset, DatePickerEvent},
     calendar::{Date, Matcher},
 };
@@ -132,7 +132,7 @@ div()
 ### Disabled Weekends
 
 ```rust
-use gpui_component::calendar;
+use gpui_kit::component::calendar;
 
 let date_picker = cx.new(|cx| {
     DatePickerState::new(window, cx)

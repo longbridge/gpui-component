@@ -1,11 +1,9 @@
 use std::path::PathBuf;
 
-use gpui::{
-    App, AppContext, Context, Entity, InteractiveElement, KeyBinding, ParentElement, Render,
-    Styled, Window, actions, prelude::FluentBuilder as _, px,
-};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::*;
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName,
     button::Button,
     dock::PanelControl,
@@ -152,21 +150,21 @@ impl TreeStory {
         }
     }
 
-    fn on_action_rename(&mut self, _: &Rename, _: &mut Window, cx: &mut gpui::Context<Self>) {
+    fn on_action_rename(&mut self, _: &Rename, _: &mut Window, cx: &mut gpui_kit::Context<Self>) {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             let item = entry.item();
             println!("Renaming item: {} ({})", item.label, item.id);
         }
     }
 
-    fn on_action_open(&mut self, _: &OpenFile, _: &mut Window, cx: &mut gpui::Context<Self>) {
+    fn on_action_open(&mut self, _: &OpenFile, _: &mut Window, cx: &mut gpui_kit::Context<Self>) {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             let item = entry.item();
             println!("Opening item: {} ({})", item.label, item.id);
         }
     }
 
-    fn on_action_delete(&mut self, _: &Delete, _: &mut Window, cx: &mut gpui::Context<Self>) {
+    fn on_action_delete(&mut self, _: &Delete, _: &mut Window, cx: &mut gpui_kit::Context<Self>) {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             let item = entry.item();
             println!("Deleting item: {} ({})", item.label, item.id);
@@ -191,9 +189,9 @@ impl Story for TreeStory {
 impl Render for TreeStory {
     fn render(
         &mut self,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
+        _: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
         let view = cx.entity();
         v_flex()
             .w_full()

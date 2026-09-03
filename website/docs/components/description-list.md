@@ -10,7 +10,7 @@ A versatile component for displaying key-value pairs in a structured, organized 
 ## Import
 
 ```rust
-use gpui_component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
+use gpui_kit::component::description_list::{DescriptionList, DescriptionItem, DescriptionText};
 ```
 
 ## Usage
@@ -108,7 +108,7 @@ DescriptionList::new()
 ### Custom Label Width (Horizontal Layout)
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 DescriptionList::horizontal()
     .label_width(px(200.0)) // Set custom label width
@@ -119,7 +119,7 @@ DescriptionList::horizontal()
 ### Rich Content with Custom Elements
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 DescriptionList::new()
     .columns(2)

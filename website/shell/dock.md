@@ -9,7 +9,7 @@ order: 13
 A View that can only fill a window is not much of an application. A **dock area** turns a script View into a *panel*: draggable, dockable, zoomable, and still where the user left it after a restart.
 
 ```js
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { DockArea, dock_area, v_flex } from "gpui-base";
 
 class Notes extends View {

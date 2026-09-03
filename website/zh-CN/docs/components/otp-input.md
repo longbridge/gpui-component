@@ -10,7 +10,7 @@ OtpInput 是为一次性验证码（OTP）设计的输入组件，会以网格�
 ## 导入
 
 ```rust
-use gpui_component::input::{OtpInput, OtpState};
+use gpui_kit::component::input::{OtpInput, OtpState};
 ```
 
 ## 用法

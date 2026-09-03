@@ -10,12 +10,12 @@ VirtualList is a high-performance component designed for efficiently rendering l
 ## Import
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     v_virtual_list, h_virtual_list, VirtualListScrollHandle,
     scroll::{Scrollbar, ScrollbarState, ScrollbarAxis},
 };
 use std::rc::Rc;
-use gpui::{px, size, ScrollStrategy, Size, Pixels};
+use gpui_kit::{px, size, ScrollStrategy, Size, Pixels};
 ```
 
 ## Usage
@@ -24,7 +24,7 @@ use gpui::{px, size, ScrollStrategy, Size, Pixels};
 
 ```rust
 use std::rc::Rc;
-use gpui::{px, size, Size, Pixels};
+use gpui_kit::{px, size, Size, Pixels};
 
 pub struct ListViewExample {
     items: Vec<String>,

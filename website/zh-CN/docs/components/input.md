@@ -10,7 +10,7 @@ Input 是一个单行文本输入组件，支持校验、输入掩码、前后�
 ## 导入
 
 ```rust
-use gpui_component::input::{Input, InputState};
+use gpui_kit::component::input::{Input, InputState};
 ```
 
 ## 用法
@@ -55,7 +55,7 @@ Input::new(&input)
 ### 前缀和后缀
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Input::new(&input)
     .prefix(Icon::new(IconName::Search).small())
@@ -152,7 +152,7 @@ let input = cx.new(|cx|
         .mask_pattern("AAA-###-AAA")
 );
 
-use gpui_component::input::MaskPattern;
+use gpui_kit::component::input::MaskPattern;
 
 let input = cx.new(|cx|
     InputState::new(window, cx)

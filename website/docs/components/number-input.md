@@ -10,7 +10,7 @@ A specialized input component for numeric values with built-in increment/decreme
 ## Import
 
 ```rust
-use gpui_component::input::{InputState, NumberInput, NumberInputEvent, StepAction};
+use gpui_kit::component::input::{InputState, NumberInput, NumberInputEvent, StepAction};
 ```
 
 ## Usage
@@ -108,7 +108,7 @@ NumberInput::new(&price_input)
 The step strategy can also be updated at runtime via `set_step`:
 
 ```rust
-use gpui_component::input::NumberStep;
+use gpui_kit::component::input::NumberStep;
 
 state.set_step(NumberStep::Fixed(0.01), window, cx);
 state.set_step(NumberStep::by_value(|v, _, _cx| if v < 1. { 0.01 } else { 0.1 }), window, cx);
@@ -118,7 +118,7 @@ state.set_step(None, window, cx); // Fall back to NumberInputEvent::Step
 ### With Number Formatting
 
 ```rust
-use gpui_component::input::MaskPattern;
+use gpui_kit::component::input::MaskPattern;
 
 // Currency input with thousands separator
 let currency_input = cx.new(|cx|
@@ -149,7 +149,7 @@ NumberInput::new(&input).small()
 ### With Prefix and Suffix
 
 ```rust
-use gpui_component::{button::{Button, ButtonVariants}, IconName};
+use gpui_kit::component::{button::{Button, ButtonVariants}, IconName};
 
 // With currency prefix
 NumberInput::new(&input)

@@ -31,7 +31,8 @@ gpui-kit = { version = "0.6", default-features = false, features = ["component"]
 
 ```rust
 use gpui_kit::component::button::*;
-use gpui_kit::prelude::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct HelloWorld;
 

@@ -1,11 +1,11 @@
 ---
-title: Introduction
+title: GPUI Kit
 description: A comprehensive Rust framework for building fantastic, high-performance desktop applications with GPUI.
 ---
 
-# GPUI Kit Introduction
+# GPUI Kit
 
-GPUI Kit is a comprehensive Rust desktop application framework built on GPUI.
+GPUI Kit (aka: GPUI Component) is a comprehensive Rust desktop application framework built on GPUI.
 
 It combines a complete UI system with application-grade data, layout, content,
 and editing capabilities, and it ships as three crates that build on each other,
@@ -50,8 +50,9 @@ gpui-kit = "0.6"
 Then create a simple "Hello, World!" application with a button:
 
 ```rust
+use gpui_kit::*;
 use gpui_kit::component::button::*;
-use gpui_kit::prelude::*;
+use gpui_kit::component::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {

@@ -10,7 +10,7 @@ ColorPicker 是一个通用的颜色选择组件，提供直观的颜色选择�
 ## 导入
 
 ```rust
-use gpui_component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEvent};
+use gpui_kit::component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEvent};
 ```
 
 ## 用法
@@ -18,7 +18,7 @@ use gpui_component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEve
 ### 基础 Color Picker
 
 ```rust
-use gpui::{Entity, Window, Context};
+use gpui_kit::{Entity, Window, Context};
 
 let color_picker = cx.new(|cx|
     ColorPickerState::new(window, cx)
@@ -31,7 +31,7 @@ ColorPicker::new(&color_picker)
 ### 处理事件
 
 ```rust
-use gpui::{Subscription, Entity};
+use gpui_kit::{Subscription, Entity};
 
 let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
 
@@ -50,7 +50,7 @@ ColorPicker::new(&color_picker)
 ### 设置默认颜色
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 let color_picker = cx.new(|cx|
     ColorPickerState::new(window, cx)
@@ -70,7 +70,7 @@ ColorPicker::new(&color_picker).xsmall()
 ### 自定义精选颜色
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 let featured_colors = vec![
     cx.theme().red,
@@ -86,7 +86,7 @@ ColorPicker::new(&color_picker)
 ### 用图标替代色块
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 ColorPicker::new(&color_picker)
     .icon(IconName::Palette)
@@ -102,7 +102,7 @@ ColorPicker::new(&color_picker)
 ### 自定义锚点位置
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 ColorPicker::new(&color_picker)
     .anchor(Anchor::TopRight)
@@ -159,7 +159,7 @@ let color = cx.theme().blue;
 ColorPicker 原生使用 HSL/HSLA 表示：
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 let color = Hsla::hsl(240.0, 100.0, 50.0);
 
@@ -185,7 +185,7 @@ if let Ok(color) = Hsla::parse_hex("#3366FF") {
 支持透明度：
 
 ```rust
-use gpui::hsla;
+use gpui_kit::hsla;
 
 let semi_transparent = hsla(0.5, 0.8, 0.6, 0.7);
 
@@ -266,7 +266,7 @@ impl ThemeEditor {
 ### 品牌色选择器
 
 ```rust
-use gpui_component::Sizable as _;
+use gpui_kit::component::Sizable as _;
 
 let brand_colors = vec![
     Hsla::parse_hex("#FF6B6B").unwrap(),
@@ -285,7 +285,7 @@ ColorPicker::new(&color_picker)
 ### 工具栏颜色选择器
 
 ```rust
-use gpui_component::{Sizable as _, IconName};
+use gpui_kit::component::{Sizable as _, IconName};
 
 ColorPicker::new(&text_color_picker)
     .icon(IconName::Type)

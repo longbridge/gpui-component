@@ -26,7 +26,7 @@ import { project_name } from "workspace";
 project_name();      // "gpui-component"
 ```
 
-注册好的模块就是一个普通的 ES module，由解析 `gpui` 和 `path` 的同一个 loader 负责。一次调用注册一个模块，重名会替换掉先前那个而不是合并进去——有三个模块的 Host 就调三次 `export_module`。本页余下的部分讲它的代价和它拒绝的东西。
+注册好的模块就是一个普通的 ES module，由解析 `gpui-kit` 和 `path` 的同一个 loader 负责。一次调用注册一个模块，重名会替换掉先前那个而不是合并进去——有三个模块的 Host 就调三次 `export_module`。本页余下的部分讲它的代价和它拒绝的东西。
 
 ## 为什么是 import 而不是查表
 
@@ -193,7 +193,7 @@ HostModule::new("market")
     .function("watch", /* … */)
 ```
 
-生成的 `gpui.d.ts` 会把这段原样放进 `declare module "market"`，于是 `import { quotes } from "market"` 得到的检查和 `import { div } from "gpui"` 完全一样。
+生成的 `gpui-kit.d.ts` 会把这段原样放进 `declare module "market"`，于是 `import { quotes } from "market"` 得到的检查和 `import { div } from "gpui-kit"` 完全一样。
 
 把它写在这里、而不是脚本旁边的 `.d.ts` 里，是让两半保持为一件事的关键。`.d.ts` 会是第二个文件、第二种语言，而且没有任何东西把它绑在注册表上。`export_module` 会拿声明的导出和实际注册的对账，不一致就拒绝：
 
@@ -208,7 +208,7 @@ registered but not declared: quotes; declared but not registered: prices
 
 ```ts
 declare module "audit" {
-  import { HostValue } from "gpui";
+  import { HostValue } from "gpui-kit";
 
   export function observe(...args: HostValue[]): HostValue;
 }

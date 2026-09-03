@@ -53,7 +53,7 @@ gpui_platform::application()
 
 ```js
 // hello/main.js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Hello extends View {
@@ -95,7 +95,7 @@ cargo run -p gpui-shell -- hello
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
 
-**能力由哪个包提供，就从哪个模块导入。** `"gpui"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
+**能力由哪个包提供，就从哪个模块导入。** `"gpui-kit"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
 **`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在 View 创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在 View 失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
@@ -148,7 +148,7 @@ cargo run -p gpui-shell -- check hello --print-spec
 cargo run -p gpui-shell -- types hello
 ```
 
-它会在应用旁边写出 `gpui.d.ts`。在脚本顶部加上 `// @ts-check`，编辑器就会补全整套 API，并在运行之前、在调用点上直接拒绝拼错的样式方法、不存在的颜色 token，或者 `.p("auto")`。
+它会在应用旁边写出 `gpui-kit.d.ts`。在脚本顶部加上 `// @ts-check`，编辑器就会补全整套 API，并在运行之前、在调用点上直接拒绝拼错的样式方法、不存在的颜色 token，或者 `.p("auto")`。
 
 它同时会把编辑器需要的其余部分一并配好：manifest 声明的每个 Git 依赖都会被抓取并按声明的名字链接进 `node_modules`，于是 `import { style } from "omarchy-ui"` 解析到的正是运行时将要执行的那批文件，连同该 package 自己的类型、参数与 JSDoc；若目录里既没有 `jsconfig.json` 也没有 `tsconfig.json`，还会生成一份 `jsconfig.json`。详见[依赖](./dependencies.md)。
 
@@ -188,7 +188,7 @@ gpui-shell --help | --version
 | -------------- | ------------------------------------------- |
 | `<directory>`  | 应用根目录，或其中的 `main.js`              |
 | `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1` |
-| `types`        | 写出 `gpui.d.ts`、链接 manifest 依赖、生成配置 |
+| `types`        | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
 | `--watch`      | 源码变化时重载                              |
 | `--dev`        | 开发模式，隐含 `--watch`                    |
 | `--print-spec` | 配合 `check`，额外打印构建出的元素描述      |

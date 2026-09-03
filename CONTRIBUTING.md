@@ -145,7 +145,7 @@ GPUI from crates.io, publish a snapshot of any Zed commit under our own names:
 | other internal  | `gpui-pre-<x>` (e.g. `gpui-pre-collections`) |
 
 Every crate those four need is published together at one version, and each keeps
-its original crate name as the library name, so `use gpui::*` works unchanged.
+its original crate name as the library name, so `use gpui_kit::*` works unchanged.
 
 ```bash
 # Verify the latest Zed `main` without uploading anything.

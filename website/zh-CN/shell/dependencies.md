@@ -6,7 +6,7 @@ order: 9
 
 # 依赖
 
-应用用相对路径 import 自己的文件。除此之外，它写下的每一条 import 只有两个来源：运行时提供的**内建模块**——`gpui`、`gpui-base`、`gpui-shell`、`gpui-fps`，以及标准运行时的 `fs/promises`、`path`、`crypto`、`net`、`websocket`——或者一个**依赖**：manifest 声明、gpui-shell 在 entry module 求值之前从 Git 抓取的 JavaScript package。
+应用用相对路径 import 自己的文件。除此之外，它写下的每一条 import 只有两个来源：运行时提供的**内建模块**——`gpui-kit`、`gpui-base`、`gpui-shell`、`gpui-fps`，以及标准运行时的 `fs/promises`、`path`、`crypto`、`net`、`websocket`——或者一个**依赖**：manifest 声明、gpui-shell 在 entry module 求值之前从 Git 抓取的 JavaScript package。
 
 这里没有 registry，没有包管理器，也没有安装步骤。一个依赖就是一个 Git remote、一个 ref，加上脚本 import 它时用的名字。
 
@@ -19,7 +19,7 @@ order: 9
 | 发布 ES module，且不需要构建步骤                       | 运行时直接求值 checkout 里的文件，而且 `require` 不存在     |
 | 根目录 `package.json` 带 `"type": "module"` 与 `main`   | 它让声明只需一行，并同时向运行时和编辑器指明 entry          |
 | 只 import 内建模块与自己的文件                          | 其余的都解析不了——它无法反向伸回 import 它的应用            |
-| 把 `gpui` 与 `gpui-base` 当作由环境提供，而非自己的依赖 | 它们来自加载它的运行时，版本由 Host 决定                    |
+| 把 `gpui-kit` 与 `gpui-base` 当作由环境提供，而非自己的依赖 | 它们来自加载它的运行时，版本由 Host 决定                    |
 | 不声明任何属于自己的 capability                         | 它的 `fs` 与 `fetch` 调用都跑在使用方应用的授权之下         |
 
 这个名字不会被任何代码读取：依赖是靠被声明来识别的，不是靠被贴标签。它的作用是让一个作者写下、另一个作者找到；写给搜索引擎的那一份，是仓库上的 `gpui-shell` topic。
@@ -82,7 +82,7 @@ export function render(cx) {
 | `"omarchy-ui"`                   | package entry——见 [package entry](#package-entry)            |
 | `"omarchy-ui/src/style"`         | checkout 内的该文件，`.js` 后缀可省略                        |
 | package 内部的 `"./theme.js"`    | 该 package 自己 checkout 内的文件                            |
-| package 内部的 `"gpui"`          | 内建模块，与应用代码中完全一致                               |
+| package 内部的 `"gpui-kit"`          | 内建模块，与应用代码中完全一致                               |
 | 另一个已声明的依赖名             | 那个 package 的 entry——已声明的 package 之间互相可见         |
 | 从 package 内部用裸名 import 应用文件 | 拒绝：package 不能反向伸回 import 它的应用                |
 
@@ -179,7 +179,7 @@ JSON 格式错误、非字符串 `main`，以及缺失、不是文件或逃出 c
 projects/
 ├── gpui-shell.json
 ├── main.js
-├── gpui.d.ts          运行时生成——请忽略
+├── gpui-kit.d.ts          运行时生成——请忽略
 ├── jsconfig.json      只生成一次，之后归你
 └── node_modules/
     └── omarchy-ui  →  ~/.gpui-shell/cache/dependencies/checkouts/<remote>/<commit>
@@ -189,12 +189,12 @@ projects/
 
 只有 gpui-shell 自己写下的条目会被替换或删除——指向自身依赖缓存的 symlink，或带有它标记文件的目录。同名的已安装 package 不会被动到；manifest 中已移除的依赖，其链接也会一并清除。若平台拒绝创建 symlink（例如未开启开发者模式、权限不足的 Windows 进程），gpui-shell 改为写入一个转发该 checkout 的小 package：裸 import 的类型效果相同，只有 package subpath import 无法解析。
 
-当目录里既没有 `jsconfig.json` 也没有 `tsconfig.json` 时会生成一份 `jsconfig.json`，且只生成一次——已有的配置永远不会被替换。它不是装饰：靠推断得到的 `moduleResolution` 可能落到那种从不查看 `node_modules` 的解析方式，把运行时明明能解析的依赖标红；而默认的 `lib` 会把浏览器的全局对象塞给脚本，它们的声明与 `gpui.d.ts` 产生冲突，于是描述 API 的那个文件本身反倒被报成错误。
+当目录里既没有 `jsconfig.json` 也没有 `tsconfig.json` 时会生成一份 `jsconfig.json`，且只生成一次——已有的配置永远不会被替换。它不是装饰：靠推断得到的 `moduleResolution` 可能落到那种从不查看 `node_modules` 的解析方式，把运行时明明能解析的依赖标红；而默认的 `lib` 会把浏览器的全局对象塞给脚本，它们的声明与 `gpui-kit.d.ts` 产生冲突，于是描述 API 的那个文件本身反倒被报成错误。
 
-`node_modules` 和 `gpui.d.ts` 一样属于生成物，两者都应加入忽略列表：
+`node_modules` 和 `gpui-kit.d.ts` 一样属于生成物，两者都应加入忽略列表：
 
 ```text
-gpui.d.ts
+gpui-kit.d.ts
 node_modules/
 ```
 

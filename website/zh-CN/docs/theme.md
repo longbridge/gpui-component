@@ -7,7 +7,7 @@ order: -4
 所有组件都支持内置主题系统。[ActiveTheme] trait 用于访问当前主题中的颜色值：
 
 ```rs
-use gpui_component::{ActiveTheme as _};
+use gpui_kit::component::{ActiveTheme as _};
 
 // Access theme colors in your components
 cx.theme().primary
@@ -52,8 +52,8 @@ cx.theme().foreground
 
 ```rs
 use std::path::PathBuf;
-use gpui::{App, SharedString};
-use gpui_component::{Theme, ThemeRegistry};
+use gpui_kit::{App, SharedString};
+use gpui_kit::component::{Theme, ThemeRegistry};
 
 pub fn init(cx: &mut App) {
     let theme_name = SharedString::from("Ayu Light");

@@ -1,5 +1,6 @@
 use gpui_kit::component::button::*;
-use gpui_kit::prelude::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct Example;
 impl Render for Example {

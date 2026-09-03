@@ -1,5 +1,4 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_kit::component::{
     Icon, IconName, ThemeStyled as _,
     button::{Button, ButtonVariants as _},
     command::{CommandEntry, CommandItem},
@@ -11,6 +10,7 @@ use gpui_component::{
     status_bar::StatusBar,
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use crate::*;
 
@@ -222,7 +222,7 @@ impl Gallery {
 
     pub(crate) fn select_story_index(
         &mut self,
-        index: gpui_component::IndexPath,
+        index: gpui_kit::component::IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -460,7 +460,7 @@ impl Render for Gallery {
 #[cfg(test)]
 mod tests {
     use super::{component_command, find_story_index};
-    use gpui_component::command::CommandEntry;
+    use gpui_kit::component::command::CommandEntry;
 
     #[test]
     fn component_command_uses_story_name() {

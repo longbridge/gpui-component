@@ -21,7 +21,7 @@ DataTable 是一个面向大数据集场景的高性能表格组件。它支持�
 ## 导入
 
 ```rust
-use gpui_component::table::{
+use gpui_kit::component::table::{
     DataTable, TableState, TableDelegate,
     Column, ColumnSort, ColumnFixed,
     TableEvent
@@ -36,8 +36,8 @@ use gpui_component::table::{
 
 ```rust
 use std::ops::Range;
-use gpui::{App, Context, Window, IntoElement};
-use gpui_component::table::{DataTable, TableDelegate, Column, ColumnSort};
+use gpui_kit::{App, Context, Window, IntoElement};
+use gpui_kit::component::table::{DataTable, TableDelegate, Column, ColumnSort};
 
 struct MyData {
     id: usize,
@@ -324,8 +324,8 @@ impl TableDelegate for MyTableDelegate {
 `DataTable` 实现了 `Sizable`：可以用 `.small()`、`.large()` 等预设尺寸调整表格密度，也可以传入自定义像素值来设置统一的表头和表体行高。
 
 ```rust
-use gpui::px;
-use gpui_component::Sizable as _;
+use gpui_kit::px;
+use gpui_kit::component::Sizable as _;
 
 DataTable::new(&state)
     .with_size(px(48.))

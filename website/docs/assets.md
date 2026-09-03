@@ -26,10 +26,10 @@ gpui-kit-assets = { git = "https://github.com/longbridge/gpui-kit" }
 Then we need call the `with_assets` method when creating the GPUI application to register the asset source:
 
 ```rs
-use gpui::*;
-use gpui_kit_assets::Assets;
+use gpui_kit::*;
+use gpui_kit::assets::Assets;
 
-let app = gpui_platform::application().with_assets(Assets);
+let app = gpui_kit::application().with_assets(Assets);
 ```
 
 Now, we can use `IconName` and `Icon` in our application as usual, the all icon assets are loaded from the default bundled assets.
@@ -52,8 +52,8 @@ And GPUI Application providers an `AssetSource` trait to load the assets.
 
 ```rs
 use anyhow::anyhow;
-use gpui::*;
-use gpui_component::{v_flex, IconName, Root};
+use gpui_kit::*;
+use gpui_kit::component::{v_flex, IconName, Root};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 
@@ -87,11 +87,11 @@ We need call the `with_assets` method when creating the GPUI application to regi
 ```rs
 fn main() {
     // Register Assets to GPUI application.
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         // We must initialize gpui_component before using it.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

@@ -10,7 +10,7 @@ Toggle 是一种按钮式的二元切换组件，用于表示选中 / 未选中�
 ## 导入
 
 ```rust
-use gpui_component::button::{Toggle, ToggleGroup};
+use gpui_kit::component::button::{Toggle, ToggleGroup};
 ```
 
 ## 用法
@@ -31,7 +31,7 @@ Toggle::new("toggle1")
 ### 图标 Toggle
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Toggle::new("toggle2")
     .icon(IconName::Eye)
@@ -182,7 +182,7 @@ ToggleGroup::new("formatting")
 非零 `gap`：
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 ToggleGroup::new("quick-actions")
     .segmented()

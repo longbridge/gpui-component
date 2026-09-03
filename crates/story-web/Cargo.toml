@@ -8,10 +8,7 @@ edition.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gpui.workspace = true
-gpui_platform.workspace = true
-gpui-component = { path = "../ui", default-features = false }
-gpui-kit-assets.workspace = true
+gpui-kit.workspace = true
 gpui-component-story = { path = "../story", default-features = false }
 
 # Web specific dependencies

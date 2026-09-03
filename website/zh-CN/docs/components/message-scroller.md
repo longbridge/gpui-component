@@ -23,8 +23,8 @@ description: 支持尾部跟随、未读定位和稳定 prepend 的虚拟消息�
 ```rust
 use std::time::Duration;
 
-use gpui::{div, IntoElement as _, ParentElement as _, StyleRefinement, Styled as _};
-use gpui_component::{
+use gpui_kit::{div, IntoElement as _, ParentElement as _, StyleRefinement, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _,
     button::ButtonVariants as _,
     message_scroller::{MessageScroller, MessageScrollerState},

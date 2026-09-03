@@ -17,8 +17,8 @@ chat, assistant responses, system notices, and generated content.
 ## Import
 
 ```rust
-use gpui::{ParentElement as _, StyleRefinement, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, StyleRefinement, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Colorize as _, Sizable as _,
     attachment::{Attachment, AttachmentContent, AttachmentTitle},
     avatar::Avatar,

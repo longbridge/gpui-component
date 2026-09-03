@@ -10,7 +10,7 @@ A versatile badge component that can display counts, dots, or icons on elements.
 ## Import
 
 ```rust
-use gpui_component::badge::Badge;
+use gpui_kit::component::badge::Badge;
 ```
 
 ## Usage
@@ -76,7 +76,7 @@ Badge::new()
 ### Badge Colors
 
 ```rust
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
 
 // Custom colors
 Badge::new()
@@ -98,7 +98,7 @@ Badge::new()
 ### Badge on Icons
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 // Badge with count on icon
 Badge::new()
@@ -120,7 +120,7 @@ Badge::new()
 ### Badge on Avatars
 
 ```rust
-use gpui_component::avatar::Avatar;
+use gpui_kit::component::avatar::Avatar;
 
 // Basic count badge
 Badge::new()

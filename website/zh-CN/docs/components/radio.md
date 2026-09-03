@@ -10,7 +10,7 @@ Radio 用于在一组选项中选择唯一结果。适合“多选一”的场�
 ## 导入
 
 ```rust
-use gpui_component::radio::{Radio, RadioGroup};
+use gpui_kit::component::radio::{Radio, RadioGroup};
 ```
 
 ## 用法

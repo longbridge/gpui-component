@@ -40,7 +40,7 @@ cx.open_window(options, move |window, cx| {
 })?;
 ```
 
-存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于 Host 已经批准；两条路径都按 Host 当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让 Host panic。需要自行处理结构化错误的 Host 使用 `try_load`。失败状态的 root 没有可供监听的应用，因此 `watch` 会返回 `Err`；这里忽略这个错误，才能保留可选择的失败界面。
+存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于 Host 已经批准；两条路径都按 Host 当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui-kit.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让 Host panic。需要自行处理结构化错误的 Host 使用 `try_load`。失败状态的 root 没有可供监听的应用，因此 `watch` 会返回 `Err`；这里忽略这个错误，才能保留可选择的失败界面。
 
 下面的低层方法只供需要把脚本 View 装进既有 Rust 组合的 Host 使用。
 

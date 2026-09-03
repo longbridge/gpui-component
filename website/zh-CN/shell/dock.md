@@ -9,7 +9,7 @@ order: 13
 只能铺满整个窗口的 View 算不上一个应用。**dock area** 把脚本 View 变成*面板*：可拖动、可停靠、可放大，重启之后仍然停在用户上次放的位置。
 
 ```js
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { DockArea, dock_area, v_flex } from "gpui-base";
 
 class Notes extends View {

@@ -10,7 +10,7 @@
 This document describes the architecture implemented by `crates/shell`. It is a
 source-derived reference, not a proposal. The public exports in
 `crates/shell/src/lib.rs`, the Rust API documentation, and the generated
-`gpui.d.ts` remain authoritative for individual methods.
+`gpui-kit.d.ts` remain authoritative for individual methods.
 
 `gpui-shell` is a scriptable application runtime built on `gpui-base`. The host
 owns rendering, layout, text editing, focus, overlays, and system access; the
@@ -212,7 +212,7 @@ Seven things are deliberately absent, and will stay absent:
 
 ```text
      JS application            main.js · views · styles · business logic
-              │  import ... from "gpui" · "gpui-base" · "gpui-fps"
+              │  import ... from "gpui-kit" · "gpui-base" · "gpui-fps"
               ▼
      crates/shell ── gpui-shell
      ┌──────────────────────────────────────────────┐
@@ -266,7 +266,7 @@ and styling written in JavaScript instead of Rust, and `ui.js` deliberately
 follows the showcase's visual language.
 
 **The layering is visible in the script's import lines.** Each crate that
-provides script API gets a module named after it: `"gpui"` for GPUI's own
+provides script API gets a module named after it: `"gpui-kit"` for GPUI's own
 elements and what this runtime adds, `"gpui-base"` for base's layout helpers,
 components and theme, `"gpui-fps"` for its overlay. A name belongs to exactly one
 of them, which makes the boundary argued for above checkable rather than merely
@@ -343,7 +343,7 @@ a legal host call?" into a runtime-checkable fact, so an out-of-scope access
 throws a script exception rather than reading a dead stack frame (§9).
 
 **5.5 Binding tables are data.** The no-argument style surface comes from
-GPUI's reflection tables with no hand-written names, and `gpui.d.ts` is
+GPUI's reflection tables with no hand-written names, and `gpui-kit.d.ts` is
 generated from the same tables the dispatcher uses (§14.4). The failure mode of
 hand-written bindings is not that they are tedious; it is that upstream changes
 a signature and the binding does not follow.
@@ -394,7 +394,7 @@ engine has to justify why it could not (§6.5).
 | `view`            | `ScriptView`: the one bridge into GPUI's render loop, and where a snapshot lives                  | above            |
 | `assets`          | Application-directory asset source for `svg(path)`                                                | above            |
 | `watch`           | Source watching and in-place reload                                                               | above            |
-| `typings`         | `gpui.d.ts` generation                                                                            | above            |
+| `typings`         | `gpui-kit.d.ts` generation                                                                            | above            |
 
 The ratio is the argument. Above the seam are the element model, styling,
 theming, capabilities, and context safety — the actual design. Below it is what
@@ -478,7 +478,7 @@ the same application activity must produce the same number of script renders.
 One import, one module. Components are type tables with a single `.new`:
 
 ```js
-import { View, text } from "gpui";
+import { View, text } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
@@ -503,11 +503,11 @@ export default class Counter extends View {
 ```
 
 The built-in modules are named after the crate that provides the capability:
-`"gpui"` for GPUI's own elements and what the runtime adds, `"gpui-base"` for
+`"gpui-kit"` for GPUI's own elements and what the runtime adds, `"gpui-base"` for
 gpui-base's layout helpers, components and theme, and `"gpui-fps"` for its
 performance overlay. A name belongs to exactly one of them, so an import says
 which layer a script depends on, and a layer added later — `gpui-component` —
-arrives as its own module rather than as more names on `"gpui"`. The Standard
+arrives as its own module rather than as more names on `"gpui-kit"`. The Standard
 Runtime also provides the selected bare modules listed in §1.1; every other
 `import` resolves inside the application directory (§19.1). The entry point is `main.js`, and it must
 `export default` a class extending `View`. The host takes that class, constructs
@@ -1567,7 +1567,7 @@ assumes the opposite: **there are no signals here, no
 ### 11.3 View definition
 
 ```js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 
 export default class Counter extends View {
   init(props = {}) {
@@ -1853,7 +1853,7 @@ because a wrong suggestion is worse than none:
 unknown element method `items_centre` (did you mean `items_center`?)
 ```
 
-Two further guarantees hold regardless of engine. `gpui.d.ts` plus `// @ts-check`
+Two further guarantees hold regardless of engine. `gpui-kit.d.ts` plus `// @ts-check`
 catches the same class of mistake in the editor, before anything runs (§14.4).
 And nothing is ever silently ignored: any name reaching `__apply` that the
 dispatcher does not recognize throws.
@@ -2014,17 +2014,17 @@ still waiting to move onto it.
 The style surface already works the way the whole binding layer should: it is a
 table, it is generated, and nothing about it is written by hand.
 
-### 14.4 `gpui.d.ts`
+### 14.4 `gpui-kit.d.ts`
 
 `typings.rs` generates TypeScript declarations for the script API.
-`gpui-shell types <directory>` writes `gpui.d.ts` next to an application, and the
+`gpui-shell types <directory>` writes `gpui-kit.d.ts` next to an application, and the
 output is deterministic — no timestamps, no reflection order — so regenerating
 after a runtime upgrade produces a reviewable diff.
 
-One file, one ambient module per crate that provides the capability: `"gpui"`,
+One file, one ambient module per crate that provides the capability: `"gpui-kit"`,
 `"gpui-base"`, `"gpui-fps"`. A name belongs to exactly one of them. The
 dependency runs upward only — `"gpui-base"` imports the element and
-component-factory types it is built out of from `"gpui"`, and `"gpui"` refers
+component-factory types it is built out of from `"gpui-kit"`, and `"gpui-kit"` refers
 down only where one shared element prototype forces it: `track_scroll`, `mode`,
 `axis` and `cx.theme()` name their argument types with an inline
 `import("gpui-base").X`.
@@ -2088,7 +2088,7 @@ the same render protocol, call scope, event model, and arena. It is built;
 §14.7 describes the registry it is built on.
 
 ```js
-import { text } from "gpui";
+import { text } from "gpui-kit";
 import { v_flex } from "gpui-base"; // base: the script owns presentation
 import { Button } from "gpui-component"; // product visuals, ready-made
 ```
@@ -2138,7 +2138,7 @@ seam between the runtime and an adapter, and a later field must be an added
 
 Every method must carry documentation. `register` refuses one that does not,
 rather than filling in a default sentence, because a default would make the
-published `gpui.d.ts` look documented without anyone having described it.
+published `gpui-kit.d.ts` look documented without anyone having described it.
 
 **Arguments are schemas, and the schema is the validator.** An
 `ArgumentDescriptor` pairs a name with an `ArgumentSchema` — string, number,
@@ -2584,7 +2584,7 @@ Three experimental surfaces are implemented. Global `fetch(url, options?)`
 supports bounded requests of any HTTP method -- which methods actually reach a
 host is the capability policy's decision -- string or `Uint8Array` bodies, safe
 request headers, and resolves to `{ status, ok, url, , json() }`; both
-body readers return promises. The `gpui` module exports
+body readers return promises. The `gpui-kit` module exports
 `WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
 `connect(host, port)` with bounded async `read` and `write`; its synchronous
@@ -2719,7 +2719,7 @@ script cannot tell the two apart.
 The `gpui-shell` binary installs the obvious policy for a host that _is_ the
 process: it ends it, with the code the script asked for.
 
-`process` is installed as a global as well as a `gpui` module member, because
+`process` is installed as a global as well as a `gpui-kit` module member, because
 `process` is the name a JavaScript author, or a model writing JavaScript, will
 reach for.
 
@@ -2755,7 +2755,7 @@ considered was a `native("workspace")` call answering with a frozen bag of
 functions. It loses twice, both times on when a mistake surfaces. A lookup puts
 every misspelled export on the run-time path, where an import fails while the
 module graph is linked. And a lookup leaves the generated declarations with
-nothing to say — only the host knows what it registered, so the best `gpui.d.ts`
+nothing to say — only the host knows what it registered, so the best `gpui-kit.d.ts`
 can offer for `native(name)` is `Record<string, (...args) => any>`, with any real
 types hand-written in a `.d.ts` that nothing checks against the registry. A
 module specifier is a name declarations can be written against, so §21 emits
@@ -2894,7 +2894,7 @@ current runtime; omitted `capabilities` grants nothing. The file is
   "id": "com.example.inbox",
   "name": "Inbox",
   "version": "1.2.0",
-  "shell-version": "0.1.0",
+  "shell-version": "0.6.0",
   "entry": "main.js",
   "dependencies": {
     "omarchy-ui": "huacnlee/omarchy-ui#main"
@@ -3102,7 +3102,7 @@ prototypes.
 | -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Never added**      | quickjs-libc's `std` and `os`                                                    | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
-| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, `gpui-base`, `gpui-fps`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
+| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui-kit`, `gpui-base`, `gpui-fps`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
 | **Capability-gated** | `fs/promises`, `process.run`, `process.exit`, `fetch`, `net.connect`, `websocket.WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
 | **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
@@ -3637,7 +3637,7 @@ It does not have to be one. The separation can be discovered at run time, by
 calling the body once with values that are not values:
 
 ```js
-import { template } from "gpui";
+import { template } from "gpui-kit";
 
 const Row = template((symbol, price, onSelect) =>
   h_flex().gap(6).py(2)
@@ -4019,7 +4019,7 @@ errors, unresolved imports, a missing or malformed default export, unknown style
 methods with a suggestion, wrongly typed style arguments, and an element used
 twice. `--print-spec` additionally prints the description tree.
 
-`gpui-shell types <directory>` writes `gpui.d.ts` (§14.4), which moves a second
+`gpui-shell types <directory>` writes `gpui-kit.d.ts` (§14.4), which moves a second
 class of mistake earlier still, into the editor.
 
 There is no DevTools panel. The intended form — a debug panel written in the
@@ -4276,7 +4276,7 @@ reopened without new information.
 | **Cycles across two collectors leak**                                                                                                                                                | Medium    | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. Native module registries live on `Policy`, and runtime-owned persistent values are released before QuickJS is dropped                                                                                                                                                                                                                                                                               |
 | **A symlink escape from a filesystem grant**                                                                                                                                         | Fatal     | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces                                                                                       | High      | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages                                                                                                                                                                                                                                                                                                                                                      |
-| **Generated code assumes Node or a browser**                                                                                                                                         | Medium    | Named stubs fail with the available replacement or capability boundary, and `gpui.d.ts` moves unsupported API errors into the editor. A complete browser/Node standard library is deliberately outside Core (§3, §19.1)                                                                                                                                                                                                                                                                                                                                                         |
+| **Generated code assumes Node or a browser**                                                                                                                                         | Medium    | Named stubs fail with the available replacement or capability boundary, and `gpui-kit.d.ts` moves unsupported API errors into the editor. A complete browser/Node standard library is deliberately outside Core (§3, §19.1)                                                                                                                                                                                                                                                                                                                                                         |
 | **Per-plugin capability grants.** Two loaded plugins must be able to hold different permissions at once                                                                              | High      | Closed. The grant lives on a `Policy` carried by the call frame, so the engine reads the grant of whichever plugin owns the running code, and it survives an `await` (§18.3)                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Interned `&'static str` accumulates** for script-registered names                                                                                                                  | Low       | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name                                                                                                                                                                                                                                                                                                                                                                |
 
@@ -4317,7 +4317,7 @@ surface. Host-registered native modules through
 `native(name)`. Manifest-level `shell-version` compatibility. The sandbox:
 module confinement, compiler withholding, frozen prototypes, absent-global
 stubs, interrupt and memory limits. Hot reload with per-generation module
-invalidation. `gpui.d.ts` generation from the dispatch tables. The CLI, with
+invalidation. `gpui-kit.d.ts` generation from the dispatch tables. The CLI, with
 `check` and `types`. The three-way benchmark of §20.3, including the cached-render
 regression gate.
 
@@ -4432,7 +4432,7 @@ dialog body — and a test loads and renders it, because if it stops rendering t
 quickstart is wrong.
 
 ```js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 
 export default class TodoList extends View {
@@ -4547,7 +4547,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     view.rs                   # ScriptView — snapshot ownership and invalidation
     assets.rs                 # application-directory asset source
     watch.rs                  # source watching and in-place reload
-    typings.rs                # gpui.d.ts generation
+    typings.rs                # gpui-kit.d.ts generation
     bin/gpui-shell.rs         # run / check / types
   bin/default-tokens.json     # the CLI host's semantic palette, light and dark
   tests/

@@ -1,10 +1,7 @@
-use gpui::{
-    App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
-    Render, StatefulInteractiveElement as _, Styled, Window, actions, div,
-    prelude::FluentBuilder as _,
-};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::*;
 
-use gpui_component::{
+use gpui_kit::component::{
     IconName,
     button::{Button, ButtonVariant, ButtonVariants, Toggle},
     checkbox::Checkbox,
@@ -26,7 +23,7 @@ pub fn init(cx: &mut App) {
 }
 
 pub struct TooltipStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     removable_button_visible: bool,
 }
 
@@ -62,7 +59,7 @@ impl Story for TooltipStory {
 }
 
 impl Focusable for TooltipStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &gpui_kit::App) -> gpui_kit::FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -70,9 +67,9 @@ impl Focusable for TooltipStory {
 impl Render for TooltipStory {
     fn render(
         &mut self,
-        _: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
+        _: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
         v_flex()
             .w_full()
             .gap_3()

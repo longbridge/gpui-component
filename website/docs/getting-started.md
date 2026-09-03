@@ -32,7 +32,8 @@ Here's a simple example to get you started:
 
 ```rust
 use gpui_kit::component::button::*;
-use gpui_kit::prelude::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct HelloWorld;
 
@@ -132,7 +133,7 @@ impl Render for MyView {
 All components support theming through the built-in `Theme` system:
 
 ```rust
-use gpui_component::{ActiveTheme, Theme};
+use gpui_kit::component::{ActiveTheme, Theme};
 
 // Access theme colors in your components
 cx.theme().primary
@@ -177,7 +178,7 @@ GPUI Component has an `Icon` element, but does not include SVG files by default.
 The examples use [Lucide](https://lucide.dev) icons. You can use any icons you like by naming the SVG files as defined in `IconName`. Add the icons you need to your project.
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Icon::new(IconName::Check)
 Icon::new(IconName::Search).small()

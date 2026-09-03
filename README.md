@@ -116,9 +116,8 @@ gpui-kit = "0.6"
 ```
 
 `gpui-kit` always brings in GPUI and `gpui-base`; `gpui-component`,
-`gpui-shell` and the default icon set are on by default. Add the `webview`
-feature for the WebView element, or turn default features off to keep only
-the layers you use. The `gpui-component` features (`inspector`, `decimal`,
+`gpui-shell` and the default icon set are on by default. Turn default
+features off to keep only the layers you use. The `gpui-component` features (`inspector`, `decimal`,
 `tree-sitter`, and each `tree-sitter-<language>`) are available under the same
 names.
 
@@ -126,7 +125,8 @@ names.
 
 ```rs
 use gpui_kit::component::button::*;
-use gpui_kit::prelude::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {

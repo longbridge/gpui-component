@@ -10,8 +10,8 @@ A Sheet (also known as a sidebar or slide-out panel) is a navigation component t
 ## Import
 
 ```rust
-use gpui_component::WindowExt;
-use gpui_component::Placement;
+use gpui_kit::component::WindowExt;
+use gpui_kit::component::Placement;
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ You need to set up your application's root view to render the sheet layer. This 
 The [Root::render_sheet_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_sheet_layer) function handles rendering any active modals on top of your app content.
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 
 struct MyApp {
     view: AnyView,

@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
-use gpui::{
-    Anchor, AnyElement, App, AppContext, Context, Entity, FocusHandle, FontWeight,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
-    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
     badge::Badge,
     button::{Button, ButtonVariants as _},
     menu::{AppMenuBar, DropdownMenu as _},
     scroll::ScrollbarMode,
+};
+use gpui_kit::{
+    Anchor, AnyElement, App, AppContext, Context, Entity, FocusHandle, FontWeight,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{

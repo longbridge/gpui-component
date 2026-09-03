@@ -10,7 +10,7 @@ Skeleton 会在真实内容尚未加载完成时显示带动画的占位块，�
 ## 导入
 
 ```rust
-use gpui_component::skeleton::Skeleton;
+use gpui_kit::component::skeleton::Skeleton;
 ```
 
 ## 用法

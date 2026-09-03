@@ -26,7 +26,7 @@ import { project_name } from "workspace";
 project_name();      // "gpui-component"
 ```
 
-A registered module is an ordinary ES module, resolved by the same loader that answers `gpui` and `path`. One call registers one module, and a repeated name replaces the earlier module rather than merging into it — a host with three of them calls `export_module` three times. The rest of this page is what that costs and what it refuses.
+A registered module is an ordinary ES module, resolved by the same loader that answers `gpui-kit` and `path`. One call registers one module, and a repeated name replaces the earlier module rather than merging into it — a host with three of them calls `export_module` three times. The rest of this page is what that costs and what it refuses.
 
 ## Why an import rather than a lookup
 
@@ -193,7 +193,7 @@ HostModule::new("market")
     .function("watch", /* … */)
 ```
 
-The generated `gpui.d.ts` emits that verbatim inside `declare module "market"`, so `import { quotes } from "market"` is checked exactly the way `import { div } from "gpui"` is.
+The generated `gpui-kit.d.ts` emits that verbatim inside `declare module "market"`, so `import { quotes } from "market"` is checked exactly the way `import { div } from "gpui-kit"` is.
 
 Writing it here rather than in a `.d.ts` beside the script is what keeps the two halves one thing. A `.d.ts` would be a second file, in a second language, with nothing holding it to the registry. `export_module` compares the declared exports with the registered ones and refuses a mismatch:
 
@@ -208,7 +208,7 @@ Declaring nothing is allowed and costs only precision. An undeclared module is e
 
 ```ts
 declare module "audit" {
-  import { HostValue } from "gpui";
+  import { HostValue } from "gpui-kit";
 
   export function observe(...args: HostValue[]): HostValue;
 }

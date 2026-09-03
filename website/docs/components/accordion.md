@@ -10,7 +10,7 @@ An accordion component that allows users to show and hide sections of content. I
 ## Import
 
 ```rust
-use gpui_component::accordion::Accordion;
+use gpui_kit::component::accordion::Accordion;
 ```
 
 ## Usage
@@ -55,7 +55,7 @@ Accordion::new("my-accordion")
 ### Different Sizes
 
 ```rust
-use gpui_component::{Sizable as _, Size};
+use gpui_kit::component::{Sizable as _, Size};
 
 Accordion::new("my-accordion")
     .small()

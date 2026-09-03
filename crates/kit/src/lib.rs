@@ -1,25 +1,24 @@
 //! GPUI Kit: one dependency for building desktop applications with GPUI.
 //!
 //! GPUI itself is published as a family of `gpui-pre-*` crates that move
-//! together. This crate depends on the matching set for you and re-exports
-//! each layer under a short name, so an application lists `gpui-kit` alone:
+//! together. This crate depends on the matching set for you, so an
+//! application lists `gpui-kit` alone. `use gpui_kit::*;` is GPUI, and each
+//! layer is reachable by name:
 //!
-//! | Path          | Crate                   | Feature       |
-//! | ------------- | ----------------------- | ------------- |
-//! | [`gpui`]      | `gpui`                  | always        |
-//! | [`platform`]  | `gpui_platform`         | always        |
-//! | [`base`]      | `gpui-base`             | always           |
-//! | [`component`] | `gpui-component`        | `component` (on) |
-//! | [`assets`]    | `gpui-kit-assets` | `assets` (on)    |
-//! | [`shell`]     | `gpui-shell`            | `shell` (on)     |
-//! | [`webview`]   | `gpui-wry`              | `webview`        |
+//! | Path            | Crate             | Feature          |
+//! | --------------- | ----------------- | ---------------- |
+//! | `gpui_kit::*`   | `gpui`            | always           |
+//! | [`platform`]    | `gpui_platform`   | always           |
+//! | [`base`]        | `gpui-base`       | always           |
+//! | [`component`]   | `gpui-component`  | `component` (on) |
+//! | [`assets`]      | `gpui-kit-assets` | `assets` (on)    |
+//! | [`shell`]       | `gpui-shell`      | `shell` (on)     |
 //!
-//! [`prelude`] also brings the crate names themselves into scope, so code
-//! written against `gpui::…` (including the `actions!` and `#[derive(Action)]`
-//! macros) works unchanged:
+//! [`application`] opens the platform and [`init`] initializes the enabled
+//! layers:
 //!
 //! ```no_run
-//! use gpui_kit::prelude::*;
+//! use gpui_kit::*;
 //!
 //! actions!(hello, [Quit]);
 //!
@@ -45,17 +44,25 @@
 //!
 //! See [`component`] for the same program with the styled component library.
 
-pub use gpui;
-pub use gpui_platform as platform;
-#[cfg(target_family = "wasm")]
-pub use gpui_web as web;
+// Everything in GPUI itself, so `use gpui_kit::*;` is enough to get started.
+pub use ::gpui::*;
 
-pub use gpui_base as base;
-/// The styled component library, with `gpui_kit::init` initializing it.
+// The crate name, so code that keeps `gpui::…` paths still resolves after
+// `use gpui_kit::*;`. `gpui_kit::*` is the documented way.
+#[doc(hidden)]
+pub use ::gpui;
+
+pub use ::gpui_base as base;
+pub use ::gpui_platform as platform;
+#[cfg(target_family = "wasm")]
+pub use ::gpui_web as web;
+
+/// The styled component library.
 ///
 /// ```no_run
 /// use gpui_kit::component::button::*;
-/// use gpui_kit::prelude::*;
+/// use gpui_kit::component::Root;
+/// use gpui_kit::*;
 ///
 /// struct Hello;
 ///
@@ -80,56 +87,25 @@ pub use gpui_base as base;
 /// }
 /// ```
 #[cfg(feature = "component")]
-pub use gpui_component as component;
+pub use ::gpui_component as component;
 #[cfg(feature = "assets")]
-pub use gpui_kit_assets as assets;
+pub use ::gpui_kit_assets as assets;
 #[cfg(feature = "shell")]
-pub use gpui_shell as shell;
-#[cfg(feature = "webview")]
-pub use gpui_wry as webview;
+pub use ::gpui_shell as shell;
 
-pub use gpui_platform::application;
+pub use ::gpui_platform::application;
 
 /// Initializes every enabled layer. Call it once, before using anything else.
 ///
 /// With the `component` feature (on by default) this is
 /// `gpui_component::init`, which also initializes `gpui-base`; otherwise it
-/// is `gpui_base::init`. The
-/// `shell` runtime has its own [`shell::init`](gpui_shell::init) and
+/// is `gpui_base::init`. The `shell` runtime has its own
+/// [`shell::init`](gpui_shell::init) and
 /// [`shell::init_with_components`](gpui_shell::init_with_components), which
 /// the host calls when it registers its component catalog.
-pub fn init(cx: &mut gpui::App) {
+pub fn init(cx: &mut App) {
     #[cfg(feature = "component")]
     gpui_component::init(cx);
     #[cfg(not(feature = "component"))]
     gpui_base::init(cx);
-}
-
-/// Everything an application file usually needs, plus the underlying crate
-/// names so existing `gpui::…` and `gpui_component::…` paths keep working.
-///
-/// A few names exist in both `gpui` and `gpui_component` (`Size`, `Edges`,
-/// and the color helpers such as `red`); qualify those at the use site, as
-/// with `use gpui::*; use gpui_component::*;` today.
-#[allow(ambiguous_glob_reexports)]
-pub mod prelude {
-    pub use gpui;
-    pub use gpui::*;
-    pub use gpui_platform;
-
-    #[cfg(feature = "component")]
-    pub use gpui_component;
-    #[cfg(feature = "component")]
-    pub use gpui_component::*;
-
-    pub use gpui_base;
-    #[cfg(not(feature = "component"))]
-    pub use gpui_base::*;
-
-    #[cfg(feature = "assets")]
-    pub use gpui_kit_assets;
-    #[cfg(feature = "shell")]
-    pub use gpui_shell;
-    #[cfg(feature = "webview")]
-    pub use gpui_wry;
 }

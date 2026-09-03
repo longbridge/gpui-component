@@ -47,4 +47,4 @@ order: -1
 gpui-kit = "0.6"
 ```
 
-`gpui-kit` 会替你引入配套的 GPUI crate，并以 `gpui_kit::gpui`、`gpui_kit::platform`、`gpui_kit::component` 的形式重新导出。文档其余部分使用的 `gpui::…` 与 `gpui_component::…` 路径，通过 `use gpui_kit::prelude::*;` 即可解析，它会把这些 crate 名字引入作用域。
+`gpui-kit` 会替你引入配套的 GPUI crate，并把 GPUI 和 `gpui-component` 直接放在根下：`use gpui_kit::*;` 即可替代 `use gpui_kit::*; use gpui_kit::component::*;`。文档其余部分使用的 `gpui::…` 与 `gpui_kit::component::…` 路径在这一句导入之后同样可用，它也会把这些 crate 名字引入作用域。

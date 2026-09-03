@@ -17,7 +17,7 @@ order: 1
 Both goals rest on the same split. `gpui-shell` is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. The host builds the runtime and grants what a script may reach; the script draws real interface inside the same process. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic.
 
 ```js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
@@ -73,7 +73,7 @@ Plugins-first is not a positioning statement. It is the reason behind decisions 
 | Dock panels keep their place and state across an uninstall                | Plugins get installed and removed; a panel comes back where it was, with what it had                                     |
 | The foundation ships no presentation, so the script owns all of it        | A plugin has to look like part of its host, which takes control of every pixel                                           |
 
-A standalone script application uses few of these. What it gains is the iteration speed — hot reload, `check`, and a generated `gpui.d.ts` — which is why it sits second: it is where a plugin is developed and proven, rather than the point of the runtime.
+A standalone script application uses few of these. What it gains is the iteration speed — hot reload, `check`, and a generated `gpui-kit.d.ts` — which is why it sits second: it is where a plugin is developed and proven, rather than the point of the runtime.
 
 Text editing, syntax highlighting, LSP, virtualization and motion sampling stay in Rust. That line is a division of responsibility rather than a limit on the script: the host owns everything that has to sit close to the GPU and the system, so a plugin never becomes a variable in the application's performance or stability.
 
@@ -93,10 +93,10 @@ The engine is a parameter of the design rather than a part of it. QuickJS is the
 
 A script gets what a Rust application built on `gpui-base` gets: elements and layout, links and controls, a fluent style surface over semantic theme tokens, View state through `init` / `render` / `cx.notify()`, retained host state such as a text input's rope and selection, dialogs, a sheet and toasts, asynchronous tasks, native transitions and springs, and gated filesystem, storage, clipboard, process, HTTP, TCP and WebSocket surfaces.
 
-Around that: `--watch` hot-reloads on save, `gpui-shell.json` declares identity and least-privilege capabilities before code runs, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
+Around that: `--watch` hot-reloads on save, `gpui-shell.json` declares identity and least-privilege capabilities before code runs, a generated `gpui-kit.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
 
 ::: tip
-`gpui.d.ts` can go in `.gitignore` — it is generated.
+`gpui-kit.d.ts` can go in `.gitignore` — it is generated.
 :::
 
 ### Performance: the script is not in the frame
@@ -176,7 +176,7 @@ What the script gains in exchange for the extra typing is the whole application 
 
 ```text
   JavaScript application       main.js · Views · styles · business logic
-            │  import { … } from "gpui"
+            │  import { … } from "gpui-kit"
             ▼
   gpui-shell                   engine seam · element descriptions · call scope
                                style table · theme tokens · capabilities

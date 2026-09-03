@@ -72,7 +72,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
   "id": "com.example.quotes",
   "name": "Quotes",
   "version": "1.0.0",
-  "shell-version": "0.1.0",
+  "shell-version": "0.6.0",
   "entry": "main.js",
   "dependencies": {
     "omarchy-ui": "huacnlee/omarchy-ui"
@@ -345,7 +345,7 @@ process.exit(0);
 
 DNS 解析是有界的进程级共享服务：所有应用共用两个 resolver worker 和一个最多 64 个请求的队列。排队沿用每次连接已有的 deadline，所以饱和时会以 timeout 失败，不会无界增长内存或线程。这是资源收敛，不是每应用的服务质量保证；同一进程中运行互不信任应用的 Host，不会获得应用之间的 DNS 公平性。
 
-运行时还提供 `buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process` 与 `os`。它们是生成的 `gpui.d.ts` 所声明、经过审计的 LLRT/Host 子集；`node:` 别名和任意 Node 内建模块不属于 shell 契约。
+运行时还提供 `buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process` 与 `os`。它们是生成的 `gpui-kit.d.ts` 所声明、经过审计的 LLRT/Host 子集；`node:` 别名和任意 Node 内建模块不属于 shell 契约。
 
 ## 还没有的东西
 

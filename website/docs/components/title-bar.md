@@ -10,7 +10,7 @@ TitleBar provides a customizable window title bar that can replace the default O
 ## Import
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 ```
 
 ## Usage
@@ -98,7 +98,7 @@ everything the title bar needs, including letting the title bar own dragging and
 double clicking instead of the system.
 
 ```rust
-use gpui::WindowOptions;
+use gpui_kit::WindowOptions;
 
 WindowOptions {
     window_bounds: Some(window_bounds),
@@ -109,7 +109,7 @@ WindowOptions {
 If you build the [`WindowOptions`] yourself, set both fields:
 
 ```rust
-use gpui::WindowOptions;
+use gpui_kit::WindowOptions;
 
 WindowOptions {
     titlebar: Some(TitleBar::title_bar_options()),
@@ -183,7 +183,7 @@ The `TitleBarElement` provides window dragging functionality on Linux platforms.
 ### Application Title Bar
 
 ```rust
-use gpui_component::{TitleBar, button::Button, menu::AppMenuBar};
+use gpui_kit::component::{TitleBar, button::Button, menu::AppMenuBar};
 
 struct AppTitleBar {
     app_menu_bar: Entity<AppMenuBar>,

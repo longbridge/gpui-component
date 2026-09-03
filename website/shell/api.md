@@ -8,21 +8,21 @@ order: 10
 
 An inventory of the script surface: what exists, and which module it comes from. The other pages explain why each thing works the way it does — this one is for looking a name up.
 
-The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's HostModule registrations. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it. The manifest's Git dependencies are not listed here either: they are linked into `node_modules` by the same refresh, and their names, signatures and documentation come from the packages themselves. See [Dependencies](./dependencies.md).
+The authority is not this page. The runtime generates `gpui-kit.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's HostModule registrations. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it. The manifest's Git dependencies are not listed here either: they are linked into `node_modules` by the same refresh, and their names, signatures and documentation come from the packages themselves. See [Dependencies](./dependencies.md).
 
 ## The modules
 
-Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui` module also carries the shell bridge needed to use GPUI from JavaScript: Views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
+Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui-kit` module also carries the shell bridge needed to use GPUI from JavaScript: Views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
 
 ```js
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Button, v_flex } from "gpui-base";
 import { fps_monitor } from "gpui-fps";
 ```
 
 | Module | Provides |
 | --- | --- |
-| `gpui` | GPUI's own elements, plus what this runtime adds: Views, the style surface, scheduling |
+| `gpui-kit` | GPUI's own elements, plus what this runtime adds: Views, the style surface, scheduling |
 | `gpui-base` | Layout helpers, components and the theme |
 | `gpui-shell` | Type-only concepts owned by the shell bridge; it has no run-time exports |
 | `gpui-fps` | The performance overlay |
@@ -31,7 +31,7 @@ Two names are never imported, for two different reasons. `window` is a real glob
 
 API shape follows the Rust original: a method on `App` is a method on `cx`, a method on `Window` is on the `window` global, an associated constructor is `Type.new(...)`, and a free function stays lowercase. Names with no direct GPUI or Base original belong to the module for the layer that implements them. Type-only names appear in these tables too, but are never run-time values.
 
-## The `gpui` module
+## The `gpui-kit` module
 
 ### Elements
 
@@ -159,7 +159,7 @@ Three places hand one out: `init`, the body of `cx.spawn`, and the callbacks of 
 
 ## The `window` global
 
-The global has the `Window` type exported by `gpui`. Nothing hands it to you and there is nothing to import at the call site. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the View that opened it, which is why these are here and not on `Context`.
+The global has the `Window` type exported by `gpui-kit`. Nothing hands it to you and there is nothing to import at the call site. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the View that opened it, which is why these are here and not on `Context`.
 
 | Member | What it is |
 | --- | --- |

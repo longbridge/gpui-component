@@ -20,11 +20,11 @@ one state entity per scroller.
 ```rust
 use std::{rc::Rc, time::Duration};
 
-use gpui::{
+use gpui_kit::{
     IntoElement as _, ParentElement as _, StyleRefinement, Styled as _,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _,
     button::ButtonVariants as _,
     message_scroller::{MessageScroller, MessageScrollerState},
@@ -79,10 +79,10 @@ MessageScroller::new(
     scroller.clone(),
     move |index, _window, _cx| {
         let Some(message) = messages.get(index) else {
-            return gpui::div().into_any_element();
+            return gpui_kit::div().into_any_element();
         };
 
-        gpui::div()
+        gpui_kit::div()
             .id(("message-row", message.id))
             .min_w_0()
             .child(render_message(message))

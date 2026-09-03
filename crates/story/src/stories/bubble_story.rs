@@ -1,8 +1,4 @@
-use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, div, rems,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, StyledExt as _,
     bubble::{
         Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant,
@@ -14,6 +10,10 @@ use gpui_component::{
     message::MessageAlignment,
     popover::Popover,
     v_flex,
+};
+use gpui_kit::{
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
+    Render, Styled as _, Window, div, rems,
 };
 
 use crate::{Story, section};

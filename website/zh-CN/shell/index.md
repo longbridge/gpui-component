@@ -17,7 +17,7 @@ order: 1
 这两个目标建立在同一条分工上。`gpui-shell` 直接构建在 [`gpui-base`](/base/) 之上，[QuickJS](https://github.com/quickjs-ng/quickjs) 跑在 Host 自己的线程上。由 Host 构建运行时、决定脚本能碰到什么，而脚本在同一个进程里画出真正的界面。Rust 负责渲染、布局、文本编辑、虚拟化、焦点、浮层以及全部系统能力；脚本负责界面组合、视觉呈现与业务逻辑。
 
 ```js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
@@ -73,7 +73,7 @@ export default class Counter extends View {
 | Dock 面板在应用被卸载后仍保留位置与状态               | 插件会被装了又卸；重新装回来时，面板还在原来的位置，状态也还在                  |
 | 基座不提供任何视觉，呈现权整个交给脚本                | 插件要长得像 Host 的一部分，就必须能掌控每一个像素                              |
 
-独立脚本应用用得上其中的很少几条。它真正获得的是迭代速度——hot-reload、`check`，以及自动生成的 `gpui.d.ts`。这也是它排在第二位的原因：它是插件被开发和验证的地方，而不是这套运行时的目的本身。
+独立脚本应用用得上其中的很少几条。它真正获得的是迭代速度——hot-reload、`check`，以及自动生成的 `gpui-kit.d.ts`。这也是它排在第二位的原因：它是插件被开发和验证的地方，而不是这套运行时的目的本身。
 
 文本编辑、语法高亮、LSP、虚拟化与动画采样都留在 Rust。这条线是职责划分，而不是对脚本的限制：所有必须贴着 GPU 与系统运行的部分都归 Host，插件因此不会成为应用性能与稳定性上的变量。
 
@@ -93,10 +93,10 @@ export default class Counter extends View {
 
 脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、链接与控件、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的 View 状态、由 Host 留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务、原生 transition 与 spring，以及需要授权才能用的文件、存储、剪贴板、进程、HTTP、TCP 与 WebSocket 接口。
 
-围绕它的还有：`--watch` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
+围绕它的还有：`--watch` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui-kit.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
 
 ::: tip
-`gpui.d.ts` 可以加进 `.gitignore`，它是自动生成的。
+`gpui-kit.d.ts` 可以加进 `.gitignore`，它是自动生成的。
 :::
 
 ### 性能：脚本不在每一帧里
@@ -176,7 +176,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 
 ```text
   JavaScript 应用            main.js · views · 样式 · 业务逻辑
-            │  import { … } from "gpui"
+            │  import { … } from "gpui-kit"
             ▼
   gpui-shell                 引擎分界线 · 元素描述 · CallScope
                              样式表 · 主题 token · 能力模型

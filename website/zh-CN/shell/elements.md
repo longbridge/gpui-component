@@ -13,7 +13,7 @@ order: 4
 每个模块只装它自己那个包提供的东西：
 
 ```js
-import { div, svg, image } from "gpui";
+import { div, svg, image } from "gpui-kit";
 import {
   h_flex,
   v_flex,
@@ -31,10 +31,10 @@ import { fps_monitor } from "gpui-fps";
 
 | 构造器             | 来自        | 产出                                                            |
 | ------------------ | ----------- | --------------------------------------------------------------- |
-| `div()`            | `gpui`      | 自身不带布局的元素                                              |
-| `value`            | `gpui`      | 文本元素，参数会被转成字符串                                    |
-| `svg(path)`        | `gpui`      | 来自应用自身目录、跟随主题着色的矢量图标                        |
-| `image(path)`      | `gpui`      | 来自应用自身目录的全彩图片                                      |
+| `div()`            | `gpui-kit`  | 自身不带布局的元素                                              |
+| `value`            | `gpui-kit`  | 文本元素，参数会被转成字符串                                    |
+| `svg(path)`        | `gpui-kit`  | 来自应用自身目录、跟随主题着色的矢量图标                        |
+| `image(path)`      | `gpui-kit`  | 来自应用自身目录的全彩图片                                      |
 | `h_flex()`         | `gpui-base` | 一行                                                            |
 | `v_flex()`         | `gpui-base` | 一列                                                            |
 | `Button.new(id)`   | `gpui-base` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
@@ -362,11 +362,11 @@ div()
   .child(name);
 ```
 
-role 的取值逐字镜像 `gpui::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
+role 的取值逐字镜像 `gpui::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui-kit.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
 
 ```text
 unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
-— see the Role type in gpui.d.ts
+— see the Role type in gpui-kit.d.ts
 ```
 
 ## 元素是一次性的

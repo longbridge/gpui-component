@@ -104,7 +104,7 @@ fn pascal_case(filename: &str) -> String {
 /// icon_named!(IconName, "icons");
 ///
 /// // Env-var reference (resolved at macro expansion time)
-/// icon_named!(IconName, "$GPUI_COMPONENT_DEFAULT_ICONS_DIR");
+/// icon_named!(IconName, "$GPUI_KIT_DEFAULT_ICONS_DIR");
 ///
 /// // With custom derives
 /// icon_named!(IconName, "icons", [Debug, Copy, PartialEq, Eq]);

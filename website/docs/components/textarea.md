@@ -12,7 +12,7 @@ code.
 ## Import
 
 ```rust
-use gpui_component::input::{Textarea, TextareaState};
+use gpui_kit::component::input::{Textarea, TextareaState};
 ```
 
 ## Basic usage

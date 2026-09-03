@@ -6,11 +6,8 @@ publish = false
 edition = "2024"
 
 [dependencies]
+gpui-kit.workspace = true
 anyhow.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
-gpui-kit-assets.workspace = true
-gpui-component.workspace = true
 sysinfo = "0.37"
 smol = "2"
 battery = "0.7"

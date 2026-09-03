@@ -8,21 +8,21 @@ order: 10
 
 脚本接口的一份清单：有什么，以及它来自哪个模块。其余页面解释每样东西为什么是这个样子——这一页是用来查名字的。
 
-权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。manifest 声明的 Git 依赖同样不在这一页：它们由同一次刷新链接进 `node_modules`，名字、签名与文档都来自 package 自身。见[依赖](./dependencies.md)。
+权威不在这一页。runtime 会为自己的版本生成 `gpui-kit.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。manifest 声明的 Git 依赖同样不在这一页：它们由同一次刷新链接进 `node_modules`，名字、签名与文档都来自 package 自身。见[依赖](./dependencies.md)。
 
 ## 模块
 
-每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接： View、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
+每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui-kit` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接： View、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
 
 ```js
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Button, v_flex } from "gpui-base";
 import { fps_monitor } from "gpui-fps";
 ```
 
 | 模块 | 提供 |
 | --- | --- |
-| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分： View、样式接口与调度 |
+| `gpui-kit` | GPUI 自己的元素，加上这个运行时补上的部分： View、样式接口与调度 |
 | `gpui-base` | 布局辅助函数、组件与主题 |
 | `gpui-shell` | shell 桥接层自有的纯类型概念；没有运行时导出 |
 | `gpui-fps` | 性能 HUD |
@@ -31,7 +31,7 @@ import { fps_monitor } from "gpui-fps";
 
 API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的方法放在 `window` 全局对象，关联构造器写成 `Type.new(...)`，自由函数保持小写。没有直接 GPUI 或 Base 原型的名字，属于实现它的公开层。表中也会列出仅存在于类型系统的名字，但它们不是运行时可调用的值。
 
-## `gpui` 模块
+## `gpui-kit` 模块
 
 ### 元素
 
@@ -159,7 +159,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 ## `window` 全局对象
 
-这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个 View——这就是这些方法在这里、而不在 `Context` 上的原因。
+这个全局对象的类型是 `gpui-kit` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个 View——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |

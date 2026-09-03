@@ -25,8 +25,6 @@ shell = ["dep:gpui-shell"]
 assets = ["dep:gpui-kit-assets"]
 # GPUI's test harness: `#[gpui_kit::test]`, `TestAppContext`, `VisualTestContext`.
 test-support = ["gpui/test-support"]
-# The WebView element, `gpui_kit::webview`.
-webview = ["dep:gpui-wry"]
 inspector = ["gpui/inspector", "gpui-base/inspector", "gpui-component?/inspector"]
 decimal = ["component", "gpui-component/decimal"]
 tree-sitter = ["component", "gpui-component/tree-sitter"]
@@ -75,7 +73,10 @@ gpui-base.workspace = true
 gpui-component = { workspace = true, optional = true }
 gpui-kit-assets = { workspace = true, optional = true }
 gpui-shell = { workspace = true, optional = true }
-gpui-wry = { workspace = true, optional = true }
+
+# `reqwest_client` pulls in tokio's default runtime, which does not build on wasm.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+reqwest_client.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true

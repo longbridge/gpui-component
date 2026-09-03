@@ -10,7 +10,7 @@ A versatile tree component for displaying hierarchical data with expand/collapse
 ## Import
 
 ```rust
-use gpui_component::tree::{tree, TreeState, TreeItem, TreeEntry};
+use gpui_kit::component::tree::{tree, TreeState, TreeItem, TreeEntry};
 ```
 
 ## Usage
@@ -44,7 +44,7 @@ tree(&tree_state, |ix, entry, selected, window, cx| {
 ### File Tree with Icons
 
 ```rust
-use gpui_component::{ListItem, IconName, h_flex};
+use gpui_kit::component::{ListItem, IconName, h_flex};
 
 tree(&tree_state, |ix, entry, selected, window, cx| {
     let item = entry.item();
@@ -172,7 +172,7 @@ tree_state.update(cx, |state, cx| {
 
 // Scroll to specific item
 tree_state.update(cx, |state, _| {
-    state.scroll_to_item(5, gpui::ScrollStrategy::Center);
+    state.scroll_to_item(5, gpui_kit::ScrollStrategy::Center);
 });
 
 // Clear selection (by selected_index)

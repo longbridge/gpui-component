@@ -103,7 +103,7 @@ Initialize GPUI Component once, before creating component-backed views, and put
 
 ```rust
 app.run(move |cx| {
-    gpui_component::init(cx);
+    gpui_kit::init(cx);
 
     cx.spawn(async move |cx| {
         cx.open_window(WindowOptions::default(), |window, cx| {
@@ -463,7 +463,7 @@ presentation instead of replacing it with `Link`. GPUI Kit applications
 reserve `Link` for targets opened by a browser or mail client, such as a URL,
 web document, or email address. Use the relevant navigation component for an
 in-app destination and `Button`/`Action` for a command. This is a product
-convention, not a limitation of `gpui_base::Link`, whose `open_with` seam can
+convention, not a limitation of `gpui_kit::base::Link`, whose `open_with` seam can
 route a destination elsewhere.
 
 Only stop propagation when a nested interaction must prevent its parent from

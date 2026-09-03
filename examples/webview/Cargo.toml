@@ -9,10 +9,8 @@ edition.workspace = true
 inspector = []
 
 [dependencies]
+gpui-kit.workspace = true
 anyhow.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
-gpui-component = { workspace = true }
 
 # WebView dependencies
 gpui-wry = { path = "../../crates/webview" }

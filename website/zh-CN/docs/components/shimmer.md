@@ -22,8 +22,8 @@ Shimmer 只负责文字表现，不保存 loading 状态。是否显示 shimmer�
 ```rust
 use std::time::Duration;
 
-use gpui::Styled as _;
-use gpui_component::{
+use gpui_kit::Styled as _;
+use gpui_kit::component::{
     ActiveTheme as _, StyledExt as _,
     attachment::{
         Attachment, AttachmentContent, AttachmentDescription, AttachmentStatus, AttachmentTitle,
@@ -205,7 +205,7 @@ Attachment::new()
 `ShimmerText` 是普通元素，任何接受文字 child 的位置都可以使用：
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     bubble::{Bubble, BubbleContent, BubbleVariant},
     message::{Message, MessageContent},
 };

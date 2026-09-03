@@ -155,3 +155,31 @@ consts = "consts"
 
 [workspace.metadata.cargo-machete]
 ignored = ["log", "anyhow", "serde"]
+
+# BUMP-GPUI-LOCAL-PATCH: temporary, verification only
+[patch.crates-io]
+gpui-pre-util = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_util" }
+gpui-pre-collections = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/collections" }
+gpui-pre-macros = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_macros" }
+gpui-pre-shared-string = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_shared_string" }
+gpui-pre-http-client = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/http_client" }
+gpui-pre-derive-refineable = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/refineable/derive_refineable" }
+gpui-pre-refineable = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/refineable" }
+gpui-pre-scheduler = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/scheduler" }
+gpui-pre-perf = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/tooling/perf" }
+gpui-pre-util-macros = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/util_macros" }
+gpui-pre-zlog = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/zlog" }
+gpui-pre-ztracing-macro = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/ztracing_macro" }
+gpui-pre-ztracing = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/ztracing" }
+gpui-pre-sum-tree = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/sum_tree" }
+gpui-pre = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui" }
+gpui-pre-apple = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_apple" }
+gpui-pre-media = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/media" }
+gpui-pre-macos = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_macos" }
+gpui-pre-windows = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_windows" }
+gpui-pre-wgpu = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_wgpu" }
+gpui-pre-linux = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_linux" }
+gpui-pre-web = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_web" }
+gpui-pre-platform = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/gpui_platform" }
+gpui-pre-http-client-tls = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/http_client_tls" }
+gpui-pre-reqwest-client = { path = "/private/tmp/claude-502/-Users-jason-work-gpui-kit/b1dafe62-aa96-421a-8b48-692e17c55435/scratchpad/gpui-pre-workspace/crates/reqwest_client" }

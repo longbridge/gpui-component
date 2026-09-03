@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 Each module carries what its own crate provides:
 
 ```js
-import { div, svg, image } from "gpui";
+import { div, svg, image } from "gpui-kit";
 import {
   h_flex,
   v_flex,
@@ -31,10 +31,10 @@ Functions are lowercase, and component types are capitalized and constructed thr
 
 | Constructor        | From        | Produces                                                                    |
 | ------------------ | ----------- | --------------------------------------------------------------------------- |
-| `div()`            | `gpui`      | An element with no layout of its own                                        |
-| `"a string"`       | `gpui`      | Text. A string is an element, so it goes straight into `.child(...)`        |
-| `svg(path)`        | `gpui`      | A theme-tinted vector icon from the application's own directory             |
-| `image(path)`      | `gpui`      | A full-colour image from the application's own directory                    |
+| `div()`            | `gpui-kit`  | An element with no layout of its own                                        |
+| `"a string"`       | `gpui-kit`  | Text. A string is an element, so it goes straight into `.child(...)`        |
+| `svg(path)`        | `gpui-kit`  | A theme-tinted vector icon from the application's own directory             |
+| `image(path)`      | `gpui-kit`  | A full-colour image from the application's own directory                    |
 | `h_flex()`         | `gpui-base` | A row                                                                       |
 | `v_flex()`         | `gpui-base` | A column                                                                    |
 | `Button.new(id)`   | `gpui-base` | A base `Button`: activation, focus, disabled and selected state, no styling |
@@ -362,11 +362,11 @@ div()
   .child(name);
 ```
 
-Role names mirror `gpui::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
+Role names mirror `gpui::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui-kit.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
 
 ```text
 unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
-— see the Role type in gpui.d.ts
+— see the Role type in gpui-kit.d.ts
 ```
 
 ## Elements are single-use

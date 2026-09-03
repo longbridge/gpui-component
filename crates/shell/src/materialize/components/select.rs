@@ -17,7 +17,7 @@
 //!
 //! Nothing here supplies one, so out of the box the control is complete with a
 //! pointer, opens and closes from the keyboard, and cannot be *navigated* from
-//! the keyboard once open. That is written into `gpui.d.ts` rather than left
+//! the keyboard once open. That is written into `gpui-kit.d.ts` rather than left
 //! for a script author to discover.
 //!
 //! What changed since this was written is that the script can now supply the
