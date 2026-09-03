@@ -218,7 +218,7 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
         },
         {
           text: releasesText,
-          link: "https://github.com/longbridge/gpui-kit/releases",
+          link: `${prefix}/releases`,
         },
         {
           text: issuesText,
