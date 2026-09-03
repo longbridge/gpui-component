@@ -128,3 +128,52 @@ When we are ready to release a new version, please follow the steps below:
    ```
 
 4. Then GitHub Actions will automatically publish the crates to crates.io and create a new release in GitHub.
+
+## Publish GPUI pre-release crates from Zed
+
+GPUI lives in the [Zed](https://github.com/zed-industries/zed) repository,
+and Zed only publishes `gpui` to crates.io now and then. To depend on a newer
+GPUI from crates.io, publish a snapshot of any Zed commit under our own names:
+
+| Zed crate       | Published as                      |
+| --------------- | --------------------------------- |
+| `gpui`          | `gpui-pre`                        |
+| `gpui_platform` | `gpui-pre-platform`               |
+| `gpui_macros`   | `gpui-pre-macros`                 |
+| `gpui_<x>`      | `gpui-pre-<x>` (e.g. `gpui-pre-macos`) |
+| other internal  | `gpui-pre-<x>` (e.g. `gpui-pre-collections`) |
+
+Every crate `gpui` needs is published together at one version, and each keeps
+its original crate name as the library name, so `use gpui::*` works unchanged.
+
+```bash
+# Verify the latest Zed `main` without uploading anything.
+./script/bump-gpui.ts --dry-run
+
+# Publish from Zed `main`.
+./script/bump-gpui.ts
+
+# Publish a specific Zed commit.
+./script/bump-gpui.ts --rev 1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a
+```
+
+The version is the `VERSION` constant at the top of `script/bump-gpui.ts`
+(`0.3.0` to begin with). crates.io never accepts the same version twice, so
+bump that constant before each publish; the Zed commit each build came from is
+recorded in every crate's description and `[package.metadata.gpui-pre]`.
+
+The script runs on [Bun](https://bun.sh) and needs Cargo 1.90+ (for `cargo publish --workspace`)
+and a crates.io token from `cargo login`. It stages a standalone workspace in
+`target/gpui-pre/workspace`, verifies it with `cargo publish --dry-run`, and
+then uploads. crates.io only accepts a few brand-new crates per ten minutes, so
+the first run waits between batches; re-running resumes from where it stopped.
+Pass `--zed <path>` to reuse a local Zed checkout and `--stage-only` to inspect
+the generated workspace.
+
+Depend on the result with:
+
+```toml
+gpui = { package = "gpui-pre", version = "=0.3.0" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.0" }
+gpui_macros = { package = "gpui-pre-macros", version = "=0.3.0" }
+```
