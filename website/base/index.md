@@ -1,12 +1,12 @@
 ---
 title: GPUI Base
-description: The unstyled behavior and infrastructure foundation of the GPUI Component Rust desktop framework.
+description: The unstyled behavior and infrastructure foundation of GPUI Kit, the Rust desktop framework.
 order: 1
 ---
 
 # GPUI Base
 
-`gpui-base` is the unstyled foundation of the GPUI Component Rust desktop application framework. It provides interaction behavior, controlled state, focus management, accessibility semantics, animation, virtual lists, and theme tokens while leaving layout and visual design to your application.
+`gpui-base` is the unstyled foundation of GPUI Kit, the Rust desktop application framework. It provides interaction behavior, controlled state, focus management, accessibility semantics, animation, virtual lists, and theme tokens while leaving layout and visual design to your application.
 
 ## Choose the right layer
 

@@ -10,9 +10,10 @@ const CONTENT_TYPES = {
 };
 
 export function wasmExamplesDevServer(base) {
+  const prefix = base.replace(/\/$/, '');
   const roots = new Map([
-    [`${base}/examples/base`, resolve('../crates/base/examples/wasm/www/dist')],
-    [`${base}/gallery`, resolve('../crates/story-web/www/dist')],
+    [`${prefix}/examples/base`, resolve('../crates/base/examples/wasm/www/dist')],
+    [`${prefix}/gallery`, resolve('../crates/story-web/www/dist')],
   ]);
 
   return {

@@ -1,1 +1,1 @@
-export const SITE_URL = 'https://longbridge.github.io/gpui-component';
+export const SITE_URL = 'https://gpui-kit.com';

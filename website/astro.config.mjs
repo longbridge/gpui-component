@@ -7,10 +7,10 @@ import rehypeMathjax from 'rehype-mathjax';
 import pagefind from 'astro-pagefind';
 import { wasmExamplesDevServer } from './src/lib/wasm-middleware.js';
 
-const BASE = '/gpui-component';
+const BASE = '/';
 
 export default defineConfig({
-  site: 'https://longbridge.github.io',
+  site: 'https://gpui-kit.com',
   base: BASE,
   output: 'static',
   trailingSlash: 'never',

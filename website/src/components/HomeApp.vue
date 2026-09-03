@@ -248,7 +248,7 @@ const copy = computed(() =>
         <div class="home-nav__inner">
             <a :href="homeHref" class="home-brand">
                 <img :src="isDark ? darkLogoHref : logoHref" alt="" />
-                <span>GPUI Component</span>
+                <span>GPUI Kit</span>
             </a>
             <nav aria-label="Primary navigation">
                 <template v-for="item in navItems" :key="item.text">
@@ -520,7 +520,7 @@ const copy = computed(() =>
 
     <footer class="home-footer">
         <div class="home-footer__brand">
-            <strong>GPUI Component</strong>
+            <strong>GPUI Kit</strong>
             <p>{{ copy.footerPrefix }} <a href="https://longbridge.com" target="_blank">Longbridge</a>.</p>
         </div>
         <nav :aria-label="copy.footerNav">

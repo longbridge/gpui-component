@@ -50,7 +50,7 @@ Button::new("menu-btn")
     .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
-            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .link("Documentation", "https://gpui-kit.com/")
             .separator()
             .item(PopupMenuItem::new("Custom Action")
                 .on_click(window.listener_for(&view, |this, _, window, cx| {

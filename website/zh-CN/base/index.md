@@ -1,12 +1,12 @@
 ---
 title: GPUI Base
-description: GPUI Component Rust 桌面框架中无样式的行为与基础设施层。
+description: GPUI Kit Rust 桌面框架中无样式的行为与基础设施层。
 order: 1
 ---
 
 # GPUI Base
 
-`gpui-base` 是 GPUI Component 的无样式基础层。它提供交互行为、受控状态、焦点管理、无障碍语义、动画、虚拟列表和主题 token，同时将布局与视觉设计完整留给应用。
+`gpui-base` 是 GPUI Kit 的无样式基础层。它提供交互行为、受控状态、焦点管理、无障碍语义、动画、虚拟列表和主题 token，同时将布局与视觉设计完整留给应用。
 
 ## 如何选择
 

@@ -34,11 +34,11 @@ const props = defineProps<{
 }>();
 
 const isZh = computed(() => props.lang === 'zh-CN');
-const title = computed(() => (isZh.value ? "GPUI Component 技能" : "GPUI Component Skills"));
+const title = computed(() => (isZh.value ? "GPUI Kit 技能" : "GPUI Kit Skills"));
 const description = computed(() =>
     isZh.value
-        ? "这里汇总了适用于 GPUI Component 的开发技能、约定和最佳实践。"
-        : "Skills available for working with GPUI Component. These skills provide guidance and best practices for building GPUI applications.",
+        ? "这里汇总了适用于 GPUI Kit 的开发技能、约定和最佳实践。"
+        : "Skills available for working with GPUI Kit. These skills provide guidance and best practices for building GPUI applications.",
 );
 </script>
 
