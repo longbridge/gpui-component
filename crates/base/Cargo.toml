@@ -3,12 +3,14 @@ description = "Behavior, interaction, and infrastructure foundations for GPUI ap
 keywords = ["desktop", "gpui", "ui", "foundation"]
 license = "Apache-2.0"
 name = "gpui-base"
-default-run = "components"
-repository = "https://github.com/longbridge/gpui-component"
-homepage = "https://longbridge.github.io/gpui-component"
+# The showcase binary and examples are development tools that read fixtures
+# from `crates/story`; they stay out of the published package.
+exclude = ["src/bin/", "examples/"]
+repository = "https://github.com/longbridge/gpui-kit"
+homepage = "https://gpui-kit.com"
 documentation = "https://docs.rs/gpui-base"
-version = "0.5.2"
-publish = false
+version = "0.6.0"
+publish = true
 edition.workspace = true
 
 [lib]

@@ -10,8 +10,8 @@ A powerful List component that provides a virtualized, searchable list interface
 ## Import
 
 ```rust
-use gpui_component::list::{List, ListState, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
-use gpui_component::IndexPath;
+use gpui_kit::component::list::{List, ListState, ListDelegate, ListItem, ListEvent, ListSeparatorItem};
+use gpui_kit::component::IndexPath;
 ```
 
 ## Usage

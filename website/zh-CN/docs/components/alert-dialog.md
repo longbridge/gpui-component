@@ -19,8 +19,8 @@ AlertDialog 基于 Dialog 提供了以下默认值：
 ## 导入
 
 ```rust
-use gpui_component::dialog::{AlertDialog, DialogAction, DialogClose};
-use gpui_component::WindowExt;
+use gpui_kit::component::dialog::{AlertDialog, DialogAction, DialogClose};
+use gpui_kit::component::WindowExt;
 ```
 
 ## 用法
@@ -34,7 +34,7 @@ use gpui_component::WindowExt;
 通过 `trigger` 和 `content` 创建声明式 AlertDialog：
 
 ```rust
-use gpui_component::dialog::{AlertDialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter};
+use gpui_kit::component::dialog::{AlertDialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter};
 
 AlertDialog::new(cx)
     .trigger(
@@ -145,8 +145,8 @@ window.open_alert_dialog(cx, |alert, _, _| {
 ### 自定义按钮属性
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
-use gpui_component::button::ButtonVariant;
+use gpui_kit::component::dialog::DialogButtonProps;
+use gpui_kit::component::button::ButtonVariant;
 
 window.open_alert_dialog(cx, |alert, _, _| {
     alert
@@ -171,7 +171,7 @@ window.open_alert_dialog(cx, |alert, _, _| {
 声明式写法：
 
 ```rust
-use gpui_component::{Icon, IconName, ActiveTheme};
+use gpui_kit::component::{Icon, IconName, ActiveTheme};
 
 AlertDialog::new(cx)
     .w(px(320.))
@@ -322,7 +322,7 @@ window.open_alert_dialog(cx, |alert, _, _| {
 如果 `on_ok` 或 `on_cancel` 返回 `false`，对话框不会关闭：
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
+use gpui_kit::component::dialog::DialogButtonProps;
 
 window.open_alert_dialog(cx, |alert, _, _| {
     alert

@@ -10,7 +10,7 @@ Rating 是一个星级评分组件，允许用户选择评分值。它支持不�
 ## 导入
 
 ```rust
-use gpui_component::rating::Rating;
+use gpui_kit::component::rating::Rating;
 ```
 
 ## 用法

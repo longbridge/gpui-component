@@ -16,7 +16,7 @@ Use [Textarea](./textarea.md) for ordinary multi-line text and
 ## Import
 
 ```rust
-use gpui_base::input::{Input, InputEvent, InputState};
+use gpui_kit::base::input::{Input, InputEvent, InputState};
 ```
 
 ## Basic usage
@@ -85,4 +85,4 @@ cargo run -p gpui-base --example components -- input
 ```
 
 The implementation is in
-[`crates/base/examples/showcase/components/input.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/input.rs).
+[`crates/base/examples/showcase/components/input.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/input.rs).

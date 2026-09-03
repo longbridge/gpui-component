@@ -12,7 +12,7 @@ Like every `gpui-base` primitive, Switch supplies behavior and semantic structur
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
 cargo run -p gpui-base --example components -- switch
@@ -21,14 +21,14 @@ cargo run -p gpui-base --example components -- switch
 ## Import
 
 ```rust
-use gpui_base::{Switch, SwitchThumb, SwitchTrack};
+use gpui_kit::base::{Switch, SwitchThumb, SwitchTrack};
 ```
 
 ## Anatomy and API
 
 The example composes `Switch`, `SwitchThumb`, `SwitchTrack`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/switch.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/switch.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/switch.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/switch.rs). Native and browser previews compile this same file.
 
 ## State and events
 

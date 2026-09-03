@@ -14,7 +14,7 @@ TextView is selectable by default and uses the shared window selection engine fr
 ## Import
 
 ```rust
-use gpui_component::text::{markdown, TextView};
+use gpui_kit::component::text::{markdown, TextView};
 ```
 
 ## Usage
@@ -24,7 +24,7 @@ use gpui_component::text::{markdown, TextView};
 Use the `markdown` helper when you only need to render Markdown text:
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 markdown("# Hello\n\nThis is **Markdown**.")
     .scrollable(true)
@@ -33,7 +33,7 @@ markdown("# Hello\n\nThis is **Markdown**.")
 You can also construct a `TextView` directly when you need a stable id:
 
 ```rust
-use gpui_component::text::TextView;
+use gpui_kit::component::text::TextView;
 
 TextView::markdown("preview", markdown_source)
 ```
@@ -78,10 +78,10 @@ URL and the original GPUI `ClickEvent`, so it can distinguish mouse buttons,
 keyboard activation, touch, and modifier keys:
 
 ```rust
-use gpui::ClickEvent;
-use gpui_component::text::markdown;
+use gpui_kit::ClickEvent;
+use gpui_kit::component::text::markdown;
 
-markdown("[Open the project](https://github.com/longbridge/gpui-component)")
+markdown("[Open the project](https://github.com/longbridge/gpui-kit)")
     .on_link_click(|url, event, _window, cx| {
         if event.is_right_click() {
             println!("Show a context menu for {url}");
@@ -114,8 +114,8 @@ markdown(source)
 A Markdown plugin implements `MarkdownPlugin`:
 
 ```rust
-use gpui::{App, IntoElement, ParentElement as _, Window};
-use gpui_component::text::{
+use gpui_kit::{App, IntoElement, ParentElement as _, Window};
+use gpui_kit::component::text::{
     markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
 };
 
@@ -173,7 +173,7 @@ impl MarkdownPlugin for TickerPlugin {
     ) -> impl IntoElement {
         let ticker = node.data::<TickerNode>().expect("ticker node data");
 
-        gpui::div().child(format!("${}", ticker.symbol))
+        gpui_kit::div().child(format!("${}", ticker.symbol))
     }
 }
 ```
@@ -219,6 +219,6 @@ You can render controls for Markdown code blocks:
 ```rust
 markdown(source)
     .code_block_actions(|code_block, _window, _cx| {
-        gpui::div().child(format!("Run {}", code_block.lang().unwrap_or_default()))
+        gpui_kit::div().child(format!("Run {}", code_block.lang().unwrap_or_default()))
     })
 ```

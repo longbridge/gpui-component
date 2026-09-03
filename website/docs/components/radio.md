@@ -10,7 +10,7 @@ Radio buttons allow users to select a single option from a set of mutually exclu
 ## Import
 
 ```rust
-use gpui_component::radio::{Radio, RadioGroup};
+use gpui_kit::component::radio::{Radio, RadioGroup};
 ```
 
 ## Usage

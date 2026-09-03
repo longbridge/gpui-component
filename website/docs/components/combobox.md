@@ -22,10 +22,10 @@ Use `Select` for simple single-value picking. Use `Combobox` when you need multi
 ## Import
 
 ```rust
-use gpui_component::combobox::{
+use gpui_kit::component::combobox::{
     Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
 };
-use gpui_component::searchable_list::{
+use gpui_kit::component::searchable_list::{
     SearchableListItem, SearchableVec, SearchableGroup,
 };
 ```

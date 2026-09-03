@@ -10,8 +10,8 @@ A component for displaying keyboard shortcuts and key combinations with proper p
 ## Import
 
 ```rust
-use gpui_component::kbd::Kbd;
-use gpui::Keystroke;
+use gpui_kit::component::kbd::Kbd;
+use gpui_kit::Keystroke;
 ```
 
 ## Usage
@@ -83,7 +83,7 @@ Kbd::new(Keystroke::parse("cmd-s").unwrap())
 ### From Action Bindings
 
 ```rust
-use gpui::{Action, Window, FocusHandle};
+use gpui_kit::{Action, Window, FocusHandle};
 
 // Get first keybinding for an action
 if let Some(kbd) = Kbd::binding_for_action(&MyAction {}, None, window) {
@@ -135,7 +135,7 @@ The Kbd component automatically formats shortcuts according to platform conventi
 ### Keyboard Shortcut Help
 
 ```rust
-use gpui::{div, h_flex, v_flex};
+use gpui_kit::{div, h_flex, v_flex};
 
 // Display common shortcuts
 v_flex()

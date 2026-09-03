@@ -10,7 +10,7 @@ A comprehensive form component that provides structured layout for form fields w
 ## Import
 
 ```rust
-use gpui_component::form::{field, v_form, h_form, Form, Field};
+use gpui_kit::component::form::{field, v_form, h_form, Form, Field};
 ```
 
 ## Usage

@@ -21,12 +21,12 @@ cargo run -p gpui-base --example components -- hover-card
 ## 导入
 
 ```rust
-use gpui_base::{HoverCard};
+use gpui_kit::base::{HoverCard};
 ```
 
 ## 结构与 API
 
-示例组合上述公开类型。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/hover-card.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/hover-card.rs)，原生与浏览器预览编译的是同一文件。
+示例组合上述公开类型。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/hover-card.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/hover-card.rs)，原生与浏览器预览编译的是同一文件。
 
 ## 状态与事件
 

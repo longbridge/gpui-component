@@ -10,7 +10,7 @@ A versatile color picker component that provides an intuitive interface for colo
 ## Import
 
 ```rust
-use gpui_component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEvent};
+use gpui_kit::component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEvent};
 ```
 
 ## Usage
@@ -18,7 +18,7 @@ use gpui_component::color_picker::{ColorPicker, ColorPickerState, ColorPickerEve
 ### Basic Color Picker
 
 ```rust
-use gpui::{Entity, Window, Context};
+use gpui_kit::{Entity, Window, Context};
 
 // Create color picker state
 let color_picker = cx.new(|cx|
@@ -33,7 +33,7 @@ ColorPicker::new(&color_picker)
 ### With Event Handling
 
 ```rust
-use gpui::{Subscription, Entity};
+use gpui_kit::{Subscription, Entity};
 
 let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
 
@@ -52,7 +52,7 @@ ColorPicker::new(&color_picker)
 ### Setting Default Color
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 let color_picker = cx.new(|cx|
     ColorPickerState::new(window, cx)
@@ -79,7 +79,7 @@ ColorPicker::new(&color_picker).xsmall()
 ### With Custom Featured Colors
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 let featured_colors = vec![
     cx.theme().red,
@@ -96,7 +96,7 @@ ColorPicker::new(&color_picker)
 ### With Icon Instead of Color Square
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 ColorPicker::new(&color_picker)
     .icon(IconName::Palette)
@@ -112,7 +112,7 @@ ColorPicker::new(&color_picker)
 ### Custom Anchor Position
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 ColorPicker::new(&color_picker)
     .anchor(Anchor::TopRight) // Dropdown opens to top-right
@@ -169,7 +169,7 @@ let color = cx.theme().blue;
 Native format used by the color picker:
 
 ```rust
-use gpui::Hsla;
+use gpui_kit::Hsla;
 
 // Create HSL color
 let color = Hsla::hsl(240.0, 100.0, 50.0); // Blue color
@@ -199,7 +199,7 @@ if let Ok(color) = Hsla::parse_hex("#3366FF") {
 Full alpha channel support for transparency:
 
 ```rust
-use gpui::hsla;
+use gpui_kit::hsla;
 
 // Create color with alpha
 let semi_transparent = hsla(0.5, 0.8, 0.6, 0.7); // 70% opacity
@@ -282,7 +282,7 @@ impl ThemeEditor {
 ### Brand Color Selector
 
 ```rust
-use gpui_component::{Sizable as _};
+use gpui_kit::component::{Sizable as _};
 
 let brand_colors = vec![
     Hsla::parse_hex("#FF6B6B").unwrap(), // Brand Red
@@ -301,7 +301,7 @@ ColorPicker::new(&color_picker)
 ### Toolbar Color Picker
 
 ```rust
-use gpui_component::{Sizable as _, IconName);
+use gpui_kit::component::{Sizable as _, IconName);
 
 ColorPicker::new(&text_color_picker)
     .icon(IconName::Type)

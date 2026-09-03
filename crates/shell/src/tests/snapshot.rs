@@ -21,7 +21,7 @@ use crate::{
 use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 const TOGGLE: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, Checkbox } from "gpui-base";
 
 export default class Toggle extends View {
@@ -45,7 +45,7 @@ export default class Toggle extends View {
 const ENTRY: &str = "toggle.js";
 
 const FPS_MONITOR: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { fps_monitor } from "gpui-fps";
 
 export default class Monitor extends View {
@@ -56,7 +56,7 @@ export default class Monitor extends View {
 "#;
 
 const PATH: &str = r##"
-import { div, View, PathBuilder, Background } from "gpui";
+import { div, View, PathBuilder, Background } from "gpui-kit";
 
 export default class NativePath extends View {
   render() {
@@ -102,7 +102,7 @@ fn path_builder_freezes_commands_in_the_render_snapshot(cx: &mut TestAppContext)
 #[gpui::test]
 fn path_dash_rejects_values_that_round_to_zero_pixels(cx: &mut TestAppContext) {
     let source = r##"
-import { div, View, PathBuilder } from "gpui";
+import { div, View, PathBuilder } from "gpui-kit";
 export default class TinyDash extends View {
   render() {
     const path = PathBuilder.stroke(1)
@@ -128,7 +128,7 @@ export default class TinyDash extends View {
 /// A script whose `render` throws every other call, so a failed build can be
 /// observed next to a successful one.
 const FLAKY: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class Flaky extends View {
@@ -146,7 +146,7 @@ export default class Flaky extends View {
 "#;
 
 const ASYNC_FAILURE: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
 
 export default class AsyncFailure extends View {
@@ -164,14 +164,14 @@ export default class AsyncFailure extends View {
 "#;
 
 const ALWAYS_FAILS: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class AlwaysFails extends View {
   render() { throw new Error("first render failed on purpose"); }
 }
 "#;
 
 const INPUT_SUBSCRIPTION: &str = r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { v_flex, InputState } from "gpui-base";
 
 export default class InputSubscription extends View {
@@ -294,7 +294,7 @@ fn shell_fps_monitor_can_explicitly_drive_a_sustained_frame_test(cx: &mut TestAp
 #[gpui::test]
 fn a_changed_motion_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Checkbox } from "gpui-base";
 
 export default class Panel extends View {
@@ -347,7 +347,7 @@ export default class Panel extends View {
 #[gpui::test]
 fn a_changed_spring_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
     let source = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { Checkbox } from "gpui-base";
 
 export default class Indicator extends View {

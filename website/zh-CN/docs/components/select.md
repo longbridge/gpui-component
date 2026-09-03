@@ -22,7 +22,7 @@ Select 允许用户从一组选项中选择一个值。
 ## 导入
 
 ```rust
-use gpui_component::select::{
+use gpui_kit::component::select::{
     Select, SelectState, SelectItem, SelectDelegate,
     SelectEvent, SearchableVec, SelectGroup
 };
@@ -102,7 +102,7 @@ impl SelectItem for Country {
         self.name.clone()
     }
 
-    fn display_title(&self) -> Option<gpui::AnyElement> {
+    fn display_title(&self) -> Option<gpui_kit::AnyElement> {
         Some(format!("{} ({})", self.name, self.code).into_any_element())
     }
 

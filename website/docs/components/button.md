@@ -10,7 +10,7 @@ The [Button] element with multiple variants, sizes, and states. Supports icons, 
 ## Import
 
 ```rust
-use gpui_component::button::{Button, ButtonGroup};
+use gpui_kit::component::button::{Button, ButtonGroup};
 ```
 
 ## Usage
@@ -100,7 +100,7 @@ All icon types automatically adapt to the button's size and can be customized wi
 #### Icon Types
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 // Using IconName (simplest)
 Button::new("btn")
@@ -122,7 +122,7 @@ Button::new("btn")
 Use a [Spinner] to indicate loading or processing state:
 
 ```rust
-use gpui_component::spinner::Spinner;
+use gpui_kit::component::spinner::Spinner;
 
 // Basic spinner
 Button::new("btn")
@@ -145,7 +145,7 @@ Button::new("btn")
 Use a [ProgressCircle] to show progress percentage:
 
 ```rust
-use gpui_component::progress::ProgressCircle;
+use gpui_kit::component::progress::ProgressCircle;
 
 // Basic progress circle
 Button::new("btn")
@@ -279,7 +279,7 @@ ButtonGroup::new("toggle-group")
 ## Custom Variant
 
 ```rust
-use gpui_component::button::ButtonCustomVariant;
+use gpui_kit::component::button::ButtonCustomVariant;
 
 let custom = ButtonCustomVariant::new(cx)
     .color(cx.theme().magenta)

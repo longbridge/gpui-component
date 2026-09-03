@@ -9,7 +9,7 @@ example: dock
 
 Dock builds application workspaces from draggable tab groups, nested splits, and collapsible left, right, and bottom docks. It is the layout foundation used by Longbridge in production, not an isolated UI demo.
 
-`gpui-base` owns the data model, layout calculation, and drag-and-drop behavior. `gpui-component` supplies the polished controls and visual language. Use `gpui_component::dock` when you want a Dock ready to fit into a real application.
+`gpui-base` owns the data model, layout calculation, and drag-and-drop behavior. `gpui-component` supplies the polished controls and visual language. Use `gpui_kit::component::dock` when you want a Dock ready to fit into a real application.
 
 For the renderer-independent architecture and custom-renderer API, see [Dock — gpui-base](/base/dock).
 
@@ -18,7 +18,7 @@ For the renderer-independent architecture and custom-renderer API, see [Dock —
 Create the area through `DockSkin`. Keep the returned skin if you want to change its appearance later.
 
 ```rust
-use gpui_component::dock::{DockArea, DockSkin};
+use gpui_kit::component::dock::{DockArea, DockSkin};
 
 struct Workspace {
     dock_area: Entity<DockArea>,
@@ -42,7 +42,7 @@ The optional version belongs to your saved layout schema. Increase it when your 
 A styled Dock panel implements `BasePanel` for identity and persistence, and `Panel` for its title, tab, and toolbar presentation.
 
 ```rust
-use gpui_component::dock::{BasePanel, Panel, PanelEvent};
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent};
 
 struct FilesPanel {
     focus_handle: FocusHandle,
@@ -82,7 +82,7 @@ Wrap styled panels with `panel_handle`. This preserves the `gpui-component` pane
 `DockLayout` is a value: compose it before a window exists, serialize it, compare it, or generate it from application state. Tabs and splits can be nested freely.
 
 ```rust
-use gpui_component::dock::{DockLayout, panel_handle};
+use gpui_kit::component::dock::{DockLayout, panel_handle};
 
 let files = cx.new(|cx| FilesPanel {
     focus_handle: cx.focus_handle(),
@@ -113,7 +113,7 @@ The Dock area also supports left, right, and bottom regions through `DockPlaceme
 Dump the entire workspace as `DockAreaState`, store it with Serde, then load it on the next launch.
 
 ```rust
-use gpui_component::dock::DockAreaState;
+use gpui_kit::component::dock::DockAreaState;
 
 // Save.
 let state = self.dock_area.read(cx).dump(cx);
@@ -158,4 +158,4 @@ The repository includes a complete workspace with edge docks, runtime panel oper
 cargo run --example dock
 ```
 
-See [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/story/examples/dock.rs) for the full implementation.
+See [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/story/examples/dock.rs) for the full implementation.

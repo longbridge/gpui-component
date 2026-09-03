@@ -12,7 +12,7 @@ Like every `gpui-base` primitive, Combobox supplies behavior and semantic struct
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
 cargo run -p gpui-base --example components -- combobox
@@ -21,14 +21,14 @@ cargo run -p gpui-base --example components -- combobox
 ## Import
 
 ```rust
-use gpui_base::{Combobox};
+use gpui_kit::base::{Combobox};
 ```
 
 ## Anatomy and API
 
 The example composes `Combobox`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/combobox.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/combobox.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/combobox.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/combobox.rs). Native and browser previews compile this same file.
 
 ## State and events
 

@@ -10,7 +10,7 @@ Switch 是一个二元开关组件，适合表示开启 / 关闭状态。它支�
 ## 导入
 
 ```rust
-use gpui_component::switch::Switch;
+use gpui_kit::component::switch::Switch;
 ```
 
 ## 用法

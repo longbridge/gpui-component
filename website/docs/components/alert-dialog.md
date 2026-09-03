@@ -19,8 +19,8 @@ AlertDialog provides these defaults on top of Dialog:
 ## Import
 
 ```rust
-use gpui_component::dialog::{AlertDialog, DialogAction, DialogClose};
-use gpui_component::WindowExt;
+use gpui_kit::component::dialog::{AlertDialog, DialogAction, DialogClose};
+use gpui_kit::component::WindowExt;
 ```
 
 ## Usage
@@ -34,7 +34,7 @@ Like Dialog, you need to set up your application's root view to render the dialo
 Create a fully declarative AlertDialog using `trigger` and `content`:
 
 ```rust
-use gpui_component::dialog::{AlertDialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter};
+use gpui_kit::component::dialog::{AlertDialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter};
 
 AlertDialog::new(cx)
     .trigger(
@@ -146,8 +146,8 @@ window.open_alert_dialog(cx, |alert, _, _| {
 Use `button_props` to customize button text and styles:
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
-use gpui_component::button::ButtonVariant;
+use gpui_kit::component::dialog::DialogButtonProps;
+use gpui_kit::component::button::ButtonVariant;
 
 window.open_alert_dialog(cx, |alert, _, _| {
     alert
@@ -172,7 +172,7 @@ window.open_alert_dialog(cx, |alert, _, _| {
 Using icon in declarative API:
 
 ```rust
-use gpui_component::{Icon, IconName, ActiveTheme};
+use gpui_kit::component::{Icon, IconName, ActiveTheme};
 
 AlertDialog::new(cx)
     .w(px(320.))
@@ -323,7 +323,7 @@ window.open_alert_dialog(cx, |alert, _, _| {
 Return `false` from `on_ok` or `on_cancel` callbacks to prevent the dialog from closing:
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
+use gpui_kit::component::dialog::DialogButtonProps;
 
 window.open_alert_dialog(cx, |alert, _, _| {
     alert

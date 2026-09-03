@@ -10,7 +10,7 @@ A step-by-step progress component that guides users through a series of steps or
 ## Import
 
 ```rust
-use gpui_component::stepper::{Stepper, StepperItem};
+use gpui_kit::component::stepper::{Stepper, StepperItem};
 ```
 
 ## Usage
@@ -35,7 +35,7 @@ Stepper::new("my-stepper")
 ### With Icons
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Stepper::new("icon-stepper")
     .selected_index(0)
@@ -114,7 +114,7 @@ Stepper::new("center-stepper")
 ### Different Sizes
 
 ```rust
-use gpui_component::{Sizable as _, Size};
+use gpui_kit::component::{Sizable as _, Size};
 
 Stepper::new("stepper")
     .xsmall()

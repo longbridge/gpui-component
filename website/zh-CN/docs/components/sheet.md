@@ -10,8 +10,8 @@ Sheet 是一种从屏幕边缘滑出的面板组件，也常被用作侧栏、�
 ## 导入
 
 ```rust
-use gpui_component::WindowExt;
-use gpui_component::Placement;
+use gpui_kit::component::WindowExt;
+use gpui_kit::component::Placement;
 ```
 
 ## 用法
@@ -23,7 +23,7 @@ use gpui_component::Placement;
 [Root::render_sheet_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_sheet_layer) 会把当前激活的 Sheet 渲染到应用内容之上。
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 
 struct MyApp {
     view: AnyView,

@@ -8,7 +8,7 @@ use gpui::{
     Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::history::History;
+use crate::UndoHistory;
 
 use super::{
     drag::AnyDrag,
@@ -92,7 +92,7 @@ pub struct TilesState {
     zoomed: Option<PanelId>,
     moving: Option<TileMove>,
     resizing: Option<TileResize>,
-    history: History<TileChange>,
+    history: UndoHistory<TileChange>,
     renderer: Rc<dyn TilesRenderer>,
 }
 
@@ -108,7 +108,7 @@ impl TilesState {
             zoomed: None,
             moving: None,
             resizing: None,
-            history: History::new().group_interval(std::time::Duration::from_millis(100)),
+            history: UndoHistory::new().group_interval(std::time::Duration::from_millis(100)),
             renderer: Rc::new(BareTiles),
         }
     }

@@ -1,15 +1,15 @@
 [package]
-name = "gpui-component-assets"
-description = "Default bundled assets for GPUI Component."
+name = "gpui-kit-assets"
+description = "Default bundled assets for GPUI Kit."
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
 license = "Apache-2.0"
-documentation = "https://docs.rs/gpui-component"
-homepage = "https://longbridge.github.io/gpui-component"
-repository = "https://github.com/longbridge/gpui-component"
+documentation = "https://docs.rs/gpui-kit-assets"
+homepage = "https://gpui-kit.com"
+repository = "https://github.com/longbridge/gpui-kit"
 readme = "README.md"
 edition.workspace = true
 publish = true
-version = "0.5.1"
+version = "0.6.0"
 
 # `links` is the documented cargo mechanism for sharing build-time metadata
 # across the dep graph: every dependent (regular OR build-dep) receives the
@@ -21,7 +21,7 @@ version = "0.5.1"
 # conventionally a native-library name; we use a unique identifier scoped
 # to this crate's purpose. Cargo enforces uniqueness across the build
 # graph, which also prevents accidental double-linkage in dependents.
-links = "gpui-component-default-icons"
+links = "gpui-kit-default-icons"
 
 [lib]
 doctest = false

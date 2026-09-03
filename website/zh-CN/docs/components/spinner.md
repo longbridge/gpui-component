@@ -10,7 +10,7 @@ Spinner 用于显示旋转中的加载动画，适合异步请求、处理中状
 ## 导入
 
 ```rust
-use gpui_component::spinner::Spinner;
+use gpui_kit::component::spinner::Spinner;
 ```
 
 ## 用法
@@ -24,7 +24,7 @@ Spinner::new()
 ### 自定义颜色
 
 ```rust
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
 
 Spinner::new()
     .color(cx.theme().blue)
@@ -49,7 +49,7 @@ Spinner::new().with_size(px(64.))
 ### 自定义图标
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Spinner::new()
     .icon(IconName::LoaderCircle)

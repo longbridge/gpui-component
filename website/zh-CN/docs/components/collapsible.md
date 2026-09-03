@@ -10,7 +10,7 @@ Collapsible 是一个用于展开和收起内容的交互式组件。
 ## 导入
 
 ```rust
-use gpui_component::collapsible::Collapsible;
+use gpui_kit::component::collapsible::Collapsible;
 ```
 
 ## 用法

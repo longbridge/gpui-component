@@ -12,18 +12,16 @@ Add dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-# Optional, for default bundled assets
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-kit = "0.6"
 anyhow = "1.0"
 ```
 
 :::tip
-The `gpui-component-assets` crate is optional.
+`gpui-kit` always pulls in GPUI and `gpui-base`, and by default `gpui-component` and the default icon set. To manage your own assets, keep only the features you need:
 
-It provides a default set of icon assets. If you want to manage your own assets, you can skip adding this dependency.
+```toml
+gpui-kit = { version = "0.6", default-features = false, features = ["component"] }
+```
 
 See [Icons & Assets](./assets.md) for more details.
 :::
@@ -33,8 +31,9 @@ See [Icons & Assets](./assets.md) for more details.
 Here's a simple example to get you started:
 
 ```rust
-use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_kit::component::button::*;
+use gpui_kit::component::*;
+use gpui_kit::*;
 
 pub struct HelloWorld;
 
@@ -57,11 +56,11 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
 
     app.run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {
@@ -77,7 +76,7 @@ fn main() {
 ```
 
 :::info
-Make sure to call `gpui_component::init(cx);` at first line inside the `app.run` closure. This initializes the GPUI Component system.
+Make sure to call `gpui_kit::init(cx);` at first line inside the `app.run` closure. This initializes the GPUI Component system.
 
 This is required for theming and other global settings to work correctly.
 :::
@@ -134,7 +133,7 @@ impl Render for MyView {
 All components support theming through the built-in `Theme` system:
 
 ```rust
-use gpui_component::{ActiveTheme, Theme};
+use gpui_kit::component::{ActiveTheme, Theme};
 
 // Access theme colors in your components
 cx.theme().primary
@@ -179,7 +178,7 @@ GPUI Component has an `Icon` element, but does not include SVG files by default.
 The examples use [Lucide](https://lucide.dev) icons. You can use any icons you like by naming the SVG files as defined in `IconName`. Add the icons you need to your project.
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Icon::new(IconName::Check)
 Icon::new(IconName::Search).small()

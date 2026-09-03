@@ -10,7 +10,7 @@ DatePicker 是一个灵活的日期选择组件，内置日历界面，支持单
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     date_picker::{DatePicker, DatePickerState, DateRangePreset, DatePickerEvent},
     calendar::{Date, Matcher},
 };
@@ -128,7 +128,7 @@ div()
 ### 禁用周末
 
 ```rust
-use gpui_component::calendar;
+use gpui_kit::component::calendar;
 
 let date_picker = cx.new(|cx| {
     DatePickerState::new(window, cx)

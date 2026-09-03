@@ -12,7 +12,7 @@ Icon 是一个灵活的图标组件，用于渲染内置图标库中的 SVG 图�
 ## 导入
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 ```
 
 ## 用法
@@ -43,13 +43,13 @@ Icon::new(IconName::Heart)
     .text_color(cx.theme().red)
 
 Icon::new(IconName::Star)
-    .text_color(gpui::red())
+    .text_color(gpui_kit::red())
 ```
 
 ### 旋转图标
 
 ```rust
-use gpui::Radians;
+use gpui_kit::Radians;
 
 Icon::new(IconName::ArrowUp)
     .rotate(Radians::from_degrees(90.))
@@ -132,7 +132,7 @@ Icon::new(Icon::empty())
 如果你需要更贴合业务的图标命名，可以自己定义 `IconName` 并实现 `IconNamed` trait。
 
 ```rust
-use gpui_component::IconNamed;
+use gpui_kit::component::IconNamed;
 
 pub enum IconName {
     Encounters,
@@ -141,7 +141,7 @@ pub enum IconName {
 }
 
 impl IconNamed for IconName {
-    fn path(self) -> gpui::SharedString {
+    fn path(self) -> gpui_kit::SharedString {
         match self {
             IconName::Encounters => "icons/encounters.svg",
             IconName::Monsters => "icons/monsters.svg",
@@ -173,7 +173,7 @@ div()
 ### 按钮中的图标
 
 ```rust
-use gpui_component::button::Button;
+use gpui_kit::component::button::Button;
 
 Button::new("like-btn")
     .icon(

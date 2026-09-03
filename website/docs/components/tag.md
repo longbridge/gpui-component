@@ -10,7 +10,7 @@ A versatile tag component for categorizing and labeling content. Tags are compac
 ## Import
 
 ```rust
-use gpui_component::tag::Tag;
+use gpui_kit::component::tag::Tag;
 ```
 
 ## Usage
@@ -68,7 +68,7 @@ Tag::primary().child("Medium Tag")
 ### Custom Colors
 
 ```rust
-use gpui_component::ColorName;
+use gpui_kit::component::ColorName;
 
 // Using predefined color names
 Tag::color(ColorName::Blue).child("Blue Tag")
@@ -83,7 +83,7 @@ Tag::color(ColorName::Red).child("Red Tag")
 ### Custom HSLA Colors
 
 ```rust
-use gpui::{hsla, Hsla};
+use gpui_kit::{hsla, Hsla};
 
 // Custom colors with HSLA values
 let color = hsla(220.0 / 360.0, 0.8, 0.5, 1.0);
@@ -96,7 +96,7 @@ Tag::custom(color, foreground, border).child("Custom Color")
 ### Rounded Corners
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 // Fully rounded tags
 Tag::primary().rounded_full().child("Rounded Full")
@@ -204,7 +204,7 @@ Tag::warning().small().child("Limited")
 ### Tag Collections
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 // Horizontal tag group
 h_flex()
@@ -263,7 +263,7 @@ h_flex()
 ### Color-Coded Categories
 
 ```rust
-use gpui_component::ColorName;
+use gpui_kit::component::ColorName;
 
 // Content type tags
 h_flex()

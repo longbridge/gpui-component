@@ -4,9 +4,9 @@ use gpui::{
     WindowId,
     profiler::{FrameEvent, FrameTiming, FrameTimingCollector},
 };
-use instant::Instant;
+use web_time::Instant;
 
-/// Frames older than this stop contributing to the FPS readout.
+/// Frames presented longer ago than this stop contributing to the FPS readout.
 const FPS_WINDOW: Duration = Duration::from_secs(1);
 
 /// One drawn frame.
@@ -29,8 +29,14 @@ pub(crate) struct FrameSampler {
     collector: FrameTimingCollector,
     window_id: WindowId,
     samples: VecDeque<FrameSample>,
-    /// Arrival times of the frames still inside [`FPS_WINDOW`].
-    frame_times: VecDeque<Instant>,
+    /// When the frames still inside [`FPS_WINDOW`] were presented.
+    ///
+    /// The frame's own `present_end`, not the moment this sampler read the
+    /// event. A HUD that draws only when the window does reads the trace in
+    /// batches, and a batch stamped with the time it was read collapses every
+    /// frame in it onto one instant -- the rate then depends on how often the
+    /// HUD looked, not on how often the window presented.
+    present_times: VecDeque<Instant>,
     capacity: usize,
 }
 
@@ -41,7 +47,7 @@ impl FrameSampler {
             collector: FrameTimingCollector::new(),
             window_id,
             samples: VecDeque::with_capacity(capacity),
-            frame_times: VecDeque::new(),
+            present_times: VecDeque::new(),
             capacity,
         }
     }
@@ -49,16 +55,19 @@ impl FrameSampler {
     /// Drains the frames drawn since the previous call. Call once per rendered
     /// frame.
     pub(crate) fn tick(&mut self) {
-        let timings = self
-            .collector
-            .collect_unseen()
-            .into_iter()
-            .filter_map(|event| match event {
-                FrameEvent::Draw(timing) => Some(timing),
-                FrameEvent::Present(_) => None,
-            })
-            .collect();
-        self.ingest(timings, Instant::now());
+        let mut draws = Vec::new();
+        let mut presents = Vec::new();
+        for event in self.collector.collect_unseen() {
+            match event {
+                FrameEvent::Draw(timing) => draws.push(timing),
+                FrameEvent::Present(timing) if timing.window_id == self.window_id => {
+                    presents.push(timing.present_end);
+                }
+                FrameEvent::Present(_) => {}
+            }
+        }
+        self.ingest_draws(draws);
+        self.ingest_presents(presents, Instant::now());
     }
 
     pub(crate) fn set_capacity(&mut self, capacity: usize) {
@@ -68,16 +77,22 @@ impl FrameSampler {
         }
     }
 
-    /// Frames per second measured over the frames still inside [`FPS_WINDOW`].
+    /// Frames presented per second, over the frames still inside
+    /// [`FPS_WINDOW`].
+    ///
+    /// Presented, not drawn: it is the same count the platform's own overlay
+    /// keeps -- Metal's HUD counts drawables handed to the display -- so the
+    /// two agree on the figure. A drawn frame that was never presented did not
+    /// reach the screen and is not a frame the reader saw.
     ///
     /// `n` frames span `n - 1` intervals, so the rate is derived from the
     /// elapsed span rather than from the raw count; that keeps the readout
     /// correct before the rolling window has filled up.
     pub(crate) fn fps(&self) -> f32 {
-        if self.frame_times.len() < 2 {
+        if self.present_times.len() < 2 {
             return 0.;
         }
-        let (Some(oldest), Some(newest)) = (self.frame_times.front(), self.frame_times.back())
+        let (Some(oldest), Some(newest)) = (self.present_times.front(), self.present_times.back())
         else {
             return 0.;
         };
@@ -85,7 +100,18 @@ impl FrameSampler {
         if span <= 0. {
             return 0.;
         }
-        (self.frame_times.len() - 1) as f32 / span
+        (self.present_times.len() - 1) as f32 / span
+    }
+
+    /// Mean time between consecutive presents inside [`FPS_WINDOW`], as the
+    /// platform's overlay reports its frame interval. The reciprocal of
+    /// [`fps`](Self::fps); zero when there is no rate.
+    pub(crate) fn present_interval(&self) -> Duration {
+        let fps = self.fps();
+        if fps <= 0. {
+            return Duration::ZERO;
+        }
+        Duration::from_secs_f32(1. / fps)
     }
 
     pub(crate) fn samples(&self) -> impl ExactSizeIterator<Item = &FrameSample> {
@@ -166,7 +192,8 @@ impl FrameSampler {
             .unwrap_or_default()
     }
 
-    fn ingest(&mut self, timings: Vec<FrameTiming>, now: Instant) {
+    /// Retains the cost of each drawn frame, newest last.
+    fn ingest_draws(&mut self, timings: Vec<FrameTiming>) {
         for timing in timings {
             if timing.window_id != self.window_id {
                 continue;
@@ -179,12 +206,17 @@ impl FrameSampler {
                 draw: timing.draw_duration(),
                 invalidations: timing.invalidations,
             });
-            self.frame_times.push_back(now);
         }
+    }
 
-        while let Some(oldest) = self.frame_times.front() {
+    /// Records when frames were presented and forgets the ones that have aged
+    /// out of [`FPS_WINDOW`] as of `now`. `presented` must be in order.
+    fn ingest_presents(&mut self, presented: impl IntoIterator<Item = Instant>, now: Instant) {
+        self.present_times.extend(presented);
+
+        while let Some(oldest) = self.present_times.front() {
             if now.duration_since(*oldest) > FPS_WINDOW {
-                self.frame_times.pop_front();
+                self.present_times.pop_front();
             } else {
                 break;
             }
@@ -410,9 +442,8 @@ mod tests {
     fn sampler_of(draws: &[u64]) -> FrameSampler {
         let window_id = WindowId::from(1);
         let mut sampler = FrameSampler::new(window_id, 256);
-        let now = Instant::now();
         for millis in draws {
-            sampler.ingest(vec![timing(window_id, Duration::from_millis(*millis))], now);
+            sampler.ingest_draws(vec![timing(window_id, Duration::from_millis(*millis))]);
         }
         sampler
     }
@@ -422,16 +453,12 @@ mod tests {
         let ours = WindowId::from(1);
         let theirs = WindowId::from(2);
         let mut sampler = FrameSampler::new(ours, 8);
-        let now = Instant::now();
 
-        sampler.ingest(
-            vec![
-                timing(ours, Duration::from_millis(8)),
-                timing(theirs, Duration::from_millis(40)),
-                timing(ours, Duration::from_millis(9)),
-            ],
-            now,
-        );
+        sampler.ingest_draws(vec![
+            timing(ours, Duration::from_millis(8)),
+            timing(theirs, Duration::from_millis(40)),
+            timing(ours, Duration::from_millis(9)),
+        ]);
 
         assert_eq!(sampler.samples().len(), 2);
         assert_eq!(sampler.peak_draw(), Duration::from_millis(9));
@@ -441,10 +468,9 @@ mod tests {
     fn drops_oldest_samples_beyond_capacity() {
         let window_id = WindowId::from(1);
         let mut sampler = FrameSampler::new(window_id, 2);
-        let now = Instant::now();
 
         for millis in [5, 6, 7] {
-            sampler.ingest(vec![timing(window_id, Duration::from_millis(millis))], now);
+            sampler.ingest_draws(vec![timing(window_id, Duration::from_millis(millis))]);
         }
 
         let draws: Vec<_> = sampler.samples().map(|sample| sample.draw).collect();
@@ -454,7 +480,7 @@ mod tests {
         );
     }
 
-    /// Feeds `count` frames spaced `interval` apart and returns the resulting
+    /// Feeds `count` presents spaced `interval` apart and returns the resulting
     /// rate.
     fn measure_fps(count: u64, interval: Duration) -> f32 {
         let window_id = WindowId::from(1);
@@ -462,12 +488,39 @@ mod tests {
         let start = Instant::now();
 
         for frame in 0..count {
-            sampler.ingest(
-                vec![timing(window_id, Duration::from_millis(1))],
-                start + interval * frame as u32,
-            );
+            let presented = start + interval * frame as u32;
+            sampler.ingest_presents([presented], presented);
         }
         sampler.fps()
+    }
+
+    #[test]
+    fn fps_is_taken_from_when_frames_were_presented_not_when_they_were_read() {
+        let window_id = WindowId::from(1);
+        let mut sampler = FrameSampler::new(window_id, 256);
+        let start = Instant::now();
+        let interval = Duration::from_millis(10);
+
+        // A whole batch of presents read at once, long after the first of them:
+        // what a HUD that draws only when the window does sees. Stamped with
+        // the time they were read, 61 frames would collapse onto one instant
+        // and report no rate at all; stamped with their own times they cover
+        // 600ms => 100 fps.
+        let presents: Vec<Instant> = (0..61).map(|frame| start + interval * frame).collect();
+        let read_at = start + Duration::from_millis(600);
+        sampler.ingest_presents(presents, read_at);
+        assert!((sampler.fps() - 100.).abs() < 0.5, "{}", sampler.fps());
+        assert!(
+            (sampler.present_interval().as_secs_f32() * 1000. - 10.).abs() < 0.1,
+            "{:?}",
+            sampler.present_interval()
+        );
+
+        // Read again a second later with nothing new: everything has aged
+        // out of the window, and the honest rate is zero.
+        sampler.ingest_presents([], read_at + Duration::from_millis(1_100));
+        assert_eq!(sampler.fps(), 0.);
+        assert_eq!(sampler.present_interval(), Duration::ZERO);
     }
 
     #[test]
@@ -608,16 +661,9 @@ mod tests {
         let mut sampler = FrameSampler::new(window_id, 64);
         let now = Instant::now();
 
-        // A first tick can drain several frames at once, stamping them all with
-        // the same arrival time; the span between them is zero.
-        sampler.ingest(
-            vec![
-                timing(window_id, Duration::from_millis(4)),
-                timing(window_id, Duration::from_millis(4)),
-                timing(window_id, Duration::from_millis(4)),
-            ],
-            now,
-        );
+        // Three presents on one instant -- what a trace with no clock behind
+        // it would say -- span nothing, and nothing is divided by that.
+        sampler.ingest_presents([now, now, now], now);
 
         assert_eq!(sampler.fps(), 0.);
     }
@@ -674,18 +720,14 @@ mod tests {
     fn invalidations_average_over_the_retained_frames() {
         let window_id = WindowId::from(1);
         let mut sampler = FrameSampler::new(window_id, 8);
-        let now = Instant::now();
 
         // A window asked to redraw five times for every three frames it drew.
         for invalidations in [1, 3, 1] {
-            sampler.ingest(
-                vec![coalesced(
-                    window_id,
-                    Duration::from_millis(4),
-                    invalidations,
-                )],
-                now,
-            );
+            sampler.ingest_draws(vec![coalesced(
+                window_id,
+                Duration::from_millis(4),
+                invalidations,
+            )]);
         }
 
         assert!((sampler.mean_invalidations() - 5. / 3.).abs() < f32::EPSILON);
@@ -698,16 +740,15 @@ mod tests {
         let start = Instant::now();
 
         for frame in 0..10 {
-            sampler.ingest(
-                vec![timing(window_id, Duration::from_millis(4))],
-                start + Duration::from_millis(frame * 10),
-            );
+            let presented = start + Duration::from_millis(frame * 10);
+            sampler.ingest_draws(vec![timing(window_id, Duration::from_millis(4))]);
+            sampler.ingest_presents([presented], presented);
         }
         assert!(sampler.fps() > 0.);
 
         // Two seconds later the window has gone idle: every retained frame is
         // now older than the rolling window, so the rate collapses to zero.
-        sampler.ingest(vec![], start + Duration::from_secs(2));
+        sampler.ingest_presents([], start + Duration::from_secs(2));
         assert_eq!(sampler.fps(), 0.);
         // The chart history survives so the last known shape stays on screen.
         assert_eq!(sampler.samples().len(), 10);

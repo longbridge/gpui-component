@@ -10,7 +10,7 @@ Scrollable 是一个功能完整的可滚动容器组件，支持自定义滚动
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     scroll::{ScrollableElement, ScrollbarAxis, ScrollbarMode},
     StyledExt as _,
 };
@@ -27,8 +27,8 @@ use gpui_component::{
 - `overflow_y_scrollbar()`：按需添加纵向滚动条。
 
 ```rust
-use gpui::{div, Axis};
-use gpui_component::ScrollableElement;
+use gpui_kit::{div, Axis};
+use gpui_kit::component::ScrollableElement;
 
 div()
     .id("scrollable-container")
@@ -95,7 +95,7 @@ div()
 如果你需要更高的控制粒度，可以手动创建滚动条：
 
 ```rust
-use gpui_component::scroll::{ScrollableElement};
+use gpui_kit::component::scroll::{ScrollableElement};
 
 pub struct ScrollableView {
     scroll_handle: ScrollHandle,
@@ -126,7 +126,7 @@ impl Render for ScrollableView {
 渲染超长列表时，推荐使用 `VirtualList`：
 
 ```rust
-use gpui_component::{VirtualList, VirtualListScrollHandle};
+use gpui_kit::component::{VirtualList, VirtualListScrollHandle};
 
 pub struct LargeListView {
     items: Vec<String>,
@@ -213,7 +213,7 @@ VirtualList::new(
 控制滚动条何时显示：
 
 ```rust
-use gpui_component::{Theme, scroll::ScrollbarMode};
+use gpui_kit::component::{Theme, scroll::ScrollbarMode};
 
 Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx);
 Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);

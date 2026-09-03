@@ -10,7 +10,7 @@ A tabbed interface component for organizing content into separate sections. Supp
 ## Import
 
 ```rust
-use gpui_component::tab::{Tab, TabBar};
+use gpui_kit::component::tab::{Tab, TabBar};
 ```
 
 ## Usage
@@ -76,7 +76,7 @@ TabBar::new("outline-tabs")
 #### Segmented Tabs
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 TabBar::new("segmented-tabs")
     .segmented()
@@ -110,7 +110,7 @@ TabBar::new("tabs").large()
 ### Tabs with Icons
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 TabBar::new("icon-tabs")
     .child(Tab::default().icon(IconName::User).with_variant(TabVariant::Tab))
@@ -121,8 +121,8 @@ TabBar::new("icon-tabs")
 ### Tabs with Prefix and Suffix
 
 ```rust
-use gpui_component::button::Button;
-use gpui_component::{h_flex, IconName};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::{h_flex, IconName};
 
 TabBar::new("tabs-with-controls")
     .prefix(
@@ -201,7 +201,7 @@ Use `max_width` to cap the width of each tab. For tabs created with `.label()`, 
 Tabs built from custom children (via `.child()`) are only given the width limit; add `truncate()` yourself to the part that should shrink.
 
 ```rust
-use gpui::{div, px};
+use gpui_kit::{div, px};
 
 TabBar::new("tabs-with-max-width")
     .max_width(px(100.))
@@ -223,7 +223,7 @@ TabBar::new("tabs-with-max-width")
 ### Scrollable Tabs
 
 ```rust
-use gpui::ScrollHandle;
+use gpui_kit::ScrollHandle;
 
 struct ScrollableTabsView {
     scroll_handle: ScrollHandle,

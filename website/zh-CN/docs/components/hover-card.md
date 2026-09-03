@@ -12,7 +12,7 @@ HoverCard 用于在鼠标悬停到触发元素时显示富内容浮层，适合�
 ## 导入
 
 ```rust
-use gpui_component::hover_card::HoverCard;
+use gpui_kit::component::hover_card::HoverCard;
 ```
 
 ## 用法
@@ -20,8 +20,8 @@ use gpui_component::hover_card::HoverCard;
 ### 基础 HoverCard
 
 ```rust
-use gpui::{ParentElement as _, Styled as _};
-use gpui_component::{hover_card::HoverCard, v_flex};
+use gpui_kit::{ParentElement as _, Styled as _};
+use gpui_kit::component::{hover_card::HoverCard, v_flex};
 
 HoverCard::new("basic")
     .trigger(
@@ -54,8 +54,8 @@ HoverCard::new("basic")
 这是一个很常见的场景，类似 GitHub 或 Twitter 的用户悬停预览：
 
 ```rust
-use gpui::{px, relative, Styled as _};
-use gpui_component::{
+use gpui_kit::{px, relative, Styled as _};
+use gpui_kit::component::{
     avatar::Avatar,
     hover_card::HoverCard,
     h_flex,
@@ -93,7 +93,7 @@ h_flex()
                                     .text_color(cx.theme().muted_foreground)
                                     .text_sm()
                             )
-                            .child("The author of GPUI Component.")
+                            .child("The author of GPUI Kit.")
                     )
             )
     )
@@ -106,8 +106,8 @@ h_flex()
 
 ```rust
 use std::time::Duration;
-use gpui::Styled as _;
-use gpui_component::{
+use gpui_kit::Styled as _;
+use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
 };

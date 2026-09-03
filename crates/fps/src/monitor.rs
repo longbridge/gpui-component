@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use instant::Instant;
+use web_time::Instant;
 
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
@@ -109,7 +109,12 @@ const DEFAULT_FONT: &str = "monospace";
 /// The numbers as last published to the screen.
 #[derive(Clone, Copy, Default)]
 struct Readout {
+    /// Frames presented per second.
     fps: f32,
+    /// Mean time between presents, in milliseconds: the platform overlay's
+    /// "frame interval", and `1000 / fps`.
+    interval_millis: f32,
+    /// Mean `Window::draw` cost of the retained frames, in milliseconds.
     frame_millis: f32,
     /// The slow tail of the same frames `frame_millis` is the mean of.
     percentile_millis: f32,
@@ -276,6 +281,7 @@ impl FpsMonitor {
 
         self.readout = Readout {
             fps: self.sampler.fps(),
+            interval_millis: self.sampler.present_interval().as_secs_f32() * 1000.,
             // The mean over the interval rather than the latest frame, which
             // at this cadence would be an arbitrary sample.
             frame_millis: self.sampler.mean_draw().as_secs_f32() * 1000.,
@@ -428,12 +434,21 @@ impl Render for FpsMonitor {
         let budget = self.frame_budget;
         let Readout {
             fps,
+            interval_millis,
             frame_millis,
             percentile_millis,
             dropped_percent: dropped,
             invalidations,
         } = self.readout;
-        let fps_color = fps_color(fps, budget, style);
+        // Continuous, the rate is the rate the window can sustain, and
+        // falling short of the target is the finding. Drawing on demand, the
+        // rate is how often something changed, and the platform's own overlay
+        // prints it plain -- so does this one.
+        let fps_color = if self.continuous {
+            fps_color(fps, budget, style)
+        } else {
+            style.foreground
+        };
         let resources = self.resources.filter(|_| self.show_resources);
         let compact = self.compact;
 
@@ -474,6 +489,15 @@ impl Render for FpsMonitor {
                         .py_1p5()
                         .rounded(px(4.))
                         .child(self.render_headline(fps, fps_color))
+                        .child(reading(
+                            // The same figure the platform overlay calls its
+                            // frame interval: time between presents, which is
+                            // the headline's reciprocal. Ungraded, like there.
+                            "INTERVAL",
+                            format!("{interval_millis:.1} ms"),
+                            style.foreground,
+                            style,
+                        ))
                         .child(reading(
                             "FRAME",
                             format!("{frame_millis:.1} ms"),

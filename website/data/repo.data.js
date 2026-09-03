@@ -1,4 +1,4 @@
-const API_URL = "https://api.github.com/repos/longbridge/gpui-component";
+const API_URL = "https://api.github.com/repos/longbridge/gpui-kit";
 const IS_BUILD = process.env.NODE_ENV === "production";
 
 export default {
@@ -7,10 +7,12 @@ export default {
     if (!res.ok) {
       if (IS_BUILD) {
         throw new Error(
-          `GitHub API request failed: ${res.status} ${res.statusText}`
+          `GitHub API request failed: ${res.status} ${res.statusText}`,
         );
       }
-      console.warn(`[repo.data] GitHub API rate limited (${res.status}), using fallback`);
+      console.warn(
+        `[repo.data] GitHub API rate limited (${res.status}), using fallback`,
+      );
       return { stargazers_count: 0 };
     }
 
@@ -18,10 +20,12 @@ export default {
     if (typeof data.stargazers_count !== "number") {
       if (IS_BUILD) {
         throw new Error(
-          `GitHub API returned unexpected data: ${JSON.stringify(data).slice(0, 200)}`
+          `GitHub API returned unexpected data: ${JSON.stringify(data).slice(0, 200)}`,
         );
       }
-      console.warn("[repo.data] GitHub API returned unexpected data, using fallback");
+      console.warn(
+        "[repo.data] GitHub API returned unexpected data, using fallback",
+      );
       return { stargazers_count: 0 };
     }
 

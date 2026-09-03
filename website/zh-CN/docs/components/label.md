@@ -10,7 +10,7 @@ Label 是一个灵活的文本标签组件，可用于表单标签、说明文�
 ## 导入
 
 ```rust
-use gpui_component::label::{Label, HighlightsMatch};
+use gpui_kit::component::label::{Label, HighlightsMatch};
 ```
 
 ## 用法
@@ -60,7 +60,7 @@ Label::new("Company Name")
 ### 颜色与字体样式
 
 ```rust
-use gpui_component::green_500;
+use gpui_kit::component::green_500;
 
 Label::new("Color Label")
     .text_color(green_500())
