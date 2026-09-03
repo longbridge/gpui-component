@@ -353,7 +353,17 @@
             <strong>GPUI Kit</strong>
             <p>
                 {{ copy.footerPrefix }}
-                <a href="https://longbridge.com" target="_blank">Longbridge</a>.
+                <a href="https://longbridge.com" target="_blank">Longbridge</a
+                >{{ copy.footerSuffix }}
+            </p>
+            <!-- The one place the landing page names GPUI's origin. Kept
+                 exact rather than prominent: what GPUI is, who made it, and
+                 that GPUI Kit is neither Zed's project nor endorsed by Zed. -->
+            <p>
+                {{ copy.footerBuiltOn }}
+                <a href="https://github.com/zed-industries/zed" target="_blank"
+                    >GPUI</a
+                >{{ copy.footerAttribution }}
             </p>
         </div>
         <nav :aria-label="copy.footerNav">
@@ -610,6 +620,10 @@ const copy = computed(() =>
               principleDetail:
                   "gpui-base 处理困难的交互机制：焦点、浮层定位、虚拟化与无障碍；你的产品决定它们最终呈现的样子。",
               footerPrefix: "基于 Apache-2.0 许可证开源，由",
+              footerSuffix: " 开发。",
+              footerBuiltOn: "构建于",
+              footerAttribution:
+                  " 之上，GPUI 由 Zed Industries 创建并以 Apache-2.0 许可证发布。GPUI Kit 是独立项目，与 Zed Industries 没有隶属关系，也未获得其背书。",
               footerNav: "页脚导航",
               contributors: "贡献者",
               reportBug: "报告问题",
@@ -717,6 +731,10 @@ const copy = computed(() =>
                   "gpui-base handles the difficult interaction mechanics — focus, overlay positioning, virtualization and accessibility. Your product decides how they should look and feel.",
               footerPrefix:
                   "Open source under the Apache-2.0 License, developed by",
+              footerSuffix: ".",
+              footerBuiltOn: "Built on",
+              footerAttribution:
+                  ", the UI framework created by Zed Industries and released under Apache-2.0. GPUI Kit is an independent project and is not affiliated with or endorsed by Zed Industries.",
               footerNav: "Footer navigation",
               contributors: "Contributors",
               reportBug: "Report Bug",

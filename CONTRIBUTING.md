@@ -179,8 +179,8 @@ constant in the script; keep that version in step with the hand-published one.
 
 The script runs on [Bun](https://bun.sh) and needs Cargo 1.90+ (for `cargo publish --workspace`)
 and a crates.io token from `cargo login`. It stages a standalone workspace in
-`target/gpui-pre/workspace`, verifies it with `cargo publish --dry-run`, then
-builds and tests this repository against the staged crates (the same `check`,
+`target/gpui-pre/workspace`, audits its licenses, verifies it with
+`cargo publish --dry-run`, then builds and tests this repository against the staged crates (the same `check`,
 `clippy` and `test` commands CI runs, injected with `--config patch.crates-io`
 so nothing in the checkout changes), and only then uploads. Applications
 depend on `gpui-pre` with a caret requirement and pick up new snapshots on
@@ -190,6 +190,23 @@ instead of reaching users; adapt the repository first, then publish. Pass
 the first run waits between batches; re-running resumes from where it stopped.
 Pass `--zed <path>` to reuse a local Zed checkout and `--stage-only` to inspect
 the generated workspace.
+
+GPUI is Apache-2.0, and the snapshots are a redistribution of it, so the
+script keeps Zed's terms intact and refuses to publish anything else:
+
+- Every crate keeps its `license`, its `repository` and Zed's copyright
+  notices, ships Zed's `LICENSE-APACHE` beside its sources, and would carry a
+  `NOTICE` file if Zed added one. The Zed commit is recorded in the
+  description and `[package.metadata.gpui-pre]`, and the three files the
+  script rewrites (`gpui/src/action.rs`, `gpui_macros/src/lib.rs`,
+  `gpui_apple/build.rs`) start with a line saying what changed.
+- Staging fails if a selected crate is not `Apache-2.0`. Zed's application
+  crates are GPL-3.0-or-later and live in the same workspace, so a new
+  internal dependency can pull one into the closure; `zlog` did exactly that
+  before Zed relicensed it.
+- The audit step runs `cargo metadata` on the staged workspace and fails on
+  any copyleft dependency, whether it comes from Zed or from crates.io, so a
+  license change upstream stops the release instead of reaching users.
 
 Depend on the result with:
 
