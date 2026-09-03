@@ -124,9 +124,7 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
         self.session.replace_mode = replace_mode;
         if focus {
             self.search_input
-                .read(cx)
-                .focus_handle(cx)
-                .focus(window, cx);
+                .update(cx, |input, cx| input.focus(window, cx));
         }
 
         self.search_input.update(cx, |this, cx| {
