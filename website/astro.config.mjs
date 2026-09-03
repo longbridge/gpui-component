@@ -7,9 +7,11 @@ import rehypeMathjax from 'rehype-mathjax';
 import pagefind from 'astro-pagefind';
 import { wasmExamplesDevServer } from './src/lib/wasm-middleware.js';
 
+const BASE = '/gpui-component';
+
 export default defineConfig({
   site: 'https://longbridge.github.io',
-  base: '/gpui-component',
+  base: BASE,
   output: 'static',
   trailingSlash: 'never',
 
@@ -40,6 +42,6 @@ export default defineConfig({
   },
 
   vite: {
-    plugins: [tailwindcss(), ViteToml(), wasmExamplesDevServer()],
+    plugins: [tailwindcss(), ViteToml(), wasmExamplesDevServer(BASE)],
   },
 });

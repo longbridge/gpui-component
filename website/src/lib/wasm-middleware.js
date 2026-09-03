@@ -9,10 +9,10 @@ const CONTENT_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
-export function wasmExamplesDevServer() {
+export function wasmExamplesDevServer(base) {
   const roots = new Map([
-    ['/gpui-component/examples/base', resolve('../crates/base/examples/wasm/www/dist')],
-    ['/gpui-component/gallery', resolve('../crates/story-web/www/dist')],
+    [`${base}/examples/base`, resolve('../crates/base/examples/wasm/www/dist')],
+    [`${base}/gallery`, resolve('../crates/story-web/www/dist')],
   ]);
 
   return {
