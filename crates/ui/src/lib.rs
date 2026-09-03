@@ -29,6 +29,7 @@ pub mod badge;
 pub mod breadcrumb;
 pub mod bubble;
 pub mod button;
+pub mod carousel;
 pub mod chart;
 pub mod checkbox;
 pub mod clipboard;
@@ -137,6 +138,7 @@ pub fn init(cx: &mut App) {
     sheet::init(cx);
     list::init(cx);
     command::init(cx);
+    carousel::init(cx);
     notification::init(cx);
     popover::init(cx);
     menu::init(cx);
