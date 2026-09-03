@@ -169,41 +169,42 @@ export function generateSidebar(config: SidebarGeneratorConfig): SidebarItem[] {
 
 // Pre-generate sidebars at build time
 const WEBSITE_ROOT = new URL('../..', import.meta.url).pathname;
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 export const enDocsSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'docs'),
-  baseUrl: '/gpui-component/docs',
+  baseUrl: `${BASE}/docs`,
   rootGroupText: 'Introduction',
 });
 
 export const enShellSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'shell'),
-  baseUrl: '/gpui-component/shell',
+  baseUrl: `${BASE}/shell`,
   rootGroupText: 'GPUI Shell',
   rootLinkText: 'Introduction',
 });
 
 export const enBaseSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'base'),
-  baseUrl: '/gpui-component/base',
+  baseUrl: `${BASE}/base`,
   rootGroupText: 'GPUI Base',
 });
 
 export const zhDocsSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'zh-CN/docs'),
-  baseUrl: '/gpui-component/zh-CN/docs',
+  baseUrl: `${BASE}/zh-CN/docs`,
   rootGroupText: '文档',
 });
 
 export const zhShellSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'zh-CN/shell'),
-  baseUrl: '/gpui-component/zh-CN/shell',
+  baseUrl: `${BASE}/zh-CN/shell`,
   rootGroupText: 'GPUI Shell',
   rootLinkText: '简介',
 });
 
 export const zhBaseSidebar = generateSidebar({
   contentDir: join(WEBSITE_ROOT, 'zh-CN/base'),
-  baseUrl: '/gpui-component/zh-CN/base',
+  baseUrl: `${BASE}/zh-CN/base`,
   rootGroupText: 'GPUI Base',
 });

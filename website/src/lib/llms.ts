@@ -4,7 +4,7 @@ import { extname, join, relative } from 'node:path';
 const SITE_TITLE = 'GPUI Component';
 const SITE_DESCRIPTION =
   'A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.';
-const BASE_URL = '/gpui-component';
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 interface PageEntry {
   title: string;
