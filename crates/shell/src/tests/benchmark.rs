@@ -124,6 +124,54 @@ export default class NumericLayout extends View {
 }
 "#;
 
+#[cfg(not(debug_assertions))]
+const MIXED_MARKET_TEMPLATE: &str = r#"
+import { View, div } from "gpui-kit";
+
+function quoteScore(seed, index) {
+  let previous = seed;
+  let current = seed + index + 1;
+  let aggregate = 0;
+  for (let sample = 0; sample < 32; sample += 1) {
+    const next = previous + current;
+    previous = current;
+    current = next;
+    aggregate += current & 2047;
+  }
+  return aggregate;
+}
+
+function compareQuotes(left, right) {
+  return right.score - left.score;
+}
+
+export default class MarketPanel extends View {
+  render(cx) {
+    const quotes = [];
+    let total = 0;
+    for (let index = 0; index < 96; index += 1) {
+      const score = quoteScore(17, index);
+      total += score;
+      quotes.push({ index, score });
+    }
+    quotes.sort(compareQuotes);
+
+    const visible = [];
+    for (let rank = 0; rank < 12; rank += 1) {
+      const quote = quotes[rank];
+      visible.push(
+        div()
+          .h_flex()
+          .justify_between()
+          .child(`SYM${quote.index}`)
+          .child(`${quote.score}`),
+      );
+    }
+    return div().v_flex().gap(2).child(`total:${total}`).children(visible);
+  }
+}
+"#;
+
 const _: () = assert!(ROWS > 0 && COLUMNS > 0);
 
 #[test]
@@ -324,6 +372,49 @@ fn numeric_layout_installs_and_enters_native_code(cx: &mut TestAppContext) {
         jit.native_entries > 0,
         "numeric layout never entered native code: {jit:?}"
     );
+}
+
+#[gpui::test]
+fn mixed_market_panel_matches_interpreter_and_enters_native_code(cx: &mut TestAppContext) {
+    let (interpreter, mut interpreter_context, interpreter_object) =
+        runtime_with_source(cx, MIXED_MARKET_TEMPLATE, true);
+    let interpreter_tree = interpreter_context.update(|window, cx| {
+        interpreter
+            .build_snapshot(
+                &interpreter_object,
+                None,
+                crate::policy::default(),
+                window,
+                cx,
+            )
+            .expect("interpreter mixed render")
+            .debug_tree()
+    });
+
+    let (automatic, mut automatic_context, automatic_object) =
+        runtime_with_source(cx, MIXED_MARKET_TEMPLATE, false);
+    let mut automatic_tree = String::new();
+    for _ in 0..JIT_WARMUP_RENDERS {
+        automatic_tree = automatic_context.update(|window, cx| {
+            automatic
+                .build_snapshot(
+                    &automatic_object,
+                    None,
+                    crate::policy::default(),
+                    window,
+                    cx,
+                )
+                .expect("JIT mixed render")
+                .debug_tree()
+        });
+        cx.run_until_parked();
+    }
+
+    assert_eq!(automatic_tree, interpreter_tree);
+    let metrics = automatic.jit_metrics_for_benchmark();
+    assert!(metrics.native_entries > 0, "{metrics:?}");
+    assert_eq!(metrics.native_fallbacks, 0, "{metrics:?}");
+    assert_eq!(metrics.deopts, 0, "{metrics:?}");
 }
 
 #[gpui::test]
@@ -591,7 +682,8 @@ fn emit_one_jit_acceptance_sample(cx: &mut TestAppContext) {
     let benchmark_source = match workload.as_str() {
         "panel" => source(ROWS, COLUMNS),
         "compute" => COMPUTE_TEMPLATE.to_owned(),
-        _ => panic!("GPUI_SHELL_JIT_WORKLOAD must be panel or compute"),
+        "mixed" => MIXED_MARKET_TEMPLATE.to_owned(),
+        _ => panic!("GPUI_SHELL_JIT_WORKLOAD must be panel, compute, or mixed"),
     };
 
     let first_started = Instant::now();
