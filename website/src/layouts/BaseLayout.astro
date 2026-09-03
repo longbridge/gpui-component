@@ -65,9 +65,8 @@ const base = import.meta.env.BASE_URL;
     </script>
 
     <!-- Favicon follows theme toggle -->
-    <script is:inline>
+    <script is:inline define:vars={{ base }}>
       (function () {
-        const base = document.querySelector('base')?.href ?? '/gpui-component/';
         function updateFavicon() {
           const isDark = document.documentElement.classList.contains('dark');
           const link = document.querySelector('link[rel="icon"]');
