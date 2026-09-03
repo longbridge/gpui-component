@@ -158,6 +158,22 @@ async function run(cmd: string[], options: RunOptions = {}): Promise<string> {
   return output;
 }
 
+/**
+ * `cargo metadata` with only stdout captured: `run` interleaves stderr, and
+ * cargo reports downloads there, so the JSON would come back with
+ * "Downloading ..." lines inside it.
+ */
+async function cargoMetadata(cwd: string, args: string[] = []): Promise<Toml> {
+  const cmd = ["cargo", "metadata", "--format-version", "1", ...args];
+  console.log(dim(`$ (cd ${cwd} && ${cmd.join(" ")})`));
+  const process_ = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "inherit" });
+  const output = await new Response(process_.stdout).text();
+  const code = await process_.exited;
+  if (code !== 0)
+    throw new BumpError(`command failed (${code}): cargo metadata`);
+  return JSON.parse(output);
+}
+
 /** Run a command, streaming its output while also capturing it. */
 async function runStreaming(
   cmd: string[],
@@ -1437,13 +1453,7 @@ async function auditLicenses(staging: string, crates: Crate[]) {
   // Not `--locked`: the lock file is Zed's, and the staged workspace is a
   // subset of it with pruned dependencies, so it has to be updated here the
   // way `cargo publish --dry-run` updates it in the next step.
-  const cmd = ["cargo", "metadata", "--format-version", "1"];
-  console.log(dim(`$ (cd ${staging} && ${cmd.join(" ")})`));
-  const process_ = Bun.spawn(cmd, { cwd: staging, stdout: "pipe", stderr: "inherit" });
-  const output = await new Response(process_.stdout).text();
-  if ((await process_.exited) !== 0)
-    throw new BumpError("cargo metadata failed on the staged workspace");
-  const metadata = JSON.parse(output);
+  const metadata = await cargoMetadata(staging);
   const members = new Set<string>(metadata.workspace_members);
   const copyleft: string[] = [];
   const undeclared: string[] = [];
@@ -1758,9 +1768,9 @@ async function verifyKitAgainstStaging(staging: string, crates: Crate[], version
       );
     }
 
-    const metadata = JSON.parse(
-      await run(["cargo", "metadata", "--format-version", "1", ...patches], { cwd: REPO_ROOT, capture: true }),
-    ) as { packages: { name: string; version: string; manifest_path: string }[] };
+    const metadata = (await cargoMetadata(REPO_ROOT, patches)) as {
+      packages: { name: string; version: string; manifest_path: string }[];
+    };
     const foreign = crates
       .map((crate) => metadata.packages.find((pkg) => pkg.name === crate.publishedName))
       .filter((pkg): pkg is NonNullable<typeof pkg> => pkg !== undefined && !pkg.manifest_path.startsWith(mirror));
