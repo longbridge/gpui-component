@@ -50,8 +50,8 @@ These are a floor, not a substitute. Read the guide for anything past this list.
 
 ## Documentation
 
-- **Full reference**: fetch `https://longbridge.github.io/gpui-component/llms-full.txt`
-- **Per-component API**: fetch `https://longbridge.github.io/gpui-component/docs/components/{name}.md`
+- **Full reference**: fetch `https://gpui-kit.com/llms-full.txt`
+- **Per-component API**: fetch `https://gpui-kit.com/docs/components/{name}.md`
   - e.g. `button.md`, `input.md`, `select.md`, `dialog.md`, `data-table.md`
 - **Any site page** can be fetched as Markdown by appending `.md` to the URL
 

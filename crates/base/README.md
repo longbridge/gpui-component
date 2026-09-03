@@ -321,8 +321,8 @@ style and motion contracts.
 
 ## Related Resources
 
-- [GPUI Component repository](https://github.com/longbridge/gpui-component)
-- [GPUI Component documentation](https://longbridge.github.io/gpui-component)
+- [GPUI Kit repository](https://github.com/longbridge/gpui-component)
+- [GPUI Kit documentation](https://gpui-kit.com)
 - [`gpui-component` crate](https://crates.io/crates/gpui-component)
 - [`gpui-base` API documentation](https://docs.rs/gpui-base)
 - [GPUI](https://gpui.rs)

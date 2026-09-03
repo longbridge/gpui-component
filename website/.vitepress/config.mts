@@ -10,8 +10,8 @@ import { extname, join, resolve } from "node:path";
 
 function wasmExamplesDevServer() {
   const roots = new Map([
-    ["/gpui-component/examples/base", resolve("../crates/base/examples/wasm/www/dist")],
-    ["/gpui-component/gallery", resolve("../crates/story-web/www/dist")],
+    ["/examples/base", resolve("../crates/base/examples/wasm/www/dist")],
+    ["/gallery", resolve("../crates/story-web/www/dist")],
   ]);
   const contentTypes: Record<string, string> = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -138,9 +138,9 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
   const message =
     locale === "zh"
-      ? `GPUI Component 是一个基于 Apache-2.0 许可证的开源项目，
+      ? `GPUI Kit 是一个基于 Apache-2.0 许可证的开源项目，
         由 <a href='https://longbridge.com' target='_blank'>Longbridge</a> 开发。`
-      : `GPUI Component is an open source project under the Apache-2.0 License,
+      : `GPUI Kit is an open source project under the Apache-2.0 License,
         developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.`;
 
   return {
@@ -148,17 +148,17 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
     copyright: `
       <a href="https://gpui.rs">GPUI</a>
       |
-      <a href="/gpui-component${prefix}/docs/design-guides">${designGuidesText}</a>
+      <a href="${prefix}/docs/design-guides">${designGuidesText}</a>
       |
-      <a href="/gpui-component${prefix}/docs/coding-guides">${codingGuidesText}</a>
+      <a href="${prefix}/docs/coding-guides">${codingGuidesText}</a>
       |
-      <a href="/gpui-component${prefix}/apps">${appsText}</a>
+      <a href="${prefix}/apps">${appsText}</a>
       |
-      <a href="/gpui-component${prefix}/contributors">${contributorsText}</a>
+      <a href="${prefix}/contributors">${contributorsText}</a>
       |
-      <a href="/gpui-component${prefix}/skills" target="_blank">${skillsText}</a>
+      <a href="${prefix}/skills" target="_blank">${skillsText}</a>
       |
-      <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
+      <a href="/llms-full.txt" target="_blank">llms-full.txt</a>
       |
       <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">${reportBugText}</a>
       |
@@ -229,15 +229,15 @@ const sharedThemeConfig = {
 
 // Absolute URLs are required for social cards; relative paths are ignored by
 // every crawler.
-const SITE_URL = "https://longbridge.github.io/gpui-component";
-const SITE_TITLE = "GPUI Component";
+const SITE_URL = "https://gpui-kit.com";
+const SITE_TITLE = "GPUI Kit";
 const SITE_DESCRIPTION =
   "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.";
 
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
-  title: "GPUI Component",
-  base: "/gpui-component/",
+  title: "GPUI Kit",
+  base: "/",
   description:
     "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.",
   cleanUrls: true,
@@ -245,7 +245,7 @@ const config: UserConfig = {
     // One icon link, not a `prefers-color-scheme` pair: the site's own
     // appearance toggle is what the reader sees, and it can disagree with the
     // OS setting. `useThemeFavicon` repoints this link on every switch.
-    ["link", { rel: "icon", href: "/gpui-component/logo.svg" }],
+    ["link", { rel: "icon", href: "/logo.svg" }],
     // The card image is one static asset for every page — the same approach
     // Base UI takes. A per-page image would need a server to render it, which
     // GitHub Pages does not give us.

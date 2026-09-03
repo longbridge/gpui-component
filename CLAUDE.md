@@ -25,7 +25,7 @@ natural Chinese rather than word-for-word translation.
 
 ## Project Overview
 
-GPUI Component is a UI component library for building desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design.
+GPUI Kit is a Rust desktop application framework built on [GPUI](https://gpui.rs), published at <https://gpui-kit.com>. It ships as three crates: `gpui-base` (unstyled behavior and infrastructure), `gpui-shell` (JavaScript extensions for a Rust host), and `gpui-component` (GPUI Component, the styled component library with 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design).
 
 This is a Rust workspace project with the following main crates:
 
@@ -107,7 +107,8 @@ implementing this architecture:
   change. By default, implement component behavior and visual styling in
   `crates/ui` or the application layer.
 
-- Keep `gpui-component` as the ecosystem and product brand.
+- Keep GPUI Kit as the ecosystem and product brand; `gpui-component` is its
+  styled component layer, alongside `gpui-base` and `gpui-shell`.
 - Name the foundation crate `gpui-base`.
 - Follow the ownership boundary: the framework owns behavior and infrastructure;
   the application owns component source and visual style.

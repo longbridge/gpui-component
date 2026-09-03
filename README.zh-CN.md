@@ -1,4 +1,4 @@
-# GPUI Component
+# GPUI Kit
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
@@ -6,8 +6,18 @@
 
 使用 Rust 和 [GPUI](https://gpui.rs) 构建出色、高性能的桌面应用。
 
-GPUI Component 是一个综合性的 Rust 桌面应用开发框架。它将生产级 UI
-系统、应用级数据与布局能力、编辑能力，以及可复用的行为、状态和基础设施整合在一起。
+GPUI Kit 是一个综合性的 Rust 桌面应用开发框架。它将生产级 UI
+系统、应用级数据与布局能力、编辑能力，以及可复用的行为、状态和基础设施整合在一起，
+并让交付后的应用可以被 JavaScript 扩展。
+
+文档：<https://gpui-kit.com>
+
+```text
+gpui-kit
+├── gpui-base        无样式的行为、状态与基础设施
+├── gpui-shell       为 Rust 宿主提供 JavaScript 扩展能力
+└── gpui-component   GPUI Component：完整的带样式 UI 系统
+```
 
 ## 特性
 
@@ -21,49 +31,50 @@ GPUI Component 是一个综合性的 Rust 桌面应用开发框架。它将生�
 - **Dock 布局**：可调整面板、可拖拽标签、嵌套分割、边缘停靠，以及可序列化的 Tiles 自由布局。
 - **丰富内容**：原生 Markdown 与 HTML 渲染、语法高亮和内置图表。
 - **设计自由**：使用完整视觉系统，或基于 `gpui-base` 的行为与基础设施构建自己的系统。
+- **JavaScript 扩展**：`gpui-shell` 让已发布的 Rust 宿主以脚本方式加载面板与业务逻辑，每项能力都需显式授予。
 - **跨平台**：通过一份 Rust 代码交付 macOS、Windows 和 Linux。
 
 ## 框架架构
 
-### 两层架构，一个生态
+### 三层架构，一个生态
 
-使用 `gpui-component`，让整个应用保持统一、完整的视觉与交互风格；当产品需要创建并拥有自己的设计系统时，使用 `gpui-base`。
+使用 `gpui-component`，让整个应用保持统一、完整的视觉与交互风格；当产品需要创建并拥有自己的设计系统时，使用 `gpui-base`；当应用需要在交付后仍可被 JavaScript 扩展时，使用 `gpui-shell`。
 
-| **`gpui-component`**     | **`gpui-base`**            |
-| ------------------------ | -------------------------- |
-| 完整且带样式的组件       | 无预设样式的行为与基础设施 |
-| 开箱即用，并支持主题定制 | 完全掌控结构与视觉设计     |
-| 适合直接构建应用         | 适合构建设计系统           |
+| **`gpui-component`**     | **`gpui-base`**            | **`gpui-shell`**            |
+| ------------------------ | -------------------------- | --------------------------- |
+| 完整且带样式的组件       | 无预设样式的行为与基础设施 | 由 Rust 托管的 JavaScript 运行时 |
+| 开箱即用，并支持主题定制 | 完全掌控结构与视觉设计     | 能力逐项授予                |
+| 适合直接构建应用         | 适合构建设计系统           | 适合插件与脚本化应用        |
 
 ```text
                              APPLICATION
                                   │
-                ┌─────────────────┴─────────────────┐
-                │                                   │
-                ▼                                   ▼
-       ┌──────────────────┐               ┌──────────────────┐
-       │  gpui-component  │               │ Your Design      │
-       │    Styled UI     │               │ System           │
-       └────────┬─────────┘               └────────┬─────────┘
-                │                                  │
-                └────────────────┬─────────────────┘
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+              ▼                   ▼                   ▼
+    ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+    │  gpui-component  │ │ Your Design      │ │    gpui-shell    │
+    │    Styled UI     │ │ System           │ │  JS extensions   │
+    └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘
+             │                    │                    │
+             └────────────────────┼────────────────────┘
+                                  ▼
+                        ┌──────────────────┐
+                        │    gpui-base     │
+                        │ Behavior · State │
+                        │ Infrastructure   │
+                        └────────┬─────────┘
                                  ▼
-                       ┌──────────────────┐
-                       │    gpui-base     │
-                       │ Behavior · State │
-                       │ Infrastructure   │
-                       └────────┬─────────┘
-                                ▼
-                              GPUI
+                               GPUI
 ```
 
 > **行为属于基础层，呈现属于应用。**
 
-如果希望使用精致、开箱即用且风格统一的控件，请选择 **`gpui-component`**。如果应用需要拥有组件源码、布局、样式和动效，同时复用复杂且可靠的交互行为，请直接构建于 **`gpui-base`**。
+如果希望使用精致、开箱即用且风格统一的控件，请选择 **`gpui-component`**。如果应用需要拥有组件源码、布局、样式和动效，同时复用复杂且可靠的交互行为，请直接构建于 **`gpui-base`**。如果希望贡献者无需 fork、也无需发新版本就能扩展产品，请加入 **`gpui-shell`**。
 
 这种分层方式与 [shadcn](https://ui.shadcn.com) 生态的灵活性来源一致：
 
-| GPUI Component 生态                  | Web 生态                       |
+| GPUI Kit 生态                        | Web 生态                       |
 | ------------------------------------ | ------------------------------ |
 | [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
@@ -73,7 +84,7 @@ GPUI Component 是一个综合性的 Rust 桌面应用开发框架。它将生�
 
 ## Showcase
 
-GPUI Component 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/desktop)。
+GPUI Kit 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/desktop)。
 这个框架不是脱离应用场景凭空设计出来的，而是从一款公开发布的商业桌面应用中持续提炼而成。
 
 > **GPUI 为渲染打下基础，Longbridge 为生产实践打下基础。**
@@ -139,7 +150,7 @@ GPUI Component 提供了 `Icon` 元素，但默认不包含 SVG 文件。
 
 ## AI 编码 Agent 技能 (Skills)
 
-为你的 AI 编码助手（Cursor, Claude Code, Gemini CLI, Codex 等）安装 GPUI Component 技能库：
+为你的 AI 编码助手（Cursor, Claude Code, Gemini CLI, Codex 等）安装 GPUI Kit 技能库：
 
 ```bash
 npx skills add longbridge/gpui-component
@@ -195,7 +206,7 @@ cargo run -p window_title
 
 ## 与其他框架对比
 
-| 特性                | GPUI Component       | [Iced]             | [egui]                | [Qt 6]                                            |
+| 特性                | GPUI Kit             | [Iced]             | [egui]                | [Qt 6]                                            |
 | ------------------- | -------------------- | ------------------ | --------------------- | ------------------------------------------------- |
 | 语言                | Rust                 | Rust               | Rust                  | C++/QML                                           |
 | 核心                | GPUI                 | wgpu               | wgpu                  | QT                                                |

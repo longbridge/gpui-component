@@ -52,7 +52,7 @@ impl Example {
         });
 
         let address_input = cx.new(|cx| {
-            InputState::new(window, cx).default_value("https://longbridge.github.io/gpui-component")
+            InputState::new(window, cx).default_value("https://gpui-kit.com")
         });
 
         let url = address_input.read(cx).value().clone();

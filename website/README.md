@@ -1,4 +1,4 @@
-# GPUI Component website
+# GPUI Kit website
 
 To install dependencies:
 

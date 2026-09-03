@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/longbridge/gpui-component/main/website/public/logo.svg" width="112" alt="GPUI Component logo" />
+  <img src="https://raw.githubusercontent.com/longbridge/gpui-component/main/website/public/logo.svg" width="112" alt="GPUI Kit logo" />
   <br>
-  <strong>GPUI Component</strong>
+  <strong>GPUI Kit</strong>
 </p>
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
@@ -10,10 +10,19 @@
 
 Build fantastic, high-performance desktop apps with Rust and [GPUI](https://gpui.rs).
 
-GPUI Component is a comprehensive Rust desktop application framework. It
-combines a production-ready UI system with application-grade data, layout, and
-editing capabilities, all built on a reusable foundation of behavior, state,
-and infrastructure.
+GPUI Kit is a comprehensive Rust desktop application framework. It combines a
+production-ready UI system with application-grade data, layout, and editing
+capabilities, all built on a reusable foundation of behavior, state, and
+infrastructure, and opens the finished application to JavaScript extensions.
+
+Documentation: <https://gpui-kit.com>
+
+```text
+gpui-kit
+├── gpui-base        Unstyled behavior, state, and infrastructure
+├── gpui-shell       JavaScript extensions for a Rust host
+└── gpui-component   GPUI Component: the complete styled UI system
+```
 
 ## Features
 
@@ -27,54 +36,58 @@ and infrastructure.
 - **Dock Layout**: Resizable panels, draggable tabs, nested splits, edge docks, and serializable freeform Tiles.
 - **Rich Content**: Native Markdown and HTML rendering, syntax highlighting, and built-in charts.
 - **Design Freedom**: Use the complete visual system or build your own on the behavior and infrastructure in `gpui-base`.
+- **JavaScript Extensions**: `gpui-shell` lets a shipped Rust host load panels and business logic as scripts, with every capability granted explicitly.
 - **Cross Platform**: Ship one Rust codebase to macOS, Windows, and Linux.
 
 ## Framework Architecture
 
-### Two layers. One ecosystem.
+### Three layers. One ecosystem.
 
 Use `gpui-component` to keep the application coherent with one complete visual
 and interaction system. Use `gpui-base` when your product needs to create and
-own that system itself.
+own that system itself. Use `gpui-shell` when the application should be
+extensible in JavaScript after it ships.
 
-| **`gpui-component`**             | **`gpui-base`**                               |
-| -------------------------------- | --------------------------------------------- |
-| Complete, styled components      | Unstyled behavior and infrastructure          |
-| Productive defaults with theming | Full control over structure and visual design |
-| Best for building applications   | Best for building design systems              |
+| **`gpui-component`**             | **`gpui-base`**                               | **`gpui-shell`**                           |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------ |
+| Complete, styled components      | Unstyled behavior and infrastructure          | JavaScript runtime hosted by Rust          |
+| Productive defaults with theming | Full control over structure and visual design | Capabilities granted one at a time         |
+| Best for building applications   | Best for building design systems              | Best for plugins and scripted applications |
 
 ```text
                              APPLICATION
                                   │
-                ┌─────────────────┴─────────────────┐
-                │                                   │
-                ▼                                   ▼
-       ┌──────────────────┐               ┌──────────────────┐
-       │  gpui-component  │               │ Your Design      │
-       │    Styled UI     │               │ System           │
-       └────────┬─────────┘               └────────┬─────────┘
-                │                                  │
-                └────────────────┬─────────────────┘
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+              ▼                   ▼                   ▼
+    ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+    │  gpui-component  │ │ Your Design      │ │    gpui-shell    │
+    │    Styled UI     │ │ System           │ │  JS extensions   │
+    └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘
+             │                    │                    │
+             └────────────────────┼────────────────────┘
+                                  ▼
+                        ┌──────────────────┐
+                        │    gpui-base     │
+                        │ Behavior · State │
+                        │ Infrastructure   │
+                        └────────┬─────────┘
                                  ▼
-                       ┌──────────────────┐
-                       │    gpui-base     │
-                       │ Behavior · State │
-                       │ Infrastructure   │
-                       └────────┬─────────┘
-                                ▼
-                              GPUI
+                               GPUI
 ```
 
 > **Behavior belongs to the foundation. Presentation belongs to the application.**
 
 Use **`gpui-component`** when you want polished controls ready to ship. Build on
 **`gpui-base`** when your application should own its component source, layout,
-styling, and motion while reusing difficult interaction behavior.
+styling, and motion while reusing difficult interaction behavior. Add
+**`gpui-shell`** when contributors should extend the product without a fork or
+a release.
 
 The layering follows the same separation that makes the
 [shadcn](https://ui.shadcn.com) ecosystem flexible:
 
-| GPUI Component ecosystem             | Web ecosystem                   |
+| GPUI Kit ecosystem                   | Web ecosystem                   |
 | ------------------------------------ | ------------------------------- |
 | [GPUI](https://gpui.rs)              | HTML + Tailwind CSS             |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com)  |
@@ -84,7 +97,7 @@ The layering follows the same separation that makes the
 
 ## Showcase
 
-GPUI Component has powered [Longbridge Pro](https://longbridge.com/desktop)
+GPUI Kit has powered [Longbridge Pro](https://longbridge.com/desktop)
 from day one. The framework is extracted from the demands of a publicly shipped
 commercial desktop application rather than designed in isolation.
 
@@ -151,7 +164,7 @@ The example uses [Lucide](https://lucide.dev) icons, but you can use any icons y
 
 ## Skills for AI Coding Agents
 
-Install the GPUI Component skills for your AI coding agent (Cursor, Claude Code, Gemini CLI, Codex, etc.):
+Install the GPUI Kit skills for your AI coding agent (Cursor, Claude Code, Gemini CLI, Codex, etc.):
 
 ```bash
 npx skills add longbridge/gpui-component
@@ -207,7 +220,7 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Compare to others
 
-| Features              | GPUI Component                 | [Iced]             | [egui]                | [Qt 6]                                            |
+| Features              | GPUI Kit                       | [Iced]             | [egui]                | [Qt 6]                                            |
 | --------------------- | ------------------------------ | ------------------ | --------------------- | ------------------------------------------------- |
 | Language              | Rust                           | Rust               | Rust                  | C++/QML                                           |
 | Core Render           | GPUI                           | wgpu               | wgpu                  | QT                                                |
