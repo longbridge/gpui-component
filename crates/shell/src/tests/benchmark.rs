@@ -100,7 +100,7 @@ export default class Grid extends View {
 
 #[cfg(not(debug_assertions))]
 const COMPUTE_TEMPLATE: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 
 function layoutKernel(batches, seed) {
   let checksum = seed;

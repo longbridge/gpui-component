@@ -8,7 +8,7 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-upstream = { package = "quickjs-jit", version = "0.12.5", default-features = false }
+upstream = { package = "quickjs-jit", version = "0.12.6", default-features = false }
 
 [features]
 default = ["std"]

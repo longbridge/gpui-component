@@ -7807,8 +7807,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit"
-version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6#8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35cab5ee38637272ba5b3c41324074d15bbbb42030d810f17011b1683db4a593"
 dependencies = [
  "either",
  "indexmap",
@@ -7818,8 +7819,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-core"
-version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6#8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0885171276c9b2cfc5d931c444c0f62237dad6f9fc63f791dfe9d05fb6c0f12"
 dependencies = [
  "async-lock",
  "bytes",
@@ -7836,8 +7838,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-macro"
-version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6#8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f15f9771e55eecae002342563951678d1a1f8ad351f9a28f1a4b05b3d0e50346"
 dependencies = [
  "convert_case 0.11.0",
  "fnv",
@@ -7854,8 +7857,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-runtime"
-version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6#8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c54be317aca788f6d803d703f5073aec8be276d040747c1e22e8573901aaaf42"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -7876,8 +7880,9 @@ dependencies = [
 
 [[package]]
 name = "quickjs-jit-sys"
-version = "0.12.5"
-source = "git+https://github.com/longbridge/quickjs-jit?rev=8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6#8540a4d01dbd0996e0a11b085cc9f5e43c82e4b6"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12d6c75ea0120429d056f91bd1af8fc50757bace4a778b34238029bd52c95630"
 dependencies = [
  "bindgen",
  "cc",
