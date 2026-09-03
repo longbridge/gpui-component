@@ -356,9 +356,7 @@
                 <a href="https://longbridge.com" target="_blank">Longbridge</a
                 >{{ copy.footerSuffix }}
             </p>
-            <!-- The one place the landing page names GPUI's origin. Kept
-                 exact rather than prominent: what GPUI is, who made it, and
-                 that GPUI Kit is neither Zed's project nor endorsed by Zed. -->
+            <!-- The one place the landing page names GPUI's origin. -->
             <p>
                 {{ copy.footerBuiltOn }}
                 <a href="https://github.com/zed-industries/zed" target="_blank"
@@ -622,8 +620,7 @@ const copy = computed(() =>
               footerPrefix: "基于 Apache-2.0 许可证开源，由",
               footerSuffix: " 开发。",
               footerBuiltOn: "构建于",
-              footerAttribution:
-                  " 之上，GPUI 由 Zed Industries 创建并以 Apache-2.0 许可证发布。GPUI Kit 是独立项目，与 Zed Industries 没有隶属关系，也未获得其背书。",
+              footerAttribution: " 之上，GPUI 来自 Zed Industries，同样采用 Apache-2.0。",
               footerNav: "页脚导航",
               contributors: "贡献者",
               reportBug: "报告问题",
@@ -734,7 +731,7 @@ const copy = computed(() =>
               footerSuffix: ".",
               footerBuiltOn: "Built on",
               footerAttribution:
-                  ", the UI framework created by Zed Industries and released under Apache-2.0. GPUI Kit is an independent project and is not affiliated with or endorsed by Zed Industries.",
+                  ", the UI framework from Zed Industries, also Apache-2.0.",
               footerNav: "Footer navigation",
               contributors: "Contributors",
               reportBug: "Report Bug",

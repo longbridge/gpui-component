@@ -151,21 +151,16 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const iconCreditsText = locale === "zh" ? "图标资源来自" : "Icons by";
   const andText = locale === "zh" ? "与" : "and";
   const periodText = locale === "zh" ? "。" : ".";
-  // The attribution is stated once, here and in the landing page footer,
-  // and kept exact: GPUI's origin and license, and that GPUI Kit is neither
-  // Zed's project nor endorsed by Zed. Everywhere else the product is GPUI Kit.
+  // GPUI's origin is stated once, here and in the landing page footer, in
+  // one plain line. Everywhere else the product is GPUI Kit.
   const message =
     locale === "zh"
       ? `GPUI Kit 是一个基于 Apache-2.0 许可证的开源项目，
-        由 <a href='https://longbridge.com' target='_blank'>Longbridge</a> 开发。
-        它构建于 <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a> 之上，
-        GPUI 由 Zed Industries 创建并以 Apache-2.0 许可证发布。
-        GPUI Kit 是独立项目，与 Zed Industries 没有隶属关系，也未获得其背书。`
+        由 <a href='https://longbridge.com' target='_blank'>Longbridge</a> 开发，
+        基于 Zed Industries 的 <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a> 构建。`
       : `GPUI Kit is an open source project under the Apache-2.0 License,
-        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.
-        It is built on <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a>,
-        the UI framework created by Zed Industries and released under Apache-2.0.
-        GPUI Kit is an independent project and is not affiliated with or endorsed by Zed Industries.`;
+        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>
+        and built on <a href='https://github.com/zed-industries/zed' target='_blank'>GPUI</a> from Zed Industries.`;
 
   return {
     message,
