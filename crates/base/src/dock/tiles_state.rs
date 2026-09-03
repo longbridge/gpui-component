@@ -7,7 +7,8 @@ use gpui::{
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, Size,
     Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
-use instant::{Duration, Instant};
+
+use crate::UndoHistory;
 
 use super::{
     drag::AnyDrag,
@@ -73,67 +74,6 @@ struct TileResize {
     drag: ResizeDrag,
 }
 
-/// The tiles canvas's private grouped change log.
-///
-/// Dock needs timed grouping for the changes emitted by one drag, but that
-/// policy is not a general-purpose public history abstraction.
-#[derive(Debug)]
-struct GroupedHistory<T> {
-    undos: Vec<Vec<T>>,
-    redos: Vec<Vec<T>>,
-    last_changed_at: Option<Instant>,
-    group_interval: Duration,
-}
-
-impl<T> GroupedHistory<T> {
-    fn new(group_interval: Duration) -> Self {
-        Self {
-            undos: Vec::new(),
-            redos: Vec::new(),
-            last_changed_at: None,
-            group_interval,
-        }
-    }
-
-    fn push(&mut self, item: T) {
-        let group_with_previous = self
-            .last_changed_at
-            .is_some_and(|last_changed_at| last_changed_at.elapsed() <= self.group_interval);
-        if group_with_previous && !self.undos.is_empty() {
-            self.undos.last_mut().unwrap().push(item);
-        } else {
-            if self.undos.len() >= 1000 {
-                self.undos.remove(0);
-            }
-            self.undos.push(vec![item]);
-        }
-        self.last_changed_at = Some(Instant::now());
-        self.redos.clear();
-    }
-
-    fn undo(&mut self) -> Option<Vec<T>>
-    where
-        T: Clone,
-    {
-        let transaction = self.undos.pop()?;
-        let changes = transaction.iter().rev().cloned().collect();
-        self.redos.push(transaction);
-        self.last_changed_at = None;
-        Some(changes)
-    }
-
-    fn redo(&mut self) -> Option<Vec<T>>
-    where
-        T: Clone,
-    {
-        let transaction = self.redos.pop()?;
-        let changes = transaction.clone();
-        self.undos.push(transaction);
-        self.last_changed_at = None;
-        Some(changes)
-    }
-}
-
 /// A tiles canvas's behavior, with no appearance of its own.
 ///
 /// It owns the tile list mirrored from the layout tree, the in-flight move and
@@ -152,7 +92,7 @@ pub struct TilesState {
     zoomed: Option<PanelId>,
     moving: Option<TileMove>,
     resizing: Option<TileResize>,
-    history: GroupedHistory<TileChange>,
+    history: UndoHistory<TileChange>,
     renderer: Rc<dyn TilesRenderer>,
 }
 
@@ -168,7 +108,7 @@ impl TilesState {
             zoomed: None,
             moving: None,
             resizing: None,
-            history: GroupedHistory::new(Duration::from_millis(100)),
+            history: UndoHistory::new().group_interval(std::time::Duration::from_millis(100)),
             renderer: Rc::new(BareTiles),
         }
     }
@@ -922,19 +862,6 @@ mod tests {
     use crate::dock::{
         DockArea, DockAreaRenderer, DockLayout, TabGroupRenderer, test_support::TestPanel,
     };
-
-    /// Losing transaction ordering here would make a grouped drag replay its
-    /// intermediate bounds backwards during undo or forwards during redo.
-    #[test]
-    fn tile_history_undoes_newest_first_and_redoes_oldest_first() {
-        let mut history = GroupedHistory::new(std::time::Duration::MAX);
-        history.push(1);
-        history.push(2);
-        history.push(3);
-
-        assert_eq!(history.undo(), Some(vec![3, 2, 1]));
-        assert_eq!(history.redo(), Some(vec![1, 2, 3]));
-    }
 
     /// What each hook drew, in the order the frame prepainted it.
     ///

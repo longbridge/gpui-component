@@ -1,20 +1,23 @@
 ---
-title: History
-description: 用于应用状态的浏览器式导航轨迹。
+title: History 与 Undo History
+description: 用于应用状态的浏览器式导航轨迹和分组 undo/redo 事务。
 order: 7
 ---
 
-# History
+# History 与 Undo History
 
-`History<T>` 是浏览器式的线性导航轨迹，支持后退和前进。它不持有 GPUI 状态，由调用方把返回的值应用到模型。
+`History<T>` 与 `UndoHistory<T>` 分别保存两种不同的应用状态。两者都不持有 GPUI 状态，且都由调用方把返回的值应用到模型；但它们的操作含义不同：
+
+- `History<T>` 是浏览器式的线性导航轨迹，支持后退和前进。
+- `UndoHistory<T>` 将改动记录为 undo 事务，并能把多个改动合成一次用户操作。
 
 ## 引入
 
 ```rust
-use gpui_base::History;
+use gpui_base::{History, UndoHistory};
 ```
 
-## 导航轨迹
+## `History`：导航轨迹
 
 每到一个位置就 push 一条。当前条目是轨迹中的最后一个值。例如访问完 `A -> B -> C` 后，当前是 `C`；后退会返回新的当前条目 `B`：
 
@@ -43,3 +46,38 @@ assert_eq!(history.current(), Some(&"B"));
 | `entries()`、`forward_entries()` | 按导航顺序迭代当前轨迹和前进分支。 |
 | `replace_current(entry)`、`remove_current()` | 更新或删除当前条目。 |
 | `retain(keep)`、`clear()` | 从两侧删除不保留的条目，或清空轨迹。 |
+
+## `UndoHistory`：分组 undo 与 redo
+
+每次需要由应用回退的改动都 push 一条。要把一次拖拽作为一项可撤销操作，请显式地把它的所有更新分组。`undo()` 以最新在前的顺序返回一个组里的改动，确保最近的改动先被回退；`redo()` 按最旧在前的顺序返回同一组，以原始顺序重新应用：
+
+```rust
+let mut history = UndoHistory::new();
+history.start_grouping();
+history.push("从 x=0 移到 x=10");
+history.push("从 x=10 移到 x=20");
+history.end_grouping();
+
+assert_eq!(
+    history.undo(),
+    Some(vec!["从 x=10 移到 x=20", "从 x=0 移到 x=10"]),
+);
+assert_eq!(
+    history.redo(),
+    Some(vec!["从 x=0 移到 x=10", "从 x=10 移到 x=20"]),
+);
+```
+
+对于边界不明确的改动，`group_interval` 会把时间间隔足够短的连续 push 合成一个事务。成功 undo 或 redo 会结束这段定时分组窗口，下一次 push 会创建新事务。显式分组与此独立：只要显式分组仍在进行，push 就会继续追加到当前事务，包括刚完成 undo 之后。新的 push 会清空 redo 事务。回放改动时，用 `set_ignoring(true)` 防止回放本身被再次记录。
+
+| 方法 | 作用 |
+| --- | --- |
+| `new()` | 创建空 undo 历史。`max_undos` 默认是 1000。 |
+| `max_undos(n)` | 限制 undo 事务数并立即删除最旧的多余事务；redo 也会遵守该上限。 |
+| `group_interval(duration)` | 将相隔很近的连续 push 合并为一个事务。 |
+| `start_grouping()`、`end_grouping()` | 让后续 push 追加到当前事务；结束分组会停止这种显式追加行为。和上例一样，空历史中的第一个 push 会创建该事务。 |
+| `push(change)` | 在当前或一个新事务中记录改动，并清空 redo。 |
+| `undo()`、`redo()` | undo 时最新改动在前，redo 时最旧改动在前地返回最新事务。 |
+| `can_undo()`、`can_redo()` | 判断是否有可用事务。 |
+| `set_ignoring(bool)`、`is_ignoring()` | 控制是否记录 push。 |
+| `clear()` | 清空 undo 与 redo 事务。 |
