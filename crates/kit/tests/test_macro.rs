@@ -1,7 +1,11 @@
 //! `#[gpui_kit::test]` is GPUI's test attribute reached through the umbrella
 //! crate; it needs the `test-support` feature.
+//!
+//! Test modules import what they use rather than `use gpui_kit::*;`: with
+//! `test-support` on, the glob also brings in GPUI's `test` attribute, which
+//! would shadow the built-in `#[test]` the expansion relies on.
 
-use gpui_kit::*;
+use gpui_kit::TestAppContext;
 
 struct Counter(u32);
 

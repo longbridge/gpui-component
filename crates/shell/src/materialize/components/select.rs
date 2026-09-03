@@ -29,7 +29,7 @@
 //!
 //! `DatePicker` loses more than the other two. It handles Confirm and Cancel
 //! but sets no key context of its own, and every binding base installs is
-//! scoped to one — `crates/ui` supplies both halves for its own picker, and the
+//! scoped to one — `crates/component` supplies both halves for its own picker, and the
 //! shell can supply neither. So its `on_open_change` never fires from the
 //! keyboard at all, and a script opens the picker from a press on the trigger
 //! it drew. What is left still earns the binding: the combobox role, the

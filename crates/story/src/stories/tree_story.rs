@@ -43,20 +43,24 @@ fn example_file_items() -> Vec<TreeItem> {
                 TreeItem::new("gpui-component/crates", "crates")
                     .expanded(true)
                     .children([
-                        TreeItem::new("gpui-component/crates/ui", "ui")
+                        TreeItem::new("gpui-component/crates/component", "ui")
                             .expanded(true)
                             .children([
-                                TreeItem::new("gpui-component/crates/ui/src", "src").children([
-                                    TreeItem::new(
-                                        "gpui-component/crates/ui/src/tree.rs",
-                                        "tree.rs",
-                                    ),
-                                    TreeItem::new(
-                                        "gpui-component/crates/ui/src/list/mod.rs",
-                                        "mod.rs",
-                                    ),
-                                ]),
-                                TreeItem::new("gpui-component/crates/ui/Cargo.toml", "Cargo.toml"),
+                                TreeItem::new("gpui-component/crates/component/src", "src")
+                                    .children([
+                                        TreeItem::new(
+                                            "gpui-component/crates/component/src/tree.rs",
+                                            "tree.rs",
+                                        ),
+                                        TreeItem::new(
+                                            "gpui-component/crates/component/src/list/mod.rs",
+                                            "mod.rs",
+                                        ),
+                                    ]),
+                                TreeItem::new(
+                                    "gpui-component/crates/component/Cargo.toml",
+                                    "Cargo.toml",
+                                ),
                             ]),
                         TreeItem::new("gpui-component/crates/story", "story").children([
                             TreeItem::new(

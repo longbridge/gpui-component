@@ -30,10 +30,10 @@ GPUI Kit is a Rust desktop application framework built on GPUI, published at <ht
 This is a Rust workspace project with the following main crates:
 
 - `crates/kit` - Umbrella crate applications depend on (published as `gpui-kit`)
-- `crates/ui` - Core UI component library (published as `gpui-component`)
+- `crates/component` - Core UI component library (published as `gpui-component`)
 - `crates/story` - Gallery application for showcasing and testing components
 - `crates/story-web` - Web version of the story gallery (using WebAssembly)
-- `crates/macros` - Procedural macros (`IntoPlot` derive)
+- `crates/component-macros` - Procedural macros (`IntoPlot` derive)
 - `crates/assets` - Static assets
 - `crates/webview` - WebView component support
 - `examples/` - Various example applications
@@ -106,7 +106,7 @@ implementing this architecture:
 
 - Do not modify `gpui-base` unless the user explicitly requests a Base-layer
   change. By default, implement component behavior and visual styling in
-  `crates/ui` or the application layer.
+  `crates/component` or the application layer.
 
 - Keep GPUI Kit as the ecosystem and product brand; `gpui-component` is its
   styled component layer, alongside `gpui-base` and `gpui-shell`.
@@ -171,7 +171,7 @@ The first view of every window must be a `Root`.
 
 ### Dock System
 
-Layout behavior lives in `crates/base/src/dock`; `crates/ui/src/dock` is a
+Layout behavior lives in `crates/base/src/dock`; `crates/component/src/dock` is a
 presentation skin (`DockSkin`) over it. See `docs/ARCHITECTURE.md`.
 
 - **`LayoutTree`**: Pure-data layout tree, the single source of truth.
@@ -212,7 +212,7 @@ Text input system based on Rope data structure:
 4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
 5. **Base controls are no-style**: Base controls and parts do not install layout,
    positioning, colors, sizing, gaps, radius, borders, shadows, variants, or animation.
-   Complete presentation belongs to `crates/ui` or the application. The deliberate
+   Complete presentation belongs to `crates/component` or the application. The deliberate
    exception is the foundational Base Input frame, which provides only a semantic
    one-pixel input border and semantic radius baseline; UI/application layers own
    its background, sizing, padding, typography, adornments, and richer focus style.
@@ -244,12 +244,12 @@ Text input system based on Rope data structure:
 - When creating a PR, inspect previous PR titles in the repository and match
   that style. Do not blindly use conventional prefixes like `fix:` or `feat:`
   unless the existing PR title style uses them.
-- When a PR changes the public API of `crates/ui`, add a `## Breaking Changes`
+- When a PR changes the public API of `crates/component`, add a `## Breaking Changes`
   section with `diff` blocks showing the old and new usage. See PR #2691 and
   `.claude/skills/gpui-component-dev/references/pr-description.md`.
 - Avoid `Kind` as a type-name suffix. It says an enum classifies something
   without saying what it classifies, and carries no meaning a reader could not
-  already infer from `enum`. Name the type after what its variants *are*
+  already infer from `enum`. Name the type after what its variants _are_
   instead. Keep `Kind` only when no honest name covers the variant set —
   `NodeKind`'s variants straddle two levels (`Split` is an interior node,
   `Tabs` and `Tiles` are leaves), and every domain word for the leaf level
@@ -264,7 +264,7 @@ Text input system based on Rope data structure:
 The `Icon` element does not include SVG files by default. You need to:
 
 - Use [Lucide](https://lucide.dev) or other icon libraries
-- Name SVG files according to the `IconName` enum definition (located in `crates/ui/src/icon.rs`)
+- Name SVG files according to the `IconName` enum definition (located in `crates/component/src/icon.rs`)
 
 ## Dependencies
 
@@ -280,7 +280,7 @@ The `Icon` element does not include SVG files by default. You need to:
 
 Uses `rust-i18n` crate.
 
-- Localization files are located in `crates/ui/locales/`.
+- Localization files are located in `crates/component/locales/`.
 - Only add `en`, `zh-CN`, `zh-HK` by default.
 
 ## Documentation

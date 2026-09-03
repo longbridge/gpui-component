@@ -45,6 +45,9 @@
 //! See [`component`] for the same program with the styled component library.
 
 // Everything in GPUI itself, so `use gpui_kit::*;` is enough to get started.
+// With the `test-support` feature the glob also carries GPUI's `test`
+// attribute, so a test module imports explicitly (or adds
+// `use core::prelude::v1::test;`) to keep the built-in `#[test]`.
 pub use ::gpui::*;
 
 // The crate name, so code that keeps `gpui::…` paths still resolves after

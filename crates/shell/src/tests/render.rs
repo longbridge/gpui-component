@@ -9168,7 +9168,7 @@ export default class NoHandle extends View {
 ///
 /// Enter and Escape are the part that is missing, and the reason is worth
 /// pinning down: base's `DatePicker` sets no key context, while every binding
-/// base installs is scoped to one. `crates/ui` supplies both — its own
+/// base installs is scoped to one. `crates/component` supplies both — its own
 /// `"DatePicker"` context and its own bindings — and the shell has no
 /// key-binding layer to supply either. So the assertion below is that Escape
 /// changes nothing. If it ever starts changing something, this test is the

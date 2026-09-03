@@ -463,7 +463,7 @@ Docking layouts are well-trodden. Where implementations differ is how far the la
 
 Three families are visible in that table. **Application-owned** engines (VS Code, Zed) are the most capable and the least reusable — you cannot lift them out of their host. **Widget-tree** engines (Qt, AvalonDock, golden-layout) make the dockable thing a widget, so the layout _is_ the view hierarchy. **Model-and-renderer** engines (FlexLayout, rc-dock, dockview, egui_dock, and this one) keep a separate description of the layout and hand rendering to something else.
 
-`gpui-base` sits at the far end of the third family: the engine paints nothing at all. In a library that draws its own chrome, customization is a set of overrides layered onto a default appearance, and you are limited to the seams it chose to expose. Here a renderer returns elements and base attaches behavior to _those_ elements, so two unrelated appearances can sit over one behavior — `crates/ui/src/dock` and the example below are exactly that.
+`gpui-base` sits at the far end of the third family: the engine paints nothing at all. In a library that draws its own chrome, customization is a set of overrides layered onto a default appearance, and you are limited to the seams it chose to expose. Here a renderer returns elements and base attaches behavior to _those_ elements, so two unrelated appearances can sit over one behavior — `crates/component/src/dock` and the example below are exactly that.
 
 ### The closest relative
 

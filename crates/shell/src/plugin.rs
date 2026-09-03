@@ -64,7 +64,7 @@ pub const MANIFEST_FILE: &str = "gpui-shell.json";
 /// The JSON Schema for a manifest, for editor validation.
 ///
 /// §18.1 keeps the schema worth generating but small enough to read: six
-/// fields, one nested permission object. `crates/ui/src/theme/schema.rs` is the
+/// fields, one nested permission object. `crates/component/src/theme/schema.rs` is the
 /// precedent for generating rather than hand-writing it — the schema and the
 /// parser then cannot disagree, because both come from the same type.
 pub fn manifest_schema() -> serde_json::Value {

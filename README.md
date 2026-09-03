@@ -171,7 +171,7 @@ The default `assets` feature bundles the [Lucide](https://lucide.dev) icon set
 as `gpui-kit-assets`; pass it to the application with
 `gpui_kit::application().with_assets(gpui_kit::assets::Assets)`. To ship your
 own icons instead, leave that feature out and name the SVG files as defined in
-[IconName](https://github.com/longbridge/gpui-kit/blob/main/crates/ui/src/icon.rs#L86).
+[IconName](https://github.com/longbridge/gpui-kit/blob/main/crates/component/src/icon.rs#L86).
 
 ## Skills for AI Coding Agents
 
@@ -181,10 +181,10 @@ Install the GPUI Kit skills for your AI coding agent (Cursor, Claude Code, Gemin
 npx skills add longbridge/gpui-kit
 ```
 
-| Skill                    | Description                                                                                                          |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Skill                    | Description                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `gpui-kit`               | Setup, component catalog, usage patterns, GPUI mechanics (elements, entities, async, focus, actions, tests), and the Coding Guides. |
-| `gpui-kit-design-guides` | The Design Guides: layout, spacing, hierarchy, interaction states, overlays, and interface copy.                      |
+| `gpui-kit-design-guides` | The Design Guides: layout, spacing, hierarchy, interaction states, overlays, and interface copy.                                    |
 
 ## Development
 

@@ -26,12 +26,12 @@ Dependencies always point from higher layers toward the foundation: `gpui-base` 
 
 The GPUI Component ecosystem follows the same layering idea as [shadcn](https://ui.shadcn.com):
 
-| GPUI ecosystem                | shadcn ecosystem               |
-| ----------------------------- | ------------------------------ |
-| GPUI                          | HTML + Tailwind CSS            |
-| `gpui-base`                   | [Base UI](https://base-ui.com) |
-| `gpui-component`              | shadcn                         |
-| `crates/ui` in GPUI Component | shadcn's default UI            |
+| GPUI ecosystem                       | shadcn ecosystem               |
+| ------------------------------------ | ------------------------------ |
+| GPUI                                 | HTML + Tailwind CSS            |
+| `gpui-base`                          | [Base UI](https://base-ui.com) |
+| `gpui-component`                     | shadcn                         |
+| `crates/component` in GPUI Component | shadcn's default UI            |
 
 ## Design Principles
 
@@ -278,13 +278,13 @@ Tokens describe design semantics; they do not automatically style unstyled contr
 
 The crates target different abstraction levels and can be used in the same application:
 
-|                      | `gpui-base`                                                      | `gpui-component`                                               |
-| -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| Role                 | Behavior and infrastructure                                      | Complete UI component library                                  |
-| Default presentation | None                                                             | Included                                                       |
-| Visual style owner   | Application                                                      | Component library, customizable through its Theme and APIs     |
-| Best suited for      | Custom design systems, registry components, and foundation reuse | Building complete desktop applications quickly                 |
-| Initialization       | `gpui_kit::base::init(cx)`                                            | `gpui_kit::init(cx)`, which includes base initialization |
+|                      | `gpui-base`                                                      | `gpui-component`                                           |
+| -------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------- |
+| Role                 | Behavior and infrastructure                                      | Complete UI component library                              |
+| Default presentation | None                                                             | Included                                                   |
+| Visual style owner   | Application                                                      | Component library, customizable through its Theme and APIs |
+| Best suited for      | Custom design systems, registry components, and foundation reuse | Building complete desktop applications quickly             |
+| Initialization       | `gpui_kit::base::init(cx)`                                       | `gpui_kit::init(cx)`, which includes base initialization   |
 
 Do not migrate from `gpui-component` by mechanically replacing imports. For example, `gpui_kit::component::button::Button` is a fully styled higher-level component, while `gpui_kit::base::Button` requires the caller to provide its children and all presentation styles.
 

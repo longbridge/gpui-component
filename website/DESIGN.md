@@ -22,7 +22,7 @@ single screen, what this project is — and then prove it is real.
    type names (`DockArea`, `Rope`, `Tiles`), real numbers from the README (120
    FPS, 200K lines). A developer judges credibility from specifics.
 4. **Same palette and typeface as the library.** Colours come from
-   `crates/ui/src/theme/default-theme.json`; code colours come from the same
+   `crates/component/src/theme/default-theme.json`; code colours come from the same
    shiki theme the docs use; the type is the platform font, as in a real app.
    The site must not invent a look the components cannot produce.
 5. **Restraint carries the design.** Hierarchy comes from type scale, weight
@@ -212,7 +212,7 @@ through motion alone.
 
 - The crate is **not published**. Installation must show the git dependency,
   never `cargo add`, and the UI must not display a version number.
-- Code samples must be real API, verified against `crates/ui` and
+- Code samples must be real API, verified against `crates/component` and
   `crates/base`.
 - Capability copy tracks the README's feature list — 120 FPS rendering, complex
   data tables, virtualized lists, the 200K-line editor, freeform docking,
