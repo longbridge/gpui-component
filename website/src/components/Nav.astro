@@ -45,9 +45,11 @@ const resourceLinks = isZh
       { text: 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions' },
     ];
 
+const baseSlash = `${base}/`.replace(/\/+/g, '/');
+const zhBase = `${base}/zh-CN/`.replace(/\/+/g, '/');
 const langSwitchHref = isZh
-  ? currentPath.replace(/\/gpui-component\/zh-CN\//, '/gpui-component/')
-  : currentPath.replace(/\/gpui-component\//, '/gpui-component/zh-CN/');
+  ? currentPath.replace(zhBase, baseSlash)
+  : currentPath.replace(baseSlash, zhBase);
 const langLabel = isZh ? 'EN' : '中';
 const resourcesLabel = isZh ? '资源' : 'Resources';
 ---
