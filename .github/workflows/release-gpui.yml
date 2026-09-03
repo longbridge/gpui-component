@@ -1,0 +1,64 @@
+name: "Release GPUI"
+# Publish a fresh snapshot of Zed's gpui crates to crates.io as gpui-pre-*.
+# See script/bump-gpui.ts and the "Publish GPUI pre-release crates from Zed"
+# section of CONTRIBUTING.md.
+on:
+  schedule:
+    # Every Sunday at 06:00 Beijing time (22:00 UTC on Saturday).
+    - cron: "0 22 * * 6"
+  workflow_dispatch:
+    inputs:
+      rev:
+        description: "Zed branch, tag or commit to publish"
+        required: false
+        default: "main"
+      version:
+        description: "Publish exactly this version instead of <VERSION>-<YYMMDD>"
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish gpui-pre
+    # macOS verifies the Metal shader build script of gpui_apple, the one
+    # part of the pipeline that only compiles on Apple platforms.
+    runs-on: macos-latest
+    # A first publish of brand-new crates waits on the crates.io rate limit
+    # between batches; the default 6 hours is enough for a full run.
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+      - name: Cache the staged workspace build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/gpui-pre/workspace/target/
+          key: release-gpui-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: release-gpui-${{ runner.os }}-
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          bun script/bump-gpui.ts ${{ inputs.version }} --rev "${{ inputs.rev || 'main' }}"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f target/gpui-pre/gpui-pre.json ]; then
+            {
+              echo "## gpui-pre $(jq -r .version target/gpui-pre/gpui-pre.json)"
+              echo
+              echo "Zed revision: $(jq -r .zed.rev target/gpui-pre/gpui-pre.json)"
+              echo
+              echo '| Zed crate | Published as |'
+              echo '| --- | --- |'
+              jq -r '.crates[] | "| \(.zed_name) | \(.name) |"' target/gpui-pre/gpui-pre.json
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

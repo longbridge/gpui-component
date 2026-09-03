@@ -108,8 +108,8 @@ commercial desktop application rather than designed in isolation.
 ## Usage
 
 ```toml
-gpui = { package = "gpui-pre", version = "0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.0", features = ["font-kit"] }
+gpui = { package = "gpui-pre", version = "0.3.0-260903" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-260903", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 

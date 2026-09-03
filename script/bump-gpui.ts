@@ -28,8 +28,9 @@
  *     script/bump-gpui.ts [VERSION] [--rev REV] [--zed PATH]
  *                         [--dry-run] [--stage-only] [--no-verify] [--no-wait]
  *
- * The version comes from the `VERSION` constant below; bump it before each
- * publish. A positional VERSION overrides it for one run.
+ * Every crate is published at `<VERSION>-<YYMMDD>`, e.g. `0.3.0-260903`:
+ * the `VERSION` constant below plus the UTC date of the run. A positional
+ * VERSION overrides the whole thing for one run.
  */
 
 import {
@@ -46,11 +47,11 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 /**
- * The version every `gpui-pre-*` crate is published at.
- *
- * crates.io never accepts the same version twice, so bump this before each
- * publish; the Zed commit it was built from is recorded in each crate's
- * description and `[package.metadata.gpui-pre]`.
+ * The base version of every `gpui-pre-*` crate. Each run publishes
+ * `<VERSION>-<YYMMDD>` (see `datedVersion`), so a new base is only needed
+ * when the crates should sort as a new release; day-to-day snapshots differ
+ * by date alone. The Zed commit each build came from is recorded in every
+ * crate's description and `[package.metadata.gpui-pre]`.
  */
 const VERSION = "0.3.0";
 
@@ -883,6 +884,12 @@ async function publish(staging: string, crates: Crate[], version: string, wait: 
 // Entry point
 // ---------------------------------------------------------------------------
 
+/** `0.3.0` on 2026-09-03 becomes `0.3.0-260903`; crates.io rejects a repeat on the same day. */
+function datedVersion(base: string): string {
+  const today = new Date().toISOString().slice(2, 10).replaceAll("-", "");
+  return `${base}-${today}`;
+}
+
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
@@ -891,8 +898,8 @@ const USAGE = `Usage: script/bump-gpui.ts [VERSION] [options]
 Publish Zed's GPUI crates to crates.io as ${PUBLISH_PREFIX}-*.
 
 Arguments:
-  VERSION           override the VERSION constant in this script for one run
-                    (current constant: ${VERSION})
+  VERSION           publish exactly this version instead of
+                    <VERSION>-<YYMMDD> (today: ${datedVersion(VERSION)})
 
 Options:
   --rev REV         Zed branch, tag or commit (default: ${ZED_DEFAULT_REV})
@@ -968,7 +975,7 @@ async function main(argv: string[]): Promise<number> {
   logStep(`2/${totalSteps}`, "Collecting the crates that gpui needs");
   const ws = loadWorkspace(zed);
   const crates = selectCrates(ws);
-  const version = args.version ?? VERSION;
+  const version = args.version ?? datedVersion(VERSION);
   const width = Math.max(...crates.map((c) => c.name.length));
   for (const crate of crates) console.log(`    ${crate.name.padEnd(width)}  ->  ${crate.publishedName}`);
   logSuccess(`${crates.length} crates will be published as version ${bold(version)}`);

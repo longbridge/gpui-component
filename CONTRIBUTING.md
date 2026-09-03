@@ -151,17 +151,25 @@ its original crate name as the library name, so `use gpui::*` works unchanged.
 # Verify the latest Zed `main` without uploading anything.
 ./script/bump-gpui.ts --dry-run
 
-# Publish from Zed `main`.
+# Publish from Zed `main` as <VERSION>-<today>.
 ./script/bump-gpui.ts
 
 # Publish a specific Zed commit.
 ./script/bump-gpui.ts --rev 1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a
 ```
 
-The version is the `VERSION` constant at the top of `script/bump-gpui.ts`
-(`0.3.0` to begin with). crates.io never accepts the same version twice, so
-bump that constant before each publish; the Zed commit each build came from is
-recorded in every crate's description and `[package.metadata.gpui-pre]`.
+Every crate is published at `<VERSION>-<YYMMDD>`, for example `0.3.0-260903`:
+the `VERSION` constant at the top of `script/bump-gpui.ts` plus the UTC date of
+the run. Day-to-day snapshots differ by date alone; raise `VERSION` only when
+the crates should sort as a new release. crates.io never accepts the same
+version twice, so a second run on the same day is a no-op unless you pass an
+explicit version. The Zed commit each build came from is recorded in every
+crate's description and `[package.metadata.gpui-pre]`.
+
+The `Release GPUI` workflow (`.github/workflows/release-gpui.yml`) runs this
+script every Sunday at 06:00 Beijing time and can be started by hand from the
+Actions tab, optionally with a Zed revision or an explicit version. It uses the
+repository's `CARGO_REGISTRY_TOKEN` secret.
 
 Zed's [reqwest fork](https://github.com/zed-industries/reqwest) is not part of
 the Zed workspace and is published by hand as `gpui-pre-reqwest`. The published
@@ -179,7 +187,7 @@ the generated workspace.
 Depend on the result with:
 
 ```toml
-gpui = { package = "gpui-pre", version = "=0.3.0" }
-gpui_platform = { package = "gpui-pre-platform", version = "=0.3.0" }
-gpui_macros = { package = "gpui-pre-macros", version = "=0.3.0" }
+gpui = { package = "gpui-pre", version = "0.3.0-260903" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.0-260903" }
+gpui_macros = { package = "gpui-pre-macros", version = "0.3.0-260903" }
 ```
