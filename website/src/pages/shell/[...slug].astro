@@ -1,0 +1,25 @@
+---
+import { getCollection } from 'astro:content';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { enShellSidebar } from '../../lib/sidebar';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('shell');
+  return entries.map((entry) => ({
+    params: { slug: entry.id.replace(/\.md$/, '') },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await entry.render();
+---
+
+<DocsLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  lang="en"
+  sidebar={enShellSidebar}
+>
+  <Content />
+</DocsLayout>

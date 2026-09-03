@@ -1,0 +1,21 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="App Stories — GPUI Component"
+  description="Desktop apps built with GPUI Component — from a production trading terminal to database clients, terminals, and system utilities."
+  lang="en"
+>
+  <div id="apps-root" data-lang="en"></div>
+</DocsLayout>
+
+<script>
+  import { createApp } from 'vue';
+  import AppsApp from '../components/AppsApp.vue';
+
+  const root = document.getElementById('apps-root');
+  if (root) {
+    createApp(AppsApp, { lang: 'en' }).mount(root);
+  }
+</script>

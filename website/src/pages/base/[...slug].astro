@@ -1,0 +1,38 @@
+---
+import { getCollection } from 'astro:content';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { enBaseSidebar } from '../../lib/sidebar';
+import ComponentExample from '../../components/ComponentExample.vue';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('base');
+  return entries.map((entry) => ({
+    params: { slug: entry.id.replace(/\.md$/, '') },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await entry.render();
+const pathname = Astro.url.pathname;
+const base = import.meta.env.BASE_URL;
+const devVersion = import.meta.env.DEV ? 'dev' : undefined;
+---
+
+<DocsLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  lang="en"
+  sidebar={enBaseSidebar}
+>
+  <Content />
+  {entry.data.example !== false && (
+    <ComponentExample
+      client:load
+      frontmatter={{ ...entry.data, exampleKind: 'base' }}
+      pathname={pathname}
+      baseUrl={base}
+      devVersion={devVersion}
+    />
+  )}
+</DocsLayout>

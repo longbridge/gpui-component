@@ -1,0 +1,21 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="应用案例 — GPUI Component"
+  description="基于 GPUI Component 构建的桌面应用——从生产环境的交易终端到数据库客户端、终端与系统工具。"
+  lang="zh-CN"
+>
+  <div id="apps-root-zh" data-lang="zh-CN"></div>
+</DocsLayout>
+
+<script>
+  import { createApp } from 'vue';
+  import AppsApp from '../../components/AppsApp.vue';
+
+  const root = document.getElementById('apps-root-zh');
+  if (root) {
+    createApp(AppsApp, { lang: 'zh-CN' }).mount(root);
+  }
+</script>

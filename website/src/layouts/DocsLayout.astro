@@ -1,0 +1,97 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Nav from '../components/Nav.astro';
+import Sidebar from '../components/Sidebar.astro';
+import type { SidebarItem } from '../lib/sidebar';
+import { fetchStarCount } from '../lib/github';
+
+export interface Props {
+  title?: string;
+  description?: string;
+  lang?: 'en' | 'zh-CN';
+  sidebar?: SidebarItem[];
+  frontmatter?: Record<string, any>;
+}
+
+const { title, description, lang = 'en', sidebar = [], frontmatter = {} } = Astro.props;
+const hasSidebar = sidebar.length > 0;
+const pathname = Astro.url.pathname;
+const base = import.meta.env.BASE_URL;
+
+const SITE_URL = 'https://longbridge.github.io/gpui-component';
+const canonical = `${SITE_URL}${pathname}`;
+
+let starCount = 0;
+try {
+  starCount = await fetchStarCount();
+} catch {}
+
+const isZh = lang === 'zh-CN';
+const footerLinks = isZh
+  ? [
+      { text: 'GPUI', href: 'https://gpui.rs' },
+      { text: '设计指南', href: `${base}zh-CN/docs/design-guides` },
+      { text: '编码指南', href: `${base}zh-CN/docs/coding-guides` },
+      { text: '应用案例', href: `${base}zh-CN/apps` },
+      { text: '贡献者', href: `${base}zh-CN/contributors` },
+      { text: 'Skills', href: `${base}zh-CN/skills` },
+      { text: 'llms-full.txt', href: `${base}llms-full.txt` },
+      { text: '报告问题', href: 'https://github.com/longbridge/gpui-component/issues' },
+      { text: '讨论', href: 'https://github.com/longbridge/gpui-component/discussions' },
+    ]
+  : [
+      { text: 'GPUI', href: 'https://gpui.rs' },
+      { text: 'Design Guides', href: `${base}docs/design-guides` },
+      { text: 'Coding Guides', href: `${base}docs/coding-guides` },
+      { text: 'App Stories', href: `${base}apps` },
+      { text: 'Contributors', href: `${base}contributors` },
+      { text: 'Skills', href: `${base}skills` },
+      { text: 'llms-full.txt', href: `${base}llms-full.txt` },
+      { text: 'Report Bug', href: 'https://github.com/longbridge/gpui-component/issues' },
+      { text: 'Discussion', href: 'https://github.com/longbridge/gpui-component/discussions' },
+    ];
+
+const footerMessage = isZh
+  ? 'GPUI Component 是一个基于 Apache-2.0 许可证的开源项目，由 <a href="https://longbridge.com" target="_blank">Longbridge</a> 开发。'
+  : 'GPUI Component is an open source project under the Apache-2.0 License, developed by <a href="https://longbridge.com" target="_blank">Longbridge</a>.';
+---
+
+<BaseLayout title={title} description={description} lang={isZh ? 'zh-CN' : 'en'} canonical={canonical}>
+  <Nav lang={lang} currentPath={pathname} starCount={starCount} />
+
+  <div class="docs-layout">
+    {hasSidebar && <Sidebar items={sidebar} currentPath={pathname} lang={lang} />}
+
+    <main class:list={['docs-main', { 'docs-main--full': !hasSidebar }]}>
+      <article class="doc-content" data-pagefind-body>
+        <slot />
+      </article>
+
+      <footer class="site-footer" style="margin-top: 4rem">
+        <nav aria-label="Footer">
+          {footerLinks.map((link, i) => (
+            <>
+              {i > 0 && <span aria-hidden="true"> | </span>}
+              <a
+                href={link.href}
+                target={link.href.startsWith('http') ? '_blank' : undefined}
+                rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+              >
+                {link.text}
+              </a>
+            </>
+          ))}
+        </nav>
+        <p style="margin-top: 0.75rem" set:html={footerMessage} />
+        <p style="margin-top: 0.5rem; font-size: 0.72rem">
+          Icon resources are used <a href="https://lucide.dev" target="_blank">Lucide</a>,
+          <a href="https://isocons.app" target="_blank">Isocons</a>.
+        </p>
+      </footer>
+    </main>
+  </div>
+</BaseLayout>
+
+<style is:global>
+  @import '../styles/global.css';
+</style>

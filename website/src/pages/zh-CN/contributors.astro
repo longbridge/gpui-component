@@ -1,0 +1,26 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { fetchContributors } from '../../lib/github';
+
+let contributors: Awaited<ReturnType<typeof fetchContributors>> = [];
+try { contributors = await fetchContributors(); } catch {}
+---
+
+<DocsLayout
+  title="贡献者 — GPUI Component"
+  description="感谢所有为 GPUI Component 做出贡献的开发者。"
+  lang="zh-CN"
+>
+  <div id="contributors-root-zh" data-lang="zh-CN" data-contributors={JSON.stringify(contributors)}></div>
+</DocsLayout>
+
+<script>
+  import { createApp } from 'vue';
+  import ContributorsApp from '../../components/ContributorsApp.vue';
+
+  const root = document.getElementById('contributors-root-zh');
+  if (root) {
+    const contributors = JSON.parse(root.dataset.contributors ?? '[]');
+    createApp(ContributorsApp, { lang: 'zh-CN', contributors }).mount(root);
+  }
+</script>

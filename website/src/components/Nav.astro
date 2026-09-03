@@ -1,0 +1,238 @@
+---
+import { ChevronDown } from 'lucide-vue-next';
+
+export interface Props {
+  lang?: 'en' | 'zh-CN';
+  currentPath?: string;
+  starCount?: number;
+}
+
+const { lang = 'en', currentPath = '', starCount = 0 } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const isZh = lang === 'zh-CN';
+const prefix = isZh ? `${base}zh-CN` : base;
+
+function url(path: string) {
+  return `${base}${path}`.replace(/\/+/g, '/');
+}
+
+const starLabel = starCount >= 1000 ? `${(starCount / 1000).toFixed(1)}k` : `${starCount}`;
+
+const navLinks = isZh
+  ? [
+      { text: '组件', href: url('zh-CN/docs/components') },
+      { text: 'Shell', href: url('zh-CN/shell/') },
+      { text: 'Base', href: url('zh-CN/base/') },
+      { text: '应用案例', href: url('zh-CN/apps') },
+    ]
+  : [
+      { text: 'Components', href: url('docs/components') },
+      { text: 'Shell', href: url('shell/') },
+      { text: 'Base', href: url('base/') },
+      { text: 'App Stories', href: url('apps') },
+    ];
+
+const resourceLinks = isZh
+  ? [
+      { text: 'API Doc', href: 'https://docs.rs/gpui-component' },
+      { text: '贡献者', href: url('zh-CN/contributors') },
+      { text: '版本发布', href: 'https://github.com/longbridge/gpui-component/releases' },
+      { text: 'Issues', href: 'https://github.com/longbridge/gpui-component/issues' },
+      { text: '讨论', href: 'https://github.com/longbridge/gpui-component/discussions' },
+    ]
+  : [
+      { text: 'API Doc', href: 'https://docs.rs/gpui-component' },
+      { text: 'Contributors', href: url('contributors') },
+      { text: 'Releases', href: 'https://github.com/longbridge/gpui-component/releases' },
+      { text: 'Issues', href: 'https://github.com/longbridge/gpui-component/issues' },
+      { text: 'Discussion', href: 'https://github.com/longbridge/gpui-component/discussions' },
+    ];
+
+const langSwitchHref = isZh
+  ? currentPath.replace(/\/gpui-component\/zh-CN\//, '/gpui-component/')
+  : currentPath.replace(/\/gpui-component\//, '/gpui-component/zh-CN/');
+const langLabel = isZh ? 'EN' : '中';
+const resourcesLabel = isZh ? '资源' : 'Resources';
+---
+
+<nav class="site-nav" aria-label="Primary">
+  <div class="site-nav__inner">
+    <a href={base} class="site-nav__brand">
+      <img src={`${base}logo.svg`} alt="" class="site-nav__logo" />
+      <span>GPUI Component</span>
+    </a>
+
+    <div class="site-nav__links">
+      {navLinks.map(link => (
+        <a
+          href={link.href}
+          class={`site-nav__link${currentPath.startsWith(link.href) ? ' active' : ''}`}
+        >
+          {link.text}
+        </a>
+      ))}
+
+      <div class="site-nav__dropdown">
+        <button class="site-nav__dropdown-btn site-nav__link" type="button">
+          {resourcesLabel}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div class="site-nav__dropdown-menu">
+          {resourceLinks.map(link => (
+            <a
+              href={link.href}
+              class="site-nav__dropdown-item"
+              target={link.href.startsWith('http') ? '_blank' : undefined}
+              rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            >
+              {link.text}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div class="site-nav__actions">
+      <!-- Pagefind search -->
+      <div id="pagefind-search" class="site-nav__search">
+        <button id="search-btn" type="button" class="site-nav__search-btn" aria-label={isZh ? '搜索文档' : 'Search docs'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <span class="site-nav__search-hint">{isZh ? '搜索' : 'Search'}</span>
+          <kbd class="site-nav__search-key">⌘K</kbd>
+        </button>
+      </div>
+
+      <!-- GitHub star -->
+      <a
+        href="https://github.com/longbridge/gpui-component"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="github-star-btn site-nav__link"
+        title={`${starCount} stars on GitHub`}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/>
+          <path d="M9 18c-4.51 2-5-2-7-2"/>
+        </svg>
+        <span class="github-star-btn__label">{starLabel}</span>
+      </a>
+
+      <!-- Language switch -->
+      <a href={langSwitchHref} class="site-nav__lang-btn site-nav__link">
+        {langLabel}
+      </a>
+
+      <!-- Theme toggle -->
+      <button
+        id="theme-toggle"
+        class="theme-toggle"
+        aria-label={isZh ? '切换主题' : 'Toggle color theme'}
+        type="button"
+      >
+        <svg class="theme-toggle__sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+        </svg>
+        <svg class="theme-toggle__moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<script>
+  const toggle = document.getElementById('theme-toggle');
+  const sun = toggle?.querySelector('.theme-toggle__sun') as HTMLElement | null;
+  const moon = toggle?.querySelector('.theme-toggle__moon') as HTMLElement | null;
+
+  function updateIcon() {
+    const isDark = document.documentElement.classList.contains('dark');
+    if (sun) sun.style.display = isDark ? 'none' : '';
+    if (moon) moon.style.display = isDark ? '' : 'none';
+  }
+
+  updateIcon();
+
+  toggle?.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateIcon();
+  });
+
+  // Pagefind search modal
+  (async () => {
+    const btn = document.getElementById('search-btn');
+    if (!btn) return;
+
+    let initialized = false;
+    let modalEl: HTMLElement | null = null;
+
+    async function openSearch() {
+      if (!initialized) {
+        try {
+          const { PagefindUI } = await import('/pagefind/pagefind-ui.js' as any);
+          const wrap = document.createElement('div');
+          wrap.id = 'search-modal-overlay';
+          wrap.innerHTML = '<div id="search-modal-inner"><div id="search-modal-ui"></div></div>';
+          document.body.appendChild(wrap);
+          modalEl = wrap;
+
+          new PagefindUI({ element: '#search-modal-ui', showImages: false, resetStyles: false });
+
+          wrap.addEventListener('click', (e) => {
+            if (e.target === wrap) closeSearch();
+          });
+          document.addEventListener('keydown', onKey);
+          initialized = true;
+        } catch {
+          // Pagefind not available in dev mode
+          return;
+        }
+      }
+      if (modalEl) {
+        modalEl.style.display = 'flex';
+        setTimeout(() => modalEl?.querySelector<HTMLInputElement>('input')?.focus(), 50);
+      }
+    }
+
+    function closeSearch() {
+      if (modalEl) modalEl.style.display = 'none';
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { closeSearch(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (modalEl?.style.display === 'flex') closeSearch();
+        else openSearch();
+      }
+    }
+
+    btn.addEventListener('click', openSearch);
+    document.addEventListener('keydown', onKey);
+  })();
+</script>
+
+<style>
+.github-star-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.site-nav__lang-btn {
+  font-size: 0.78rem;
+  font-weight: 560;
+}
+
+@media (max-width: 767px) {
+  .github-star-btn__label { display: none; }
+  .site-nav__links { display: none; }
+}
+</style>

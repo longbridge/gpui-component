@@ -1,0 +1,86 @@
+---
+export interface Props {
+  title?: string;
+  description?: string;
+  lang?: string;
+  ogTitle?: string;
+  canonical?: string;
+}
+
+const {
+  title,
+  description = 'A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.',
+  lang = 'en',
+  ogTitle,
+  canonical,
+} = Astro.props;
+
+const SITE_TITLE = 'GPUI Component';
+const SITE_URL = 'https://longbridge.github.io/gpui-component';
+const OG_IMAGE = `${SITE_URL}/og.png`;
+
+const pageTitle = title ? `${title} · ${SITE_TITLE}` : SITE_TITLE;
+const socialTitle = ogTitle ?? pageTitle;
+const base = import.meta.env.BASE_URL;
+---
+
+<!DOCTYPE html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{pageTitle}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href={`${base}logo.svg`} />
+
+    <!-- OG / Twitter -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_TITLE} />
+    <meta property="og:title" content={socialTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={OG_IMAGE} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="2400" />
+    <meta property="og:image:height" content="1260" />
+    <meta property="og:image:alt" content={SITE_TITLE} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={socialTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={OG_IMAGE} />
+    {canonical && <link rel="canonical" href={canonical} />}
+
+    <!-- Theme: apply before paint to avoid FOUC -->
+    <script is:inline>
+      (function () {
+        const stored = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (stored === 'dark' || (!stored && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+
+    <!-- Favicon follows theme toggle -->
+    <script is:inline>
+      (function () {
+        const base = document.querySelector('base')?.href ?? '/gpui-component/';
+        function updateFavicon() {
+          const isDark = document.documentElement.classList.contains('dark');
+          const link = document.querySelector('link[rel="icon"]');
+          if (link) link.href = isDark ? base + 'logo-dark.svg' : base + 'logo.svg';
+        }
+        updateFavicon();
+        new MutationObserver(updateFavicon).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['class'],
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
