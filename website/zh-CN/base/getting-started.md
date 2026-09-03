@@ -12,7 +12,7 @@ order: 2
 
 ```toml
 [dependencies]
-gpui-base = { git = "https://github.com/longbridge/gpui-component" }
+gpui-base = { git = "https://github.com/longbridge/gpui-kit" }
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
 ```

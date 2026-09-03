@@ -5,7 +5,7 @@
         <div class="skills-list">
             <div v-for="skill in skills" :key="skill.id" class="skill-card">
                 <a
-                    :href="`https://github.com/longbridge/gpui-component/tree/main/${skill.skillPath}`"
+                    :href="`https://github.com/longbridge/gpui-kit/tree/main/${skill.skillPath}`"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="skill-link"

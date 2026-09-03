@@ -231,7 +231,7 @@ through motion alone.
 `apps.vue` lists the applications people have shipped with the library — the
 strongest available answer to "is this real?", and the reason it sits in the
 navbar rather than inside the Resources menu. Submissions come from
-[discussion #989](https://github.com/longbridge/gpui-component/discussions/989).
+[discussion #989](https://github.com/longbridge/gpui-kit/discussions/989).
 
 - **The screenshots are the authors' own published GitHub URLs**, used as
   submitted. They must not be wrapped in `.mac-window`: most already contain a

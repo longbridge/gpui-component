@@ -12,7 +12,7 @@ Like every `gpui-base` primitive, Nav Stack supplies behavior and semantic struc
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
 cargo run -p gpui-base --example components -- nav-stack
@@ -43,7 +43,7 @@ use gpui_base::motion::{PresencePhase, Transition};
 
 `NavPage` is what the renderer receives. It already fills the container. Read `phase()` (`Entering`, `Present` or `Exiting`), `operation()` (`Push`, `Pop` or `Replace`, or `None` once settled) and `progress()` (eased, `0.0` to `1.0`, shared by both pages of one change), refine the page with GPUI styles, and return it.
 
-The authoritative module is [`components/nav_stack.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/nav_stack.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/nav_stack.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/nav_stack.rs). Native and browser previews compile this same file.
 
 ## Animation
 

@@ -23,7 +23,7 @@ cargo run -p gpui-base --example components -- scrollbar
 ```
 
 The source is available in
-[`components/scrollbar.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/scrollbar.rs).
+[`components/scrollbar.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/scrollbar.rs).
 
 ## Imports
 

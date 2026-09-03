@@ -173,7 +173,7 @@ Paint the returned range behind the glyphs, then paint the text normally. Wrappe
 
 For multiple runs, give each run a stable `document_order`. Input order is preserved in `projection.ranges()` so each range can be paired with its original layout; document order is used when composing copied text.
 
-The [shared Text Selection showcase](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/text_selection.rs) is the complete runnable example used by both the native command and the live Rust/WASM preview above:
+The [shared Text Selection showcase](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/text_selection.rs) is the complete runnable example used by both the native command and the live Rust/WASM preview above:
 
 ```bash
 cargo run -p gpui-base --example components -- text-selection

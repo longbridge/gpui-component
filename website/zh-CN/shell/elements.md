@@ -429,7 +429,7 @@ render(cx) {
 }
 ```
 
-[示例应用](https://github.com/longbridge/gpui-component/tree/main/examples/js_todolist)就是这样写的：`ui.js` 把 `button`、`label`、`icon`、`checkbox` 等导出为函数，`main.js` 调用它们。读起来像一个组件库，而且不花什么代价——一次函数调用就是一段新描述的来源。
+[示例应用](https://github.com/longbridge/gpui-kit/tree/main/examples/js_todolist)就是这样写的：`ui.js` 把 `button`、`label`、`icon`、`checkbox` 等导出为函数，`main.js` 调用它们。读起来像一个组件库，而且不花什么代价——一次函数调用就是一段新描述的来源。
 
 ## 回调属于它所在的那次渲染
 

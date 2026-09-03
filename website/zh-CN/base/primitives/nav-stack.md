@@ -43,7 +43,7 @@ use gpui_base::motion::{PresencePhase, Transition};
 
 `NavPage` 是 renderer 收到的东西，已经铺满容器。读取 `phase()`（`Entering`、`Present` 或 `Exiting`）、`operation()`（`Push`、`Pop`、`Replace`，稳定后为 `None`）和 `progress()`（已缓动，`0.0` 到 `1.0`，一次变化中两个页面共用），用 GPUI 样式修饰后返回。
 
-权威实现位于 [`components/nav_stack.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/nav_stack.rs)，原生与浏览器预览编译的是同一文件。
+权威实现位于 [`components/nav_stack.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/nav_stack.rs)，原生与浏览器预览编译的是同一文件。
 
 ## 动画
 

@@ -81,9 +81,9 @@ const navItems = computed(() => {
             items: [
                 { text: 'API Doc', href: 'https://docs.rs/gpui-component', external: true },
                 { text: isZh.value ? '贡献者' : 'Contributors', href: contributorsHref.value, external: false },
-                { text: isZh.value ? '版本发布' : 'Releases', href: 'https://github.com/longbridge/gpui-component/releases', external: true },
-                { text: 'Issues', href: 'https://github.com/longbridge/gpui-component/issues', external: true },
-                { text: isZh.value ? '讨论' : 'Discussion', href: 'https://github.com/longbridge/gpui-component/discussions', external: true },
+                { text: isZh.value ? '版本发布' : 'Releases', href: 'https://github.com/longbridge/gpui-kit/releases', external: true },
+                { text: 'Issues', href: 'https://github.com/longbridge/gpui-kit/issues', external: true },
+                { text: isZh.value ? '讨论' : 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions', external: true },
             ],
         },
     ];
@@ -114,13 +114,13 @@ const capIcons: Record<string, any> = {
     theme: Palette,
 };
 
-const installCommand = 'gpui-component = { git = "https://github.com/longbridge/gpui-component" }';
+const installCommand = 'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }';
 const installSnippet = [
     "[dependencies]",
     'gpui = { git = "https://github.com/zed-industries/zed" }',
     'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
-    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }',
-    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }',
+    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }',
+    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-kit" }',
 ].join("\n");
 
 const copied = ref(false);
@@ -278,7 +278,7 @@ const copy = computed(() =>
                     <span>{{ copy.searchShort }}</span>
                 </a>
                 <a
-                    href="https://github.com/longbridge/gpui-component"
+                    href="https://github.com/longbridge/gpui-kit"
                     target="_blank"
                     class="home-nav__github"
                     :title="`${stars} stars on GitHub`"
@@ -528,8 +528,8 @@ const copy = computed(() =>
             <a :href="contributorsHref">{{ copy.contributors }}</a>
             <a :href="skillsHref" target="_blank">Skills</a>
             <a :href="llmsHref" target="_blank">llms-full.txt</a>
-            <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">{{ copy.reportBug }}</a>
-            <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">{{ copy.discussion }}</a>
+            <a href="https://github.com/longbridge/gpui-kit/issues" target="_blank">{{ copy.reportBug }}</a>
+            <a href="https://github.com/longbridge/gpui-kit/discussions" target="_blank">{{ copy.discussion }}</a>
         </nav>
         <p class="home-footer__credits">
             {{ copy.iconCredits }}

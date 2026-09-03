@@ -44,7 +44,7 @@ cx.theme().foreground
 
 ## Theme Registry
 
-仓库在 [themes](https://github.com/longbridge/gpui-component/tree/main/themes) 目录下内置了 20+ 主题。
+仓库在 [themes](https://github.com/longbridge/gpui-kit/tree/main/themes) 目录下内置了 20+ 主题。
 
 你可以通过 [ThemeRegistry] 来加载和监听这些主题文件：
 

@@ -458,7 +458,7 @@ SettingItem::new(
     "GitHub Repository",
     SettingField::element(OpenURLSettingField {
         label: "Repository...".into(),
-        url: "https://github.com/longbridge/gpui-component".into(),
+        url: "https://github.com/longbridge/gpui-kit".into(),
     })
 )
 ```

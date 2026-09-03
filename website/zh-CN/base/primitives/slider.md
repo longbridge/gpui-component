@@ -26,7 +26,7 @@ use gpui_base::{Slider, SliderState};
 
 ## 结构与 API
 
-示例组合上述公开类型。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/slider.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/slider.rs)，原生与浏览器预览编译的是同一文件。
+示例组合上述公开类型。GPUI 的标准样式和事件 trait 负责表现，Base 类型负责交互结构。权威实现位于 [`components/slider.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/slider.rs)，原生与浏览器预览编译的是同一文件。
 
 ## 状态与事件
 

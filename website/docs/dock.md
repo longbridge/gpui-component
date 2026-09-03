@@ -158,4 +158,4 @@ The repository includes a complete workspace with edge docks, runtime panel oper
 cargo run --example dock
 ```
 
-See [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/story/examples/dock.rs) for the full implementation.
+See [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/story/examples/dock.rs) for the full implementation.

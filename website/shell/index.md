@@ -209,4 +209,4 @@ What the script gains in exchange for the extra typing is the whole application 
 
 The crate is at milestone **M0**: a feasibility baseline, not a stable interface. It is not published to crates.io, and the script API is expected to change. What is documented here exists and works; what is missing is called out on the page where you would go looking for it.
 
-The design is specified in the [GPUI Shell design document](https://github.com/longbridge/gpui-component/blob/main/docs/gpui-shell.md), and the crate lives at [`crates/shell`](https://github.com/longbridge/gpui-component/tree/main/crates/shell).
+The design is specified in the [GPUI Shell design document](https://github.com/longbridge/gpui-kit/blob/main/docs/gpui-shell.md), and the crate lives at [`crates/shell`](https://github.com/longbridge/gpui-kit/tree/main/crates/shell).

@@ -61,7 +61,7 @@
             <p>{{ copy.ctaLead }}</p>
             <a
                 class="apps-cta__action"
-                href="https://github.com/longbridge/gpui-component/discussions/989"
+                href="https://github.com/longbridge/gpui-kit/discussions/989"
                 target="_blank"
                 rel="noopener noreferrer"
             >

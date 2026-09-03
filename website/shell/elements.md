@@ -429,7 +429,7 @@ render(cx) {
 }
 ```
 
-That is how the [example application](https://github.com/longbridge/gpui-component/tree/main/examples/js_todolist) is written: `ui.js` exports `button`, `label`, `icon`, `checkbox` and the rest as functions, and `main.js` calls them. It reads like a component library and costs nothing, because a function call is where a fresh description comes from.
+That is how the [example application](https://github.com/longbridge/gpui-kit/tree/main/examples/js_todolist) is written: `ui.js` exports `button`, `label`, `icon`, `checkbox` and the rest as functions, and `main.js` calls them. It reads like a component library and costs nothing, because a function call is where a fresh description comes from.
 
 ## Callbacks belong to their render
 

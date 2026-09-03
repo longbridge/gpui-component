@@ -158,4 +158,4 @@ self.dock_skin
 cargo run --example dock
 ```
 
-完整实现见 [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/story/examples/dock.rs)。
+完整实现见 [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/story/examples/dock.rs)。

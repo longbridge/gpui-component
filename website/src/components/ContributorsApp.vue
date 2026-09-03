@@ -17,7 +17,7 @@
         </div>
         <div class="contributors-more">
             {{ moreText }}
-            <a href="https://github.com/longbridge/gpui-component/graphs/contributors" target="_blank">
+            <a href="https://github.com/longbridge/gpui-kit/graphs/contributors" target="_blank">
                 {{ contributorsLinkText }}
             </a>{{ suffixText }}
         </div>

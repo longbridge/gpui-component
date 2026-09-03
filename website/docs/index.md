@@ -34,7 +34,7 @@ Add `gpui` and `gpui-component` to your `Cargo.toml`:
 ```toml
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component = { git = "https://github.com/longbridge/gpui-kit" }
 ```
 
 Then create a simple "Hello, World!" application with a button:
@@ -84,9 +84,9 @@ fn main() {
 
 Learn how to build interruptible 120 FPS animation in the [GPUI Base Motion guide](/base/motion).
 
-- [GitHub Repository](https://github.com/longbridge/gpui-component)
-- [Issue Tracker](https://github.com/longbridge/gpui-component/issues)
-- [Contributing Guide](https://github.com/longbridge/gpui-component/blob/main/CONTRIBUTING.md)
+- [GitHub Repository](https://github.com/longbridge/gpui-kit)
+- [Issue Tracker](https://github.com/longbridge/gpui-kit/issues)
+- [Contributing Guide](https://github.com/longbridge/gpui-kit/blob/main/CONTRIBUTING.md)
 
 ## License
 

@@ -512,7 +512,7 @@ its own, and a host that wants a different look writes a different skin.
 cargo run -p gpui-base dock
 ```
 
-Source: [`showcase/components/dock.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/dock.rs). It is the same file the preview at the top of this page compiles to WebAssembly.
+Source: [`showcase/components/dock.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/dock.rs). It is the same file the preview at the top of this page compiles to WebAssembly.
 
 ## Integration checklist
 
