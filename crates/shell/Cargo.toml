@@ -7,7 +7,7 @@ license = "Apache-2.0"
 publish = false
 edition.workspace = true
 repository = "https://github.com/longbridge/gpui-component"
-homepage = "https://longbridge.github.io/gpui-component"
+homepage = "https://gpui-kit.com"
 
 [lib]
 name = "gpui_shell"

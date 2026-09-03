@@ -145,7 +145,7 @@ impl SettingsStory {
                         .ghost()
                         .xsmall()
                         .on_click(|_, _, cx| {
-                            cx.open_url("https://longbridge.github.io/gpui-component/")
+                            cx.open_url("https://gpui-kit.com/")
                         })
                 })
                 .groups(vec![
@@ -504,7 +504,7 @@ impl SettingsStory {
                                     .label("Website...")
                                     .with_size(options.size())
                                     .on_click(|_, _window, cx| {
-                                        cx.open_url("https://longbridge.github.io/gpui-component/");
+                                        cx.open_url("https://gpui-kit.com/");
                                     })
                             }),
                         )

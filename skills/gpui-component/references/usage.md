@@ -399,4 +399,4 @@ All components follow the builder pattern `Component::new("id").method().method(
 - `Styled`: any GPUI style methods (`.w()`, `.bg()`, `.p_2()`, etc.)
 
 For any component not covered here, fetch its doc from:
-`https://longbridge.github.io/gpui-component/docs/components/{name}.md`
+`https://gpui-kit.com/docs/components/{name}.md`

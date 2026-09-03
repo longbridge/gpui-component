@@ -281,7 +281,7 @@ impl Render for MarkerStory {
                             .content(
                                 MarkerContent::new().child(
                                     Link::new("marker-documentation-link")
-                                        .href("https://longbridge.github.io/gpui-component/")
+                                        .href("https://gpui-kit.com/")
                                         .child("Open the component documentation"),
                                 ),
                             ),

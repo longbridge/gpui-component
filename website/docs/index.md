@@ -3,14 +3,24 @@ title: Introduction
 description: A comprehensive Rust framework for building fantastic, high-performance desktop applications with GPUI.
 ---
 
-# GPUI Component Introduction
+# GPUI Kit Introduction
 
-GPUI Component is a comprehensive Rust desktop application framework built on [GPUI](https://gpui.rs).
+GPUI Kit is a comprehensive Rust desktop application framework built on [GPUI](https://gpui.rs).
 
 It combines a complete UI system with application-grade data, layout, content,
-and editing capabilities. Use `gpui-component` for polished controls with one
-coherent visual language, or build your own design system on the reusable
-behavior and infrastructure in `gpui-base`.
+and editing capabilities, and it ships as three crates that build on each other:
+
+- **`gpui-base`**: Unstyled behavior, controlled state, focus, overlays,
+  virtual lists, dock infrastructure, and semantic design tokens.
+- **`gpui-component`**: GPUI Component, the complete styled component library
+  with 60+ controls, themes, data tables, dock layout, and a code editor.
+- **`gpui-shell`**: Opens a Rust host to JavaScript extensions, one granted
+  capability at a time.
+
+Use `gpui-component` for polished controls with one coherent visual language,
+or build your own design system on the reusable behavior and infrastructure in
+`gpui-base`. This section documents GPUI Component; see [GPUI Base](/base/)
+and [GPUI Shell](/shell/) for the other two layers.
 
 ## Features
 

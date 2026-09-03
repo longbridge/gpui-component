@@ -267,7 +267,7 @@ pub fn init(cx: &mut App) {
                                 alert.title("About").description(markdown(
                                     "GPUI Component Storybook\n\n\
                                     Version 0.1.0\n\n\
-                                    https://longbridge.github.io/gpui-component",
+                                    https://gpui-kit.com",
                                 ))
                             });
                         });

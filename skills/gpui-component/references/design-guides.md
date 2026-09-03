@@ -1,13 +1,13 @@
 ---
 title: Design Guides
-description: Product and interaction design guidance for GPUI Component applications
+description: Product and interaction design guidance for GPUI Kit applications
 order: -2.1
 ---
 
 # Design Guides
 
 Use this guide before choosing components or writing layout code. It records
-the product judgment accumulated through years of GPUI Component desktop work:
+the product judgment accumulated through years of GPUI Kit desktop work:
 an interface should feel native, restrained, precise, and understandable
 without guesswork.
 
@@ -52,7 +52,7 @@ way of building a system:
 - keep the code and composition legible to both people and AI;
 - separate behavior primitives from the styled layer.
 
-GPUI Component applies those ideas through a Rust library and the split between
+GPUI Kit applies those ideas through a Rust library and the split between
 `gpui-base` and `gpui-component`. Applications normally compose or wrap the
 published components; contributors move genuinely reusable behavior into Base
 and keep visual policy above it.

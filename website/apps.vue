@@ -132,8 +132,8 @@ const apps = [
         source: null,
         image: "https://github.com/user-attachments/assets/4100dcc7-1316-4105-8ab2-ee6f84d95206",
         blurb: {
-            en: "The trading desktop GPUI Component was built for. Real-time quotes, charts and dense market data, shipped on all three platforms.",
-            zh: "GPUI Component 最初就是为它而生的交易桌面端。实时行情、图表与高密度市场数据，同时发布于三大平台。",
+            en: "The trading desktop GPUI Kit was built for. Real-time quotes, charts and dense market data, shipped on all three platforms.",
+            zh: "GPUI Kit 最初就是为它而生的交易桌面端。实时行情、图表与高密度市场数据，同时发布于三大平台。",
         },
     },
     {
@@ -510,8 +510,8 @@ const copy = computed(() =>
     isZh.value
         ? {
               kicker: "应用案例",
-              title: "用 GPUI Component 做出来的真实应用。",
-              lead: "下面每一个都基于 GPUI Component 构建，是人们真正下载并每天使用的桌面软件——从生产环境的交易终端，到数据库客户端、终端与系统工具。",
+              title: "用 GPUI Kit 做出来的真实应用。",
+              lead: "下面每一个都基于 GPUI Kit 构建，是人们真正下载并每天使用的桌面软件——从生产环境的交易终端，到数据库客户端、终端与系统工具。",
               signalCount: `${apps.length} 个应用`,
               signalLicense: "开源与商业产品",
               filterLabel: "按类别筛选",
@@ -520,14 +520,14 @@ const copy = computed(() =>
               building: "开发中",
               visit: "官网",
               sourceLink: "源码",
-              ctaTitle: "你也用 GPUI Component 做了应用？",
+              ctaTitle: "你也用 GPUI Kit 做了应用？",
               ctaLead: "把它发到 Showcase 讨论区，就有机会出现在这个页面上。",
               ctaAction: "提交你的应用",
           }
         : {
               kicker: "App Stories",
-              title: "Real apps, shipped with GPUI Component.",
-              lead: "Every app below is built on GPUI Component — desktop software people download and use every day, from a production trading terminal to database clients, terminals and system utilities.",
+              title: "Real apps, shipped with GPUI Kit.",
+              lead: "Every app below is built on GPUI Kit — desktop software people download and use every day, from a production trading terminal to database clients, terminals and system utilities.",
               signalCount: `${apps.length} apps`,
               signalLicense: "Open source and commercial",
               filterLabel: "Filter by category",
@@ -536,7 +536,7 @@ const copy = computed(() =>
               building: "In development",
               visit: "Website",
               sourceLink: "Source",
-              ctaTitle: "Built something with GPUI Component?",
+              ctaTitle: "Built something with GPUI Kit?",
               ctaLead: "Post it in the showcase discussion and it can appear on this page.",
               ctaAction: "Submit your app",
           },

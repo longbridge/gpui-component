@@ -1,13 +1,13 @@
 ---
 title: Coding Guides
-description: Architecture and coding conventions for maintainable GPUI Component applications
+description: Architecture and coding conventions for maintainable GPUI Kit applications
 order: -2.2
 ---
 
 # Coding Guides
 
 This guide describes the application architecture and code patterns that have
-proved durable in GPUI Component. It is written for both engineers and coding
+proved durable in GPUI Kit. It is written for both engineers and coding
 agents. Read [Design Guides](./design-guides.md) first: code structure should
 preserve product intent, not replace it.
 
@@ -459,7 +459,7 @@ what it does.
 
 Preserve semantic roles in the element choice. Use `Button` for commands even
 when the desired treatment is quiet—select `outline`, `ghost`, or an icon
-presentation instead of replacing it with `Link`. GPUI Component applications
+presentation instead of replacing it with `Link`. GPUI Kit applications
 reserve `Link` for targets opened by a browser or mail client, such as a URL,
 web document, or email address. Use the relevant navigation component for an
 in-app destination and `Button`/`Action` for a command. This is a product

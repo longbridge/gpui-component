@@ -201,7 +201,7 @@ impl Render for BubbleStory {
                                     .child("The implementation guide is available online.")
                                     .child(
                                         Link::new("bubble-documentation-link")
-                                            .href("https://longbridge.github.io/gpui-component/")
+                                            .href("https://gpui-kit.com/")
                                             .child("Open the component documentation"),
                                     ),
                             ),
