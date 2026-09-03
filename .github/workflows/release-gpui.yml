@@ -4,8 +4,8 @@ name: "Release GPUI"
 # section of CONTRIBUTING.md.
 on:
   schedule:
-    # Every Sunday at 06:00 Beijing time (22:00 UTC on Saturday).
-    - cron: "0 22 * * 6"
+    # Every Sunday at 18:00 Beijing time (10:00 UTC).
+    - cron: "0 10 * * 0"
   workflow_dispatch:
     inputs:
       rev:

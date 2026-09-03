@@ -167,7 +167,7 @@ explicit version. The Zed commit each build came from is recorded in every
 crate's description and `[package.metadata.gpui-pre]`.
 
 The `Release GPUI` workflow (`.github/workflows/release-gpui.yml`) runs this
-script every Sunday at 06:00 Beijing time and can be started by hand from the
+script every Sunday at 18:00 Beijing time and can be started by hand from the
 Actions tab, optionally with a Zed revision or an explicit version. It uses the
 repository's `CARGO_REGISTRY_TOKEN` secret.
 
