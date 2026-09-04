@@ -1173,43 +1173,84 @@ html[lang^="zh"] :is(
 }
 
 /* ====================================================================
-   Pagefind search modal
+   Search dialog
    ==================================================================== */
 
-#search-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: none;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 8vh;
-  background: color-mix(in srgb, var(--background) 30%, transparent);
-  backdrop-filter: blur(8px);
-}
-
-#search-modal-inner {
+/* A native <dialog>: the browser owns the backdrop, the top layer, focus
+   trapping and Escape, so none of that is reimplemented here. */
+#search-modal {
+  display: flex;
+  flex-direction: column;
   width: min(42rem, calc(100% - 2rem));
-  max-height: 80vh;
-  overflow-y: auto;
+  max-height: min(32rem, calc(100vh - 8rem));
+  margin: 8vh auto auto;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
   background: var(--popover);
+  color: var(--foreground);
   box-shadow: var(--shadow-dialog);
-  scrollbar-width: thin;
 }
 
-#search-modal-ui { padding: 0.5rem; }
+#search-modal::backdrop {
+  background: color-mix(in srgb, var(--background) 45%, transparent);
+  backdrop-filter: blur(6px);
+}
 
-/* Override Pagefind default styles to match our design system */
-#search-modal-ui .pagefind-ui__search-input {
+#search-ui { flex: 1; min-height: 0; overflow-y: auto; padding: 0.5rem; }
+
+.search-blank { padding: 2rem 1.5rem 2.5rem; text-align: center; }
+.search-blank__title { margin: 0; color: var(--foreground); font-size: 0.95rem; font-weight: 620; }
+.search-blank__body { margin: 0.35rem 0 0; color: var(--muted-foreground); font-size: 0.85rem; }
+
+.search-footer {
+  display: flex;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--border);
   background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+}
+
+.search-footer span { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+.search-footer kbd,
+.site-nav__search-key {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: var(--secondary);
+  font: 0.9em/1.5 var(--font-mono);
+}
+
+/* Pagefind's own UI, re-skinned onto the site's tokens. */
+#search-ui .pagefind-ui {
+  --pagefind-ui-primary: var(--foreground);
+  --pagefind-ui-text: var(--foreground);
+  --pagefind-ui-background: var(--popover);
+  --pagefind-ui-border: var(--border);
+  --pagefind-ui-tag: var(--secondary);
+  --pagefind-ui-border-width: 1px;
+  --pagefind-ui-border-radius: var(--radius-control);
+  --pagefind-ui-font: inherit;
+}
+
+#search-ui .pagefind-ui__search-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
+  background: var(--background);
   color: var(--foreground);
   font-size: 0.95rem;
 }
 
-#search-modal-ui .pagefind-ui__result-link { color: var(--brand); }
-#search-modal-ui .pagefind-ui__result-excerpt { color: var(--muted-foreground); }
-#search-modal-ui mark { background: color-mix(in srgb, var(--brand) 20%, transparent); color: var(--foreground); }
+#search-ui .pagefind-ui__search-clear { background: transparent; color: var(--muted-foreground); }
+#search-ui .pagefind-ui__result { border-top: 1px solid var(--border); }
+#search-ui .pagefind-ui__result-link { color: var(--foreground); font-weight: 560; }
+#search-ui .pagefind-ui__result-excerpt { color: var(--muted-foreground); font-size: 0.85rem; }
+#search-ui mark {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: var(--foreground);
+}

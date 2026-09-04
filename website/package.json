@@ -12,6 +12,7 @@
     "@astrojs/markdown-remark": "^7.3.0",
     "@astrojs/vue": "7.0.2",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@pagefind/default-ui": "^1.5.2",
     "@tailwindcss/vite": "^4.1.15",
     "astro": "7.3.1",
     "astro-pagefind": "^1.0.0",

@@ -1,4 +1,6 @@
 ---
+import DocSearch from './DocSearch.astro';
+
 export interface Props {
   lang?: 'en' | 'zh-CN';
   currentPath?: string;
@@ -113,15 +115,7 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
 
     <div class="site-nav__actions">
       <!-- Pagefind search -->
-      <div id="pagefind-search" class="site-nav__search">
-        <button id="search-btn" type="button" class="site-nav__search-btn" aria-label={isZh ? '搜索文档' : 'Search docs'}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <span class="site-nav__search-hint">{isZh ? '搜索' : 'Search'}</span>
-          <kbd class="site-nav__search-key">⌘K</kbd>
-        </button>
-      </div>
+      <DocSearch lang={lang} />
 
       <!-- GitHub star -->
       <a
@@ -235,62 +229,6 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
     updateIcon();
   });
 
-  // Pagefind search modal
-  (async () => {
-    const btn = document.getElementById('search-btn');
-    if (!btn) return;
-
-    let initialized = false;
-    let modalEl: HTMLElement | null = null;
-
-    async function openSearch() {
-      if (!initialized) {
-        try {
-          // Pagefind's bundle is written by its CLI after the Astro build, so
-          // the path cannot be resolved at build time. Keep it in a variable
-          // so the bundler leaves the import alone.
-          const pagefindUrl = `${import.meta.env.BASE_URL}pagefind/pagefind-ui.js`.replace(/\/+/g, '/');
-          const { PagefindUI } = await import(/* @vite-ignore */ pagefindUrl);
-          const wrap = document.createElement('div');
-          wrap.id = 'search-modal-overlay';
-          wrap.innerHTML = '<div id="search-modal-inner"><div id="search-modal-ui"></div></div>';
-          document.body.appendChild(wrap);
-          modalEl = wrap;
-
-          new PagefindUI({ element: '#search-modal-ui', showImages: false, resetStyles: false });
-
-          wrap.addEventListener('click', (e) => {
-            if (e.target === wrap) closeSearch();
-          });
-          document.addEventListener('keydown', onKey);
-          initialized = true;
-        } catch {
-          // Pagefind not available in dev mode
-          return;
-        }
-      }
-      if (modalEl) {
-        modalEl.style.display = 'flex';
-        setTimeout(() => modalEl?.querySelector<HTMLInputElement>('input')?.focus(), 50);
-      }
-    }
-
-    function closeSearch() {
-      if (modalEl) modalEl.style.display = 'none';
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { closeSearch(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        if (modalEl?.style.display === 'flex') closeSearch();
-        else openSearch();
-      }
-    }
-
-    btn.addEventListener('click', openSearch);
-    document.addEventListener('keydown', onKey);
-  })();
 
   // Mobile nav drawer
   const burger = document.getElementById('nav-burger');
