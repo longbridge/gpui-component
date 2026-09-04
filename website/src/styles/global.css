@@ -1143,12 +1143,12 @@ html[lang^="zh"] :is(
    Mobile: the docs shell (the bar styles itself in Nav.astro)
    ==================================================================== */
 
-@media (max-width: 767px) {
-  .site-nav__search-hint, .site-nav__search-key { display: none; }
-
-  /* One column: as a 280px sidebar beside the article, the prose would be
-     about 100px wide. */
-  .docs-layout { flex-direction: column; width: calc(100% - 2rem); }
+/* The published site folds its sidebar away below 960px, and for the same
+   reason: a 280px column beside the article leaves the prose near 560px at
+   900px wide, and narrower still below that. The bar keeps its own 767px
+   breakpoint — its links fit far longer than the sidebar does. */
+@media (max-width: 959px) {
+  .docs-layout { flex-direction: column; width: calc(100% - 3rem); }
 
   .docs-sidebar {
     position: static;
@@ -1162,6 +1162,12 @@ html[lang^="zh"] :is(
 
   .docs-main,
   .docs-main--full { padding: 1.75rem 0 3rem; }
+}
+
+@media (max-width: 767px) {
+  .site-nav__search-hint, .site-nav__search-key { display: none; }
+
+  .docs-layout { width: calc(100% - 2rem); }
 }
 
 /* ====================================================================

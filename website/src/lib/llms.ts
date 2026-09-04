@@ -52,6 +52,27 @@ function forPlainText(body: string, url: string): string {
     .trim();
 }
 
+/**
+ * Expands VitePress snippet imports (`<<< ../path.rs{rust}`) into fenced code,
+ * so the bundle carries the source a reader of the page would see rather than
+ * a path they cannot follow.
+ */
+function expandSnippets(body: string, fileDir: string): string {
+  return body.replace(/^<<<\s+(\S+?)(?:\{([^}]*)\})?[ \t]*$/gm, (whole, target: string, braces = '') => {
+    const [rel] = target.split('#');
+    const lang =
+      braces.trim().split(/\s+/).find((part) => /^[a-z][\w+-]*$/i.test(part)) ??
+      { rs: 'rust', ts: 'typescript', js: 'javascript', toml: 'toml' }[rel.split('.').pop()?.toLowerCase() ?? ''] ??
+      '';
+    try {
+      const source = readFileSync(join(fileDir, rel), 'utf-8').replace(/\s+$/, '');
+      return '```' + lang + '\n' + source + '\n```';
+    } catch {
+      return whole;
+    }
+  });
+}
+
 function scanDir(dir: string, baseDir: string, urlPrefix: string): PageEntry[] {
   const results: PageEntry[] = [];
   let entries: string[];
@@ -82,7 +103,7 @@ function scanDir(dir: string, baseDir: string, urlPrefix: string): PageEntry[] {
         .replace(/\.md$/, '')
         .replace(/index$/, '');
       const url = `${BASE_URL}/${urlPrefix}/${relPath}`.replace(/\/+/g, '/');
-      const body = bodyWithoutFrontmatter(content);
+      const body = expandSnippets(bodyWithoutFrontmatter(content), dir);
 
       try {
         results.push({ title, url, body });
