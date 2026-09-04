@@ -2039,6 +2039,80 @@ const ELEMENTS: &str = r#"
    */
   export function image(path: string): Element;
 
+  /** The visible items, as a half-open `[start, end)` interval. */
+  export interface ItemRange {
+    start: number;
+    end: number;
+  }
+
+  /**
+   * GPUI's own lazy list: rows of any height, measured as they are drawn.
+   *
+   * Where `v_virtual_list` places rows by the sizes the script states, `list`
+   * asks nothing about size. `render(index, cx)` is called for each item that
+   * is on screen, from inside layout as a virtual list's renderer is, and the
+   * element it returns is measured; the list keeps those measurements and
+   * estimates the rest, so a collection of panels that size to their own
+   * content scrolls as one and costs the script only what is visible. The
+   * rules of a virtual list's renderer apply unchanged: no handlers and no
+   * retained state inside it, and `cx.notify()` is refused there.
+   *
+   * The list scrolls itself and paints no scrollbar; pair one with it by name,
+   * as with a scroll area:
+   *
+   * ```js
+   * v_flex().relative().flex_1().min_h(0)
+   *   .child(list("panels", this.panels.length,
+   *     (index) => this.panels[index].id,
+   *     (index) => this.panel(this.panels[index])))
+   *   .child(Scrollbar.vertical("panels").absolute().inset_0());
+   * ```
+   *
+   * The measuring is what it costs: the host is entered once per visible item
+   * per frame, where `v_virtual_list` and `uniform_list` are entered once per
+   * frame however many rows are on screen. Reach for this when heights are
+   * genuinely unequal and unknown — a column of panels, a feed of mixed
+   * cards — and for a long run of same-height rows reach for one of the
+   * others.
+   *
+   * One consequence of the per-item call: `get_key`'s uniqueness is checked
+   * within a call, so a `list` cannot see that two items share a key, where
+   * the other two throw. A duplicate key there quietly gives both items one
+   * identity, and `on_item_click` reports it for either.
+   *
+   * @param id      Identity, and the name a `Scrollbar` pairs with.
+   * @param item_count How many items the collection has, visible or not.
+   * @param get_key An item's stable domain key, from its current index; the
+   *   row's element identity and what `on_item_click` reports.
+   * @param render  Called with one index; returns that item's element.
+   */
+  export function list(
+    id: string | number,
+    item_count: number,
+    get_key: (index: number) => string,
+    render: (index: number, cx: Context) => Element,
+  ): Element;
+
+  /**
+   * GPUI's own uniform list: one row is measured and every row takes its
+   * height.
+   *
+   * The same contract as `v_virtual_list` with a single size, without the
+   * size: the first row (or the one `with_item_to_measure_index` names) is
+   * measured and the rest are placed by it, so a row's height may come from
+   * its content rather than a number in the script. `render(range, cx)` is
+   * called with the visible interval and returns one element per item in it,
+   * so one frame is one call however many rows are on screen — the same
+   * bargain `v_virtual_list` makes, and the reason to prefer this over `list`
+   * whenever the rows really are the same height.
+   */
+  export function uniform_list(
+    id: string | number,
+    item_count: number,
+    get_key: (index: number) => string,
+    render: (range: ItemRange, cx: Context) => Element[],
+  ): Element;
+
   /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
   export interface Path {}
   export interface PathBuilder {
@@ -2789,10 +2863,7 @@ const BASE: &str = r#"  /** A row. */
   };
 
   /** The visible items, as a half-open `[start, end)` interval. */
-  export interface ItemRange {
-    start: number;
-    end: number;
-  }
+  export type ItemRange = import("gpui-kit").ItemRange;
 
   /**
    * A list that describes only what is on screen.
