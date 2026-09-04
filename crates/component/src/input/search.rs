@@ -127,8 +127,8 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.session.open = true;
-        self.session.replace_mode = replace_mode;
+        self.session.set_open(true);
+        self.session.set_replace_mode(replace_mode);
         if focus {
             self.search_input
                 .update(cx, |input, cx| input.focus(window, cx));
@@ -158,14 +158,14 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
         let query = self.search_input.read(cx).value();
         let editor = self.editor.clone();
         let _ = editor.update(cx, |state, cx| {
-            state.set_search_query(query.clone(), self.session.case_insensitive, cx);
+            state.set_search_query(query.clone(), self.session.is_case_insensitive(), cx);
         });
         if let Ok(session) = editor.read_with(cx, |state, _| state.search_session().clone()) {
             self.session = session;
         }
         if let Some(visible_range_offset) = visible_range_offset {
             self.session
-                .matcher
+                .matcher_mut()
                 .update_cursor_by_offset(visible_range_offset.start);
         }
         cx.notify();
@@ -187,7 +187,7 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.session.open = false;
+        self.session.set_open(false);
         let _ = self.editor.update(cx, |state, cx| {
             state.close_search(cx);
             if focus_editor {
@@ -227,7 +227,7 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
     ///
     /// There are only 2 inputs, so the forward and the backward are the same.
     fn cycle_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.session.replace_mode || !self.replaceable(cx) {
+        if !self.session.is_replace_mode() || !self.replaceable(cx) {
             return;
         }
 
@@ -250,12 +250,12 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
             return;
         }
 
-        self.session.replace_mode = !self.session.replace_mode;
-        let replace_mode = self.session.replace_mode;
+        let replace_mode = !self.session.is_replace_mode();
+        self.session.set_replace_mode(replace_mode);
         let _ = self.editor.update(cx, |state, cx| {
             state.set_search_replace_mode(replace_mode, cx);
         });
-        let focus_handle = if self.session.replace_mode {
+        let focus_handle = if replace_mode {
             self.replace_input.read(cx).focus_handle(cx)
         } else {
             self.search_input.read(cx).focus_handle(cx)
@@ -278,7 +278,7 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
 
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.replaceable(cx) {
-            self.session.replace_mode = false;
+            self.session.set_replace_mode(false);
             cx.notify();
             return;
         }
@@ -291,7 +291,7 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
 
     fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.replaceable(cx) {
-            self.session.replace_mode = false;
+            self.session.set_replace_mode(false);
             cx.notify();
             return;
         }
@@ -311,14 +311,14 @@ impl<M: crate::input::overlay::OverlayMode> Focusable for SearchPanel<M> {
 
 impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.session.open {
+        if !self.session.is_open() {
             return Empty.into_any_element();
         }
 
-        let has_matches = !self.session.matcher.is_empty();
+        let has_matches = !self.session.matcher().is_empty();
         let allow_replace = self.replaceable(cx);
         if !allow_replace {
-            self.session.replace_mode = false;
+            self.session.set_replace_mode(false);
         }
 
         v_flex()
@@ -355,15 +355,16 @@ impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
                                     .focus_bordered(false)
                                     .suffix(
                                         Button::new("case-insensitive")
-                                            .selected(!self.session.case_insensitive)
-                                            .toggled(!self.session.case_insensitive)
+                                            .selected(!self.session.is_case_insensitive())
+                                            .toggled(!self.session.is_case_insensitive())
                                             .xsmall()
                                             .compact()
                                             .text()
                                             .icon(IconName::CaseSensitive)
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                this.session.case_insensitive =
-                                                    !this.session.case_insensitive;
+                                                let insensitive =
+                                                    !this.session.is_case_insensitive();
+                                                this.session.set_case_insensitive(insensitive);
                                                 this.update_search_query(None, cx);
                                                 cx.notify();
                                             })),
@@ -385,8 +386,8 @@ impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
                                 .xsmall()
                                 .ghost()
                                 .icon(IconName::Replace)
-                                .selected(self.session.replace_mode)
-                                .toggled(self.session.replace_mode)
+                                .selected(self.session.is_replace_mode())
+                                .toggled(self.session.is_replace_mode())
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.toggle_replace_mode(window, cx);
                                 })),
@@ -413,7 +414,7 @@ impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
                             })),
                     )
                     .child(
-                        Label::new(self.session.matcher.label())
+                        Label::new(self.session.matcher().label())
                             .when(!has_matches, |this| {
                                 this.text_color(cx.theme().muted_foreground)
                             })
@@ -431,7 +432,7 @@ impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
                             })),
                     ),
             )
-            .when(self.session.replace_mode && allow_replace, |this| {
+            .when(self.session.is_replace_mode() && allow_replace, |this| {
                 this.child(
                     h_flex()
                         .w_full()

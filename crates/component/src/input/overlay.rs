@@ -312,8 +312,8 @@ impl<M: OverlayMode> InputOverlayHost<M> {
             let state = state.read(cx);
             let search = state.search_session();
             (
-                search.open,
-                search.replace_mode,
+                search.is_open(),
+                search.is_replace_mode(),
                 state.search_activation_revision(),
                 search.clone(),
             )
@@ -325,8 +325,8 @@ impl<M: OverlayMode> InputOverlayHost<M> {
         let search_signature = SearchSignature {
             open: search_open,
             replace_mode,
-            query: search_session.query.clone(),
-            anchor_offset: search_session.anchor_offset,
+            query: search_session.query().to_owned(),
+            anchor_offset: search_session.anchor_offset(),
             activation_revision,
         };
         if search_signature != self.search_signature {
@@ -341,13 +341,13 @@ impl<M: OverlayMode> InputOverlayHost<M> {
                 && was.replace_mode == search_signature.replace_mode
                 && was.anchor_offset == search_signature.anchor_offset
                 && was.activation_revision == search_signature.activation_revision
-                && self.search.read(cx).query(cx) == search_session.query;
+                && self.search.read(cx).query(cx) == search_session.query();
             self.search_signature = search_signature;
             if !query_echo {
                 self.search.update(cx, |panel, cx| {
                     if search_open {
-                        let selected = Rope::from(search_session.query.clone());
-                        let visible = search_session.anchor_offset.map(|offset| offset..offset);
+                        let selected = Rope::from(search_session.query());
+                        let visible = search_session.anchor_offset().map(|offset| offset..offset);
                         panel.show_with_focus(
                             &selected,
                             replace_mode,
@@ -395,7 +395,7 @@ pub(super) fn render_overlays<M: OverlayMode>(
     M::install_action_handler(state, cx);
     let has_overlay = {
         let state = state.read(cx);
-        state.search_session().open
+        state.search_session().is_open()
             || M::lsp_snapshot(state, cx).is_some_and(|lsp| lsp.has_overlay())
     };
     if !has_overlay {
@@ -583,8 +583,8 @@ mod tests {
                 state.set_value("foo bar foo", window, cx);
                 state.set_selected_range(4..7, cx);
                 state.open_search(true, cx);
-                assert_eq!(state.search_session().query, "bar");
-                assert!(state.search_session().replace_mode);
+                assert_eq!(state.search_session().query(), "bar");
+                assert!(state.search_session().is_replace_mode());
                 state.present_completion_items(
                     0,
                     "f",

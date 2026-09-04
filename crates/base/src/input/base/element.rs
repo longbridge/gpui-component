@@ -774,11 +774,11 @@ impl<M: InputModeKind> TextElement<M> {
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
         let state = self.state.read(cx);
-        if !state.search_session.open {
+        if !state.search_session.is_open() {
             return vec![];
         }
-        let ranges = state.search_session.matcher.matched_ranges();
-        let current_match_ix = state.search_session.matcher.current_match_index();
+        let ranges = state.search_session.matcher().matched_ranges();
+        let current_match_ix = state.search_session.matcher().current_match_index();
 
         let mut paths = Vec::with_capacity(ranges.as_ref().len());
         for (index, range) in ranges.as_ref().iter().enumerate() {

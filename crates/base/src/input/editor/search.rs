@@ -16,15 +16,19 @@ pub struct SearchMatcher {
     replacing: bool,
 }
 
+/// The state of one search session, as the presentation layer reads it.
+///
+/// The fields are private and reached through the methods below, so that a new
+/// one can be added without breaking every caller that names the others.
 #[derive(Debug, Clone)]
 pub struct SearchSession {
-    pub open: bool,
-    pub replace_mode: bool,
-    pub case_insensitive: bool,
-    pub query: String,
-    pub replacement: String,
-    pub anchor_offset: Option<usize>,
-    pub matcher: SearchMatcher,
+    open: bool,
+    replace_mode: bool,
+    case_insensitive: bool,
+    query: String,
+    replacement: String,
+    anchor_offset: Option<usize>,
+    matcher: SearchMatcher,
 }
 
 impl Default for SearchSession {
@@ -42,12 +46,66 @@ impl Default for SearchSession {
 }
 
 impl SearchSession {
-    pub(crate) fn open(&mut self, replace_mode: bool, replaceable: bool) {
+    /// Whether the search panel is showing.
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// Whether the replace field is showing alongside the search field.
+    pub fn is_replace_mode(&self) -> bool {
+        self.replace_mode
+    }
+
+    /// Whether the query matches without regard to case.
+    pub fn is_case_insensitive(&self) -> bool {
+        self.case_insensitive
+    }
+
+    /// The text being searched for.
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// The text the matches are replaced with.
+    pub fn replacement(&self) -> &str {
+        &self.replacement
+    }
+
+    /// Where the viewport started when search opened, used to pick the match
+    /// nearest to what the user was looking at.
+    pub fn anchor_offset(&self) -> Option<usize> {
+        self.anchor_offset
+    }
+
+    /// The engine holding the matches for the current query.
+    pub fn matcher(&self) -> &SearchMatcher {
+        &self.matcher
+    }
+
+    /// The match engine, to move its cursor.
+    pub fn matcher_mut(&mut self) -> &mut SearchMatcher {
+        &mut self.matcher
+    }
+
+    pub fn set_open(&mut self, open: bool) {
+        self.open = open;
+    }
+
+    pub fn set_replace_mode(&mut self, replace_mode: bool) {
+        self.replace_mode = replace_mode;
+    }
+
+    pub fn set_case_insensitive(&mut self, case_insensitive: bool) {
+        self.case_insensitive = case_insensitive;
+    }
+
+    /// Start a session, or restart one that is already showing.
+    pub(crate) fn activate(&mut self, replace_mode: bool, replaceable: bool) {
         self.open = true;
         self.replace_mode = replace_mode && replaceable;
     }
 
-    pub(crate) fn close(&mut self) {
+    pub(crate) fn deactivate(&mut self) {
         self.open = false;
     }
 
@@ -74,7 +132,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
         self.search_activation_revision = self.search_activation_revision.wrapping_add(1);
         self.search_session
-            .open(replace_mode, self.is_replaceable());
+            .activate(replace_mode, self.is_replaceable());
         let selected = self.selected_text().to_string();
         if !selected.is_empty() {
             self.search_session.query = selected;
@@ -134,7 +192,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn close_search(&mut self, cx: &mut Context<Self>) {
-        self.search_session.close();
+        self.search_session.deactivate();
         cx.notify();
     }
 

@@ -1002,7 +1002,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         self.readonly = readonly;
         if readonly {
-            self.search_session.replace_mode = false;
+            self.search_session.set_replace_mode(false);
         }
         cx.notify();
     }
