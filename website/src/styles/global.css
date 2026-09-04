@@ -948,11 +948,17 @@ html.dark .astro-code span {
 
 .toc::-webkit-scrollbar { display: none; }
 
+/* This names the column, so it takes the foreground while the entries under it
+   stay muted — the two levels separate by contrast rather than by a rule or a
+   heavier weight. The hairline aligns it with the section rules in the article
+   beside it. */
 .toc__label {
-  margin: 0 0 0.6rem;
-  color: var(--muted-foreground);
-  font: 620 0.66rem/1 var(--font-mono);
-  letter-spacing: 0.11em;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  font: 620 0.7rem/1 var(--font-mono);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
