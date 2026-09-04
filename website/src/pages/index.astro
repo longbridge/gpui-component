@@ -1,5 +1,7 @@
 ---
 import HomeLayout from '../layouts/HomeLayout.astro';
+import Nav from '../components/Nav.astro';
+import SiteFooter from '../components/SiteFooter.astro';
 import { fetchStarCount } from '../lib/github';
 
 let starCount = 0;
@@ -13,8 +15,13 @@ const base = import.meta.env.BASE_URL;
   title="GPUI Kit"
   description="A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI."
 >
-  <!-- The home page is a standalone Vue island that contains all its own styling -->
+  <Nav lang="en" currentPath={Astro.url.pathname} starCount={starCount} />
+
+  <!-- The bands below are a Vue island; the bar and footer around them are
+       the same components every content page uses. -->
   <div id="home-root" data-star-count={starCount} data-base={base} data-lang="en"></div>
+
+  <SiteFooter lang="en" />
 </HomeLayout>
 
 <script>

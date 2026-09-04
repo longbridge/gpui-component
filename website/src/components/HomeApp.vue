@@ -2,27 +2,14 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import {
     ArrowRight,
-    ChevronDown,
     Blocks,
     Braces,
     Check,
     Copy,
-    Gauge,
-    Github,
-    Menu,
     Layers3,
-    LayoutDashboard,
-    List,
     Monitor,
-    Moon,
-    Palette,
     Scale,
-    Search,
-    SquareCode,
     Star,
-    Sun,
-    Table2,
-    X,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -30,21 +17,6 @@ const props = defineProps<{
     base: string;
     lang: 'en' | 'zh-CN';
 }>();
-
-const isDark = ref(document.documentElement.classList.contains('dark'));
-const menuOpen = ref(false);
-
-// Watch for class changes
-const observer = new MutationObserver(() => {
-    isDark.value = document.documentElement.classList.contains('dark');
-});
-observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-onBeforeUnmount(() => observer.disconnect());
-
-function toggleTheme() {
-    const dark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
-}
 
 const isZh = computed(() => props.lang === 'zh-CN');
 const localePrefix = computed(() => isZh.value ? 'zh-CN' : '');
@@ -57,10 +29,6 @@ function url(path: string) {
 const stars = props.starCount;
 const starLabel = stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : `${stars}`;
 
-const logoHref = computed(() => url('logo.svg'));
-const darkLogoHref = computed(() => url('logo-dark.svg'));
-const homeHref = computed(() => isZh.value ? url('zh-CN/') : url(''));
-const languageHref = computed(() => isZh.value ? url('') : url('zh-CN/'));
 const gettingStartedHref = computed(() => isZh.value ? url('zh-CN/docs/getting-started') : url('docs/getting-started'));
 const componentsHref = computed(() => isZh.value ? url('zh-CN/docs/components') : url('docs/components'));
 const baseHref = computed(() => url('base'));
@@ -68,26 +36,6 @@ const shellHref = computed(() => isZh.value ? url('zh-CN/shell') : url('shell'))
 const contributorsHref = computed(() => isZh.value ? url('zh-CN/contributors') : url('contributors'));
 const skillsHref = computed(() => isZh.value ? url('zh-CN/skills') : url('skills'));
 const llmsHref = computed(() => url('llms-full.txt'));
-
-const navItems = computed(() => {
-    const prefix = isZh.value ? 'zh-CN' : '';
-    return [
-        { text: isZh.value ? '组件' : 'Components', link: isZh.value ? url('zh-CN/docs/components') : url('docs/components'), external: false },
-        { text: 'Shell', link: isZh.value ? url('zh-CN/shell') : url('shell'), external: false },
-        { text: 'Base', link: url('base'), external: false },
-        { text: isZh.value ? '应用案例' : 'App Stories', link: isZh.value ? url('zh-CN/apps') : url('apps'), external: false },
-        {
-            text: isZh.value ? '资源' : 'Resources',
-            items: [
-                { text: 'API Doc', href: 'https://docs.rs/gpui-component', external: true },
-                { text: isZh.value ? '贡献者' : 'Contributors', href: contributorsHref.value, external: false },
-                { text: isZh.value ? '版本发布' : 'Releases', href: 'https://github.com/longbridge/gpui-kit/releases', external: true },
-                { text: 'Issues', href: 'https://github.com/longbridge/gpui-kit/issues', external: true },
-                { text: isZh.value ? '讨论' : 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions', external: true },
-            ],
-        },
-    ];
-});
 
 // Indent depth and token widths (rem) per line
 const editorLines = [
@@ -136,9 +84,6 @@ onBeforeUnmount(() => clearTimeout(copyTimer));
 const copy = computed(() =>
     isZh.value
         ? {
-              searchShort: "搜索",
-              themeNav: "切换主题",
-              menuNav: "打开菜单",
               copyLabel: "复制安装命令",
               eyebrow: "经过 Longbridge 生产验证",
               title: "构建出色的高性能桌面应用。",
@@ -191,9 +136,6 @@ const copy = computed(() =>
               period: "。",
           }
         : {
-              searchShort: "Search",
-              themeNav: "Toggle color theme",
-              menuNav: "Open menu",
               copyLabel: "Copy install command",
               eyebrow: "Proven in production at Longbridge.",
               title: "Build fantastic, high-performance desktop apps.",
@@ -250,93 +192,6 @@ const copy = computed(() =>
 </script>
 
 <template>
-    <header class="home-nav shadow-sm">
-        <div class="home-nav__inner">
-            <a :href="homeHref" class="home-brand">
-                <img :src="isDark ? darkLogoHref : logoHref" alt="" />
-                <span>GPUI Kit</span>
-            </a>
-            <nav aria-label="Primary navigation">
-                <template v-for="item in navItems" :key="item.text">
-                    <a
-                        v-if="item.link"
-                        :href="item.link"
-                        :target="item.external ? '_blank' : undefined"
-                    >{{ item.text }}</a>
-                    <span v-else class="home-nav__group">
-                        <button type="button">
-                            {{ item.text }} <ChevronDown :size="12" />
-                        </button>
-                        <span class="home-nav__menu">
-                            <a
-                                v-for="child in item.items"
-                                :key="child.text"
-                                :href="child.href"
-                                :target="child.external ? '_blank' : undefined"
-                            >{{ child.text }}</a>
-                        </span>
-                    </span>
-                </template>
-            </nav>
-            <div class="home-nav__actions">
-                <a :href="componentsHref" class="home-nav__search">
-                    <Search :size="14" />
-                    <span>{{ copy.searchShort }}</span>
-                </a>
-                <a
-                    href="https://github.com/longbridge/gpui-kit"
-                    target="_blank"
-                    class="home-nav__github"
-                    :title="`${stars} stars on GitHub`"
-                >
-                    <Github :size="15" /> <span>{{ starLabel }}</span>
-                </a>
-                <span class="home-nav__rule home-nav__rule--tight" aria-hidden="true"></span>
-                <a :href="languageHref" class="home-nav__icon home-nav__icon--text">
-                    {{ isZh ? "EN" : "中" }}
-                </a>
-                <button
-                    class="home-nav__icon"
-                    :aria-label="copy.themeNav"
-                    @click="toggleTheme"
-                >
-                    <Sun v-if="isDark" :size="15" />
-                    <Moon v-else :size="15" />
-                </button>
-                <button
-                    class="home-nav__icon home-nav__burger"
-                    :aria-label="copy.menuNav"
-                    :aria-expanded="menuOpen"
-                    @click="menuOpen = !menuOpen"
-                >
-                    <X v-if="menuOpen" :size="15" />
-                    <Menu v-else :size="15" />
-                </button>
-            </div>
-        </div>
-
-        <div v-if="menuOpen" class="home-nav__drawer">
-            <template v-for="item in navItems" :key="item.text">
-                <a
-                    v-if="item.link"
-                    :href="item.link"
-                    :target="item.external ? '_blank' : undefined"
-                    @click="menuOpen = false"
-                >{{ item.text }}</a>
-                <template v-else>
-                    <span class="home-nav__drawer-label">{{ item.text }}</span>
-                    <a
-                        v-for="child in item.items"
-                        :key="child.text"
-                        :href="child.href"
-                        :target="child.external ? '_blank' : undefined"
-                        class="is-child"
-                        @click="menuOpen = false"
-                    >{{ child.text }}</a>
-                </template>
-            </template>
-        </div>
-    </header>
 
     <main class="home">
         <section class="hero">
@@ -523,36 +378,6 @@ const copy = computed(() =>
         </section>
     </main>
 
-    <footer class="home-footer">
-        <div class="home-footer__brand">
-            <strong>GPUI Kit</strong>
-            <p>
-                {{ copy.footerPrefix }}
-                <a href="https://longbridge.com" target="_blank">Longbridge</a
-                >{{ copy.footerSuffix }}
-            </p>
-            <!-- The one place the landing page names GPUI's origin. -->
-            <p>
-                {{ copy.footerBuiltOn }}
-                <a href="https://github.com/zed-industries/zed" target="_blank"
-                    >GPUI</a
-                >{{ copy.footerAttribution }}
-            </p>
-        </div>
-        <nav :aria-label="copy.footerNav">
-            <a :href="contributorsHref">{{ copy.contributors }}</a>
-            <a :href="skillsHref" target="_blank">Skills</a>
-            <a :href="llmsHref" target="_blank">llms-full.txt</a>
-            <a href="https://github.com/longbridge/gpui-kit/issues" target="_blank">{{ copy.reportBug }}</a>
-            <a href="https://github.com/longbridge/gpui-kit/discussions" target="_blank">{{ copy.discussion }}</a>
-        </nav>
-        <p class="home-footer__credits">
-            {{ copy.iconCredits }}
-            <a href="https://lucide.dev" target="_blank">Lucide</a>
-            {{ copy.and }}
-            <a href="https://isocons.app" target="_blank">Isocons</a>{{ copy.period }}
-        </p>
-    </footer>
 </template>
 
 <style>
@@ -580,188 +405,31 @@ const copy = computed(() =>
 
 .band--principle { overflow: hidden; background: var(--sidebar); }
 
-.home-nav {
-    position: sticky;
-    z-index: 50;
-    top: 0;
-    height: 3.5rem;
-    background: color-mix(in srgb, var(--background) 80%, transparent);
-    backdrop-filter: blur(18px) saturate(160%);
-    box-shadow: var(--shadow-raise);
-}
 
-.home-nav__inner {
-    display: flex;
-    align-items: center;
-    gap: 1.9rem;
-    width: min(100% - 3rem, var(--page, 1280px));
-    height: 100%;
-    margin-inline: auto;
-}
 
-.home-nav__rule { display: block; flex-shrink: 0; width: 1px; height: 1.1rem; background: var(--border); }
-.home-nav__rule--tight { margin-inline: 0.15rem; }
 
-.home-brand {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.55rem;
-    color: var(--foreground) !important;
-    font-size: 0.875rem;
-    font-weight: 620;
-    letter-spacing: -0.022em;
-    text-decoration: none !important;
-}
 
-.home-brand img { width: 1.35rem; height: 1.4rem; }
 
-.home-nav nav {
-    display: flex;
-    align-items: center;
-    gap: 0.1rem;
-}
 
-.home-nav nav a {
-    display: inline-flex;
-    align-items: center;
-    height: 2rem;
-    padding: 0 0.6rem;
-    border-radius: var(--radius-control);
-    color: var(--foreground);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: color 140ms ease, background 140ms ease;
-}
 
-.home-nav nav a:hover { background: var(--secondary); }
 
-.home-nav__group {
-    position: relative;
-}
 
-.home-nav__group > button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    height: 2rem;
-    padding: 0 0.6rem;
-    border-radius: var(--radius-control);
-    color: var(--foreground);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 140ms ease;
-}
 
-.home-nav__group:hover > button { background: var(--secondary); }
 
-.home-nav__menu {
-    position: absolute;
-    top: calc(100% + 0.4rem);
-    left: 0;
-    display: grid;
-    min-width: 11rem;
-    padding: 0.25rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    background: var(--popover);
-    box-shadow: var(--shadow-panel);
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 140ms ease, visibility 140ms ease;
-}
 
-.home-nav__menu a { height: auto; padding: 0.4rem 0.55rem; font-weight: 450; white-space: nowrap; }
-.home-nav__group:hover .home-nav__menu { opacity: 1; visibility: visible; }
 
-.home-nav__actions {
-    display: flex;
-    align-items: center;
-    margin-left: auto;
-    gap: 0.3rem;
-}
 
-.home-nav__search {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    height: 2rem;
-    min-width: 8rem;
-    padding: 0 0.35rem 0 0.6rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    background: var(--background);
-    color: var(--muted-foreground) !important;
-    font-size: 0.8125rem;
-    text-decoration: none !important;
-    transition: border-color 140ms ease;
-}
 
-.home-nav__search:hover { border-color: color-mix(in srgb, var(--foreground) 22%, var(--border)); }
 
-.home-nav__github,
-.home-nav__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 2rem;
-    border-radius: var(--radius-control);
-    color: var(--foreground) !important;
-    text-decoration: none !important;
-    transition: background 140ms ease;
-}
 
-.home-nav__github:hover, .home-nav__icon:hover { background: var(--secondary); }
 
-.home-nav__github {
-    gap: 0.4rem;
-    padding: 0 0.55rem;
-    font-size: 0.8125rem;
-    font-weight: 560;
-    font-variant-numeric: tabular-nums;
-}
 
-.home-nav__icon {
-    width: 2rem;
-    cursor: pointer;
-}
 
-.home-nav__burger { display: none; }
 
-.home-nav__drawer {
-    display: grid;
-    gap: 0.15rem;
-    padding: 0.5rem 0 0.85rem;
-    border-top: 1px solid var(--border);
-    background: var(--background);
-}
 
-.home-nav__drawer a {
-    padding: 0.6rem 0;
-    color: var(--foreground);
-    font-size: 0.95rem;
-    font-weight: 520;
-    text-decoration: none;
-}
 
-.home-nav__drawer a.is-child {
-    padding-left: 0.85rem;
-    color: var(--muted-foreground);
-    font-size: 0.88rem;
-    font-weight: 450;
-}
 
-.home-nav__drawer-label {
-    padding: 0.85rem 0 0.25rem;
-    color: var(--muted-foreground);
-    font: 620 0.66rem/1 var(--font-mono);
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-}
 
-.home-nav__icon--text { font-size: 0.78rem; font-weight: 560; }
 
 .btn {
     display: inline-flex;
@@ -1159,33 +827,10 @@ html[lang^="zh"] .section-kicker { letter-spacing: 0.04em; }
 
 .principle > *:not(.principle__grid) { position: relative; }
 
-.home-footer {
-    display: grid;
-    grid-template-columns: minmax(16rem, 1fr) minmax(22rem, auto);
-    gap: 2rem 4rem;
-    width: min(100% - 3rem, var(--page, 1280px));
-    margin: clamp(4.5rem, 8vw, 7rem) auto 0;
-    padding: 2.5rem 0;
-    border-top: 1px solid var(--border);
-    color: var(--muted-foreground);
-    font-size: 0.75rem;
-}
 
-.home-footer strong { color: var(--foreground); font-size: 0.82rem; }
-.home-footer__brand p { max-width: 32rem; margin: 0.55rem 0 0; line-height: 1.6; }
 
-.home-footer nav {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-content: start;
-    gap: 0.5rem 1.25rem;
-}
 
-.home-footer a { color: var(--muted-foreground); text-decoration: none; }
-.home-footer a:hover { color: var(--brand); }
 
-.home-footer__credits { grid-column: 1 / -1; margin: 0; padding-top: 1.25rem; border-top: 1px solid var(--border); }
 
 @media (max-width: 1080px) {
     .hero__inner { grid-template-columns: minmax(0, 1fr); }
@@ -1201,20 +846,8 @@ html[lang^="zh"] .section-kicker { letter-spacing: 0.04em; }
 }
 
 @media (max-width: 640px) {
-    .home-nav__inner { grid-template-columns: 1fr auto; width: calc(100% - 2rem); }
-    .home-nav nav { display: none; }
-    .home-nav__burger { display: inline-flex; }
-    .home-nav { height: auto; }
-    .home-nav__inner { height: 3.5rem; }
-    .home-nav__drawer { width: calc(100% - 2rem); margin-inline: auto; }
-    .home-nav__search span, .home-nav__github span { display: none; }
-    .home-nav__search, .home-nav__github { width: 2rem; min-width: auto; padding: 0; }
-    .home-nav__search { border-color: transparent; background: transparent; }
-    .home-nav__search:hover { border-color: transparent; background: var(--secondary); }
-    .hero__inner, .band__inner, .home-footer { width: calc(100% - 2rem); }
+    .hero__inner, .band__inner { width: calc(100% - 2rem); }
     .caps__grid { grid-template-columns: 1fr; }
-    .home-footer { grid-template-columns: 1fr; }
-    .home-footer nav { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

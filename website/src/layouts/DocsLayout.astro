@@ -2,6 +2,7 @@
 import BaseLayout from './BaseLayout.astro';
 import Nav from '../components/Nav.astro';
 import Sidebar from '../components/Sidebar.astro';
+import SiteFooter from '../components/SiteFooter.astro';
 import type { SidebarItem } from '../lib/sidebar';
 import { fetchStarCount } from '../lib/github';
 import { SITE_URL } from '../lib/site';
@@ -27,37 +28,6 @@ try {
 } catch {}
 
 const isZh = lang === 'zh-CN';
-const footerLinks = isZh
-  ? [
-      { text: '设计指南', href: `${base}zh-CN/docs/design-guides` },
-      { text: '编码指南', href: `${base}zh-CN/docs/coding-guides` },
-      { text: '应用案例', href: `${base}zh-CN/apps` },
-      { text: '贡献者', href: `${base}zh-CN/contributors` },
-      { text: 'Skills', href: `${base}zh-CN/skills` },
-      { text: 'llms-full.txt', href: `${base}llms-full.txt` },
-      { text: '报告问题', href: 'https://github.com/longbridge/gpui-kit/issues' },
-      { text: '讨论', href: 'https://github.com/longbridge/gpui-kit/discussions' },
-    ]
-  : [
-      { text: 'Design Guides', href: `${base}docs/design-guides` },
-      { text: 'Coding Guides', href: `${base}docs/coding-guides` },
-      { text: 'App Stories', href: `${base}apps` },
-      { text: 'Contributors', href: `${base}contributors` },
-      { text: 'Skills', href: `${base}skills` },
-      { text: 'llms-full.txt', href: `${base}llms-full.txt` },
-      { text: 'Report Bug', href: 'https://github.com/longbridge/gpui-kit/issues' },
-      { text: 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions' },
-    ];
-
-// The footer is the one place the site states GPUI's origin, in one plain
-// line. Everywhere else the product is GPUI Kit. See DESIGN.md, "Attribution".
-const footerMessage = isZh
-  ? 'GPUI Kit 是一个基于 Apache-2.0 许可证的开源项目，由 <a href="https://longbridge.com" target="_blank">Longbridge</a> 开发，基于 Zed Industries 的 <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> 构建。'
-  : 'GPUI Kit is an open source project under the Apache-2.0 License, developed by <a href="https://longbridge.com" target="_blank">Longbridge</a> and built on <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> from Zed Industries.';
-
-const iconCredits = isZh
-  ? { prefix: '图标资源来自', and: '与', period: '。' }
-  : { prefix: 'Icons by', and: 'and', period: '.' };
 ---
 
 <BaseLayout title={title} description={description} lang={isZh ? 'zh-CN' : 'en'} canonical={canonical}>
@@ -70,30 +40,12 @@ const iconCredits = isZh
       <article class="doc-content" data-pagefind-body>
         <slot />
       </article>
-
-      <footer class="site-footer" style="margin-top: 4rem">
-        <nav aria-label="Footer">
-          {footerLinks.map((link, i) => (
-            <>
-              {i > 0 && <span aria-hidden="true"> | </span>}
-              <a
-                href={link.href}
-                target={link.href.startsWith('http') ? '_blank' : undefined}
-                rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              >
-                {link.text}
-              </a>
-            </>
-          ))}
-        </nav>
-        <p style="margin-top: 0.75rem" set:html={footerMessage} />
-        <p style="margin-top: 0.5rem; font-size: 0.72rem">
-          {iconCredits.prefix} <a href="https://lucide.dev" target="_blank">Lucide</a>
-          {iconCredits.and} <a href="https://isocons.app" target="_blank">Isocons</a>{iconCredits.period}
-        </p>
-      </footer>
     </main>
   </div>
+
+  <!-- Page-level, so it spans the shared content box rather than the
+       article's reading measure. -->
+  <SiteFooter lang={lang} />
 </BaseLayout>
 
 <style is:global>

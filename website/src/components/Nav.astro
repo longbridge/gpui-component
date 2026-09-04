@@ -51,11 +51,23 @@ const resourceLinks = isZh
       { text: 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions' },
     ];
 
-const baseSlash = `${base}/`.replace(/\/+/g, '/');
-const zhBase = `${base}/zh-CN/`.replace(/\/+/g, '/');
-const langSwitchHref =
-  langSwitchOverride ??
-  (isZh ? currentPath.replace(zhBase, baseSlash) : currentPath.replace(baseSlash, zhBase));
+// Swap the locale segment rather than substituting substrings: the site is
+// `trailingSlash: 'never'`, so the two roots are `/` and `/zh-CN` with no
+// trailing slash, and a plain replace either leaves one behind or fails to
+// match the bare `/zh-CN` root at all.
+const siteRoot = base.replace(/\/+$/, '');
+const zhRoot = `${siteRoot}/zh-CN`;
+
+function swapLocale(path: string) {
+  if (isZh) {
+    const rest = path.startsWith(zhRoot) ? path.slice(zhRoot.length) : path;
+    return rest || siteRoot || '/';
+  }
+  const rest = path.startsWith(siteRoot) ? path.slice(siteRoot.length) : path;
+  return `${zhRoot}${rest === '/' ? '' : rest}`;
+}
+
+const langSwitchHref = langSwitchOverride ?? swapLocale(currentPath);
 const langLabel = isZh ? 'EN' : '中';
 const resourcesLabel = isZh ? '资源' : 'Resources';
 ---

@@ -104,7 +104,7 @@ html.dark .alignment-dark { display: block; }
   /* Layout */
   --nav-height: 56px;
   --sidebar-width: 280px;
-  --layout-max-width: 1520px;
+  --layout-max-width: 1280px;
 }
 
 .dark {
@@ -510,7 +510,6 @@ html.dark .astro-code span {
   > h1:first-child + h2 { margin-top: 2.5rem; }
 
   a {
-    font-weight: 520;
     text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
     text-decoration-thickness: 1px;
     text-underline-offset: 0.18em;
@@ -637,10 +636,9 @@ html.dark .astro-code span {
 .site-nav__inner {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 1.9rem;
+  width: min(100% - 3rem, var(--layout-max-width));
   height: 100%;
-  padding: 0 1.5rem;
-  max-width: var(--layout-max-width);
   margin-inline: auto;
 }
 
@@ -648,7 +646,7 @@ html.dark .astro-code span {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  margin-right: auto;
+  flex-shrink: 0;
   color: var(--foreground) !important;
   font-size: 0.875rem;
   font-weight: 620;
@@ -662,8 +660,6 @@ html.dark .astro-code span {
   display: flex;
   align-items: center;
   gap: 0.1rem;
-  margin-right: auto;
-  padding-left: 0.25rem;
 }
 
 .site-nav__link {
@@ -685,6 +681,7 @@ html.dark .astro-code span {
 .site-nav__actions {
   display: flex;
   align-items: center;
+  margin-left: auto;
   gap: 0.3rem;
 }
 
@@ -815,6 +812,8 @@ html.dark .astro-code span {
 .docs-layout {
   display: flex;
   min-height: calc(100vh - var(--nav-height));
+  width: min(100% - 3rem, var(--layout-max-width));
+  margin-inline: auto;
 }
 
 .docs-main {
@@ -826,27 +825,53 @@ html.dark .astro-code span {
 
 .docs-main--full {
   max-width: 100%;
-  padding: 3rem 3rem 4rem;
+  padding: 3rem 0 4rem;
 }
 
 /* ====================================================================
-   Footer (docs)
+   Footer (shared by the landing page and every content page)
    ==================================================================== */
 
 .site-footer {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(22rem, auto);
+  gap: 2rem 4rem;
+  width: min(100% - 3rem, var(--layout-max-width));
+  margin: clamp(4.5rem, 8vw, 7rem) auto 0;
+  padding: 2.5rem 0;
   border-top: 1px solid var(--border);
-  background: var(--sidebar);
-  padding: 1.25rem 1.5rem;
-  font-size: 0.78rem;
   color: var(--muted-foreground);
-  text-align: center;
+  font-size: 0.75rem;
 }
 
-.site-footer a {
-  color: var(--muted-foreground);
-  text-decoration: none;
+.site-footer strong { color: var(--foreground); font-size: 0.82rem; }
+.site-footer__brand p { max-width: 32rem; margin: 0.55rem 0 0; line-height: 1.6; }
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: start;
+  gap: 0.5rem 1.25rem;
 }
+
+.site-footer a { color: var(--muted-foreground); text-decoration: none; }
 .site-footer a:hover { color: var(--brand); }
+
+.site-footer__credits {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .site-footer {
+    grid-template-columns: 1fr;
+    width: calc(100% - 2rem);
+  }
+  .site-footer nav { justify-content: flex-start; }
+}
 
 /* ====================================================================
    Theme toggle button
