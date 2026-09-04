@@ -255,27 +255,8 @@ fn shell_root_reuses_a_clean_views_materialized_subtree(cx: &mut TestAppContext)
 }
 
 #[gpui::test]
-fn shell_fps_monitor_drives_the_window_by_default(cx: &mut TestAppContext) {
+fn shell_fps_monitor_never_requests_a_frame(cx: &mut TestAppContext) {
     let (_runtime, mut context, view) = script_view(cx, FPS_MONITOR);
-    context.update(|window, cx| {
-        window.replace_root(cx, |window, cx| {
-            crate::root::ShellRoot::new(view.clone().into(), window, cx)
-        })
-    });
-
-    context.update(|window, cx| window.draw(cx).clear(cx));
-    let requested = context.update(|window, cx| window.simulate_next_frame(cx));
-
-    assert!(
-        requested > 0,
-        "the HUD must sustain frames by default, so its rate is the one the window can hold"
-    );
-}
-
-#[gpui::test]
-fn shell_fps_monitor_can_be_asked_to_only_observe(cx: &mut TestAppContext) {
-    let source = FPS_MONITOR.replace("fps_monitor()", "fps_monitor().continuous(false)");
-    let (_runtime, mut context, view) = script_view(cx, &source);
     context.update(|window, cx| {
         window.replace_root(cx, |window, cx| {
             crate::root::ShellRoot::new(view.clone().into(), window, cx)
@@ -287,7 +268,7 @@ fn shell_fps_monitor_can_be_asked_to_only_observe(cx: &mut TestAppContext) {
 
     assert_eq!(
         requested, 0,
-        "continuous(false) must remain a way to watch the application's own frames"
+        "a HUD that asked for frames would be reporting a cost it was causing:          one dirty view redraws the whole window"
     );
 }
 

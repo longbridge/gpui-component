@@ -515,7 +515,6 @@ struct Behavior {
     /// component's own default, and the two differ: a popover anchors top-left,
     /// a hover card top-center.
     anchor: Option<gpui::Anchor>,
-    continuous: Option<bool>,
     frame_budget: Option<Duration>,
     /// The pointer button that opens a `Popover`.
     mouse_button: Option<MouseButton>,
@@ -3130,7 +3129,6 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .and_then(|value| value.as_str().ok())
                 .and_then(|value| anchor_from_name(value));
         }
-        "continuous" => behavior.continuous = Some(flag.unwrap_or(true)),
         "frame_budget" => behavior.frame_budget = milliseconds(args),
         "mouse_button" => {
             behavior.mouse_button =

@@ -160,21 +160,10 @@ pub struct ShellRoot {
 ///
 /// What a script's `show_fps_monitor(options)` names, with the same defaults
 /// `gpui_fps` gives an overlay a Rust host places by hand.
-///
-/// Including `continuous`. A HUD that only observes counts how often the
-/// window had a reason to redraw, and in a retained-mode application that is
-/// demand rather than speed: it reads far below the platform's own overlay --
-/// 26-58 against Metal's 113-120 on the same window -- and the conclusion a
-/// reader draws is that the framework cannot hold a frame rate. Sustaining the
-/// frames is what makes the number mean "can hold", and the display's refresh
-/// rate bounds it for free. A script that wants the observing behaviour asks
-/// for `continuous: false`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FpsHudRequest {
     /// Corner or edge of the window.
     pub anchor: Anchor,
-    /// Whether the HUD requests another animation frame after every render.
-    pub continuous: bool,
     /// The per-frame budget the HUD grades frame cost against. `None` keeps
     /// the HUD's own default.
     pub frame_budget: Option<Duration>,
@@ -184,7 +173,6 @@ impl Default for FpsHudRequest {
     fn default() -> Self {
         Self {
             anchor: Anchor::TopRight,
-            continuous: true,
             frame_budget: None,
         }
     }
@@ -365,9 +353,7 @@ impl ShellRoot {
         cx: &mut Context<Self>,
     ) -> Option<gpui_fps::FpsOverlay> {
         let request = self.fps_hud?;
-        let mut overlay = gpui_fps::fps_monitor(window, cx)
-            .anchor(request.anchor)
-            .continuous(request.continuous);
+        let mut overlay = gpui_fps::fps_monitor(window, cx).anchor(request.anchor);
         if let Some(budget) = request.frame_budget {
             overlay = overlay.frame_budget(budget);
         }

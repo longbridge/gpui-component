@@ -6794,7 +6794,6 @@ impl ShellRuntime {
                 "open",
                 "default_open",
                 "overlay_closable",
-                "continuous",
                 "with_item_to_measure_index",
             ]
             .into_iter()
@@ -7808,7 +7807,6 @@ impl ShellRuntime {
             | "default_open"
             | "overlay_closable"
             | "anchor"
-            | "continuous"
             | "frame_budget"
             | "mouse_button"
             | "open_delay"
@@ -7861,7 +7859,6 @@ impl ShellRuntime {
                     "default_open" => "default_open",
                     "overlay_closable" => "overlay_closable",
                     "anchor" => "anchor",
-                    "continuous" => "continuous",
                     "frame_budget" => "frame_budget",
                     "mouse_button" => "mouse_button",
                     "open_delay" => "open_delay",

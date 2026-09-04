@@ -4822,7 +4822,6 @@ export default class Monitor extends View {
     return div().relative().size_full().child(
       fps_monitor()
         .anchor("bottom_left")
-        .continuous(false)
         .frame_budget(8.33)
     );
   }
@@ -4839,9 +4838,7 @@ export default class Monitor extends View {
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
         .expect("render spec");
     assert!(
-        spec.contains("FpsMonitor :anchor")
-            && spec.contains(":continuous[Bool(false)]")
-            && spec.contains(":frame_budget[Number(8.33)]"),
+        spec.contains("FpsMonitor :anchor") && spec.contains(":frame_budget[Number(8.33)]"),
         "the snapshot must retain the native monitor and its performance options: {spec}"
     );
 
