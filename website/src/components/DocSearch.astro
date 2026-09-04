@@ -9,21 +9,21 @@ const { lang = 'en' } = Astro.props;
 const isZh = lang === 'zh-CN';
 
 const copy = isZh
-  ? { open: '搜索文档', label: '搜索', title: '搜索文档',
+  ? { label: '搜索', title: '搜索文档',
       emptyTitle: '搜索文档', emptyBody: '查找组件、指南、API 与示例。',
       navigate: '选择', enter: '打开', esc: '关闭' }
-  : { open: 'Search docs', label: 'Search', title: 'Search documentation',
+  : { label: 'Search', title: 'Search documentation',
       emptyTitle: 'Search documentation', emptyBody: 'Find components, guides, API references and examples.',
       navigate: 'Navigate', enter: 'Open', esc: 'Close' };
 ---
 
 <div class="docsearch">
-  <button type="button" id="search-open" class="site-nav__search-btn" aria-label={copy.open}>
+  <button type="button" id="search-open" class="site-nav__search-btn">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
     </svg>
     <span class="site-nav__search-hint">{copy.label}</span>
-    <kbd class="site-nav__search-key">⌘K</kbd>
+    <kbd class="site-nav__search-key" aria-hidden="true">⌘K</kbd>
   </button>
 
   <dialog id="search-modal" aria-labelledby="search-modal-title">

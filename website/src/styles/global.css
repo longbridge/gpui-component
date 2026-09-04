@@ -417,6 +417,10 @@ html.dark .astro-code span {
   border: 0;
 }
 
+/* These four match the background of the GPUI application inside the frame,
+   not this site's surface, so the frame does not flash a different colour
+   while the WASM loads. An external surface is the one place the guides allow
+   a raw value. */
 .component-example--component iframe {
   background: white;
 }
@@ -1167,9 +1171,35 @@ html[lang^="zh"] :is(
 }
 
 @media (max-width: 767px) {
-  .site-nav__search-hint, .site-nav__search-key { display: none; }
+  .site-nav__search-key { display: none; }
+
+  /* Hidden from view but kept in the accessibility tree, so the button keeps
+     its name once only the icon shows. */
+  .site-nav__search-hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 
   .docs-layout { width: calc(100% - 2rem); }
+}
+
+/* Visually hidden, still announced. Also defined inside `.doc-content` for
+   the heading the markdown pipeline emits. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ====================================================================
@@ -1217,12 +1247,16 @@ html[lang^="zh"] :is(
 
 .search-footer span { display: inline-flex; align-items: center; gap: 0.3rem; }
 
+/* A key cap names a key you can press, so it takes the foreground colour:
+   inheriting the muted text around it left it at 4.35:1 on the secondary
+   surface, under the 4.5:1 floor. */
 .search-footer kbd,
 .site-nav__search-key {
   padding: 0.05rem 0.3rem;
   border: 1px solid var(--border);
   border-radius: 0.25rem;
   background: var(--secondary);
+  color: var(--foreground);
   font: 0.9em/1.5 var(--font-mono);
 }
 
