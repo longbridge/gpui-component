@@ -121,9 +121,9 @@ struct Readout {
     /// resource row right underneath. The frame cost answers the same question
     /// without being paid for.
     ///
-    /// Held to the display's refresh rate once that is known. A frame drawn in
-    /// 3ms is not 333 frames the reader could ever see, and printing it that
-    /// way turns the headline back into a benchmark score rather than a rate.
+    /// A ceiling the frame cost can prove, not one the display can show: a
+    /// window whose frames cost 3ms could redraw 333 times a second, on a
+    /// panel that would scan out sixty of them.
     max_fps: f32,
     /// Frames presented per second: the rate the window is actually drawing
     /// at, which an idle application drives to zero. The reciprocal of
@@ -141,26 +141,23 @@ struct Readout {
     invalidations: f32,
 }
 
-/// The rate a full redraw could sustain: what a frame's cost implies, held to
-/// what the display can present.
+/// The rate a full redraw could sustain: what a frame's cost implies.
 ///
-/// The cap is the half the derivation loses. Counting presents could never
-/// exceed the refresh rate — frames go to the compositor on vsync, so the
-/// bound came for free — and a figure derived from frame cost has no such
-/// ceiling: a frame drawn in 3ms reads as 333, a number nobody could ever
-/// see. `display` is `None` until the window has presented two frames a
-/// plausible refresh apart, and an uncapped reading is better than one capped
-/// by a guess.
-fn sustainable_rate(mean_draw: Duration, display: Option<f32>) -> f32 {
+/// Not held to the display's refresh rate, which GPUI does not expose and
+/// which cannot be recovered from the frames this window happened to present.
+/// Gaps between presents are whole multiples of the panel's period, so they
+/// put a *lower* bound on it and never an upper one: 41.7ms is six refreshes
+/// at 144Hz and one at 24Hz, and nothing in the timing says which. Every
+/// estimate tried here read a real window wrong — 169 and 149 from the
+/// shortest and the densest gaps, 75 from a window drawing every other
+/// refresh, 24 from an application whose own timer fired every 41.7ms — and a
+/// ceiling under the truth hides the figure the reader came for.
+fn sustainable_rate(mean_draw: Duration) -> f32 {
     let mean_draw = mean_draw.as_secs_f32();
     if mean_draw <= 0. {
         return 0.;
     }
-    let rate = 1. / mean_draw;
-    match display {
-        Some(display) => rate.min(display),
-        None => rate,
-    }
+    1. / mean_draw
 }
 
 /// Which question the headline answers.
@@ -347,7 +344,7 @@ impl FpsMonitor {
         }
 
         self.readout = Readout {
-            max_fps: sustainable_rate(self.sampler.mean_draw(), self.sampler.peak_present_rate()),
+            max_fps: sustainable_rate(self.sampler.mean_draw()),
             fps: self.sampler.fps(),
             interval_millis: self.sampler.present_interval().as_secs_f32() * 1000.,
             // The mean over the interval rather than the latest frame, which
@@ -739,19 +736,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_headline_rate_never_exceeds_what_the_display_can_present() {
-        // A cheap frame on a 60Hz panel is not 333 frames anyone could see.
-        assert_eq!(
-            sustainable_rate(Duration::from_millis(3), Some(60.)),
-            60.,
-            "a frame cheaper than a refresh is capped by the refresh"
-        );
-        // Until the display has shown its cadence, capping would be a guess.
-        assert!((sustainable_rate(Duration::from_millis(3), None) - 333.33).abs() < 0.1);
-        // A frame that costs more than a refresh sets the rate itself.
-        assert_eq!(sustainable_rate(Duration::from_millis(20), Some(60.)), 50.);
+    fn the_headline_rate_is_what_a_frame_costs() {
+        assert!((sustainable_rate(Duration::from_millis(3)) - 333.33).abs() < 0.1);
+        assert_eq!(sustainable_rate(Duration::from_millis(20)), 50.);
         // No frames drawn yet is no rate, not an infinite one.
-        assert_eq!(sustainable_rate(Duration::ZERO, Some(60.)), 0.);
+        assert_eq!(sustainable_rate(Duration::ZERO), 0.);
     }
 
     #[gpui::test]
