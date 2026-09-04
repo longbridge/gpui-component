@@ -1814,11 +1814,6 @@ const ELEMENT_METHODS: &str = r#"    /**
      * edge is a preference rather than a promise.
      */
     anchor(value: Anchor): Element;
-    /** Whether an fps_monitor requests continuous whole-window redraws, which is
-     * what makes its rate mean the one the window can hold rather than the one it
-     * happened to need. Default true; pass false to watch the application's own
-     * frames instead. */
-    continuous(value: boolean): Element;
     /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
     frame_budget(milliseconds: number): Element;
     /** Which pointer button opens a `Popover`. Default `left`. */
@@ -3583,12 +3578,6 @@ const FPS: &str = r#"  /**
   export interface FpsMonitorOptions {
     /** Corner or edge of the window. Default `top_right`. */
     anchor?: Anchor;
-    /**
-     * Whether the HUD requests a redraw after every frame, so the rate it
-     * shows is the rate the window *can* sustain. Default `false`: the HUD
-     * observes the application's own frames and reads zero while it idles.
-     */
-    continuous?: boolean;
     /** Frame budget in milliseconds, for the FRAME grading and the chart's scale. */
     frame_budget?: number;
   }
@@ -3976,7 +3965,6 @@ mod tests {
         "default_open",
         "overlay_closable",
         "anchor",
-        "continuous",
         "frame_budget",
         "mouse_button",
         "open_delay",
