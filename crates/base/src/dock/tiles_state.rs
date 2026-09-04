@@ -8,7 +8,7 @@ use gpui::{
     Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::history::History;
+use crate::UndoHistory;
 
 use super::{
     drag::AnyDrag,
@@ -92,7 +92,7 @@ pub struct TilesState {
     zoomed: Option<PanelId>,
     moving: Option<TileMove>,
     resizing: Option<TileResize>,
-    history: History<TileChange>,
+    history: UndoHistory<TileChange>,
     renderer: Rc<dyn TilesRenderer>,
 }
 
@@ -108,7 +108,7 @@ impl TilesState {
             zoomed: None,
             moving: None,
             resizing: None,
-            history: History::new().group_interval(std::time::Duration::from_millis(100)),
+            history: UndoHistory::new().group_interval(std::time::Duration::from_millis(100)),
             renderer: Rc::new(BareTiles),
         }
     }
@@ -374,26 +374,32 @@ impl TilesState {
             return;
         };
         let previous = resize.drag.last_bounds();
+        // The pointer is in window coordinates and the bounds in canvas
+        // coordinates, so the moving edge is derived from how far the pointer
+        // has travelled since the drag began, applied to the bounds it began
+        // with — never from the pointer's position itself.
+        let initial = resize.initial_bounds;
+        let delta = pointer - resize.drag.start_position();
         let (new_x, new_y, new_width, new_height) = match resize.drag.side() {
-            ResizeSide::Left => (Some(pointer.x), None, None, None),
+            ResizeSide::Left => (Some(initial.origin.x + delta.x), None, None, None),
             ResizeSide::Right => (
                 None,
                 None,
-                Some((pointer.x - previous.origin.x).max(MINIMUM_SIZE.width)),
+                Some((initial.size.width + delta.x).max(MINIMUM_SIZE.width)),
                 None,
             ),
-            ResizeSide::Top => (None, Some(pointer.y), None, None),
+            ResizeSide::Top => (None, Some(initial.origin.y + delta.y), None, None),
             ResizeSide::Bottom => (
                 None,
                 None,
                 None,
-                Some((pointer.y - previous.origin.y).max(MINIMUM_SIZE.height)),
+                Some((initial.size.height + delta.y).max(MINIMUM_SIZE.height)),
             ),
             ResizeSide::BottomRight => (
                 None,
                 None,
-                Some((pointer.x - previous.origin.x).max(MINIMUM_SIZE.width)),
-                Some((pointer.y - previous.origin.y).max(MINIMUM_SIZE.height)),
+                Some((initial.size.width + delta.x).max(MINIMUM_SIZE.width)),
+                Some((initial.size.height + delta.y).max(MINIMUM_SIZE.height)),
             ),
         };
 
@@ -408,10 +414,7 @@ impl TilesState {
         );
 
         self.resizing = Some(TileResize {
-            drag: resize
-                .drag
-                .with_last_position(pointer)
-                .with_last_bounds(bounds),
+            drag: resize.drag.with_last_bounds(bounds),
             ..resize
         });
         self.apply_bounds(resize.panel, bounds, cx);
@@ -1004,6 +1007,56 @@ mod tests {
             order.borrow().content,
             Some(size(px(240.), px(100.))),
             "the overlay is given the canvas's scrollable extent"
+        );
+    }
+
+    /// A resize is resolved against the pointer's travel since the drag
+    /// began, never against the pointer's position: pointer positions are
+    /// window coordinates and tile bounds are canvas coordinates, and the two
+    /// differ by the canvas's own offset in the window. Reading the position
+    /// directly widened the tile by that offset the moment a drag started.
+    #[gpui::test]
+    fn a_resize_tracks_the_pointer_travel_not_its_window_position(cx: &mut TestAppContext) {
+        let (area, order, cx) = setup_order(cx);
+
+        cx.update(|window, cx| {
+            let panel = TestPanel::new("Only", cx);
+            let layout = DockLayout::tiles().tile(
+                panel,
+                Bounds {
+                    origin: point(px(20.), px(20.)),
+                    size: size(px(100.), px(100.)),
+                },
+            );
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let tile = order.borrow().tiles.last().cloned().expect("the tile drew");
+
+        // The pointer's window position is nowhere near the tile's canvas
+        // bounds, as it never is once the canvas sits offset in the window.
+        let start = point(px(500.), px(300.));
+        cx.update(|window, cx| tile.begin_resize(ResizeSide::Right, start, window, cx));
+        cx.update(|window, cx| tile.resize_to(start, window, cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            order.borrow().tiles.last().unwrap().bounds().size.width,
+            px(100.),
+            "a pointer that has not moved must not resize the tile"
+        );
+
+        // 32px of travel: 100 + 32 puts the right edge at 152, and the
+        // ten-pixel grid rounds it to 150.
+        cx.update(|window, cx| tile.resize_to(start + point(px(32.), px(0.)), window, cx));
+        cx.update(|window, cx| tile.end_resize(window, cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            order.borrow().tiles.last().unwrap().bounds().size.width,
+            px(130.),
+            "the tile grows by the pointer's travel, grid-rounded"
         );
     }
 

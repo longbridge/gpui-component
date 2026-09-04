@@ -1,4 +1,6 @@
 ---
+title: 主题
+description: 使用 GPUI Component 主题系统定制颜色、字体、圆角以及明暗外观。
 order: -4
 ---
 
@@ -7,7 +9,7 @@ order: -4
 所有组件都支持内置主题系统。[ActiveTheme] trait 用于访问当前主题中的颜色值：
 
 ```rs
-use gpui_component::{ActiveTheme as _};
+use gpui_kit::component::{ActiveTheme as _};
 
 // Access theme colors in your components
 cx.theme().primary
@@ -44,7 +46,7 @@ cx.theme().foreground
 
 ## Theme Registry
 
-仓库在 [themes](https://github.com/longbridge/gpui-component/tree/main/themes) 目录下内置了 20+ 主题。
+仓库在 [themes](https://github.com/longbridge/gpui-kit/tree/main/themes) 目录下内置了 20+ 主题。
 
 你可以通过 [ThemeRegistry] 来加载和监听这些主题文件：
 
@@ -52,8 +54,8 @@ cx.theme().foreground
 
 ```rs
 use std::path::PathBuf;
-use gpui::{App, SharedString};
-use gpui_component::{Theme, ThemeRegistry};
+use gpui_kit::{App, SharedString};
+use gpui_kit::component::{Theme, ThemeRegistry};
 
 pub fn init(cx: &mut App) {
     let theme_name = SharedString::from("Ayu Light");

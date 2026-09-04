@@ -10,7 +10,7 @@ A versatile label component for displaying text with support for secondary text,
 ## Import
 
 ```rust
-use gpui_component::label::{Label, HighlightsMatch};
+use gpui_kit::component::label::{Label, HighlightsMatch};
 ```
 
 ## Usage
@@ -68,7 +68,7 @@ Label::new("Company Name")
 ### Color and Styling
 
 ```rust
-use gpui_component::green_500;
+use gpui_kit::component::green_500;
 
 // Custom text color
 Label::new("Color Label")

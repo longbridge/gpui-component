@@ -16,7 +16,7 @@ Use [Input](./input.md) for single-line values and
 ## Import
 
 ```rust
-use gpui_base::input::{Editor, EditorState, TabSize};
+use gpui_kit::base::input::{Editor, EditorState, TabSize};
 ```
 
 ## Basic usage

@@ -11,7 +11,7 @@ order: 15
 ## 导入
 
 ```rust
-use gpui_base::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::base::input::{InputEvent, Textarea, TextareaState};
 ```
 
 ## 固定行数

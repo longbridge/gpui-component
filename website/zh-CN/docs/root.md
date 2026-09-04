@@ -1,4 +1,6 @@
 ---
+title: Root View
+description: 使用 Root 视图为窗口启用主题、通知、对话框及其他 GPUI Component 功能。
 order: -7
 ---
 
@@ -10,9 +12,9 @@ order: -7
 
 ```rs
 fn main() {
-    gpui_platform::application().run(move |cx| {
+    gpui_kit::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

@@ -12,9 +12,9 @@
 use std::panic::Location;
 
 use gpui::{
-    App, Div, Element, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    ScrollHandle, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder,
+    App, Div, Element, ElementId, InteractiveElement, IntoElement, Overflow, ParentElement,
+    PointRefinement, RenderOnce, ScrollHandle, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder,
 };
 use gpui_base::{InteractiveElementExt as _, Scrollbar, ScrollbarAxis, StyledExt as _};
 
@@ -85,7 +85,7 @@ where
 
         // Preserve the caller-requested size on the wrapper, while keeping the
         // caller's element as the actual scroll-tracked layout container.
-        let root_style = root_style_from(&mut self.element);
+        let root_style = root_style_from(&mut self.element, self.axis);
 
         let root_id = self.id.clone();
         let area_id = (self.id.clone(), "area");
@@ -153,8 +153,15 @@ fn scroll_handle_for(id: &ElementId, window: &mut Window, cx: &mut App) -> Scrol
 
 /// Copies the outer layout styles from the element, so the wrapper can
 /// participate in the parent's layout the same way the source element would.
+///
+/// The scrolled axis is marked clipped here for the same reason as in
+/// `gpui_component::scroll::scrollable`: a flex item only drops its
+/// content-based automatic minimum size when its own overflow is not
+/// [`Overflow::Visible`], and the scrolled overflow lives on the inner scroll
+/// area. Without it a scroll region used as a flex item pushes its siblings out
+/// of the container instead of scrolling.
 #[inline]
-fn root_style_from<E>(element: &mut E) -> StyleRefinement
+fn root_style_from<E>(element: &mut E, axis: ScrollbarAxis) -> StyleRefinement
 where
     E: Styled,
 {
@@ -167,6 +174,10 @@ where
         flex_shrink: style.flex_shrink,
         flex_basis: style.flex_basis,
         align_self: style.align_self,
+        overflow: PointRefinement {
+            x: axis.has_horizontal().then_some(Overflow::Hidden),
+            y: axis.has_vertical().then_some(Overflow::Hidden),
+        },
         ..Default::default()
     }
 }
@@ -196,4 +207,56 @@ fn render_scrollbar(
                 .axis(axis)
                 .viewport_from_layout(),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
+
+    struct FlexItemScrollableTest;
+
+    impl Render for FlexItemScrollableTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // A fixed-height column of header, flexible scroll area, footer.
+            // The content is far taller than the room left for the area, so
+            // the area must shrink into the remaining 60px and scroll.
+            gpui_base::v_flex()
+                .w(px(100.))
+                .h(px(100.))
+                .child(
+                    div()
+                        .h(px(20.))
+                        .flex_shrink_0()
+                        .debug_selector(|| "shell-header".to_string()),
+                )
+                .child(Scrollable::new(
+                    gpui_base::v_flex()
+                        .flex_1()
+                        .children((0..6).map(|_| div().h(px(50.)).flex_shrink_0())),
+                    ScrollbarAxis::Vertical,
+                ))
+                .child(
+                    div()
+                        .h(px(20.))
+                        .flex_shrink_0()
+                        .debug_selector(|| "shell-footer".to_string()),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn scrollable_flex_item_shrinks_below_its_content(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, _| FlexItemScrollableTest);
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        // Header and footer stay inside the 100px column, so the area took the
+        // 60px left over instead of its content height.
+        assert_eq!(cx.debug_bounds("shell-header").unwrap().top(), px(0.));
+        assert_eq!(cx.debug_bounds("shell-footer").unwrap().top(), px(80.));
+    }
 }

@@ -10,7 +10,7 @@ The Clipboard component provides an easy way to copy text or other data to the u
 ## Import
 
 ```rust
-use gpui_component::clipboard::Clipboard;
+use gpui_kit::component::clipboard::Clipboard;
 ```
 
 ## Usage
@@ -46,7 +46,7 @@ Clipboard::new("dynamic-clipboard")
 ### With Custom Content
 
 ```rust
-use gpui_component::label::Label;
+use gpui_kit::component::label::Label;
 
  h_flex()
      .gap_2()
@@ -63,7 +63,7 @@ use gpui_component::label::Label;
 The Clipboard component is commonly used as a suffix in input fields:
 
 ```rust
-use gpui_component::input::{InputState, Input};
+use gpui_kit::component::input::{InputState, Input};
 
 let url_state = cx.new(|cx| InputState::new(window, cx).default_value("https://github.com"));
 
@@ -111,7 +111,7 @@ h_flex()
 ### Form Field Integration
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     input::{InputState, Input},
     h_flex, label::Label
 };

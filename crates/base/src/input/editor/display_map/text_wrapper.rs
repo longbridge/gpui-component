@@ -528,6 +528,9 @@ pub(crate) struct LineLayout {
     pub(crate) whitespace_indicators: Option<WhitespaceIndicators>,
     /// Whitespace indicators: (line_index, x_position, is_tab)
     pub(crate) whitespace_chars: Vec<(usize, Pixels, bool)>,
+    /// Whether any run of this line carries a background color, so [`Self::paint_background`]
+    /// can skip the glyph walk for the common case of a line without highlights.
+    has_background: bool,
 }
 
 impl LineLayout {
@@ -539,7 +542,14 @@ impl LineLayout {
             wrap_indent: px(0.),
             whitespace_chars: Vec::new(),
             whitespace_indicators: None,
+            has_background: false,
         }
+    }
+
+    /// Record whether any run of this line carries a background color.
+    pub(crate) fn with_background(mut self, has_background: bool) -> Self {
+        self.has_background = has_background;
+        self
     }
 
     /// Set the left offset reserved for continuation wrapped lines.
@@ -744,6 +754,37 @@ impl LineLayout {
             .max()
             .unwrap_or(self.longest_width);
         size(width, self.wrapped_lines.len() * line_height)
+    }
+
+    /// Paint only the glyph background quads of this line.
+    ///
+    /// gpui's [`ShapedLine::paint`] does not draw backgrounds, so every line painted with
+    /// [`Self::paint`] needs this called first, with the same origin and align width.
+    pub(crate) fn paint_background(
+        &self,
+        pos: Point<Pixels>,
+        line_height: Pixels,
+        text_align: TextAlign,
+        align_width: Option<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        // Painting a background walks every glyph and pushes a scene layer, so skip the
+        // whole pass for lines that have no background color to paint.
+        if !self.has_background {
+            return;
+        }
+
+        for (ix, line) in self.wrapped_lines.iter().enumerate() {
+            _ = line.paint_background(
+                pos + point(self.line_indent(ix), ix * line_height),
+                line_height,
+                text_align,
+                align_width,
+                window,
+                cx,
+            );
+        }
     }
 
     pub(crate) fn paint(

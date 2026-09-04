@@ -22,7 +22,7 @@ A comprehensive data table component designed for handling large datasets with h
 ## Import
 
 ```rust
-use gpui_component::table::{
+use gpui_kit::component::table::{
     DataTable, TableState, TableDelegate,
     Column, ColumnSort, ColumnFixed,
     TableEvent
@@ -37,8 +37,8 @@ To create a table, you need to implement the `TableDelegate` trait and provide c
 
 ```rust
 use std::ops::Range;
-use gpui::{App, Context, Window, IntoElement};
-use gpui_component::table::{DataTable, TableDelegate, Column, ColumnSort};
+use gpui_kit::{App, Context, Window, IntoElement};
+use gpui_kit::component::table::{DataTable, TableDelegate, Column, ColumnSort};
 
 struct MyData {
     id: usize,
@@ -403,8 +403,8 @@ impl TableDelegate for MyTableDelegate {
 Customize table appearance. `DataTable` implements `Sizable`: use preset sizes such as `.small()` and `.large()` for standard density, or pass a custom pixel size to set a uniform header and body row height.
 
 ```rust
-use gpui::px;
-use gpui_component::Sizable as _;
+use gpui_kit::px;
+use gpui_kit::component::Sizable as _;
 
 let state = cx.new(|cx| {
     TableState::new(delegate, window, cx)

@@ -12,7 +12,7 @@ text and [Editor](./editor.md) for source code.
 ## Import
 
 ```rust
-use gpui_component::input::{Input, InputState};
+use gpui_kit::component::input::{Input, InputState};
 ```
 
 ## Usage
@@ -57,7 +57,7 @@ Input::new(&input)
 ### With Prefix and Suffix
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 // With prefix icon
 Input::new(&input)
@@ -164,7 +164,7 @@ let input = cx.new(|cx|
 );
 
 // Number with thousands separator
-use gpui_component::input::MaskPattern;
+use gpui_kit::component::input::MaskPattern;
 
 let input = cx.new(|cx|
     InputState::new(window, cx)

@@ -12,7 +12,7 @@ This is most like the [Popover] component, but triggered by hover instead of cli
 ## Import
 
 ```rust
-use gpui_component::hover_card::HoverCard;
+use gpui_kit::component::hover_card::HoverCard;
 ```
 
 ## Usage
@@ -20,8 +20,8 @@ use gpui_component::hover_card::HoverCard;
 ### Basic HoverCard
 
 ```rust
-use gpui::{ParentElement as _, Styled as _};
-use gpui_component::{hover_card::HoverCard, v_flex};
+use gpui_kit::{ParentElement as _, Styled as _};
+use gpui_kit::component::{hover_card::HoverCard, v_flex};
 
 HoverCard::new("basic")
     .trigger(
@@ -54,8 +54,8 @@ HoverCard::new("basic")
 A common use case is showing user profiles when hovering over a username, similar to GitHub or Twitter:
 
 ```rust
-use gpui::{px, relative, Styled as _};
-use gpui_component::{
+use gpui_kit::{px, relative, Styled as _};
+use gpui_kit::component::{
     avatar::Avatar,
     hover_card::HoverCard,
     h_flex,
@@ -93,7 +93,7 @@ h_flex()
                                     .text_color(cx.theme().muted_foreground)
                                     .text_sm()
                             )
-                            .child("The author of GPUI Component.")
+                            .child("The author of GPUI Kit.")
                     )
             )
     )
@@ -106,8 +106,8 @@ Adjust the opening and closing delays to suit your needs:
 
 ```rust
 use std::time::Duration;
-use gpui::Styled as _;
-use gpui_component::{
+use gpui_kit::Styled as _;
+use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
 };

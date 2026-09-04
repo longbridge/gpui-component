@@ -10,7 +10,7 @@ Badge 是一个通用徽标组件，可在头像、图标或其他元素上显�
 ## 导入
 
 ```rust
-use gpui_component::badge::Badge;
+use gpui_kit::component::badge::Badge;
 ```
 
 ## 用法
@@ -70,7 +70,7 @@ Badge::new()
 ### 颜色
 
 ```rust
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
 
 Badge::new()
     .count(3)
@@ -91,7 +91,7 @@ Badge::new()
 ### 用在图标上
 
 ```rust
-use gpui_component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName};
 
 Badge::new()
     .count(3)
@@ -110,7 +110,7 @@ Badge::new()
 ### 用在头像上
 
 ```rust
-use gpui_component::avatar::Avatar;
+use gpui_kit::component::avatar::Avatar;
 
 Badge::new()
     .count(5)

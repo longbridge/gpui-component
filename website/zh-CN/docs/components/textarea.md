@@ -10,7 +10,7 @@ description: 支持固定行数、软换行和自动增高的多行文本输入�
 ## 导入
 
 ```rust
-use gpui_component::input::{Textarea, TextareaState};
+use gpui_kit::component::input::{Textarea, TextareaState};
 ```
 
 ## 基础用法

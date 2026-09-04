@@ -22,7 +22,7 @@ single screen, what this project is — and then prove it is real.
    type names (`DockArea`, `Rope`, `Tiles`), real numbers from the README (120
    FPS, 200K lines). A developer judges credibility from specifics.
 4. **Same palette and typeface as the library.** Colours come from
-   `crates/ui/src/theme/default-theme.json`; code colours come from the same
+   `crates/component/src/theme/default-theme.json`; code colours come from the same
    shiki theme the docs use; the type is the platform font, as in a real app.
    The site must not invent a look the components cannot produce.
 5. **Restraint carries the design.** Hierarchy comes from type scale, weight
@@ -30,24 +30,24 @@ single screen, what this project is — and then prove it is real.
 
 ## Colour
 
-Defined in `.vitepress/theme/style.css`, mapped from the default theme so the
+Defined in `src/styles/global.css`, mapped from the default theme so the
 site and the documented components share one palette.
 
-| Token | Light | Dark | Theme source |
-| --- | --- | --- | --- |
-| `--background` | `#ffffff` | `#0a0a0a` | `background` |
-| `--foreground` | `#0a0a0a` | `#fafafa` | `foreground` |
-| `--border` | `#e5e5e5` | `#262626` | `border` |
-| `--secondary` | `#f5f5f5` | `#262626` | `secondary.background` |
-| `--muted-foreground` | `#737373` | `#a3a3a3` | `muted.foreground` |
-| `--sidebar` | `#fafafa` | `#0f0f0f` | `sidebar.background` |
-| `--titlebar` | `#f8f8f8` | `#171717` | `title_bar.background` |
-| `--brand` | `#171717` | `#fafafa` | `primary.background` |
-| `--data-1…5` | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5` |
-| logo accent | `#3b82f6` | `#419cff` | light `chart_2` / dark syntax link and tag blue |
-| `--selection` | `#55a0fc` | same | `selection.background` |
-| `--success` | `#22c55e` | same | `success.background` |
-| `--code-*` | macos-classic-light | macos-classic-dark | `src/*.theme.json` |
+| Token                | Light                 | Dark                           | Theme source                                    |
+| -------------------- | --------------------- | ------------------------------ | ----------------------------------------------- |
+| `--background`       | `#ffffff`             | `#0a0a0a`                      | `background`                                    |
+| `--foreground`       | `#0a0a0a`             | `#fafafa`                      | `foreground`                                    |
+| `--border`           | `#e5e5e5`             | `#262626`                      | `border`                                        |
+| `--secondary`        | `#f5f5f5`             | `#262626`                      | `secondary.background`                          |
+| `--muted-foreground` | `#737373`             | `#a3a3a3`                      | `muted.foreground`                              |
+| `--sidebar`          | `#fafafa`             | `#0f0f0f`                      | `sidebar.background`                            |
+| `--titlebar`         | `#f8f8f8`             | `#171717`                      | `title_bar.background`                          |
+| `--brand`            | `#171717`             | `#fafafa`                      | `primary.background`                            |
+| `--data-1…5`         | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5`                               |
+| logo accent          | `#3b82f6`             | `#419cff`                      | light `chart_2` / dark syntax link and tag blue |
+| `--selection`        | `#55a0fc`             | same                           | `selection.background`                          |
+| `--success`          | `#22c55e`             | same                           | `success.background`                            |
+| `--code-*`           | macos-classic-light   | macos-classic-dark             | `src/*.theme.json`                              |
 
 Rules that follow from this:
 
@@ -75,7 +75,7 @@ Rules that follow from this:
   from the same macos-classic theme shiki applies in the docs. Never invent
   highlighting for a snippet.
 - Links are distinguished by a rule, not a hue, since the brand colour equals
-  the text colour. See `.vp-doc a`.
+  the text colour. See `.doc-content a`.
 
 ## Typography
 
@@ -111,19 +111,17 @@ Two constraints that are easy to get wrong:
   width** (x=80, w=1280 at 1440px). Check this after any layout change.
 - Navigation is a **toolbar**: brand, a hairline divider, then the sections on
   the left; search, stars, language and appearance collected on the right.
-  Height 3.5rem/56px. The docs navbar is the same toolbar — VitePress's own
-  navbar is reordered by CSS, and the language and star controls are injected
-  through the `nav-bar-content-after` slot rather than living in `nav` items, so
-  the real search keeps working. The controls are that one set at every width:
-  VitePress would otherwise move the appearance switch into a `…` flyout on
-  mid-size screens and into the hamburger screen on phones.
-- The docs navbar's blur belongs on `.VPNavBar`, never on `.VPNav`. `.VPNav`
-  wraps both the bar and the phone menu screen, and a `backdrop-filter` makes
-  its element the containing block for fixed descendants — on `.VPNav` it
-  collapses the screen, which is anchored `top: nav-height; bottom: 0`, to zero
-  height, and the hamburger opens onto nothing.
+  Height 3.5rem/56px. The docs navbar (`Nav.astro`) is the same toolbar, hand
+  built rather than a theme default reordered by CSS: search, GitHub star,
+  language and appearance controls are all rendered directly in its markup, in
+  that fixed left/right layout, at every width down to the mobile breakpoint.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
+- Pages that are the site's own surfaces — App Stories, Skills, Contributors,
+  Releases — are their own routes under `src/pages`. They render through
+  `DocsLayout` with no sidebar, which puts them in `.docs-main--full`: full
+  width, and the same top offset as a docs page so a title never sits against
+  the toolbar. A page must not add its own offset on top.
 - Live WASM examples belong to their component documentation, next to the API
   and guidance they demonstrate. The homepage links into that documentation
   instead of maintaining a separate gallery surface.
@@ -141,16 +139,18 @@ Two constraints that are easy to get wrong:
   else to live — hiding it outright is a dead end for phone users. The window
   title is dropped there too, since the segmented control already names the
   current view.
-- The docs navbar collapses on VitePress's own 768px breakpoint, and the same
-  rule applies: the sections and the language menu move into the hamburger
-  screen (`nav-screen-content-after`), while the star count is only a label
-  beside an icon that stays. A 360px phone leaves about 180px next to the
-  title, which is four 2rem controls — measure before adding a fifth.
+- The docs navbar collapses at its own 767px breakpoint (`Nav.astro`): the
+  links and the Resources dropdown move into a drawer behind a burger button
+  (`#nav-burger` toggles `.is-open` on `#site-nav-links`), the dropdown
+  flattens into stacked items instead of overlaying, and the star badge drops
+  its numeric label, keeping only the icon. A 360px phone leaves about 180px
+  next to the title, which is four 2rem controls — measure before adding a
+  fifth.
 
 ## Surfaces and the window language
 
 Anything showing the library running is framed as a **macOS window** — the
-`.mac-window` class in `style.css`. It is the closest visual analogue to what
+`.mac-window` class in `global.css`. It is the closest visual analogue to what
 the library actually produces, so it reads as a native application rather than
 a screenshot card.
 
@@ -195,11 +195,11 @@ static image cannot keep current. Its content is shifted toward the top of the
 frame, leaving the bottom clear for source labels and other overlays added by
 social clients.
 
-Per-page `og:title`, `og:description`, `og:url` and the canonical link come from
-`transformPageData` in `config.mts`. Note it uses `||`, not `??`: the home page
-supplies empty strings rather than undefined. A per-page image would need a
-server to render it — shadcn and reui use a dynamic `/og?title=` route — and
-GitHub Pages has none, so one shared image is the right trade.
+Per-page `og:title`, `og:description`, `og:url` and the canonical link are
+props passed into `BaseLayout.astro` (`SITE_URL` lives once in `src/lib/site.ts`).
+A per-page image would need a server to render it — shadcn and reui use a
+dynamic `/og?title=` route — and GitHub Pages has none, so one shared image is
+the right trade.
 
 ## Motion
 
@@ -212,27 +212,63 @@ through motion alone.
 
 - The crate is **not published**. Installation must show the git dependency,
   never `cargo add`, and the UI must not display a version number.
-- Code samples must be real API, verified against `crates/ui` and
+- Code samples must be real API, verified against `crates/component` and
   `crates/base`.
+- The release notes page is rendered at build time from GitHub Releases
+  (`data/releases.data.js`) by the docs markdown pipeline; it holds no copy of
+  its own, so a release is written once, on GitHub.
 - Capability copy tracks the README's feature list — 120 FPS rendering, complex
   data tables, virtualized lists, the 200K-line editor, freeform docking,
   multi-theme support. Update it when the README's features change.
 - Capability previews are **diagrams**, not product mocks: they share one
   padding box and one gap, and they may use `--data-*` to read as UI. A diagram
   that needs a scrollbar needs its track too, or it looks like a glitch.
-- Landing-page copy lives in one bilingual `copy` object in `index.vue`. Both
+- Landing-page copy lives in one bilingual `copy` object in `HomeApp.vue`. Both
   locales must be updated together, matching the site-wide rule that
   `website/docs/` and `website/zh-CN/docs/` stay in sync.
 - Live examples should demonstrate the documented component's real behavior
   and use the same source as its native example.
 
+## App Stories
+
+`AppsApp.vue` lists the applications people have shipped with the library — the
+strongest available answer to "is this real?", and the reason it sits in the
+navbar rather than inside the Resources menu. Submissions come from
+[discussion #989](https://github.com/longbridge/gpui-kit/discussions/989).
+
+- **The screenshots are the authors' own published GitHub URLs**, used as
+  submitted. They must not be wrapped in `.mac-window`: most already contain a
+  real titlebar, and a second set of traffic lights around one turns a real
+  screenshot into a mock. A hairline frame and one shared 16:10 crop, anchored
+  to the top, is what makes a row of them align.
+- **Order is the only ranking.** It reads as editorial judgement — how complete
+  and shipped an app is first, GitHub traction second — and is maintained by
+  hand when an entry is added.
+- **No star counts.** A hard-coded number goes stale, and resolving one
+  repository per app at build time would exhaust the unauthenticated GitHub
+  rate limit that `src/lib/github.ts` already draws on for the single nav-bar
+  count. The facts a card does carry — platforms, open source or commercial,
+  whether it is still in development — do not expire.
+- Copy for both locales lives in one `copy` object plus a per-app
+  `blurb: { en, zh }`, so an entry cannot be added in one language only.
+
 ## Files
 
 | File | Role |
 | --- | --- |
-| `.vitepress/theme/style.css` | Tokens, `.mac-window`, VitePress overrides, doc typography |
-| `index.vue` | Landing page: markup, bilingual copy, page-scoped styles |
-| `.vitepress/theme/index.ts` | Theme entry; injects nav controls and the example window |
-| `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages |
-| `.vitepress/config.mts` | Navigation, sidebar generation, locales |
-| `src/*.theme.json` | shiki syntax themes; the source of `--code-*` |
+| `src/styles/global.css` | Tokens, `.mac-window`, docs-nav/doc-content typography |
+| `src/components/HomeApp.vue` | Landing page: markup, bilingual copy, page-scoped styles |
+| `src/components/AppsApp.vue` | App Stories page: the showcase list, bilingual copy, page-scoped styles |
+| `src/components/Nav.astro` | Docs/base/shell navbar: search, GitHub star, language, appearance, mobile drawer |
+| `src/components/ComponentExample.vue` | Windowed live example on component pages |
+| `src/lib/sidebar.ts` | Sidebar generation from the docs content collection |
+| `src/lib/site.ts` | Shared `SITE_URL` for canonical links and OG tags |
+| `src/light.theme.json` / `src/dark.theme.json` | Shiki syntax themes; the source of `--code-*` |
+
+## Attribution
+
+The footer is the one place the site states GPUI's origin, in one plain
+line: built on GPUI, from Zed Industries, also Apache-2.0. The landing page
+footer and the docs footer say the same thing. Do not repeat it in the hero,
+tutorials or API pages, where the product is GPUI Kit, and do not grow it into
+a disclaimer.

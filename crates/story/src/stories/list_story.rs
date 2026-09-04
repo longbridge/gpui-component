@@ -1,14 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
-use gpui::{
-    App, AppContext, Context, DragMoveEvent, ElementId, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, actions, div,
-    prelude::FluentBuilder as _, px,
-};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::*;
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Icon, IconName, IndexPath, Selectable, ThemeStyled as _,
     button::Button,
     h_flex,
@@ -698,7 +694,7 @@ fn random_company() -> Company {
 }
 
 impl Focusable for ListStory {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui_kit::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }

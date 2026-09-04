@@ -10,7 +10,7 @@ description: 提供页码、上一页和下一页导航的分页组件。
 ## 导入
 
 ```rust
-use gpui_component::pagination::Pagination;
+use gpui_kit::component::pagination::Pagination;
 ```
 
 ## 用法
@@ -57,7 +57,7 @@ Pagination::new("my-pagination")
 ### 不同尺寸
 
 ```rust
-use gpui_component::{Sizable as _, Size};
+use gpui_kit::component::{Sizable as _, Size};
 
 Pagination::new("my-pagination")
     .xsmall()

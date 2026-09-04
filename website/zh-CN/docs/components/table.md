@@ -10,7 +10,7 @@ Table 是一个简单、无状态、可组合的表格组件，用于渲染表�
 ## 导入
 
 ```rust
-use gpui_component::table::{
+use gpui_kit::component::table::{
     Table, TableHeader, TableBody, TableFooter,
     TableRow, TableHead, TableCell, TableCaption,
 };

@@ -10,11 +10,11 @@ The Menu component provides both context menus (right-click menus) and popup men
 ## Import
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     menu::{PopupMenu, PopupMenuItem, ContextMenuExt, DropdownMenu},
     Button
 };
-use gpui::{actions, Action};
+use gpui_kit::{actions, Action};
 ```
 
 ## Usage
@@ -24,7 +24,7 @@ use gpui::{actions, Action};
 Context menus appear when right-clicking on an element:
 
 ```rust
-use gpui_component::menu::ContextMenuExt;
+use gpui_kit::component::menu::ContextMenuExt;
 
 div()
     .id("my-element")
@@ -42,7 +42,7 @@ div()
 Dropdown menus are triggered by buttons or other interactive elements:
 
 ```rust
-use gpui_component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
+use gpui_kit::component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
 
 let view = cx.entity();
 Button::new("menu-btn")
@@ -50,7 +50,7 @@ Button::new("menu-btn")
     .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
-            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .link("Documentation", "https://gpui-kit.com/")
             .separator()
             .item(PopupMenuItem::new("Custom Action")
                 .on_click(window.listener_for(&view, |this, _, window, cx| {
@@ -79,7 +79,7 @@ There have a `on_click` callback to handle the click event directly.
 Control where the dropdown menu appears relative to the trigger:
 
 ```rust
-use gpui::Anchor;
+use gpui_kit::Anchor;
 
 Button::new("menu-btn")
     .label("Options")
@@ -94,7 +94,7 @@ Button::new("menu-btn")
 Add icons to menu items for better visual clarity:
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 menu.menu_with_icon("Search", IconName::Search, Box::new(Search))
     .menu_with_icon("Settings", IconName::Settings, Box::new(OpenSettings))
@@ -186,7 +186,7 @@ menu.link("Documentation", "https://docs.example.com")
 Create custom menu items with complex content:
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 menu.menu_element(Box::new(CustomAction), |window, cx| {
         v_flex()
@@ -358,7 +358,7 @@ div()
 Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and [PopupMenuItem] can help you:
 
 ```rust
-use gpui_component::{menu::PopupMenuItem, Button};
+use gpui_kit::component::{menu::PopupMenuItem, Button};
 
 Button::new("custom-item-menu")
     .label("Options")

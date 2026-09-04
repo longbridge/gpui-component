@@ -9,7 +9,7 @@ example: dock
 
 Dock 用可拖动标签组、嵌套分割和可收起的左、右、底部 Dock 构建应用工作区。它是 Longbridge 在商业产品中长期使用的布局基础，而不是一个脱离实际项目的 UI Demo。
 
-`gpui-base` 负责数据模型、布局计算和拖放行为，`gpui-component` 提供完整控件与统一视觉。需要直接用于真实应用的 Dock 时，请使用 `gpui_component::dock`。
+`gpui-base` 负责数据模型、布局计算和拖放行为，`gpui-component` 提供完整控件与统一视觉。需要直接用于真实应用的 Dock 时，请使用 `gpui_kit::component::dock`。
 
 如果你需要了解与渲染器无关的架构或实现自定义渲染器，请阅读英文版 [Dock — gpui-base](/base/dock)。
 
@@ -18,7 +18,7 @@ Dock 用可拖动标签组、嵌套分割和可收起的左、右、底部 Dock 
 通过 `DockSkin` 创建 DockArea。如果之后需要调整外观，请保留返回的 skin。
 
 ```rust
-use gpui_component::dock::{DockArea, DockSkin};
+use gpui_kit::component::dock::{DockArea, DockSkin};
 
 struct Workspace {
     dock_area: Entity<DockArea>,
@@ -42,7 +42,7 @@ impl Workspace {
 带样式的 Dock Panel 通过 `BasePanel` 提供身份与持久化能力，通过 `Panel` 提供标题、标签页和工具栏表现。
 
 ```rust
-use gpui_component::dock::{BasePanel, Panel, PanelEvent};
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent};
 
 struct FilesPanel {
     focus_handle: FocusHandle,
@@ -82,7 +82,7 @@ impl Render for FilesPanel {
 `DockLayout` 是纯数据：可以在 Window 存在之前组合，也可以序列化、比较或从应用状态生成。标签组与分割布局可以任意嵌套。
 
 ```rust
-use gpui_component::dock::{DockLayout, panel_handle};
+use gpui_kit::component::dock::{DockLayout, panel_handle};
 
 let files = cx.new(|cx| FilesPanel {
     focus_handle: cx.focus_handle(),
@@ -113,7 +113,7 @@ DockArea 还通过 `DockPlacement` 支持左、右和底部区域。运行时可
 将整个工作区导出为 `DockAreaState`，通过 Serde 保存，并在下次启动时恢复。
 
 ```rust
-use gpui_component::dock::DockAreaState;
+use gpui_kit::component::dock::DockAreaState;
 
 // 保存。
 let state = self.dock_area.read(cx).dump(cx);
@@ -158,4 +158,4 @@ self.dock_skin
 cargo run --example dock
 ```
 
-完整实现见 [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/story/examples/dock.rs)。
+完整实现见 [`crates/story/examples/dock.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/story/examples/dock.rs)。

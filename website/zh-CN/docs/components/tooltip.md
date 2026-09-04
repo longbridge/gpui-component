@@ -10,7 +10,7 @@ Tooltip 用于在鼠标悬停或元素获得焦点时显示补充信息。它支
 ## 导入
 
 ```rust
-use gpui_component::tooltip::Tooltip;
+use gpui_kit::component::tooltip::Tooltip;
 ```
 
 ## 用法

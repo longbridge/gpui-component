@@ -1,6 +1,6 @@
 # gpui-shell
 
-`gpui-shell` exists to make a Rust [GPUI](https://gpui.rs) application
+`gpui-shell` exists to make a Rust GPUI application
 **extensible in JavaScript**.
 
 **The primary goal is plugin extension.** A host application compiles and ships
@@ -79,7 +79,7 @@ default-exports, and mounts one instance of it as the window's root view:
 
 ```js
 // main.js
-import { View } from "gpui";
+import { View } from "gpui-kit";
 import { v_flex, Button, InputState } from "gpui-base";
 
 export default class Notes extends View {
@@ -125,7 +125,7 @@ missing:
 ```bash
 cargo run -p gpui-shell -- check examples/js_todolist    # exit 0 or 1
 cargo run -p gpui-shell -- check examples/js_todolist --print-spec
-cargo run -p gpui-shell -- types examples/js_todolist    # writes gpui.d.ts
+cargo run -p gpui-shell -- types examples/js_todolist    # writes gpui-kit.d.ts
 ```
 
 `check` loads and renders the application once without showing a window. It
@@ -162,7 +162,7 @@ camelCase one is script code.
 Each module carries what its own crate provides:
 
 ```js
-import { View, div, svg, image } from "gpui";
+import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Button, Link, Checkbox, Switch } from "gpui-base";
 import { fps_monitor } from "gpui-fps";
 ```
@@ -173,7 +173,7 @@ import { fps_monitor } from "gpui-fps";
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `value` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
-| `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
+| `fps_monitor()` | function | The native `gpui-fps` performance HUD; passive by default, with `.continuous(true)` for a sustained-frame test |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
@@ -301,7 +301,7 @@ grant the CLI installs in `gpui-shell.json`:
   "id": "com.example.viewer",
   "name": "Viewer",
   "version": "1.0.0",
-  "shell-version": "0.1.0",
+  "shell-version": "0.6.0",
   "entry": "main.js",
   "dependencies": {
     "omarchy-ui": "huacnlee/omarchy-ui"
@@ -454,9 +454,9 @@ The design, what is implemented, and what is not are in
 
 ## Types for the Script
 
-`import ... from "gpui"` is opaque without declarations, and the style surface
+`import ... from "gpui-kit"` is opaque without declarations, and the style surface
 is far too large to memorize. **There is nothing to run.** Every `gpui-shell`
-invocation — running an application, `check`, `types` — writes `gpui.d.ts` into
+invocation — running an application, `check`, `types` — writes `gpui-kit.d.ts` into
 each directory that imports a built-in module, from the runtime it is about to
 use:
 
@@ -466,12 +466,12 @@ cargo run -p gpui-shell -- check path/to/app     # checks it, and writes them
 cargo run -p gpui-shell -- types path/to/app     # writes them and nothing else
 ```
 
-One file, three modules: `"gpui"` for GPUI's own elements and what the runtime
+One file, built-in modules for each runtime layer: `"gpui-kit"` for GPUI's own elements and what the runtime
 adds, `"gpui-base"` for gpui-base's layout helpers, components and theme, and
-`"gpui-fps"` for its performance overlay. A name belongs to exactly one of them,
-so an import says which layer a script depends on.
+`"gpui-fps"` for its performance overlay. `"gpui"` is a compatibility alias for
+`"gpui-kit"`, so `import { div } from "gpui"` uses the same binding.
 
-Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
+Add `gpui-kit.d.ts` to `.gitignore`; the file's own first line says so.
 
 ### Dependencies an editor can see
 
@@ -500,7 +500,7 @@ The directory is called `node_modules` because that is the one place every
 editor looks — no package manager is involved and nothing comes from a
 registry. It also buys quiet: TypeScript treats what it resolves there as an
 external library, so a dependency's own implicit-`any` diagnostics stay out of
-your build. Ignore it, the way `gpui.d.ts` is ignored.
+your build. Ignore it, the way `gpui-kit.d.ts` is ignored.
 
 The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
@@ -529,7 +529,7 @@ the shape to copy.
 
 ### Keeping it current
 
-`gpui.d.ts` is an **output**, not a source, and a stale one is worse than none:
+`gpui-kit.d.ts` is an **output**, not a source, and a stale one is worse than none:
 it completes methods that no longer exist and refuses ones that do, and nothing
 about editing against it feels wrong until the script runs. So it is not
 something to write down and remember — it is rewritten by whatever is about to
@@ -544,7 +544,7 @@ Nothing is written when the file already matches, so an editor watching the
 directory is not woken on every launch and a read-only checkout is not an error.
 A directory that refuses the write is logged, never fatal.
 
-Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
+Do not commit it. This repository ignores `gpui-kit.d.ts` everywhere, including
 beside its own example and story scripts — a committed copy could only ever be
 the stale one. What *is* committed is the part that has no machine in it: a
 `jsconfig.json` that turns checking on. An application that has none is given
@@ -600,7 +600,7 @@ long that render's output lives.
 - [GPUI Shell design document](../../docs/gpui-shell.md)
 - [`gpui-base`](../base/README.md), the foundation this runtime binds
 - [Architecture](../../docs/ARCHITECTURE.md) and [Styling and Motion](../../docs/STYLING-AND-MOTION.md)
-- [GPUI](https://gpui.rs)
+- GPUI
 
 ## License
 

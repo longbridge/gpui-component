@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
-use gpui::{StyleRefinement, prelude::FluentBuilder, *};
-use gpui_component::{
+use gpui_kit::assets::Assets;
+use gpui_kit::component::{
     ActiveTheme, Colorize as _, ElementExt, IconName, Sizable,
     button::Button,
     checkbox::Checkbox,
@@ -10,10 +10,10 @@ use gpui_component::{
     slider::{Slider, SliderState},
     v_flex,
 };
-use gpui_component_assets::Assets;
+use gpui_kit::{StyleRefinement, prelude::FluentBuilder, *};
 
 pub struct BrushStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     brush_size: Entity<SliderState>,
     brush_opacity: Entity<SliderState>,
     brush_color: Hsla,
@@ -448,7 +448,7 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         gpui_component_story::init(cx);

@@ -2,12 +2,11 @@
 //!
 //! Every coercion lives here so the rules are defined once: a bare number is
 //! pixels, a percent string is a relative length, a `#rrggbb` string is a color,
-//! and a bare name is a semantic theme token.
+//! and colors are explicit hexadecimal values obtained from the theme API or
+//! written as literals.
 
 use crate::error::{Result as ShellResult, ShellError};
 use gpui::{Hsla, Pixels, px, rgba};
-
-use crate::theme_tokens::{color_token_names, token_color};
 
 /// A script argument after bridging, stored in the spec arena.
 ///
@@ -57,20 +56,21 @@ impl Bridged {
         Ok(px(self.as_f32()?))
     }
 
-    /// A `#rrggbb` / `#rrggbbaa` literal, or a semantic token name.
+    /// A `#rgb`, `#rrggbb`, or `#rrggbbaa` color value.
+    ///
+    /// Semantic names are deliberately rejected. Script code must read theme
+    /// colors from `cx.theme().colors` so the dependency on the active theme is
+    /// explicit and remains reactive.
     pub fn as_color(&self) -> ShellResult<Hsla> {
         let text = self.as_str()?;
-        if let Some(hex) = text.strip_prefix('#') {
-            return parse_hex(hex).ok_or_else(|| {
-                ShellError::runtime(format!(
-                    "`{text}` is not a valid color literal (expected #rgb, #rrggbb or #rrggbbaa)"
-                ))
-            });
-        }
-        token_color(text).ok_or_else(|| {
+        let Some(hex) = text.strip_prefix('#') else {
+            return Err(ShellError::runtime(format!(
+                "`{text}` is not a color value; pass a color from `cx.theme().colors` or a #rgb, #rrggbb, or #rrggbbaa literal"
+            )));
+        };
+        parse_hex(hex).ok_or_else(|| {
             ShellError::runtime(format!(
-                "unknown color token `{text}`; expected one of: {} — or a #rrggbb literal",
-                color_token_names().join(", ")
+                "`{text}` is not a valid color literal (expected #rgb, #rrggbb or #rrggbbaa)"
             ))
         })
     }
@@ -159,8 +159,8 @@ mod tests {
     }
 
     #[test]
-    fn unknown_color_token_reports_the_valid_set() {
-        let error = Bridged::Str("nope".into()).as_color().unwrap_err();
-        assert!(error.to_string().contains("unknown color token"));
+    fn semantic_color_names_are_rejected() {
+        let error = Bridged::Str("border".into()).as_color().unwrap_err();
+        assert!(error.to_string().contains("cx.theme().colors"));
     }
 }

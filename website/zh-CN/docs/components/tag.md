@@ -10,7 +10,7 @@ Tag 是一个轻量但灵活的标签组件，适合展示分类、状态、优�
 ## 导入
 
 ```rust
-use gpui_component::tag::Tag;
+use gpui_kit::component::tag::Tag;
 ```
 
 ## 用法
@@ -56,7 +56,7 @@ Tag::primary().child("Medium Tag")
 ### 预设颜色
 
 ```rust
-use gpui_component::ColorName;
+use gpui_kit::component::ColorName;
 
 Tag::color(ColorName::Blue).child("Blue Tag")
 Tag::color(ColorName::Green).child("Green Tag")
@@ -67,7 +67,7 @@ Tag::color(ColorName::Pink).child("Pink Tag")
 ### 自定义 HSLA 颜色
 
 ```rust
-use gpui::{hsla, Hsla};
+use gpui_kit::{hsla, Hsla};
 
 let color = hsla(220.0 / 360.0, 0.8, 0.5, 1.0);
 let foreground = hsla(0.0, 0.0, 1.0, 1.0);
@@ -79,7 +79,7 @@ Tag::custom(color, foreground, border).child("Custom Color")
 ### 圆角
 
 ```rust
-use gpui::px;
+use gpui_kit::px;
 
 Tag::primary().rounded_full().child("Rounded Full")
 Tag::primary().rounded(px(4.0)).child("Custom Radius")

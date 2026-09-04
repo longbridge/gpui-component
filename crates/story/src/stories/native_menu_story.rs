@@ -1,14 +1,10 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use gpui::{
-    Action, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
-    Point, Render, SharedString, Styled as _, Window, div, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, ElementExt, IconName, button::Button, native_menu::NativeMenu, v_flex,
 };
+use gpui_kit::*;
 use serde::Deserialize;
 
 use crate::section;
@@ -169,13 +165,16 @@ impl Render for NativeMenuStory {
                                 y: ev.position.y,
                             };
                             // Reuse a GPUI menu definition (incl. a submenu) directly.
-                            NativeMenu::from(gpui::Menu::new("Edit").items([
-                                gpui::MenuItem::action("Copy", MenuClick("Copy".into())),
-                                gpui::MenuItem::action("Paste", MenuClick("Paste".into())),
-                                gpui::MenuItem::separator(),
-                                gpui::MenuItem::submenu(gpui::Menu::new("Share").items([
-                                    gpui::MenuItem::action("Email", MenuClick("Email".into())),
-                                    gpui::MenuItem::action("Message", MenuClick("Message".into())),
+                            NativeMenu::from(gpui_kit::Menu::new("Edit").items([
+                                gpui_kit::MenuItem::action("Copy", MenuClick("Copy".into())),
+                                gpui_kit::MenuItem::action("Paste", MenuClick("Paste".into())),
+                                gpui_kit::MenuItem::separator(),
+                                gpui_kit::MenuItem::submenu(gpui_kit::Menu::new("Share").items([
+                                    gpui_kit::MenuItem::action("Email", MenuClick("Email".into())),
+                                    gpui_kit::MenuItem::action(
+                                        "Message",
+                                        MenuClick("Message".into()),
+                                    ),
                                 ])),
                             ]))
                             .show(position, window, cx);

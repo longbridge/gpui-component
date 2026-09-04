@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use instant::Instant;
+use web_time::Instant;
 
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
@@ -74,11 +74,6 @@ const UNIT_WIDTH: Pixels = px(22.);
 /// fast enough to feel live.
 const READOUT_INTERVAL: Duration = Duration::from_millis(500);
 
-/// Fraction of the target frame rate that still counts as meeting it. Vsync and
-/// the sampling window each cost a frame or so a second, so a 60Hz display that
-/// is keeping up perfectly reports 58 to 60, never a flat 60.
-const FPS_TOLERANCE: f32 = 0.95;
-
 /// A monospace family that ships with the platform, so the value column stays
 /// aligned without the application having to configure a font. The generic
 /// `monospace` alias is not resolvable by every platform's font backend, hence
@@ -109,7 +104,12 @@ const DEFAULT_FONT: &str = "monospace";
 /// The numbers as last published to the screen.
 #[derive(Clone, Copy, Default)]
 struct Readout {
+    /// Frames presented per second.
     fps: f32,
+    /// Mean time between presents, in milliseconds: the platform overlay's
+    /// "frame interval", and `1000 / fps`.
+    interval_millis: f32,
+    /// Mean `Window::draw` cost of the retained frames, in milliseconds.
     frame_millis: f32,
     /// The slow tail of the same frames `frame_millis` is the mean of.
     percentile_millis: f32,
@@ -184,6 +184,15 @@ impl FpsMonitor {
     pub fn continuous(mut self, continuous: bool) -> Self {
         self.continuous = continuous;
         self
+    }
+
+    pub(crate) fn set_frame_budget(&mut self, budget: Duration) {
+        self.frame_budget = budget;
+        self.axis_max = budget.as_secs_f32() * 2.;
+    }
+
+    pub(crate) fn set_continuous(&mut self, continuous: bool) {
+        self.continuous = continuous;
     }
 
     /// Whether to sample and show CPU, memory and GPU usage. Defaults to
@@ -267,6 +276,7 @@ impl FpsMonitor {
 
         self.readout = Readout {
             fps: self.sampler.fps(),
+            interval_millis: self.sampler.present_interval().as_secs_f32() * 1000.,
             // The mean over the interval rather than the latest frame, which
             // at this cadence would be an arbitrary sample.
             frame_millis: self.sampler.mean_draw().as_secs_f32() * 1000.,
@@ -419,12 +429,20 @@ impl Render for FpsMonitor {
         let budget = self.frame_budget;
         let Readout {
             fps,
+            interval_millis,
             frame_millis,
             percentile_millis,
             dropped_percent: dropped,
             invalidations,
         } = self.readout;
-        let fps_color = fps_color(fps, budget, style);
+        // Printed plain, never graded. A rate falls for reasons that are not
+        // this application being slow: the window was occluded, or nothing
+        // changed, or the display asked for fewer frames. Colouring it turns
+        // every one of those into an alarm, and the alarm contradicts the rows
+        // underneath -- 25 in red above a FRAME of 10ms in green, which is a
+        // frame drawn in a third of its budget. What costs too much is a
+        // question about frames, and `FRAME`, `P95` and `DROP` answer it.
+        let fps_color = style.foreground;
         let resources = self.resources.filter(|_| self.show_resources);
         let compact = self.compact;
 
@@ -466,13 +484,22 @@ impl Render for FpsMonitor {
                         .rounded(px(4.))
                         .child(self.render_headline(fps, fps_color))
                         .child(reading(
+                            // The same figure the platform overlay calls its
+                            // frame interval: time between presents, which is
+                            // the headline's reciprocal. Ungraded, like there.
+                            "INTERVAL",
+                            format!("{interval_millis:.1} ms"),
+                            style.foreground,
+                            style,
+                        ))
+                        .child(reading(
                             "FRAME",
                             format!("{frame_millis:.1} ms"),
-                            // Graded against the budget, not against the frame
-                            // rate. An idle window draws a handful of frames a
-                            // second, so the headline goes red while every one
-                            // of those frames was in fact drawn well inside the
-                            // budget; this row is what says so.
+                            // Graded against the budget, and the first reading
+                            // in the HUD that is: the rate above says how often
+                            // frames happened, this says whether they were
+                            // affordable. It is the one to read when something
+                            // feels slow.
                             style.level_color(frame_millis / 1000., budget.as_secs_f32()),
                             style,
                         ))
@@ -550,29 +577,6 @@ impl Render for FpsMonitor {
                         })
                 }
             })
-    }
-}
-
-/// Grades the frame rate against the rate the budget implies.
-///
-/// This deliberately does not compare `1/fps` against the budget the way the
-/// per-frame trace does. Under vsync the measured rate lands just under the
-/// refresh rate essentially always — a 60Hz display reads 58 to 60, never
-/// exactly 60.00 — so an exact comparison would paint a perfectly healthy
-/// application as over budget. Anything within [`FPS_TOLERANCE`] of the target
-/// counts as meeting it.
-fn fps_color(fps: f32, budget: Duration, style: FpsStyle) -> Hsla {
-    if fps <= 0. {
-        return style.muted;
-    }
-
-    let target = 1. / budget.as_secs_f32();
-    if fps >= target * FPS_TOLERANCE {
-        style.good
-    } else if fps >= target * 0.5 {
-        style.warn
-    } else {
-        style.bad
     }
 }
 
@@ -663,25 +667,6 @@ mod tests {
             // the chart scaled for 60Hz frames.
             assert_eq!(monitor.axis_max, budget.as_secs_f32() * 2.);
         });
-    }
-
-    #[test]
-    fn a_display_keeping_up_is_never_graded_as_falling_behind() {
-        let style = FpsStyle::dark();
-        let budget = DEFAULT_FRAME_BUDGET;
-
-        // What a healthy 60Hz display actually reports.
-        for rate in [58., 59., 59.7, 60., 61.] {
-            assert_eq!(
-                fps_color(rate, budget, style),
-                style.good,
-                "{rate} fps should read as healthy on a 60Hz display"
-            );
-        }
-
-        assert_eq!(fps_color(45., budget, style), style.warn);
-        assert_eq!(fps_color(20., budget, style), style.bad);
-        assert_eq!(fps_color(0., budget, style), style.muted);
     }
 
     #[test]

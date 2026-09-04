@@ -10,7 +10,7 @@ An interactive element which expands/collapses.
 ## Import
 
 ```rust
-use gpui_component::collapsible::Collapsible;
+use gpui_kit::component::collapsible::Collapsible;
 ```
 
 ## Usage

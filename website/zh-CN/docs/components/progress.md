@@ -15,7 +15,7 @@ Progress 组件用于直观展示任务完成百分比。库中提供两种形�
 ## Progress
 
 ```rust
-use gpui_component::progress::Progress;
+use gpui_kit::component::progress::Progress;
 ```
 
 ### 用法
@@ -126,7 +126,7 @@ impl Render for MyView {
 环形进度指示器适合用于紧凑场景、内联状态或下载上传进度。
 
 ```rust
-use gpui_component::progress::ProgressCircle;
+use gpui_kit::component::progress::ProgressCircle;
 ```
 
 ### 用法

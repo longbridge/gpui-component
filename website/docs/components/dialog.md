@@ -10,8 +10,8 @@ Dialog component for creating dialogs, confirmations, and alerts. Supports overl
 ## Import
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
-use gpui_component::WindowExt;
+use gpui_kit::component::dialog::DialogButtonProps;
+use gpui_kit::component::WindowExt;
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ You need to set up your application's root view to render the dialog layer. This
 The [Root::render_dialog_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_dialog_layer) function handles rendering any active dialogs on top of your app content.
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 
 struct MyApp {
     view: AnyView,
@@ -108,7 +108,7 @@ window.open_dialog(cx, |dialog, _, cx| {
 ### Scrollable Dialog
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 window.open_dialog(cx, |dialog, window, cx| {
     dialog
@@ -204,7 +204,7 @@ The Dialog component now supports a declarative API that provides a more React-l
 ### Import
 
 ```rust
-use gpui_component::dialog::{
+use gpui_kit::component::dialog::{
     Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 };
 ```
@@ -401,7 +401,7 @@ DialogFooter::new()
 The `DialogContent` component provides a flexible container for dialog body content:
 
 ```rust
-use gpui_component::dialog::DialogContent;
+use gpui_kit::component::dialog::DialogContent;
 
 window.open_dialog(cx, |dialog, _, _| {
     dialog.content(|content, _, cx| {

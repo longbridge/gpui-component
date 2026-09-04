@@ -26,7 +26,7 @@
 //! # Why an import rather than a lookup
 //!
 //! A registered module is resolved by the engine's module loader, so a host
-//! module is imported exactly like `gpui` or `path` is. The obvious alternative
+//! module is imported exactly like `gpui-kit` or `path` is. The obvious alternative
 //! is a lookup — `native("workspace")` answering with a bag of functions — and
 //! it loses twice, both times on *when* a mistake surfaces.
 //!
@@ -106,6 +106,8 @@
 use std::{
     cell::Cell, collections::BTreeMap, fmt, fmt::Write as _, future::Future, pin::Pin, rc::Rc,
 };
+
+use crate::component::ComponentFactory;
 
 /// A value crossing the host boundary, in either direction.
 ///
@@ -416,6 +418,7 @@ pub struct HostModule {
     /// Sorted alongside `functions`, and disjoint from it: one name is either
     /// synchronous or asynchronous, never both.
     async_functions: BTreeMap<String, HostAsyncFunction>,
+    components: BTreeMap<String, ComponentFactory>,
     /// The module's TypeScript face, if the host wrote one. See
     /// [`HostModule::declarations`].
     declarations: Option<String>,
@@ -433,8 +436,40 @@ impl HostModule {
             name: name.into(),
             functions: BTreeMap::new(),
             async_functions: BTreeMap::new(),
+            components: BTreeMap::new(),
             declarations: None,
         }
+    }
+
+    /// Exports one Rust-built element constructor from this module.
+    pub fn component(
+        mut self,
+        name: impl Into<String>,
+        build: impl for<'a> Fn(
+            crate::ComponentArgs<'a>,
+            &mut gpui::Window,
+            &mut gpui::App,
+        ) -> gpui::AnyElement
+        + 'static,
+    ) -> Self {
+        let name = name.into();
+        self.functions.remove(&name);
+        self.async_functions.remove(&name);
+        self.components.insert(name, ComponentFactory::new(build));
+        self
+    }
+
+    pub(crate) fn component_names(&self) -> impl Iterator<Item = &str> {
+        self.components.keys().map(String::as_str)
+    }
+
+    pub(crate) fn resolve_component(&self, name: &str) -> Result<ComponentFactory, HostError> {
+        self.components.get(name).cloned().ok_or_else(|| {
+            HostError::new(format!(
+                "HostModule `{}` has no component `{name}`",
+                self.name
+            ))
+        })
     }
 
     pub fn name(&self) -> &str {
@@ -452,6 +487,7 @@ impl HostModule {
         body: impl Fn(&HostArguments) -> HostResult + 'static,
     ) -> Self {
         let name = name.into();
+        self.components.remove(&name);
         self.async_functions.remove(&name);
         self.functions.insert(name, Rc::new(body));
         self
@@ -517,6 +553,7 @@ impl HostModule {
         F: Future<Output = HostResult> + Send + 'static,
     {
         let name = name.into();
+        self.components.remove(&name);
         // One name, one kind. Registering over the other table rather than
         // beside it keeps `function_names` a single list and stops a call
         // having to decide which of two entries it meant.
@@ -589,6 +626,10 @@ impl HostModule {
         self.functions.contains_key(function) || self.async_functions.contains_key(function)
     }
 
+    fn has_export(&self, name: &str) -> bool {
+        self.has(name) || self.components.contains_key(name)
+    }
+
     /// Whether this name answers with a promise.
     ///
     /// Read by the engine when it builds the binding, because the two return
@@ -647,12 +688,13 @@ impl HostModule {
         let missing: Vec<&str> = self
             .function_names()
             .into_iter()
+            .chain(self.component_names())
             .filter(|name| !declared.contains(name))
             .collect();
         let extra: Vec<&str> = declared
             .iter()
             .copied()
-            .filter(|name| !self.has(name))
+            .filter(|name| !self.has_export(name))
             .collect();
 
         if missing.is_empty() && extra.is_empty() {
@@ -660,7 +702,7 @@ impl HostModule {
         }
 
         let mut message = format!(
-            "HostModule `{}` declares a different set of functions than it registers",
+            "HostModule `{}` declares a different set of exports than it registers",
             self.name
         );
         if !missing.is_empty() {
@@ -715,8 +757,10 @@ impl HostModule {
 /// test rather than a name a host can quietly lose.
 pub const RESERVED_SPECIFIERS: &[&str] = &[
     // The runtime's own modules.
+    "gpui-kit",
     "gpui",
     "gpui-base",
+    "gpui-component",
     "gpui-shell",
     "gpui-fps",
     // The Standard Runtime.

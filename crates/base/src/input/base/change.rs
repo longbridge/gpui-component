@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{HistoryItem, input::Selection};
+use crate::input::Selection;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(super) struct Change {
@@ -10,7 +10,6 @@ pub(super) struct Change {
     pub(crate) new_text: String,
     pub(crate) selection_before: Selection,
     pub(crate) selection_after: Selection,
-    version: usize,
 }
 
 impl Change {
@@ -29,17 +28,6 @@ impl Change {
             new_text: new_text.to_string(),
             selection_before,
             selection_after,
-            version: 0,
         }
-    }
-}
-
-impl HistoryItem for Change {
-    fn version(&self) -> usize {
-        self.version
-    }
-
-    fn set_version(&mut self, version: usize) {
-        self.version = version;
     }
 }

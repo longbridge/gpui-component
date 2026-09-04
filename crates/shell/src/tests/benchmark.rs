@@ -42,7 +42,7 @@ const ROUNDS: usize = 7;
 const SIZES: [(usize, usize); 4] = [(40, 5), (100, 10), (200, 10), (400, 10)];
 
 const TEMPLATE: &str = r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 
 export default class Grid extends View {
@@ -60,8 +60,8 @@ export default class Grid extends View {
       .h(24)
       .px(6)
       .rounded(4)
-      .bg("surface")
-      .text_color("foreground")
+      .bg(`#f8f8f8`)
+      .text_color(`#111111`)
       .text_sm()
       .child(`${row}:${column}`);
   }
@@ -83,9 +83,9 @@ export default class Grid extends View {
       .size_full()
       .p(12)
       .gap(4)
-      .bg("background")
+      .bg(`#ffffff`)
       .children(rows)
-      .child(Button.new("refresh").px(10).py(4).rounded(6).bg("primary").child("Refresh"));
+      .child(Button.new("refresh").px(10).py(4).rounded(6).bg(`#2563eb`).child("Refresh"));
   }
 }
 "#;
@@ -452,8 +452,7 @@ fn one_recorded_call_is_priced_stage_by_stage(cx: &mut TestAppContext) {
     cx.update(|cx| {
         crate::init(cx);
         // What a script render does on its way in. These stages run outside
-        // every call scope, so without it `bg("surface")` has no palette to
-        // resolve against and prices a thrown error instead of a style.
+        // every call scope, matching normal application render setup.
         crate::theme_tokens::sync(cx);
     });
     let runtime = ShellRuntime::new_isolated().expect("runtime");
@@ -477,7 +476,7 @@ fn one_recorded_call_is_priced_stage_by_stage(cx: &mut TestAppContext) {
     let mut shipped = Vec::new();
     for (family, argument, label) in [
         ("nullary", None, "items_center()"),
-        ("parametric", Some("\"surface\""), "bg(\"surface\")"),
+        ("parametric", Some("\"#f8f8f8\""), "bg(\"#f8f8f8\")"),
     ] {
         println!("{label}:");
         let mut previous = floor;

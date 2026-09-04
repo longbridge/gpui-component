@@ -10,7 +10,7 @@ GroupBox 是一个用于组织相关内容的容器组件，支持标题、边�
 ## 导入
 
 ```rust
-use gpui_component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
+use gpui_kit::component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
 ```
 
 ## 用法
@@ -70,7 +70,7 @@ GroupBox::new()
 ### 自定义标题样式
 
 ```rust
-use gpui::{StyleRefinement, relative};
+use gpui_kit::{StyleRefinement, relative};
 
 GroupBox::new()
     .outline()

@@ -11,7 +11,7 @@ order: 16
 ## 导入
 
 ```rust
-use gpui_base::input::{Editor, EditorState, TabSize};
+use gpui_kit::base::input::{Editor, EditorState, TabSize};
 ```
 
 ## 基本用法

@@ -10,7 +10,7 @@ Notification 是一个 toast 通知系统，用于向用户显示短暂消息。
 ## 导入
 
 ```rust
-use gpui_component::{
+use gpui_kit::component::{
     notification::{Notification, NotificationType},
     WindowExt
 };
@@ -25,7 +25,7 @@ use gpui_component::{
 [Root::render_notification_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_notification_layer) 会将当前激活的通知渲染在应用内容之上。
 
 ```rust
-use gpui_component::{TitleBar, Root};
+use gpui_kit::component::{TitleBar, Root};
 
 struct Example {}
 
@@ -100,6 +100,8 @@ Notification::new()
     .autohide(true)
 ```
 
+指针悬停在通知上或某条通知获得键盘焦点时倒计时暂停，指针移开或焦点离开后继续。窗口未激活时倒计时照常进行，不能错过的消息应关闭自动隐藏或使用系统通知投递。
+
 ### 操作按钮
 
 ```rust
@@ -133,7 +135,7 @@ Notification::new()
 ### 自定义内容
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 let markdown_content = r#"
 ## Custom Notification
@@ -180,7 +182,7 @@ window.remove_notification::<UpdateNotification>(cx);
 通知也可以投递到操作系统的通知中心。使用 `NotificationDelivery` 选择通知的去向：应用内 toast（`InApp`，默认）、系统通知中心（`System`）、或两者都发（`InAppAndSystem`）。
 
 ```rust
-use gpui_component::notification::{Notification, NotificationDelivery};
+use gpui_kit::component::notification::{Notification, NotificationDelivery};
 
 // 单条通知覆盖；`.system()` 和 `.in_app_and_system()` 是
 // `.delivery(NotificationDelivery::...)` 的简写。
@@ -196,7 +198,7 @@ Theme::global_mut(cx).notification.delivery = NotificationDelivery::InAppAndSyst
 
 点击系统通知会激活应用及其窗口、关闭对应的应用内 toast（如有）、并以默认的 `ClickEvent` 触发 `on_click`。`NotificationDelivery::System` 模式下没有 toast，因此 `on_close` 不会被调用。
 
-`gpui_component::init` 会注册应用级的 `on_system_notification_response` 处理器，之后请勿再自行注册——gpui 只保留一个。应用通过 `cx.show_system_notification` 直接发送的系统通知不受影响。
+`gpui_kit::component::init` 会注册应用级的 `on_system_notification_response` 处理器，之后请勿再自行注册——gpui 只保留一个。应用通过 `cx.show_system_notification` 直接发送的系统通知不受影响。
 
 平台要求：
 

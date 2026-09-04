@@ -10,8 +10,8 @@ Image 组件为图片展示提供了更稳健的封装，支持加载态、回�
 ## 导入
 
 ```rust
-use gpui::{img, ImageSource, ObjectFit};
-use gpui_component::{v_flex, h_flex, div, Icon, IconName};
+use gpui_kit::{img, ImageSource, ObjectFit};
+use gpui_kit::component::{v_flex, h_flex, div, Icon, IconName};
 ```
 
 ## 用法
