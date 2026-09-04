@@ -1,5 +1,5 @@
 <template>
-    <div class="contributors-page">
+    <div class="contributors-page" :style="{ backgroundImage: `url(${bgUrl})` }">
         <h1>{{ title }}</h1>
         <p>{{ description }}</p>
         <div class="contributors-list">
@@ -55,7 +55,8 @@ const suffixText = computed(() => (isZh.value ? "。" : " on GitHub."));
 <style>
 .contributors-page {
     padding: 2.5rem 0 4rem;
-    background: url(v-bind(bgUrl)) no-repeat top 20px right 20px;
+    background-repeat: no-repeat;
+    background-position: top 20px right 20px;
 }
 
 .contributors-page h1 {

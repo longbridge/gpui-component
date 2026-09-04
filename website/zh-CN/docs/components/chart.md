@@ -10,7 +10,7 @@ Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie�
 ## 导入
 
 ```rust
-use gpui_component::chart::{
+use gpui_kit::component::chart::{
     LineChart, BarChart, AreaChart, PieChart, RadarChart, CandlestickChart, SankeyChart,
 };
 ```
@@ -132,7 +132,7 @@ BarChart::new(data)
 如需让渐变方向跟随柱子方向，请使用 `fill_gradient`。闭包接收三个参数：数据项、图表的完整数据范围（`chart_range`），以及一个 `chart_to_bar` 辅助函数（将图表数值坐标映射为柱子局部的渐变位置，其中 `0.0` 表示柱子的基线端，`1.0` 表示尖端）。渐变方向由柱子的 `BarAlignment` 推导，使 stop-0 始终位于基线端、stop-1 位于尖端。
 
 ```rust
-use gpui::linear_color_stop;
+use gpui_kit::linear_color_stop;
 
 // 单柱渐变：每个柱子都从半透明基线渐变到完全不透明的尖端，
 // 与该柱子的具体数值无关。
@@ -166,10 +166,10 @@ BarChart::new(data)
 
 #### 柱状图对齐方式
 
-`BarAlignment` 用于控制柱子的方向以及基线所在的一侧，需从 `gpui_component::plot::shape` 导入。
+`BarAlignment` 用于控制柱子的方向以及基线所在的一侧，需从 `gpui_kit::component::plot::shape` 导入。
 
 ```rust
-use gpui_component::plot::shape::BarAlignment;
+use gpui_kit::component::plot::shape::BarAlignment;
 
 // 默认：垂直方向 - 向上
 BarChart::new(data)
@@ -203,7 +203,7 @@ BarChart::new(data)
 仅对特定角进行圆角处理（例如仅对柱顶一端进行圆角）。
 
 ```rust
-use gpui::{px, Corners};
+use gpui_kit::{px, Corners};
 
 // 所有柱条统一 4px 圆角
 BarChart::new(data)
@@ -288,7 +288,7 @@ AreaChart::new(data)
 #### 样式
 
 ```rust
-use gpui::{linear_gradient, linear_color_stop};
+use gpui_kit::{linear_gradient, linear_color_stop};
 
 AreaChart::new(data)
     .x(|d| d.month.clone())
@@ -478,7 +478,7 @@ CandlestickChart::new(data)
 #### 基础桑基图
 
 ```rust
-use gpui_component::plot::shape::SankeyLink;
+use gpui_kit::component::plot::shape::SankeyLink;
 
 #[derive(Clone)]
 struct FlowNode {
@@ -507,7 +507,7 @@ SankeyChart::new(nodes, links)
 #### 节点对齐
 
 ```rust
-use gpui_component::plot::shape::SankeyAlign;
+use gpui_kit::component::plot::shape::SankeyAlign;
 
 // Justify（默认）：没有出边的节点移到最后一列
 SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
@@ -538,7 +538,7 @@ SankeyChart::new(nodes, links)
 需要完全控制标签行时使用 `labels`——每行一个 `SankeyLabel`，从上到下排列，每行可单独设置颜色和字号。设置后优先于 `node_label`/`value_label`。例如带同比涨跌幅行的财报标签：
 
 ```rust
-use gpui_component::chart::SankeyLabel;
+use gpui_kit::component::chart::SankeyLabel;
 
 SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
     let arrow = if d.growth >= 0. { "▲" } else { "▼" };
@@ -558,7 +558,7 @@ SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
 节点高度默认与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见、主流量过大。设置 `value_scale(SankeyValueScale::Sqrt)` 即可压缩跨度——组件按值的平方根来定节点高度，小流量保持可见，且无需预处理数据，标签仍显示真实值：
 
 ```rust
-use gpui_component::plot::shape::SankeyValueScale;
+use gpui_kit::component::plot::shape::SankeyValueScale;
 
 SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
 ```
@@ -598,7 +598,7 @@ struct StockPrice {
     pub volume: u64,
 }
 
-// 桑基图连接：通过索引引用节点（来自 gpui_component::plot::shape）
+// 桑基图连接：通过索引引用节点（来自 gpui_kit::component::plot::shape）
 pub struct SankeyLink {
     pub source: usize,
     pub target: usize,

@@ -11,7 +11,7 @@ single-line values and [`Textarea`](./textarea.md) for ordinary multi-line text.
 ## Import
 
 ```rust
-use gpui_component::input::{Editor, EditorState, TabSize};
+use gpui_kit::component::input::{Editor, EditorState, TabSize};
 ```
 
 ## Basic usage

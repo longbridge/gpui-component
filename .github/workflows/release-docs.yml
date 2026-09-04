@@ -69,6 +69,8 @@ jobs:
 
       - name: Build Website
         working-directory: website
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bun install
           bun run build

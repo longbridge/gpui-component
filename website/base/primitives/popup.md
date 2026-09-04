@@ -19,7 +19,7 @@ cargo run -p gpui-base --example components -- popup
 ## Import
 
 ```rust
-use gpui_base::Popup;
+use gpui_kit::base::Popup;
 ```
 
 ## Anatomy and API

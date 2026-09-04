@@ -19,8 +19,8 @@ description: 用于会话状态、通知边界和分隔标记的紧凑组合行�
 ## 导入
 
 ```rust
-use gpui::{ParentElement as _, StyleRefinement, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, StyleRefinement, Styled as _};
+use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     marker::{Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant},
     shimmer::{ShimmerStyle, ShimmerText},

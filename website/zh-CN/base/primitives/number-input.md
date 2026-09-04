@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- number-input
 ## 导入
 
 ```rust
-use gpui_base::{Decrement, Increment, NumberInput, NumberInputText};
+use gpui_kit::base::{Decrement, Increment, NumberInput, NumberInputText};
 ```
 
 ## 结构与 API

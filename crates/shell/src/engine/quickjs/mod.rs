@@ -1008,7 +1008,7 @@ mod window_api;
 ///
 /// One module per crate that provides the capability, so an import says which
 /// layer a script depends on: `gpui-base`'s components come from `"gpui-base"`,
-/// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui"` carries only what GPUI
+/// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui-kit"` carries only what GPUI
 /// itself and this runtime provide. A name belongs to exactly one of them —
 /// nothing is re-exported for convenience, because a name reachable from two
 /// specifiers stops saying anything about where it came from, and the next
@@ -1194,7 +1194,7 @@ macro_rules! builtin_modules {
 }
 
 builtin_modules![
-    (GpuiModule, "gpui", exports::GPUI),
+    (GpuiModule, "gpui-kit", exports::GPUI),
     (GpuiBaseModule, "gpui-base", exports::GPUI_BASE),
     (GpuiShellModule, "gpui-shell", exports::GPUI_SHELL),
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
@@ -1490,7 +1490,7 @@ impl ShellRuntime {
             source: components.javascript_module_source(&component_state_proof),
         };
         // Order is the namespace policy. The runtime's own modules resolve
-        // first, so a host cannot take `gpui` or `path` from under a script;
+        // first, so a host cannot take `gpui-kit` or `path` from under a script;
         // the application's files resolve last, so a HostModule cannot be
         // shadowed by a file that happens to share its name. `host_modules`
         // refuses reserved names at registration, which is what turns the first
@@ -5469,7 +5469,7 @@ globalThis.__gpui = (() => {
 
   // Which corner of an anchored surface is pinned to its trigger. The names
   // come from the host so that the check here, the parser behind it and the
-  // union in gpui.d.ts cannot disagree. Checked at the call site because an
+  // union in gpui-kit.d.ts cannot disagree. Checked at the call site because an
   // unrecognized anchor would otherwise open the surface in the component's
   // default corner, which looks like a positioning bug rather than a typo.
   methods.anchor = function (value) {
@@ -7912,7 +7912,7 @@ impl ShellRuntime {
                     let Some(named) = bridged.first().and_then(|value| value.as_str().ok()) else {
                         return Err(Exception::throw_type(
                             ctx,
-                            "role(name) expects a string; see the Role type in gpui.d.ts",
+                            "role(name) expects a string; see the Role type in gpui-kit.d.ts",
                         ));
                     };
                     if named == crate::a11y::FILTERED_ROLE {
@@ -7928,7 +7928,7 @@ impl ShellRuntime {
                             ctx,
                             &format!(
                                 "unknown accessibility role `{named}`; the names mirror \
-                                 gpui::Role in snake_case — see the Role type in gpui.d.ts"
+                                 gpui::Role in snake_case — see the Role type in gpui-kit.d.ts"
                             ),
                         ));
                     }
@@ -10049,7 +10049,7 @@ mod nested_view_lifecycle_tests {
         let mut view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View { render(cx) { return "child"; } }
 "#,
         );
@@ -10123,7 +10123,7 @@ export default class Child extends View { render(cx) { return "child"; } }
         let mut view_type = child_type(
             &runtime,
             r#"
-import { View } from "gpui";
+import { View } from "gpui-kit";
 export default class Child extends View { render(cx) { return "child"; } }
 "#,
         );
@@ -10188,7 +10188,7 @@ export default class Child extends View { render(cx) { return "child"; } }
         let view_type = child_type(
             &runtime,
             r#"
-import { View, div } from "gpui";
+import { View, div } from "gpui-kit";
 globalThis.child_hits = 0;
 
 export default class Child extends View {
@@ -10264,7 +10264,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
@@ -10352,7 +10352,7 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 // Takes a context, because module scope has none: the caller is a live host
@@ -10371,7 +10371,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class Child extends View {
@@ -10473,7 +10473,7 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 // Takes a context, because module scope has none: the caller is a live host
@@ -10492,7 +10492,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class BrokenChild extends View {
@@ -10592,7 +10592,7 @@ export default class BrokenChild extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Parent extends View {
   render() { return "parent"; }
 }
@@ -10601,7 +10601,7 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.successor_runs = 0;
 export default class BrokenChild extends View {
@@ -10695,7 +10695,7 @@ export default class BrokenChild extends View {
         std::fs::write(
             root.join("main.js"),
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   render(cx) { return "loaded child"; }
 }
@@ -10755,7 +10755,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
@@ -10832,7 +10832,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
@@ -10903,7 +10903,7 @@ export default class Child extends View {
         let view_type_a = child_type(
             &runtime_a,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
   render() { return "a"; }
@@ -10913,7 +10913,7 @@ export default class Child extends View {
         let view_type_b = child_type(
             &runtime_b,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 export default class Child extends View {
   init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
   render(cx) { return "b"; }
@@ -10982,7 +10982,7 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { div, View } from "gpui";
+import { div, View } from "gpui-kit";
 import { InputState } from "gpui-base";
 globalThis.failed_child_continuations = 0;
 

@@ -10,7 +10,7 @@ Accordion 是一个可折叠内容组件，允许用户展开和收起多个内�
 ## 导入
 
 ```rust
-use gpui_component::accordion::Accordion;
+use gpui_kit::component::accordion::Accordion;
 ```
 
 ## 用法
@@ -55,7 +55,7 @@ Accordion::new("my-accordion")
 ### 不同尺寸
 
 ```rust
-use gpui_component::{Sizable as _, Size};
+use gpui_kit::component::{Sizable as _, Size};
 
 Accordion::new("my-accordion")
     .small()

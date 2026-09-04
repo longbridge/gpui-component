@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- dialog
 ## Import
 
 ```rust
-use gpui_base::{Dialog, DialogBackdrop, DialogClose, DialogDescription, DialogPopup, DialogTitle, DialogTrigger};
+use gpui_kit::base::{Dialog, DialogBackdrop, DialogClose, DialogDescription, DialogPopup, DialogTitle, DialogTrigger};
 ```
 
 ## Anatomy and API

@@ -5,7 +5,7 @@ fn main() {
     // the icons at *build time* (notably `gpui-component`, whose `IconName`
     // enum is generated at proc-macro expansion time) can find them without
     // a sibling-crate reference. Cargo turns the `cargo:icons-dir=...` line
-    // below into the `DEP_GPUI_COMPONENT_DEFAULT_ICONS_ICONS_DIR` env var in
+    // below into the `DEP_GPUI_KIT_DEFAULT_ICONS_ICONS_DIR` env var in
     // every dependent's build script — see the `links` field in our
     // `Cargo.toml` for the full mechanism.
     //

@@ -10,7 +10,7 @@ Form 是一个完整的表单布局组件，适合组织字段、描述、校验
 ## 导入
 
 ```rust
-use gpui_component::form::{field, v_form, h_form, Form, Field};
+use gpui_kit::component::form::{field, v_form, h_form, Form, Field};
 ```
 
 ## 用法

@@ -12,7 +12,7 @@ The design mirrors the status bars found in native UI frameworks: Windows `Statu
 ## Import
 
 ```rust
-use gpui_component::status_bar::StatusBar;
+use gpui_kit::component::status_bar::StatusBar;
 ```
 
 ## Regions

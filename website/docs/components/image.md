@@ -10,8 +10,8 @@ The Image component provides a robust way to display images with comprehensive f
 ## Import
 
 ```rust
-use gpui::{img, ImageSource, ObjectFit};
-use gpui_component::{v_flex, h_flex, div, Icon, IconName};
+use gpui_kit::{img, ImageSource, ObjectFit};
+use gpui_kit::component::{v_flex, h_flex, div, Icon, IconName};
 ```
 
 ## Usage
@@ -378,7 +378,7 @@ img("assets/spinner.svg")
 ### Product Image Card
 
 ```rust
-use gpui_component::{v_flex, div, Icon, IconName};
+use gpui_kit::component::{v_flex, div, Icon, IconName};
 
 fn product_card(image_src: &str, title: &str, price: &str) -> impl IntoElement {
     v_flex()

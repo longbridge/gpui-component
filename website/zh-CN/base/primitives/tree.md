@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- tree
 ## 导入
 
 ```rust
-use gpui_base::{Tree, TreeItem, TreeState};
+use gpui_kit::base::{Tree, TreeItem, TreeState};
 ```
 
 ## 结构与 API
@@ -45,4 +45,3 @@ TreeState 保存展开、选择和虚拟滚动状态；稳定节点 ID 用于跨
 ## 注意事项
 
 在支持的位置使用稳定元素 ID，并在消费端设计系统中验证焦点、悬停、按下、选中、禁用、减少动态效果和高对比度状态。
-

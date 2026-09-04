@@ -181,13 +181,15 @@ const copy = computed(() =>
               principleLead: "行为属于基础层。",
               principleTail: "视觉属于应用。",
               principleDetail: "gpui-base 处理困难的交互机制：焦点、浮层定位、虚拟化与无障碍；你的产品决定它们最终呈现的样子。",
-              footerPrefix: "基于 Apache-2.0 许可证开源，由",
+              footerMessage:
+                  '基于 Apache-2.0 许可证开源，由 <a href="https://longbridge.com" target="_blank">Longbridge</a> 开发，基于 Zed Industries 的 <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> 构建。',
               footerNav: "页脚导航",
               contributors: "贡献者",
               reportBug: "报告问题",
               discussion: "讨论",
               iconCredits: "图标资源来自",
               and: "与",
+              period: "。",
           }
         : {
               searchShort: "Search",
@@ -232,13 +234,15 @@ const copy = computed(() =>
               principleLead: "Behavior belongs to the foundation.",
               principleTail: "Presentation belongs to the application.",
               principleDetail: "gpui-base handles the difficult interaction mechanics — focus, overlay positioning, virtualization and accessibility. Your product decides how they should look and feel.",
-              footerPrefix: "Open source under the Apache-2.0 License, developed by",
+              footerMessage:
+                  'Open source under the Apache-2.0 License, developed by <a href="https://longbridge.com" target="_blank">Longbridge</a> and built on <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> from Zed Industries.',
               footerNav: "Footer navigation",
               contributors: "Contributors",
               reportBug: "Report Bug",
               discussion: "Discussion",
-              iconCredits: "Icon resources by",
+              iconCredits: "Icons by",
               and: "and",
+              period: ".",
           },
 );
 </script>
@@ -521,10 +525,9 @@ const copy = computed(() =>
     <footer class="home-footer">
         <div class="home-footer__brand">
             <strong>GPUI Kit</strong>
-            <p>{{ copy.footerPrefix }} <a href="https://longbridge.com" target="_blank">Longbridge</a>.</p>
+            <p v-html="copy.footerMessage" />
         </div>
         <nav :aria-label="copy.footerNav">
-            <a href="https://gpui.rs" target="_blank">GPUI</a>
             <a :href="contributorsHref">{{ copy.contributors }}</a>
             <a :href="skillsHref" target="_blank">Skills</a>
             <a :href="llmsHref" target="_blank">llms-full.txt</a>
@@ -535,7 +538,7 @@ const copy = computed(() =>
             {{ copy.iconCredits }}
             <a href="https://lucide.dev" target="_blank">Lucide</a>
             {{ copy.and }}
-            <a href="https://isocons.app" target="_blank">Isocons</a>.
+            <a href="https://isocons.app" target="_blank">Isocons</a>{{ copy.period }}
         </p>
     </footer>
 </template>

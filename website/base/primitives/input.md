@@ -16,7 +16,7 @@ Use [Textarea](./textarea.md) for ordinary multi-line text and
 ## Import
 
 ```rust
-use gpui_base::input::{Input, InputEvent, InputState};
+use gpui_kit::base::input::{Input, InputEvent, InputState};
 ```
 
 ## Basic usage

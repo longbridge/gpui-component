@@ -10,8 +10,8 @@ Dialog 用于创建普通对话框、确认框和提示弹窗。它支持遮罩�
 ## 导入
 
 ```rust
-use gpui_component::dialog::DialogButtonProps;
-use gpui_component::WindowExt;
+use gpui_kit::component::dialog::DialogButtonProps;
+use gpui_kit::component::WindowExt;
 ```
 
 ## 用法
@@ -23,7 +23,7 @@ use gpui_component::WindowExt;
 [Root::render_dialog_layer](https://docs.rs/gpui-component/latest/gpui_component/struct.Root.html#method.render_dialog_layer) 会把当前激活的对话框渲染在应用内容之上。
 
 ```rust
-use gpui_component::TitleBar;
+use gpui_kit::component::TitleBar;
 
 struct MyApp {
     view: AnyView,
@@ -107,7 +107,7 @@ window.open_dialog(cx, |dialog, _, cx| {
 ### 可滚动内容
 
 ```rust
-use gpui_component::text::markdown;
+use gpui_kit::component::text::markdown;
 
 window.open_dialog(cx, |dialog, window, cx| {
     dialog
@@ -198,7 +198,7 @@ Button::new("submit")
 ### 导入
 
 ```rust
-use gpui_component::dialog::{
+use gpui_kit::component::dialog::{
     Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 };
 ```

@@ -10,7 +10,7 @@ A specialized input component for one-time passwords (OTP) that displays multipl
 ## Import
 
 ```rust
-use gpui_component::input::{OtpInput, OtpState};
+use gpui_kit::component::input::{OtpInput, OtpState};
 ```
 
 ## Usage

@@ -19,8 +19,8 @@ description: 将发送者身份、元信息、富内容和操作组合成对齐�
 ## 导入
 
 ```rust
-use gpui::{ParentElement as _, StyleRefinement, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, StyleRefinement, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Colorize as _, Sizable as _, StyledExt as _,
     attachment::{Attachment, AttachmentContent, AttachmentTitle},
     avatar::Avatar,

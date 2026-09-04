@@ -10,7 +10,7 @@ description: 支持语法高亮、行号、折叠和文本装饰的源代码编�
 ## 导入
 
 ```rust
-use gpui_component::input::{Editor, EditorState, TabSize};
+use gpui_kit::component::input::{Editor, EditorState, TabSize};
 ```
 
 ## 基础用法

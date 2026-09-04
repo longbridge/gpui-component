@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- progress
 ## 导入
 
 ```rust
-use gpui_base::{Progress, ProgressIndicator, ProgressTrack};
+use gpui_kit::base::{Progress, ProgressIndicator, ProgressTrack};
 ```
 
 ## 结构与 API
@@ -45,4 +45,3 @@ use gpui_base::{Progress, ProgressIndicator, ProgressTrack};
 ## 注意事项
 
 在支持的位置使用稳定元素 ID，并在消费端设计系统中验证焦点、悬停、按下、选中、禁用、减少动态效果和高对比度状态。
-

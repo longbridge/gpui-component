@@ -1,6 +1,6 @@
-# GPUI Component Assets
+# GPUI Kit Assets
 
-The default assets bundle for [GPUI Component](https://github.com/longbridge/gpui-component).
+The default assets bundle for [GPUI Kit](https://gpui-kit.com), enabled through the `assets` feature of `gpui-kit` and exposed as `gpui_kit::assets`.
 
 ## License
 

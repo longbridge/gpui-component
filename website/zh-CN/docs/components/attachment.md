@@ -18,8 +18,8 @@ description: 支持上传状态、预览和操作的可组合文件与媒体附�
 ## 导入
 
 ```rust
-use gpui::{Axis, ParentElement as _, Styled as _};
-use gpui_component::{
+use gpui_kit::{Axis, ParentElement as _, Styled as _};
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Size, Sizable as _, StyledExt as _,
     attachment::{
         Attachment, AttachmentActions, AttachmentContent, AttachmentDescription,

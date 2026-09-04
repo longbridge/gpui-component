@@ -21,8 +21,8 @@ description: 可承载文本、富内容和 reaction 控件的聊天消息表面
 基础组合需要以下类型：
 
 ```rust
-use gpui::{ParentElement as _, Styled as _};
-use gpui_component::{
+use gpui_kit::{ParentElement as _, Styled as _};
+use gpui_kit::component::{
     bubble::{
         Bubble, BubbleContent, BubbleGroup, BubbleReactionSide,
         BubbleReactions, BubbleVariant,
@@ -132,8 +132,8 @@ for variant in [
 `BubbleContent` 接受任意 GPUI element，因此代码块、文件摘要和多段内容都可以由应用组合：
 
 ```rust
-use gpui::{div, ParentElement as _, Styled as _};
-use gpui_component::{h_flex, v_flex, ActiveTheme as _, Sizable as _, StyledExt as _};
+use gpui_kit::{div, ParentElement as _, Styled as _};
+use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _, StyledExt as _};
 
 Bubble::new()
     .alignment(MessageAlignment::Start)
@@ -340,7 +340,7 @@ BubbleReactions::new()
 
 ```rust
 BubbleReactions::new().p_0().child(
-    gpui_component::popover::Popover::new("bubble-more")
+    gpui_kit::component::popover::Popover::new("bubble-more")
         .trigger(
             Button::new("bubble-more-trigger")
                 .ghost()

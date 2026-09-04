@@ -7,7 +7,7 @@ order: -4
 All components support theming through the built-in Theme system, the [ActiveTheme] trait provides access to the current theme colors:
 
 ```rs
-use gpui_component::{ActiveTheme as _};
+use gpui_kit::component::{ActiveTheme as _};
 
 // Access theme colors in your components
 cx.theme().primary
@@ -54,8 +54,8 @@ Use the `name` of an entry in the `themes` array, such as `Ayu Light`, when look
 
 ```rs
 use std::path::PathBuf;
-use gpui::{App, SharedString};
-use gpui_component::{Theme, ThemeRegistry};
+use gpui_kit::{App, SharedString};
+use gpui_kit::component::{Theme, ThemeRegistry};
 
 pub fn init(cx: &mut App) {
     let theme_name = SharedString::from("Ayu Light");

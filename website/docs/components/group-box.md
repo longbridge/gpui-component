@@ -10,7 +10,7 @@ The GroupBox component is a versatile container that groups related content toge
 ## Import
 
 ```rust
-use gpui_component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
+use gpui_kit::component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
 ```
 
 ## Usage
@@ -73,7 +73,7 @@ GroupBox::new()
 ### Custom Title Styling
 
 ```rust
-use gpui::{StyleRefinement, relative};
+use gpui_kit::{StyleRefinement, relative};
 
 GroupBox::new()
     .outline()

@@ -22,7 +22,7 @@ single screen, what this project is — and then prove it is real.
    type names (`DockArea`, `Rope`, `Tiles`), real numbers from the README (120
    FPS, 200K lines). A developer judges credibility from specifics.
 4. **Same palette and typeface as the library.** Colours come from
-   `crates/ui/src/theme/default-theme.json`; code colours come from the same
+   `crates/component/src/theme/default-theme.json`; code colours come from the same
    shiki theme the docs use; the type is the platform font, as in a real app.
    The site must not invent a look the components cannot produce.
 5. **Restraint carries the design.** Hierarchy comes from type scale, weight
@@ -33,21 +33,21 @@ single screen, what this project is — and then prove it is real.
 Defined in `src/styles/global.css`, mapped from the default theme so the
 site and the documented components share one palette.
 
-| Token | Light | Dark | Theme source |
-| --- | --- | --- | --- |
-| `--background` | `#ffffff` | `#0a0a0a` | `background` |
-| `--foreground` | `#0a0a0a` | `#fafafa` | `foreground` |
-| `--border` | `#e5e5e5` | `#262626` | `border` |
-| `--secondary` | `#f5f5f5` | `#262626` | `secondary.background` |
-| `--muted-foreground` | `#737373` | `#a3a3a3` | `muted.foreground` |
-| `--sidebar` | `#fafafa` | `#0f0f0f` | `sidebar.background` |
-| `--titlebar` | `#f8f8f8` | `#171717` | `title_bar.background` |
-| `--brand` | `#171717` | `#fafafa` | `primary.background` |
-| `--data-1…5` | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5` |
-| logo accent | `#3b82f6` | `#419cff` | light `chart_2` / dark syntax link and tag blue |
-| `--selection` | `#55a0fc` | same | `selection.background` |
-| `--success` | `#22c55e` | same | `success.background` |
-| `--code-*` | macos-classic-light | macos-classic-dark | `src/*.theme.json` |
+| Token                | Light                 | Dark                           | Theme source                                    |
+| -------------------- | --------------------- | ------------------------------ | ----------------------------------------------- |
+| `--background`       | `#ffffff`             | `#0a0a0a`                      | `background`                                    |
+| `--foreground`       | `#0a0a0a`             | `#fafafa`                      | `foreground`                                    |
+| `--border`           | `#e5e5e5`             | `#262626`                      | `border`                                        |
+| `--secondary`        | `#f5f5f5`             | `#262626`                      | `secondary.background`                          |
+| `--muted-foreground` | `#737373`             | `#a3a3a3`                      | `muted.foreground`                              |
+| `--sidebar`          | `#fafafa`             | `#0f0f0f`                      | `sidebar.background`                            |
+| `--titlebar`         | `#f8f8f8`             | `#171717`                      | `title_bar.background`                          |
+| `--brand`            | `#171717`             | `#fafafa`                      | `primary.background`                            |
+| `--data-1…5`         | `#93c5fd` → `#1e40af` | blue scale, keyed by `#419cff` | `chart_1…chart_5`                               |
+| logo accent          | `#3b82f6`             | `#419cff`                      | light `chart_2` / dark syntax link and tag blue |
+| `--selection`        | `#55a0fc`             | same                           | `selection.background`                          |
+| `--success`          | `#22c55e`             | same                           | `success.background`                            |
+| `--code-*`           | macos-classic-light   | macos-classic-dark             | `src/*.theme.json`                              |
 
 Rules that follow from this:
 
@@ -117,6 +117,11 @@ Two constraints that are easy to get wrong:
   that fixed left/right layout, at every width down to the mobile breakpoint.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
+- Pages that are the site's own surfaces — App Stories, Skills, Contributors,
+  Releases — are their own routes under `src/pages`. They render through
+  `DocsLayout` with no sidebar, which puts them in `.docs-main--full`: full
+  width, and the same top offset as a docs page so a title never sits against
+  the toolbar. A page must not add its own offset on top.
 - Live WASM examples belong to their component documentation, next to the API
   and guidance they demonstrate. The homepage links into that documentation
   instead of maintaining a separate gallery surface.
@@ -207,8 +212,11 @@ through motion alone.
 
 - The crate is **not published**. Installation must show the git dependency,
   never `cargo add`, and the UI must not display a version number.
-- Code samples must be real API, verified against `crates/ui` and
+- Code samples must be real API, verified against `crates/component` and
   `crates/base`.
+- The release notes page is rendered at build time from GitHub Releases
+  (`data/releases.data.js`) by the docs markdown pipeline; it holds no copy of
+  its own, so a release is written once, on GitHub.
 - Capability copy tracks the README's feature list — 120 FPS rendering, complex
   data tables, virtualized lists, the 200K-line editor, freeform docking,
   multi-theme support. Update it when the README's features change.
@@ -256,3 +264,11 @@ navbar rather than inside the Resources menu. Submissions come from
 | `src/lib/sidebar.ts` | Sidebar generation from the docs content collection |
 | `src/lib/site.ts` | Shared `SITE_URL` for canonical links and OG tags |
 | `src/light.theme.json` / `src/dark.theme.json` | Shiki syntax themes; the source of `--code-*` |
+
+## Attribution
+
+The footer is the one place the site states GPUI's origin, in one plain
+line: built on GPUI, from Zed Industries, also Apache-2.0. The landing page
+footer and the docs footer say the same thing. Do not repeat it in the hero,
+tutorials or API pages, where the product is GPUI Kit, and do not grow it into
+a disclaimer.

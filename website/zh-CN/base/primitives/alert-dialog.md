@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- alert-dialog
 ## 导入
 
 ```rust
-use gpui_base::{AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogPopup, AlertDialogTitle, AlertDialogTrigger};
+use gpui_kit::base::{AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogPopup, AlertDialogTitle, AlertDialogTrigger};
 ```
 
 ## 结构与 API

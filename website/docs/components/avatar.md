@@ -10,7 +10,7 @@ The Avatar component displays user profile images with intelligent fallbacks. Wh
 ## Import
 
 ```rust
-use gpui_component::avatar::{Avatar, AvatarGroup};
+use gpui_kit::component::avatar::{Avatar, AvatarGroup};
 ```
 
 ## Usage
@@ -44,7 +44,7 @@ Avatar::new()
 For anonymous users or when no name is provided:
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 // Default user icon placeholder
 Avatar::new()
@@ -188,7 +188,7 @@ AvatarGroup::new()
 ### Team Display
 
 ```rust
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 
 v_flex()
     .gap_4()
@@ -229,7 +229,7 @@ h_flex()
 ### Anonymous User
 
 ```rust
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 
 Avatar::new()
     .placeholder(IconName::UserCircle)

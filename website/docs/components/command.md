@@ -17,7 +17,7 @@ interaction state: query input, focus, selection, scrolling, and loading.
 ## Import
 
 ```rust
-use gpui_component::command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState};
+use gpui_kit::component::command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState};
 ```
 
 ## Composition
@@ -48,7 +48,7 @@ Action's active binding in the Command focus scope and then at application
 scope, rendering a `Kbd` hint only when it finds one.
 
 ```rust
-use gpui::{actions, KeyBinding};
+use gpui_kit::{actions, KeyBinding};
 
 actions!(my_app, [OpenProfile, OpenBilling]);
 
@@ -128,7 +128,7 @@ calls `on_cancel` and then propagates Cancel. Let the hosting Dialog perform
 dismissal—do not close it again in `on_cancel`.
 
 ```rust
-use gpui_component::WindowExt as _;
+use gpui_kit::component::WindowExt as _;
 
 let state = self.command_state.clone();
 window.open_dialog(cx, move |dialog, _, _| {

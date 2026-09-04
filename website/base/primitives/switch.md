@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- switch
 ## Import
 
 ```rust
-use gpui_base::{Switch, SwitchThumb, SwitchTrack};
+use gpui_kit::base::{Switch, SwitchThumb, SwitchTrack};
 ```
 
 ## Anatomy and API

@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- date-picker
 ## Import
 
 ```rust
-use gpui_base::{DatePicker};
+use gpui_kit::base::{DatePicker};
 ```
 
 ## Anatomy and API

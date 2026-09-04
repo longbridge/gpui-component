@@ -3,9 +3,15 @@ export interface Props {
   lang?: 'en' | 'zh-CN';
   currentPath?: string;
   starCount?: number;
+  /**
+   * Language-switch target for a page with no translated counterpart, such as
+   * 404. Without it the switch derives the target from the current path, which
+   * only resolves when both locales publish that page.
+   */
+  langSwitchHref?: string;
 }
 
-const { lang = 'en', currentPath = '', starCount = 0 } = Astro.props;
+const { lang = 'en', currentPath = '', starCount = 0, langSwitchHref: langSwitchOverride } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const isZh = lang === 'zh-CN';
 
@@ -33,23 +39,23 @@ const resourceLinks = isZh
   ? [
       { text: 'API Doc', href: 'https://docs.rs/gpui-component' },
       { text: '贡献者', href: url('zh-CN/contributors') },
-      { text: '版本发布', href: 'https://github.com/longbridge/gpui-kit/releases' },
+      { text: '版本发布', href: url('zh-CN/releases') },
       { text: 'Issues', href: 'https://github.com/longbridge/gpui-kit/issues' },
       { text: '讨论', href: 'https://github.com/longbridge/gpui-kit/discussions' },
     ]
   : [
       { text: 'API Doc', href: 'https://docs.rs/gpui-component' },
       { text: 'Contributors', href: url('contributors') },
-      { text: 'Releases', href: 'https://github.com/longbridge/gpui-kit/releases' },
+      { text: 'Releases', href: url('releases') },
       { text: 'Issues', href: 'https://github.com/longbridge/gpui-kit/issues' },
       { text: 'Discussion', href: 'https://github.com/longbridge/gpui-kit/discussions' },
     ];
 
 const baseSlash = `${base}/`.replace(/\/+/g, '/');
 const zhBase = `${base}/zh-CN/`.replace(/\/+/g, '/');
-const langSwitchHref = isZh
-  ? currentPath.replace(zhBase, baseSlash)
-  : currentPath.replace(baseSlash, zhBase);
+const langSwitchHref =
+  langSwitchOverride ??
+  (isZh ? currentPath.replace(zhBase, baseSlash) : currentPath.replace(baseSlash, zhBase));
 const langLabel = isZh ? 'EN' : '中';
 const resourcesLabel = isZh ? '资源' : 'Resources';
 ---
@@ -190,7 +196,11 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
     async function openSearch() {
       if (!initialized) {
         try {
-          const { PagefindUI } = await import('/pagefind/pagefind-ui.js' as any);
+          // Pagefind's bundle is written by its CLI after the Astro build, so
+          // the path cannot be resolved at build time. Keep it in a variable
+          // so the bundler leaves the import alone.
+          const pagefindUrl = `${import.meta.env.BASE_URL}pagefind/pagefind-ui.js`.replace(/\/+/g, '/');
+          const { PagefindUI } = await import(/* @vite-ignore */ pagefindUrl);
           const wrap = document.createElement('div');
           wrap.id = 'search-modal-overlay';
           wrap.innerHTML = '<div id="search-modal-inner"><div id="search-modal-ui"></div></div>';

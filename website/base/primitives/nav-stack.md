@@ -21,23 +21,23 @@ cargo run -p gpui-base --example components -- nav-stack
 ## Import
 
 ```rust
-use gpui_base::{NavMotion, NavOperation, NavPage, NavStack, NavStackState};
-use gpui_base::motion::{PresencePhase, Transition};
+use gpui_kit::base::{NavMotion, NavOperation, NavPage, NavStack, NavStackState};
+use gpui_kit::base::motion::{PresencePhase, Transition};
 ```
 
 ## Anatomy and API
 
 `NavStackState` is the stack. It lives in a GPUI entity, holds `AnyView`s root first, and emits `NavStackEvent` after every change.
 
-| Method | Does |
-| --- | --- |
-| `push(view, motion, cx)` | Pushes over the current top. Into an empty stack it is immediate, like Qt's `initialItem`. |
-| `pop(motion, cx)` | Pops the top and returns it. The root is never popped, so this returns `None` at a depth of one. |
-| `pop_to_root(motion, cx)` | Pops everything above the root in one transition and returns those views. |
-| `forward(motion, cx)` | Brings back the most recently popped view over the current top and returns it. `None` when nothing has been popped since the last push. |
-| `replace(view, motion, cx)` | Swaps the top for `view` and returns the one replaced, keeping the forward views. On an empty stack it pushes. |
-| `clear(cx)` | Empties the stack and the forward views immediately. |
-| `depth()`, `is_empty()`, `current()`, `views()`, `forward_views()` | Read the stack. Show a back button when `depth() > 1`, a forward button when `forward_views()` is not empty. |
+| Method                                                             | Does                                                                                                                                    |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `push(view, motion, cx)`                                           | Pushes over the current top. Into an empty stack it is immediate, like Qt's `initialItem`.                                              |
+| `pop(motion, cx)`                                                  | Pops the top and returns it. The root is never popped, so this returns `None` at a depth of one.                                        |
+| `pop_to_root(motion, cx)`                                          | Pops everything above the root in one transition and returns those views.                                                               |
+| `forward(motion, cx)`                                              | Brings back the most recently popped view over the current top and returns it. `None` when nothing has been popped since the last push. |
+| `replace(view, motion, cx)`                                        | Swaps the top for `view` and returns the one replaced, keeping the forward views. On an empty stack it pushes.                          |
+| `clear(cx)`                                                        | Empties the stack and the forward views immediately.                                                                                    |
+| `depth()`, `is_empty()`, `current()`, `views()`, `forward_views()` | Read the stack. Show a back button when `depth() > 1`, a forward button when `forward_views()` is not empty.                            |
 
 `NavStack` is the element. It holds the entity, takes a `transition` to run each change under, and hands every mounted view to the `item` renderer as a `NavPage`. Style the element for size, background and clipping; it is positioned so that the two pages of a change can overlap.
 

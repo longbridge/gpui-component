@@ -10,7 +10,7 @@ A star rating component that allows users to select a rating value. Supports dif
 ## Import
 
 ```rust
-use gpui_component::rating::Rating;
+use gpui_kit::component::rating::Rating;
 ```
 
 ## Usage

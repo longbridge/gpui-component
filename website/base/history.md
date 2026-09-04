@@ -14,7 +14,7 @@ order: 7
 ## Import
 
 ```rust
-use gpui_base::{History, UndoHistory};
+use gpui_kit::base::{History, UndoHistory};
 ```
 
 ## Which one to use
@@ -54,17 +54,17 @@ assert_eq!(history.current(), Some(&"B"));
 
 `entries()` iterates from the root to the current entry. With the full `A -> B -> C` trail, it yields `A`, `B`, then `C`; `entries().rev()` yields `C`, `B`, then `A`. `forward_entries()` iterates from the nearest forward entry to the furthest. Use `retain` to remove invalid locations, `replace_current` to update the current location in place, and `remove_current` to remove it without discarding the forward branch.
 
-| Method | Does |
-| --- | --- |
-| `new()` | Creates an empty trail. `max_entries` defaults to 1000. |
-| `max_entries(n)` | Caps root-to-current entries and immediately removes the oldest excess entries. |
-| `push(entry)` | Makes `entry` current and drops the forward branch. |
-| `back()`, `forward()` | Move through the trail and return the resulting current entry. |
-| `current()` | Returns the current entry. |
-| `can_back()`, `can_forward()` | Report whether movement in that direction is available. |
-| `entries()`, `forward_entries()` | Iterate the current trail and forward branch in navigation order. |
-| `replace_current(entry)`, `remove_current()` | Update or remove the current entry. |
-| `retain(keep)`, `clear()` | Remove rejected entries from both sides, or empty the trail. |
+| Method                                       | Does                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| `new()`                                      | Creates an empty trail. `max_entries` defaults to 1000.                         |
+| `max_entries(n)`                             | Caps root-to-current entries and immediately removes the oldest excess entries. |
+| `push(entry)`                                | Makes `entry` current and drops the forward branch.                             |
+| `back()`, `forward()`                        | Move through the trail and return the resulting current entry.                  |
+| `current()`                                  | Returns the current entry.                                                      |
+| `can_back()`, `can_forward()`                | Report whether movement in that direction is available.                         |
+| `entries()`, `forward_entries()`             | Iterate the current trail and forward branch in navigation order.               |
+| `replace_current(entry)`, `remove_current()` | Update or remove the current entry.                                             |
+| `retain(keep)`, `clear()`                    | Remove rejected entries from both sides, or empty the trail.                    |
 
 ## `UndoHistory`: grouped undo and redo
 
@@ -89,14 +89,14 @@ assert_eq!(
 
 For changes whose boundary is not explicit, `group_interval` combines consecutive pushes close enough in time. A successful undo or redo ends that timed grouping window, so the next push starts a new transaction. Explicit grouping is separate: while it is active, a push still appends to the current transaction, including after an undo. A new push clears redo transactions. While replaying changes, use `set_ignoring(true)` to prevent the replay itself from being recorded.
 
-| Method | Does |
-| --- | --- |
-| `new()` | Creates an empty undo history. `max_undos` defaults to 1000. |
-| `max_undos(n)` | Caps undo transactions and immediately removes the oldest excess transactions. Redo preserves this cap. |
-| `group_interval(duration)` | Groups consecutive nearby pushes into one transaction. |
-| `start_grouping()`, `end_grouping()` | Make subsequent pushes append to the current transaction; ending grouping stops that explicit append behavior. On an empty history, as in the example above, the first push starts the transaction. |
-| `push(change)` | Records a change in the current or a new transaction and clears redo. |
-| `undo()`, `redo()` | Return the latest transaction newest-first for undo, oldest-first for redo. |
-| `can_undo()`, `can_redo()` | Report whether a transaction is available. |
-| `set_ignoring(bool)`, `is_ignoring()` | Control whether pushes are recorded. |
-| `clear()` | Empties undo and redo transactions. |
+| Method                                | Does                                                                                                                                                                                                |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new()`                               | Creates an empty undo history. `max_undos` defaults to 1000.                                                                                                                                        |
+| `max_undos(n)`                        | Caps undo transactions and immediately removes the oldest excess transactions. Redo preserves this cap.                                                                                             |
+| `group_interval(duration)`            | Groups consecutive nearby pushes into one transaction.                                                                                                                                              |
+| `start_grouping()`, `end_grouping()`  | Make subsequent pushes append to the current transaction; ending grouping stops that explicit append behavior. On an empty history, as in the example above, the first push starts the transaction. |
+| `push(change)`                        | Records a change in the current or a new transaction and clears redo.                                                                                                                               |
+| `undo()`, `redo()`                    | Return the latest transaction newest-first for undo, oldest-first for redo.                                                                                                                         |
+| `can_undo()`, `can_redo()`            | Report whether a transaction is available.                                                                                                                                                          |
+| `set_ignoring(bool)`, `is_ignoring()` | Control whether pushes are recorded.                                                                                                                                                                |
+| `clear()`                             | Empties undo and redo transactions.                                                                                                                                                                 |

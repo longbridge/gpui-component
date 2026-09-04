@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- avatar
 ## Import
 
 ```rust
-use gpui_base::{Avatar, AvatarFallback, AvatarImage};
+use gpui_kit::base::{Avatar, AvatarFallback, AvatarImage};
 ```
 
 ## Anatomy and API

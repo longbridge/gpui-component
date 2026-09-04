@@ -10,7 +10,7 @@ A flexible sidebar component that provides navigation structure for applications
 ## Import
 
 ```rust
-use gpui_component::sidebar::{
+use gpui_kit::component::sidebar::{
     Sidebar, SidebarHeader, SidebarFooter, SidebarGroup,
     SidebarMenu, SidebarMenuItem, SidebarToggleButton
 };
@@ -21,7 +21,7 @@ use gpui_component::sidebar::{
 ### Basic Sidebar
 
 ```rust
-use gpui_component::{sidebar::*, Side};
+use gpui_kit::component::{sidebar::*, Side};
 
 Sidebar::new()
     .header(
@@ -140,7 +140,7 @@ Sidebar::new()
 ### With Badges and Suffixes
 
 ```rust
-use gpui_component::{Badge, Switch};
+use gpui_kit::component::{Badge, Switch};
 
 SidebarMenuItem::new("Notifications")
     .icon(IconName::Bell)
@@ -188,7 +188,7 @@ Sidebar::new()
 Add right-click context menus to sidebar menu items for additional actions:
 
 ```rust
-use gpui_component::menu::PopupMenu;
+use gpui_kit::component::menu::PopupMenu;
 
 SidebarMenuItem::new("Project Files")
     .icon(IconName::Folder)
@@ -248,7 +248,7 @@ Sidebar::new()
 ### Interactive Header with Popup Menu
 
 ```rust
-use gpui_component::menu::DropdownMenu;
+use gpui_kit::component::menu::DropdownMenu;
 
 SidebarHeader::new()
     .child(

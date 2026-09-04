@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- progress
 ## Import
 
 ```rust
-use gpui_base::{Progress, ProgressIndicator, ProgressTrack};
+use gpui_kit::base::{Progress, ProgressIndicator, ProgressTrack};
 ```
 
 ## Anatomy and API

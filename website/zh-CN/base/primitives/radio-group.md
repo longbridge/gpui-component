@@ -21,7 +21,7 @@ cargo run -p gpui-base --example components -- radio-group
 ## 导入
 
 ```rust
-use gpui_base::{Radio, RadioGroup};
+use gpui_kit::base::{Radio, RadioGroup};
 ```
 
 ## 结构与 API

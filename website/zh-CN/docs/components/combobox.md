@@ -22,10 +22,10 @@ description: 带有可搜索下拉列表的自动补全输入组件。
 ## 导入
 
 ```rust
-use gpui_component::combobox::{
+use gpui_kit::component::combobox::{
     Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
 };
-use gpui_component::searchable_list::{
+use gpui_kit::component::searchable_list::{
     SearchableListItem, SearchableVec, SearchableGroup,
 };
 ```

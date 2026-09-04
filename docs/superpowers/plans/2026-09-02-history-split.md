@@ -294,7 +294,7 @@ git commit -m "docs: distinguish navigation and undo history"
 
 - [ ] **Step 5: Prepare the independent pull request**
 
-Push `history-split`, open a PR targeting `longbridge/gpui-component:main`, and
+Push `history-split`, open a PR targeting `longbridge/gpui-kit:main`, and
 summarize the breaking API split, consumer migrations, and verification. Confirm
 the PR begins at squash merge `0c746dff` from #2922 and contains no commits from
 the former `nav-stack` branch.
