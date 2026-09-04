@@ -20,10 +20,11 @@ const { Content, headings } = await render(entry);
 const pathname = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
 const devVersion = import.meta.env.DEV ? 'dev' : undefined;
+const seoTitle = entry.id === 'index.md' ? entry.data.title : `${entry.data.title} — GPUI Base`;
 ---
 
 <DocsLayout
-  title={entry.data.title}
+  title={seoTitle}
   description={entry.data.description}
   lang="zh-CN"
   headings={headings}

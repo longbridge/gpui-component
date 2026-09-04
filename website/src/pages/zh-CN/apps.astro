@@ -1,5 +1,6 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import AppsApp from '../../components/AppsApp.vue';
 ---
 
 <DocsLayout
@@ -7,15 +8,5 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   description="基于 GPUI Kit 构建的桌面应用——从生产环境的交易终端到数据库客户端、终端与系统工具。"
   lang="zh-CN"
 >
-  <div id="apps-root-zh" data-lang="zh-CN"></div>
+  <AppsApp client:load lang="zh-CN" />
 </DocsLayout>
-
-<script>
-  import { createApp } from 'vue';
-  import AppsApp from '../../components/AppsApp.vue';
-
-  const root = document.getElementById('apps-root-zh');
-  if (root) {
-    createApp(AppsApp, { lang: 'zh-CN' }).mount(root);
-  }
-</script>

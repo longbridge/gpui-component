@@ -1,6 +1,7 @@
 ---
 import DocsLayout from '../layouts/DocsLayout.astro';
 import { fetchContributors } from '../lib/github';
+import ContributorsApp from '../components/ContributorsApp.vue';
 
 let contributors: Awaited<ReturnType<typeof fetchContributors>> = [];
 try { contributors = await fetchContributors(); } catch {}
@@ -11,16 +12,5 @@ try { contributors = await fetchContributors(); } catch {}
   description="Thanks to all the people who have contributed to GPUI Kit."
   lang="en"
 >
-  <div id="contributors-root" data-lang="en" data-contributors={JSON.stringify(contributors)}></div>
+  <ContributorsApp client:load lang="en" contributors={contributors} />
 </DocsLayout>
-
-<script>
-  import { createApp } from 'vue';
-  import ContributorsApp from '../components/ContributorsApp.vue';
-
-  const root = document.getElementById('contributors-root');
-  if (root) {
-    const contributors = JSON.parse(root.dataset.contributors ?? '[]');
-    createApp(ContributorsApp, { lang: 'en', contributors }).mount(root);
-  }
-</script>

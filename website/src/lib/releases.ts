@@ -41,8 +41,11 @@ function linkReferences(markdown: string): string {
 // The site renderer gives every heading an id. Release notes repeat their
 // headings across versions, so those ids would collide; the version headings
 // the page adds itself are the anchors readers need.
-function stripHeadingIds(html: string): string {
-  return html.replace(/<h([1-6]) id="[^"]*"/g, '<h$1').replace(/<h([1-6]) id='[^']*'/g, '<h$1');
+function normalizeReleaseHeadings(html: string): string {
+  return html
+    .replace(/<h([1-6]) id="[^"]*"/g, '<h$1')
+    .replace(/<h([1-6]) id='[^']*'/g, '<h$1')
+    .replace(/<\/?h([1-6])(?=[\s>])/g, (tag, level) => tag.replace(`h${level}`, `h${Math.min(Number(level) + 2, 6)}`));
 }
 
 interface GitHubRelease {
@@ -93,7 +96,7 @@ export async function loadReleases(): Promise<Release[]> {
           date: item.published_at.slice(0, 10),
           url: item.html_url,
           prerelease: item.prerelease,
-          html: stripHeadingIds(rendered.code),
+          html: normalizeReleaseHeadings(rendered.code),
         };
       }),
   );

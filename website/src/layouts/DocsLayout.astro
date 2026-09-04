@@ -31,9 +31,35 @@ try {
 } catch {}
 
 const isZh = lang === 'zh-CN';
+const segments = pathname.split('/').filter(Boolean);
+const itemListElement = segments
+  .filter(segment => segment !== 'zh-CN')
+  .map((segment, index, visibleSegments) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    name: index === visibleSegments.length - 1 && title
+      ? title
+      : segment.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase()),
+    item: `${SITE_URL}/${isZh ? 'zh-CN/' : ''}${visibleSegments.slice(0, index + 1).join('/')}`,
+  }));
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: canonical,
+    inLanguage: isZh ? 'zh-CN' : 'en',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement,
+  },
+];
 ---
 
-<BaseLayout title={title} description={description} lang={isZh ? 'zh-CN' : 'en'} canonical={canonical}>
+<BaseLayout title={title} description={description} lang={isZh ? 'zh-CN' : 'en'} canonical={canonical} structuredData={structuredData}>
   <Nav lang={lang} currentPath={pathname} starCount={starCount} />
 
   <div class="docs-layout">

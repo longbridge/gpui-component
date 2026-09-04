@@ -2,8 +2,8 @@ import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
 
 const pageSchema = z.object({
-  title: z.string().optional(),
-  description: z.string().optional(),
+  title: z.string().min(1),
+  description: z.string().min(1),
   order: z.number().optional(),
   example: z.union([z.string(), z.literal(false)]).optional(),
   exampleKind: z.enum(['base', 'component']).optional(),

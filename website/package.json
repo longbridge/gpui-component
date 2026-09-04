@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && npx pagefind --site dist",
+    "test:seo": "node --test tests/seo.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

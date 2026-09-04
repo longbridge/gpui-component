@@ -8,9 +8,10 @@ export interface Props {
 }
 
 const { title, description, lang = 'en' } = Astro.props;
+const canonical = new URL(Astro.url.pathname, 'https://gpui-kit.com').href;
 ---
 
-<BaseLayout title={title} description={description} lang={lang}>
+<BaseLayout title={title} description={description} lang={lang} canonical={canonical}>
   <slot />
 </BaseLayout>
 

@@ -1,8 +1,8 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
 import { readdir, readFile } from 'node:fs/promises';
-import { join, dirname, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
+import SkillsApp from '../../components/SkillsApp.vue';
 
 interface Skill {
     id: string;
@@ -54,16 +54,5 @@ const skills = await loadSkills();
   description="适用于 GPUI Kit 的开发技能、约定和最佳实践。"
   lang="zh-CN"
 >
-  <div id="skills-root-zh" data-lang="zh-CN" data-skills={JSON.stringify(skills)}></div>
+  <SkillsApp client:load lang="zh-CN" skills={skills} />
 </DocsLayout>
-
-<script>
-  import { createApp } from 'vue';
-  import SkillsApp from '../../components/SkillsApp.vue';
-
-  const root = document.getElementById('skills-root-zh');
-  if (root) {
-    const skills = JSON.parse(root.dataset.skills ?? '[]');
-    createApp(SkillsApp, { lang: 'zh-CN', skills }).mount(root);
-  }
-</script>
