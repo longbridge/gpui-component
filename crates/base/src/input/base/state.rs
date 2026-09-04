@@ -3454,6 +3454,66 @@ mod tests {
         });
     }
 
+    /// Search navigation must reveal the selected match even when the user has
+    /// manually scrolled the viewport past it.
+    #[gpui::test]
+    fn test_next_search_match_scrolls_back_to_match_after_manual_scroll(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        let text = (0..80)
+            .map(|row| {
+                if matches!(row, 0 | 4 | 70) {
+                    format!("match on row {row}")
+                } else {
+                    format!("line {row}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let second_match_start = text.match_indices("match").nth(1).unwrap().0;
+        let second_match = second_match_start..second_match_start + "match".len();
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(text, window, cx);
+                state.set_search_query("match", true, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                state.set_scroll_offset(point(px(0.), px(-1_000.)), cx);
+            });
+        });
+        cx.run_until_parked();
+        input.read_with(&cx, |state, _| {
+            assert!(
+                state
+                    .visible_row_range()
+                    .is_some_and(|visible| visible.start > 4),
+                "manual scroll should move the second match above the viewport"
+            );
+        });
+
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                assert_eq!(state.next_search_match(cx), Some(second_match));
+            });
+        });
+        cx.run_until_parked();
+
+        input.read_with(&cx, |state, _| {
+            assert!(
+                state
+                    .visible_row_range()
+                    .is_some_and(|visible| visible.contains(&4)),
+                "the newly active match should be visible after navigation"
+            );
+        });
+    }
+
     #[gpui::test]
     fn test_number_step(cx: &mut TestAppContext) {
         let input = InputView::build(cx, |state| state).input;

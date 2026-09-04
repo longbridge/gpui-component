@@ -139,20 +139,18 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn next_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
-        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next()?;
-        let direction = (self.search_session.matcher.current_match_index() > previous)
-            .then_some(MoveDirection::Down);
-        self.scroll_to(range.end, direction, cx);
+        // Match order does not describe viewport direction after a manual
+        // scroll. Always allow search navigation to reveal the active match.
+        self.scroll_to(range.end, None, cx);
         Some(range)
     }
 
     pub fn previous_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
-        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next_back()?;
-        let direction = (self.search_session.matcher.current_match_index() < previous)
-            .then_some(MoveDirection::Up);
-        self.scroll_to(range.start, direction, cx);
+        // Match order does not describe viewport direction after a manual
+        // scroll. Always allow search navigation to reveal the active match.
+        self.scroll_to(range.start, None, cx);
         Some(range)
     }
 
