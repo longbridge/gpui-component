@@ -24,10 +24,12 @@ function parseFrontmatter(content: string): { title?: string; order?: number } {
   if (!match) return {};
   const raw = match[1];
   const title = raw.match(/^title:\s*(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, '');
-  const orderStr = raw.match(/^order:\s*(\d+)/m)?.[1];
+  // `\d+` alone never matched the values actually in use — they are negative
+  // and often fractional (`-2.1`).
+  const orderStr = raw.match(/^order:\s*(-?\d+(?:\.\d+)?)/m)?.[1];
   return {
     title,
-    order: orderStr ? parseInt(orderStr, 10) : undefined,
+    order: orderStr ? parseFloat(orderStr) : undefined,
   };
 }
 
@@ -51,8 +53,18 @@ function getFileTitle(filePath: string, content: string): string {
   return titleCase(name);
 }
 
+/**
+ * Sort weight for a page.
+ *
+ * The published site generates its sidebar with `vitepress-sidebar`, which
+ * reads `order` as a magnitude — a page at `-1` leads and one at `-7` trails.
+ * Every `order` in this repository was written against that behaviour, so the
+ * same reading is what preserves the published order; sorting them as signed
+ * numbers would reverse the section.
+ */
 function getFileOrder(content: string): number {
-  return parseFrontmatter(content).order ?? 999;
+  const { order } = parseFrontmatter(content);
+  return order === undefined ? 999 : Math.abs(order);
 }
 
 interface FileEntry {
