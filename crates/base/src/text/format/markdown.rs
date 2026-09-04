@@ -226,6 +226,13 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
                 ..Default::default()
             });
         }
+        Node::Break(_) => {
+            // Hard line break (trailing two spaces / backslash). Mirror the
+            // inline-HTML <br> path: emit a newline inline node so the break
+            // renders instead of silently concatenating adjacent lines.
+            text.push('\n');
+            paragraph.push(InlineNode::new("\n"));
+        }
         Node::InlineMath(raw) => {
             text = raw.value.clone();
             paragraph.push(
