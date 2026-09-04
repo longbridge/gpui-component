@@ -52,7 +52,12 @@ impl SearchSession {
     }
 
     pub(crate) fn update_query(&mut self, query: impl Into<String>, case_insensitive: bool) {
-        self.query = query.into();
+        let query = query.into();
+        if self.query == query && self.case_insensitive == case_insensitive {
+            return;
+        }
+
+        self.query = query;
         self.case_insensitive = case_insensitive;
         self.matcher.update_query(&self.query, case_insensitive);
     }
@@ -402,6 +407,23 @@ mod tests {
         matcher.update_query("aaaaa", false);
         matcher.set_current_match_index(2);
         assert_eq!(matcher.next(), Some(5..10));
+    }
+
+    #[test]
+    fn identical_query_keeps_the_match_anchored_by_the_open_search_session() {
+        let mut session = SearchSession::default();
+        session.update_query("foo", true);
+        session.matcher.update(&Rope::from("foo bar foo baz foo"));
+        session.matcher.update_cursor_by_offset(12);
+        assert_eq!(session.matcher.current_match_index(), 2);
+
+        // The styled search panel echoes its input value back into Base when it
+        // opens. That echo must not reset the match chosen from the editor's
+        // visible-range anchor.
+        session.update_query("foo", true);
+
+        assert_eq!(session.matcher.current_match_index(), 2);
+        assert_eq!(session.matcher.label(), "3/3");
     }
 
     #[test]

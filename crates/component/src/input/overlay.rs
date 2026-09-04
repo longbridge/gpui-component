@@ -504,6 +504,40 @@ mod tests {
         });
     }
 
+    /// Building the styled panel must not reset navigation already owned by Base.
+    ///
+    /// The panel writes its initial input value back through `set_search_query`.
+    /// If an identical query is treated as a new query, that echo resets the
+    /// current match to zero and the panel counter drifts from the editor's
+    /// active highlight and scroll position.
+    #[gpui::test]
+    fn opening_search_panel_preserves_the_base_match_index(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
+            state: cx.new(|cx| crate::input::EditorState::new(window, cx).searchable(true)),
+        });
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_value("foo bar foo baz foo", window, cx);
+                state.open_search(false, cx);
+                state.set_search_query("foo", true, cx);
+                assert_eq!(state.next_search_match(cx), Some(8..11));
+                assert_eq!(state.next_search_match(cx), Some(16..19));
+                assert_eq!(state.search_session().matcher.current_match_index(), 2);
+            });
+
+            let mut host = InputOverlayHost::new(state.clone(), window, cx);
+            host.sync(&state, window, cx);
+
+            state.read_with(cx, |state, _| {
+                assert_eq!(state.search_session().matcher.current_match_index(), 2);
+                assert_eq!(state.search_session().matcher.label(), "3/3");
+            });
+        });
+    }
+
     /// A frame that changed nothing must not rebuild the popovers.
     ///
     /// Sync runs every frame, so the change check has to be cheap and stable.
