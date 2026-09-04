@@ -972,16 +972,13 @@ html.dark .astro-code span {
 .toc::-webkit-scrollbar { display: none; }
 
 /* This names the column, so it takes the foreground while the entries under it
-   stay muted — the two levels separate by contrast rather than by a rule or a
-   heavier weight. The hairline aligns it with the section rules in the article
-   beside it. */
+   stay muted — that contrast is the whole separation; a rule under it competed
+   with the rail beside the entries. */
 .toc__label {
-  margin: 0 0 0.75rem;
-  padding-bottom: 0.6rem;
-  border-bottom: 1px solid var(--border);
+  margin: 0 0 0.7rem;
   color: var(--foreground);
   font: 620 0.7rem/1 var(--font-mono);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -999,10 +996,10 @@ html.dark .astro-code span {
 .toc__item a {
   display: block;
   margin-left: -1px;
-  padding: 0.28rem 0 0.28rem 0.75rem;
+  padding: 0.2rem 0 0.2rem 0.75rem;
   border-left: 1px solid transparent;
   color: var(--muted-foreground);
-  line-height: 1.45;
+  line-height: 1.4;
   text-decoration: none;
   transition: color 140ms ease, border-color 140ms ease;
 }
