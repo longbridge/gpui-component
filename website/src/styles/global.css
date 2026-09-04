@@ -488,7 +488,7 @@ html.dark .astro-code span {
   }
 
   h2 {
-    margin-top: 3.5rem;
+    margin-top: 2.75rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--border);
     font-size: 1.35rem;
@@ -497,7 +497,7 @@ html.dark .astro-code span {
   }
 
   h3 {
-    margin-top: 2.25rem;
+    margin-top: 1.75rem;
     font-size: 1.02rem;
     font-weight: 640;
     letter-spacing: -0.012em;
@@ -527,7 +527,7 @@ html.dark .astro-code span {
   li > ul, li > ol { margin: 0.25rem 0 0; }
 
   :is(h2, h3, h4) + :not(h2, h3, h4) { margin-top: 0.9rem; }
-  > h1:first-child + h2 { margin-top: 2.5rem; }
+  > h1:first-child + h2 { margin-top: 2rem; }
 
   a {
     text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
@@ -879,14 +879,14 @@ html.dark .astro-code span {
   display: block;
   padding: 0.28rem 0.5rem;
   border-radius: var(--radius-control);
-  color: var(--muted-foreground);
+  color: var(--foreground);
   font-size: 0.8125rem;
   line-height: 1.5;
   text-decoration: none;
   transition: color 140ms ease, background 140ms ease;
 }
 
-.sidebar-item:hover { color: var(--foreground); }
+.sidebar-item:hover { background: var(--secondary); }
 .sidebar-item.active { color: var(--foreground); font-weight: 650; }
 
 .sidebar-subgroup-title {
