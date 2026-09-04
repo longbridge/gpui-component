@@ -1225,9 +1225,39 @@ html[lang^="zh"] :is(
     justify-content: center;
   }
 
+  /* Once it is an icon it belongs to the row of icon buttons beside it, not to
+     the input it was: the frame and fill go, leaving hover as the only
+     background — the same treatment the star, language and theme controls get. */
+  .site-nav__search-btn {
+    border-color: transparent;
+    background: transparent;
+    color: var(--foreground);
+  }
+
+  .site-nav__search-btn:hover {
+    border-color: transparent;
+    background: var(--secondary);
+  }
+
   /* Scoped to the button so it outranks the shared key-cap rule, which is
      defined further down the file and would otherwise win on source order. */
   .site-nav__search-btn .site-nav__search-key { display: none; }
+
+  /* Once the labels go, these are five icons in a row and each needs the same
+     square target — otherwise the star and language controls shrink to their
+     glyphs and the gaps between the five read as uneven. */
+  .site-nav__search-btn,
+  .github-star-btn,
+  .site-nav__lang-btn,
+  .theme-toggle,
+  .site-nav__burger {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .site-nav__actions { gap: 0.25rem; }
 
   /* Hidden from view but kept in the accessibility tree, so the button keeps
      its name once only the icon shows. */
