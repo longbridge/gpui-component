@@ -510,7 +510,7 @@ html.dark .astro-code span {
      rhythm: without this every paragraph, list and code block butted directly
      against the next one. Headings set their own top margin below. */
   p, ul, ol, pre, table, blockquote, .callout, details {
-    margin-block: 1.15rem;
+    margin-block: 1rem;
   }
 
   > :first-child { margin-top: 0; }
@@ -928,7 +928,14 @@ html.dark .astro-code span {
   overflow-y: auto;
   padding: 3rem 0 3rem 1.25rem;
   font-size: 0.8125rem;
+
+  /* A long outline still scrolls; it just does not draw a rail of its own
+     beside the page's. `scrollbar-width` overrides the global `thin`. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+
+.toc::-webkit-scrollbar { display: none; }
 
 .toc__label {
   margin: 0 0 0.6rem;
