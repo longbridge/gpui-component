@@ -18,7 +18,7 @@ function parseFrontmatterTitle(content: string): string | undefined {
   return match[1].match(/^title:\s*(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, '');
 }
 
-function bodyWithoutFrontmatter(content: string): string {
+export function bodyWithoutFrontmatter(content: string): string {
   return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 }
 
@@ -57,7 +57,7 @@ function forPlainText(body: string, url: string): string {
  * so the bundle carries the source a reader of the page would see rather than
  * a path they cannot follow.
  */
-function expandSnippets(body: string, fileDir: string): string {
+export function expandSnippets(body: string, fileDir: string): string {
   return body.replace(/^<<<\s+(\S+?)(?:\{([^}]*)\})?[ \t]*$/gm, (whole, target: string, braces = '') => {
     const [rel] = target.split('#');
     const lang =

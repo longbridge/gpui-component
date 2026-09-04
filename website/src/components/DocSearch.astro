@@ -52,6 +52,13 @@ const copy = isZh
 
   const input = () => modal?.querySelector<HTMLInputElement>('.pagefind-ui__search-input') ?? null;
 
+  /** `/shell/#anchor` → `/shell#anchor`; the site root keeps its slash. */
+  function withoutTrailingSlash(url: string) {
+    const [path, hash] = url.split('#');
+    const trimmed = path.length > 1 ? path.replace(/\/+$/, '') : path;
+    return hash === undefined ? trimmed : `${trimmed}#${hash}`;
+  }
+
   // The empty state stands in for results while the field is blank. Driven off
   // the input's value rather than Pagefind's internal DOM, so it survives the
   // library's own re-renders.
@@ -69,6 +76,15 @@ const copy = isZh
       showImages: false,
       resetStyles: false,
       showSubResults: true,
+      // Pagefind derives a result's URL from the file it indexed, so every one
+      // ends in a slash — and this site is `trailingSlash: 'never'`, where such
+      // a URL is a 404. Trim it here rather than at the click, so the status
+      // bar shows the address the link actually goes to.
+      processResult: (result) => {
+        result.url = withoutTrailingSlash(result.url);
+        for (const sub of result.sub_results ?? []) sub.url = withoutTrailingSlash(sub.url);
+        return result;
+      },
     });
     if (!modal.open) modal.showModal();
     requestAnimationFrame(() => {
