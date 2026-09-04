@@ -18,8 +18,8 @@ html.dark .alignment-dark { display: block; }
 
 :root {
   --radius-control: 0.375rem;
-  --radius-card: 0.625rem;
-  --radius-surface: 0.875rem;
+  --radius-card: 0.5rem;
+  --radius-surface: 0.75rem;
   --radius: var(--radius-control);
 
   --brand: #171717;
@@ -828,7 +828,7 @@ html.dark .astro-code span {
   height: calc(100vh - var(--nav-height));
   overflow-y: auto;
   flex-shrink: 0;
-  padding: 1.5rem 1rem;
+  padding: 1.5rem 1rem 1.5rem 0;
   border-right: 1px solid var(--border);
   scrollbar-gutter: stable;
 }
@@ -878,7 +878,7 @@ html.dark .astro-code span {
   font: 620 0.68rem/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 0.4rem 0.3rem;
+  padding: 0.4rem 0;
   margin-bottom: 0.2rem;
 }
 
@@ -886,6 +886,7 @@ html.dark .astro-code span {
 
 .sidebar-item {
   display: block;
+  margin-inline: -0.5rem;
   padding: 0.28rem 0.5rem;
   border-radius: var(--radius-control);
   color: var(--foreground);
@@ -1114,8 +1115,9 @@ html.dark .astro-code span {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  width: 13rem;
   height: 2rem;
-  padding: 0 0.55rem;
+  padding: 0 0.5rem 0 0.6rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--background);
@@ -1130,18 +1132,7 @@ html.dark .astro-code span {
   background: var(--secondary);
 }
 
-.site-nav__search-hint { white-space: nowrap; }
-
-.site-nav__search-key {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid var(--border);
-  border-radius: 0.25rem;
-  background: var(--secondary);
-  color: var(--muted-foreground);
-  font: 0.68rem/1.4 var(--font-mono);
-}
+.site-nav__search-hint { margin-right: auto; white-space: nowrap; }
 
 /* Tracking that reads as restrained emphasis on Latin caps pulls short CJK
    labels apart — `文档`, `本页内容` — because Chinese has no case for the
@@ -1262,17 +1253,19 @@ html[lang^="zh"] :is(
 
 .search-footer span { display: inline-flex; align-items: center; gap: 0.3rem; }
 
-/* A key cap names a key you can press, so it takes the foreground colour:
-   inheriting the muted text around it left it at 4.35:1 on the secondary
-   surface, under the 4.5:1 floor. */
+/* A key cap is a hint, not a control: a filled chip carries it without the
+   border, which at this size read heavier than the label beside it. Foreground
+   colour because a cap names a key you can press — inheriting the muted text
+   around it left it at 4.35:1 on the secondary surface, under 4.5:1. */
 .search-footer kbd,
 .site-nav__search-key {
-  padding: 0.05rem 0.3rem;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
   background: var(--secondary);
   color: var(--foreground);
-  font: 0.9em/1.5 var(--font-mono);
+  font: 0.78em/1.5 var(--font-mono);
 }
 
 /* Pagefind's own UI, re-skinned onto the site's tokens. */
