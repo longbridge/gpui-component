@@ -3,15 +3,16 @@ use std::time::Duration;
 use web_time::Instant;
 
 use gpui::{
-    Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-    PathBuilder, Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Window, canvas,
-    div, point, prelude::FluentBuilder as _, px, relative,
+    App, Bounds, Context, DisplayId, Div, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement, PathBuilder, Pixels, Point, Render, StatefulInteractiveElement as _, Styled,
+    Window, canvas, div, point, prelude::FluentBuilder as _, px, relative,
 };
 
 use gpui::Task;
 
 use crate::{
     FrameTraceGuard,
+    refresh::display_refresh_rate,
     sampler::{FrameSampler, ResourceSample, minimum_resource_interval},
     style::FpsStyle,
 };
@@ -141,23 +142,25 @@ struct Readout {
     invalidations: f32,
 }
 
-/// The rate a full redraw could sustain: what a frame's cost implies.
+/// The rate a full redraw could sustain: what a frame's cost implies, held to
+/// what the panel can scan out.
 ///
-/// Not held to the display's refresh rate, which GPUI does not expose and
-/// which cannot be recovered from the frames this window happened to present.
-/// Gaps between presents are whole multiples of the panel's period, so they
-/// put a *lower* bound on it and never an upper one: 41.7ms is six refreshes
-/// at 144Hz and one at 24Hz, and nothing in the timing says which. Every
-/// estimate tried here read a real window wrong — 169 and 149 from the
-/// shortest and the densest gaps, 75 from a window drawing every other
-/// refresh, 24 from an application whose own timer fired every 41.7ms — and a
-/// ceiling under the truth hides the figure the reader came for.
-fn sustainable_rate(mean_draw: Duration) -> f32 {
+/// The cap is the half the derivation loses. Counting presents could never
+/// exceed the refresh rate — frames go to the compositor on vsync, so the
+/// bound came for free — while a frame drawn in 3ms reads as 333, a rate
+/// nobody could ever see. `display` is `None` where the platform would not say
+/// what the panel runs at, and an uncapped reading is better than one held to
+/// a guess: see [`crate::refresh`] for why guessing was tried and abandoned.
+fn sustainable_rate(mean_draw: Duration, display: Option<Duration>) -> f32 {
     let mean_draw = mean_draw.as_secs_f32();
     if mean_draw <= 0. {
         return 0.;
     }
-    1. / mean_draw
+    let rate = 1. / mean_draw;
+    match display.map(|period| period.as_secs_f32()) {
+        Some(period) if period > 0. => rate.min(1. / period),
+        _ => rate,
+    }
 }
 
 /// Which question the headline answers.
@@ -181,6 +184,10 @@ pub struct FpsMonitor {
     style: FpsStyle,
     frame_budget: Duration,
     headline: Headline,
+    /// The panel's refresh period, and which display it was asked about, so
+    /// that moving the window to another monitor re-asks and staying on one
+    /// does not ask again every frame.
+    display: Option<(DisplayId, Option<Duration>)>,
     show_resources: bool,
     resource_interval: Duration,
     resources: Option<ResourceSample>,
@@ -201,6 +208,7 @@ impl FpsMonitor {
             style: FpsStyle::default(),
             frame_budget,
             headline: Headline::Max,
+            display: None,
             show_resources: true,
             resource_interval: DEFAULT_RESOURCE_INTERVAL,
             resources: None,
@@ -333,6 +341,19 @@ impl FpsMonitor {
         }));
     }
 
+    /// Re-asks the platform for the refresh rate when the window has moved to
+    /// another display, and not otherwise: the answer is a property of the
+    /// panel, and on some platforms asking is a round trip.
+    fn update_display(&mut self, window: &Window, cx: &App) {
+        let Some(display) = window.display(cx) else {
+            return;
+        };
+        let id = display.id();
+        if self.display.map(|(asked, _)| asked) != Some(id) {
+            self.display = Some((id, display_refresh_rate(display.as_ref())));
+        }
+    }
+
     /// Republishes the readings if [`READOUT_INTERVAL`] has passed.
     fn update_readout(&mut self) {
         let now = Instant::now();
@@ -344,7 +365,10 @@ impl FpsMonitor {
         }
 
         self.readout = Readout {
-            max_fps: sustainable_rate(self.sampler.mean_draw()),
+            max_fps: sustainable_rate(
+                self.sampler.mean_draw(),
+                self.display.and_then(|(_, refresh_rate)| refresh_rate),
+            ),
             fps: self.sampler.fps(),
             interval_millis: self.sampler.present_interval().as_secs_f32() * 1000.,
             // The mean over the interval rather than the latest frame, which
@@ -494,8 +518,9 @@ impl FpsMonitor {
 }
 
 impl Render for FpsMonitor {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sampler.tick();
+        self.update_display(window, cx);
         self.update_readout();
         self.update_axis();
         self.start_clock(cx);
@@ -736,11 +761,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_headline_rate_is_what_a_frame_costs() {
-        assert!((sustainable_rate(Duration::from_millis(3)) - 333.33).abs() < 0.1);
-        assert_eq!(sustainable_rate(Duration::from_millis(20)), 50.);
+    fn the_headline_rate_is_what_a_frame_costs_and_the_panel_allows() {
+        let sixty = Duration::from_micros(16_667);
+        // A cheap frame on a 60Hz panel is not 333 frames anyone could see.
+        assert!((sustainable_rate(Duration::from_millis(3), Some(sixty)) - 60.).abs() < 0.01);
+        // A frame that costs more than a refresh sets the rate itself.
+        assert_eq!(
+            sustainable_rate(Duration::from_millis(20), Some(sixty)),
+            50.
+        );
+        // Where the platform will not say, an uncapped reading beats a guess.
+        assert!((sustainable_rate(Duration::from_millis(3), None) - 333.33).abs() < 0.1);
         // No frames drawn yet is no rate, not an infinite one.
-        assert_eq!(sustainable_rate(Duration::ZERO), 0.);
+        assert_eq!(sustainable_rate(Duration::ZERO, Some(sixty)), 0.);
     }
 
     #[gpui::test]

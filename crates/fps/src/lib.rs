@@ -40,6 +40,7 @@ mod gpu;
 mod memory;
 mod monitor;
 mod overlay;
+mod refresh;
 mod sampler;
 mod style;
 

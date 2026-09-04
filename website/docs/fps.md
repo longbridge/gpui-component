@@ -54,28 +54,36 @@ The frame cost already answers the question. `FRAME` is what a full redraw
 costs, so its reciprocal is the rate those redraws could sustain, and nothing
 has to be drawn to find it. The HUD never requests a frame.
 
-### Why MAX is not capped by the display
+### Why MAX is capped by asking, not by measuring
 
-It should be. A frame drawn in 3ms reads as 333, and no panel will ever show
-that. Counting presents had the ceiling for free — frames go to the compositor
-on vsync — and a figure derived from frame cost has no such bound.
+A frame drawn in 3ms reads as 333, and no panel will ever show that. Counting
+presents had the ceiling for free — frames go to the compositor on vsync — and
+a figure derived from frame cost has no such bound, so the cap is applied
+explicitly.
 
-GPUI does not expose the refresh rate, and it cannot be recovered from the
-frames a window happened to present. Gaps between presents are whole multiples
-of the panel's period, so they put a **lower** bound on it and never an upper
-one: 41.7ms is six refreshes at 144Hz and one at 24Hz, and nothing in the
-timing distinguishes them. Every estimate tried here read a real window wrong —
-169 and 149 from the shortest and the densest gaps, 75 from a window drawing
-every other refresh, and 24 from an application whose own timer happened to
-fire every 41.7ms. A ceiling under the truth hides the figure the reader came
-for, which is worse than one that is honestly above what the panel can scan
-out.
+It cannot be inferred. The gaps between a window's presents are whole multiples
+of the panel's period, so they bound it **from below and never from above**:
+41.7ms is six refreshes at 144Hz and one at 24Hz, and nothing in the timing
+distinguishes them. Every estimate tried read a real window wrong — 169 and 149
+from the shortest and the densest gaps, 75 from a window drawing every other
+refresh, and 24 from an application whose own timer happened to fire every
+41.7ms.
 
-So the headline is what the frame cost can prove, and nothing more is claimed
-for it. Capping it correctly needs the real refresh rate from the platform,
-which every backend already has — xrandr mode info on X11, `CVTimeStamp`'s
-video refresh period on macOS, the `wl_output` mode event on Wayland — and
-which the display trait does not yet carry.
+So the platform is asked instead. GPUI hands out the platform's own display
+handle through `DisplayId`, and the HUD takes it from there:
+
+- **macOS** — `CGDisplayCopyDisplayMode` on the `CGDirectDisplayID`. A built-in
+  panel reports no fixed rate, which is the truth on ProMotion, and is read as
+  no cap.
+- **Windows** — `EnumDisplaySettingsW` on the monitor's device name.
+- **Wayland** — the outputs are enumerated on a second connection and matched
+  to GPUI's displays by the identity it derives from their names, because
+  object ids are per-connection and mean nothing across one.
+- **X11 and everything else** — no query, so no cap.
+
+The answer is re-asked when the window moves to another display and not
+otherwise. Where nobody will say, the reading is left uncapped rather than held
+to a guess: a ceiling under the truth hides the figure the reader came for.
 
 ## The rows
 

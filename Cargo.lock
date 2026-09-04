@@ -3575,11 +3575,14 @@ dependencies = [
 name = "gpui-fps"
 version = "0.6.0"
 dependencies = [
+ "core-graphics 0.24.0",
  "gpui-pre",
  "libc",
  "objc2-core-foundation",
  "objc2-io-kit",
  "sysinfo 0.37.2",
+ "uuid",
+ "wayland-client",
  "web-time",
  "windows 0.58.0",
 ]
