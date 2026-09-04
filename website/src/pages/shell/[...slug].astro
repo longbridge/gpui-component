@@ -15,13 +15,14 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await render(entry);
+const { Content, headings } = await render(entry);
 ---
 
 <DocsLayout
   title={entry.data.title}
   description={entry.data.description}
   lang="en"
+  headings={headings}
   sidebar={enShellSidebar}
 >
   <Content />

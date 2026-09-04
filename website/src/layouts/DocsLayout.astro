@@ -3,6 +3,8 @@ import BaseLayout from './BaseLayout.astro';
 import Nav from '../components/Nav.astro';
 import Sidebar from '../components/Sidebar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
+import Toc from '../components/Toc.astro';
+import type { Heading } from '../components/Toc.astro';
 import type { SidebarItem } from '../lib/sidebar';
 import { fetchStarCount } from '../lib/github';
 import { SITE_URL } from '../lib/site';
@@ -12,10 +14,11 @@ export interface Props {
   description?: string;
   lang?: 'en' | 'zh-CN';
   sidebar?: SidebarItem[];
+  headings?: Heading[];
   frontmatter?: Record<string, any>;
 }
 
-const { title, description, lang = 'en', sidebar = [], frontmatter = {} } = Astro.props;
+const { title, description, lang = 'en', sidebar = [], headings = [], frontmatter = {} } = Astro.props;
 const hasSidebar = sidebar.length > 0;
 const pathname = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
@@ -41,6 +44,8 @@ const isZh = lang === 'zh-CN';
         <slot />
       </article>
     </main>
+
+    {hasSidebar && <Toc headings={headings} lang={lang} />}
   </div>
 
   <!-- Page-level, so it spans the shared content box rather than the

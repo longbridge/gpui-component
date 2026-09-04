@@ -16,7 +16,7 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await render(entry);
+const { Content, headings } = await render(entry);
 const pathname = Astro.url.pathname;
 const base = import.meta.env.BASE_URL;
 const devVersion = import.meta.env.DEV ? 'dev' : undefined;
@@ -26,6 +26,7 @@ const devVersion = import.meta.env.DEV ? 'dev' : undefined;
   title={entry.data.title}
   description={entry.data.description}
   lang="zh-CN"
+  headings={headings}
   sidebar={zhBaseSidebar}
 >
   <Content />

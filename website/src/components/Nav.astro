@@ -290,6 +290,20 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
   font-weight: 560;
 }
 
+.site-nav__burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-control);
+  color: var(--foreground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.site-nav__burger:hover { background: var(--secondary); }
+
 @media (max-width: 767px) {
   .github-star-btn__label { display: none; }
 
@@ -329,18 +343,4 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
     visibility: visible;
   }
 }
-
-.site-nav__burger {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-control);
-  color: var(--foreground);
-  background: transparent;
-  cursor: pointer;
-}
-
-.site-nav__burger:hover { background: var(--secondary); }
 </style>

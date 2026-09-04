@@ -105,6 +105,7 @@ html.dark .alignment-dark { display: block; }
   /* Layout */
   --nav-height: 56px;
   --sidebar-width: 280px;
+  --toc-width: 200px;
   --layout-max-width: 1280px;
 }
 
@@ -500,6 +501,11 @@ html.dark .astro-code span {
     letter-spacing: -0.012em;
   }
 
+  /* The bar is sticky, so an anchored heading would land underneath it. */
+  :where(h1, h2, h3, h4, h5, h6)[id] {
+    scroll-margin-top: calc(var(--nav-height) + 1.25rem);
+  }
+
   /* Tailwind's preflight zeroes block margins, so prose needs its own vertical
      rhythm: without this every paragraph, list and code block butted directly
      against the next one. Headings set their own top margin below. */
@@ -876,6 +882,50 @@ html.dark .astro-code span {
   max-width: 860px;
 }
 
+/* ====================================================================
+   On-this-page (docs layout)
+   ==================================================================== */
+
+.toc {
+  position: sticky;
+  top: var(--nav-height);
+  flex-shrink: 0;
+  align-self: flex-start;
+  width: var(--toc-width);
+  max-height: calc(100vh - var(--nav-height));
+  overflow-y: auto;
+  padding: 3rem 0 3rem 1.25rem;
+  font-size: 0.8125rem;
+}
+
+.toc__label {
+  margin: 0 0 0.6rem;
+  color: var(--muted-foreground);
+  font: 620 0.66rem/1 var(--font-mono);
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.toc ul { margin: 0; padding: 0; list-style: none; }
+
+.toc__item a {
+  display: block;
+  padding: 0.28rem 0;
+  color: var(--muted-foreground);
+  line-height: 1.45;
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+.toc__item a:hover { color: var(--foreground); }
+.toc__item a.is-current { color: var(--brand); }
+.toc__item--sub a { padding-left: 0.75rem; font-size: 0.78rem; }
+
+/* Below this the three columns stop fitting inside the content box. */
+@media (max-width: 1180px) {
+  .toc { display: none; }
+}
+
 .docs-main--full {
   max-width: 100%;
   padding: 3rem 0 4rem;
@@ -1037,8 +1087,29 @@ html.dark .astro-code span {
   font: 0.68rem/1.4 var(--font-mono);
 }
 
+/* ====================================================================
+   Mobile: the docs shell (the bar styles itself in Nav.astro)
+   ==================================================================== */
+
 @media (max-width: 767px) {
   .site-nav__search-hint, .site-nav__search-key { display: none; }
+
+  /* One column: as a 280px sidebar beside the article, the prose would be
+     about 100px wide. */
+  .docs-layout { flex-direction: column; width: calc(100% - 2rem); }
+
+  .docs-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    max-height: 60vh;
+    padding: 1rem 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .docs-main,
+  .docs-main--full { padding: 1.75rem 0 3rem; }
 }
 
 /* ====================================================================
