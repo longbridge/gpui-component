@@ -12,10 +12,11 @@ The authority is not this page. The runtime generates `gpui-kit.d.ts` for its ow
 
 ## The modules
 
-Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui-kit` module also carries the shell bridge needed to use GPUI from JavaScript: Views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
+Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui-kit` module also carries the shell bridge needed to use GPUI from JavaScript: Views, retained entities, scheduling and shared types. `gpui` is a compatibility alias for this module and exposes the same bindings, including `div`.
 
 ```js
 import { View, div } from "gpui-kit";
+import { div as gpuiDiv } from "gpui";
 import { Button, v_flex } from "gpui-base";
 import { fps_monitor } from "gpui-fps";
 ```
