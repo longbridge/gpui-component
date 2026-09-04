@@ -74,10 +74,6 @@ const UNIT_WIDTH: Pixels = px(22.);
 /// fast enough to feel live.
 const READOUT_INTERVAL: Duration = Duration::from_millis(500);
 
-/// Fraction of the target frame rate that still counts as meeting it. Vsync and
-/// the sampling window each cost a frame or so a second, so a 60Hz display that
-/// is keeping up perfectly reports 58 to 60, never a flat 60.
-
 /// A monospace family that ships with the platform, so the value column stays
 /// aligned without the application having to configure a font. The generic
 /// `monospace` alias is not resolvable by every platform's font backend, hence
