@@ -124,6 +124,11 @@ Two constraints that are easy to get wrong:
   height, and the hamburger opens onto nothing.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
+- Pages that are the site's own surfaces — App Stories, Skills, Contributors,
+  Releases — use `layout: home` to leave the docs shell, and a shared rule in
+  `style.css` gives their content the same top offset as a docs page. VitePress
+  pads only the hero it would render there, so without that rule a title sits
+  against the toolbar. A page must not add its own offset on top.
 - Live WASM examples belong to their component documentation, next to the API
   and guidance they demonstrate. The homepage links into that documentation
   instead of maintaining a separate gallery surface.
@@ -214,6 +219,9 @@ through motion alone.
   never `cargo add`, and the UI must not display a version number.
 - Code samples must be real API, verified against `crates/component` and
   `crates/base`.
+- The release notes page is rendered at build time from GitHub Releases
+  (`data/releases.data.js`) by the docs markdown pipeline; it holds no copy of
+  its own, so a release is written once, on GitHub.
 - Capability copy tracks the README's feature list — 120 FPS rendering, complex
   data tables, virtualized lists, the 200K-line editor, freeform docking,
   multi-theme support. Update it when the README's features change.
@@ -260,3 +268,11 @@ navbar rather than inside the Resources menu. Submissions come from
 | `.vitepress/theme/components/ComponentExample.vue` | Windowed live example on component pages                                |
 | `.vitepress/config.mts`                            | Navigation, sidebar generation, locales                                 |
 | `src/*.theme.json`                                 | shiki syntax themes; the source of `--code-*`                           |
+
+## Attribution
+
+The footer is the one place the site states GPUI's origin, in one plain
+line: built on GPUI, from Zed Industries, also Apache-2.0. The landing page
+footer and the docs footer say the same thing. Do not repeat it in the hero,
+tutorials or API pages, where the product is GPUI Kit, and do not grow it into
+a disclaimer.

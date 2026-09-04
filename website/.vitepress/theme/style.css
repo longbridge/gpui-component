@@ -701,6 +701,21 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   }
 }
 
+/* `layout: home` is how the site's own surfaces — App Stories, Skills,
+   Contributors, Releases — opt out of the docs shell. VitePress pads only the
+   hero and feature bands it would render there, and these pages render
+   neither, so their markdown started flush against the toolbar. Give the
+   content the same top offset as a docs page. */
+.VPContent.is-home .VPHome > .vp-doc {
+  padding-top: 2rem;
+}
+
+@media (min-width: 768px) {
+  .VPContent.is-home .VPHome > .vp-doc {
+    padding-top: 3rem;
+  }
+}
+
 .vp-doc {
   color: var(--vp-c-text-1);
 

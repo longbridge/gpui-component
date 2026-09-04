@@ -62,7 +62,8 @@ const suffixText = computed(() => (isZh.value ? "。" : " on GitHub."));
 @reference "./.vitepress/theme/style.css";
 
 .contributors-page {
-    @apply py-10 pt-30;
+    /* The shared `layout: home` offset supplies the first 3rem. */
+    @apply py-10 pt-18;
     background: url("/contributors.svg") no-repeat;
     background-position: top 20px right 20px;
 }
