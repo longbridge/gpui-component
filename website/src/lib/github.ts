@@ -17,7 +17,17 @@ function requestHeaders(): HeadersInit {
   return headers;
 }
 
-export async function fetchStarCount(): Promise<number> {
+let starCount: Promise<number> | undefined;
+
+// Every page renders the nav, so calling this per page would put one request
+// per page on the wire — hundreds in a full build, far past the 60/hour an
+// unauthenticated build gets. The count is baked into static output, so one
+// request per process is all it can ever need.
+export function fetchStarCount(): Promise<number> {
+  return (starCount ??= requestStarCount());
+}
+
+async function requestStarCount(): Promise<number> {
   try {
     const res = await fetch(API_BASE, { headers: requestHeaders() });
     const data = await res.json();
@@ -39,7 +49,13 @@ export interface Contributor {
   contributions: number;
 }
 
-export async function fetchContributors(): Promise<Contributor[]> {
+let contributors: Promise<Contributor[]> | undefined;
+
+export function fetchContributors(): Promise<Contributor[]> {
+  return (contributors ??= requestContributors());
+}
+
+async function requestContributors(): Promise<Contributor[]> {
   try {
     const res = await fetch(`${API_BASE}/contributors`, { headers: requestHeaders() });
     const items = await res.json();

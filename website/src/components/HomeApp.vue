@@ -63,8 +63,8 @@ const homeHref = computed(() => isZh.value ? url('zh-CN/') : url(''));
 const languageHref = computed(() => isZh.value ? url('') : url('zh-CN/'));
 const gettingStartedHref = computed(() => isZh.value ? url('zh-CN/docs/getting-started') : url('docs/getting-started'));
 const componentsHref = computed(() => isZh.value ? url('zh-CN/docs/components') : url('docs/components'));
-const baseHref = computed(() => url('base/'));
-const shellHref = computed(() => isZh.value ? url('zh-CN/shell/') : url('shell/'));
+const baseHref = computed(() => url('base'));
+const shellHref = computed(() => isZh.value ? url('zh-CN/shell') : url('shell'));
 const contributorsHref = computed(() => isZh.value ? url('zh-CN/contributors') : url('contributors'));
 const skillsHref = computed(() => isZh.value ? url('zh-CN/skills') : url('skills'));
 const llmsHref = computed(() => url('llms-full.txt'));
@@ -73,8 +73,8 @@ const navItems = computed(() => {
     const prefix = isZh.value ? 'zh-CN' : '';
     return [
         { text: isZh.value ? '组件' : 'Components', link: isZh.value ? url('zh-CN/docs/components') : url('docs/components'), external: false },
-        { text: 'Shell', link: isZh.value ? url('zh-CN/shell/') : url('shell/'), external: false },
-        { text: 'Base', link: url('base/'), external: false },
+        { text: 'Shell', link: isZh.value ? url('zh-CN/shell') : url('shell'), external: false },
+        { text: 'Base', link: url('base'), external: false },
         { text: isZh.value ? '应用案例' : 'App Stories', link: isZh.value ? url('zh-CN/apps') : url('apps'), external: false },
         {
             text: isZh.value ? '资源' : 'Resources',
@@ -114,14 +114,11 @@ const capIcons: Record<string, any> = {
     theme: Palette,
 };
 
-const installCommand = 'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }';
-const installSnippet = [
-    "[dependencies]",
-    'gpui = { git = "https://github.com/zed-industries/zed" }',
-    'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
-    'gpui-component = { git = "https://github.com/longbridge/gpui-kit" }',
-    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-kit" }',
-].join("\n");
+// `gpui-kit` is the one dependency an application needs: it pins GPUI and
+// carries every layer. The line on screen is what the clipboard gets, with
+// the `[dependencies]` header so it pastes straight into Cargo.toml.
+const installCommand = 'gpui-kit = "0.6.0"';
+const installSnippet = ["[dependencies]", installCommand].join("\n");
 
 const copied = ref(false);
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -143,7 +140,7 @@ const copy = computed(() =>
               themeNav: "切换主题",
               menuNav: "打开菜单",
               copyLabel: "复制安装命令",
-              eyebrow: "基于 GPUI，经过 Longbridge 生产验证",
+              eyebrow: "经过 Longbridge 生产验证",
               title: "构建出色的高性能桌面应用。",
               lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体，并可用 JavaScript 扩展；从第一天起用于构建 Longbridge Pro。",
               componentsAction: "浏览组件",
@@ -181,8 +178,10 @@ const copy = computed(() =>
               principleLead: "行为属于基础层。",
               principleTail: "视觉属于应用。",
               principleDetail: "gpui-base 处理困难的交互机制：焦点、浮层定位、虚拟化与无障碍；你的产品决定它们最终呈现的样子。",
-              footerMessage:
-                  '基于 Apache-2.0 许可证开源，由 <a href="https://longbridge.com" target="_blank">Longbridge</a> 开发，基于 Zed Industries 的 <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> 构建。',
+              footerPrefix: "基于 Apache-2.0 许可证开源，由",
+              footerSuffix: " 开发。",
+              footerBuiltOn: "构建于",
+              footerAttribution: " 之上，GPUI 来自 Zed Industries，同样采用 Apache-2.0。",
               footerNav: "页脚导航",
               contributors: "贡献者",
               reportBug: "报告问题",
@@ -196,7 +195,7 @@ const copy = computed(() =>
               themeNav: "Toggle color theme",
               menuNav: "Open menu",
               copyLabel: "Copy install command",
-              eyebrow: "Built on GPUI. Proven at Longbridge.",
+              eyebrow: "Proven in production at Longbridge.",
               title: "Build fantastic, high-performance desktop apps.",
               lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — extensible in JavaScript, and used to build Longbridge Pro from day one.",
               componentsAction: "Browse components",
@@ -234,8 +233,11 @@ const copy = computed(() =>
               principleLead: "Behavior belongs to the foundation.",
               principleTail: "Presentation belongs to the application.",
               principleDetail: "gpui-base handles the difficult interaction mechanics — focus, overlay positioning, virtualization and accessibility. Your product decides how they should look and feel.",
-              footerMessage:
-                  'Open source under the Apache-2.0 License, developed by <a href="https://longbridge.com" target="_blank">Longbridge</a> and built on <a href="https://github.com/zed-industries/zed" target="_blank">GPUI</a> from Zed Industries.',
+              footerPrefix: "Open source under the Apache-2.0 License, developed by",
+              footerSuffix: ".",
+              footerBuiltOn: "Built on",
+              footerAttribution:
+                  ", the UI framework from Zed Industries, also Apache-2.0.",
               footerNav: "Footer navigation",
               contributors: "Contributors",
               reportBug: "Report Bug",
@@ -341,11 +343,10 @@ const copy = computed(() =>
             <div class="hero__grid" aria-hidden="true"></div>
             <div class="hero__inner">
                 <div class="hero__copy">
-                    <a href="https://gpui.rs" target="_blank" class="eyebrow">
+                    <span class="eyebrow">
                         <span class="eyebrow__pulse" aria-hidden="true"></span>
                         {{ copy.eyebrow }}
-                        <ArrowRight :size="13" />
-                    </a>
+                    </span>
                     <h1>{{ copy.title }}</h1>
                     <p class="hero__lead">{{ copy.lead }}</p>
                     <div class="hero__actions">
@@ -379,7 +380,7 @@ const copy = computed(() =>
                         <span class="mac-window__lights" aria-hidden="true"><i /><i /><i /></span>
                         <span class="mac-window__title">main.rs</span>
                     </div>
-                    <pre><code><span class="c-kw">use</span> gpui_component::{<span class="c-mod">button</span>::*, *};
+                    <pre><code><span class="c-kw">use</span> gpui_kit::component::{<span class="c-mod">button</span>::*, *};
 
 <span class="c-kw">impl</span> <span class="c-type">Render</span> <span class="c-kw">for</span> <span class="c-type">HelloWorld</span> {
     <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;) -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span> {
@@ -525,7 +526,18 @@ const copy = computed(() =>
     <footer class="home-footer">
         <div class="home-footer__brand">
             <strong>GPUI Kit</strong>
-            <p v-html="copy.footerMessage" />
+            <p>
+                {{ copy.footerPrefix }}
+                <a href="https://longbridge.com" target="_blank">Longbridge</a
+                >{{ copy.footerSuffix }}
+            </p>
+            <!-- The one place the landing page names GPUI's origin. -->
+            <p>
+                {{ copy.footerBuiltOn }}
+                <a href="https://github.com/zed-industries/zed" target="_blank"
+                    >GPUI</a
+                >{{ copy.footerAttribution }}
+            </p>
         </div>
         <nav :aria-label="copy.footerNav">
             <a :href="contributorsHref">{{ copy.contributors }}</a>
