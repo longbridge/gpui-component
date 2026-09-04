@@ -737,7 +737,7 @@ html[lang^="zh"] .section-kicker { letter-spacing: 0.04em; }
 .cap__preview--theme em:nth-child(5) { background: var(--background); }
 .cap__preview--theme em:nth-child(6) { background: var(--data-2); }
 
-.paths__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.paths__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
 
 .path {
     display: flex;
@@ -749,7 +749,11 @@ html[lang^="zh"] .section-kicker { letter-spacing: 0.04em; }
     transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
-.path:hover { border-color: color-mix(in srgb, var(--foreground) 20%, var(--border)); box-shadow: var(--shadow-panel); }
+/* These are three large cards side by side, so hovering one is read against
+   the two beside it. The shadow carries the lift; the border only needs to
+   acknowledge the pointer, hence `--border-hover` rather than the stronger
+   `--brand-line` the smaller App Stories cards use. */
+.path:hover { border-color: var(--border-hover); box-shadow: var(--shadow-panel); }
 
 .path h3 { margin: 1rem 0 0; font-size: 1.35rem; font-weight: 640; letter-spacing: -0.03em; }
 .path p { min-height: 3.05rem; margin: 0.65rem 0 0; color: var(--muted-foreground); font-size: 0.92rem; line-height: 1.65; }
@@ -841,19 +845,19 @@ html[lang^="zh"] .section-kicker { letter-spacing: 0.04em; }
 @media (max-width: 1080px) {
     .hero__inner { grid-template-columns: minmax(0, 1fr); }
     .hero__code { display: none; }
-    .caps__grid { grid-template-columns: repeat(2, 1fr); }
+    .caps__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 1180px) { .paths__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1180px) { .paths__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media (max-width: 860px) {
-    .paths__grid { grid-template-columns: 1fr; }
+    .paths__grid { grid-template-columns: minmax(0, 1fr); }
     .principle { grid-template-columns: 1fr; align-items: start; }
 }
 
 @media (max-width: 640px) {
     .hero__inner, .band__inner { width: calc(100% - 2rem); }
-    .caps__grid { grid-template-columns: 1fr; }
+    .caps__grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
