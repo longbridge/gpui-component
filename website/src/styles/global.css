@@ -484,11 +484,11 @@ html.dark .astro-code span {
     line-height: 1.25;
   }
 
+  /* The page's standfirst: muted, and set at the body size — a larger measure
+     read as a second heading under the title. */
   > h1:first-child + p {
     max-width: 46rem;
     color: var(--muted-foreground);
-    font-size: 1.05rem;
-    line-height: 1.7;
   }
 
   h2 {
@@ -506,6 +506,28 @@ html.dark .astro-code span {
     font-weight: 640;
     letter-spacing: -0.012em;
   }
+
+  /* A heading with an id can be linked to, so it offers the link: a mark that
+     appears on hover or keyboard focus and copies nothing away from the text
+     when idle. */
+  :is(h2, h3, h4)[id] {
+    position: relative;
+  }
+
+  .heading-anchor {
+    position: absolute;
+    right: 100%;
+    padding-right: 0.35rem;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    opacity: 0;
+    text-decoration: none;
+    transition: opacity 120ms ease, color 120ms ease;
+  }
+
+  :is(h2, h3, h4):hover .heading-anchor,
+  .heading-anchor:focus-visible { opacity: 1; }
+  .heading-anchor:hover { color: var(--foreground); }
 
   /* The bar is sticky, so an anchored heading would land underneath it. */
   :where(h1, h2, h3, h4, h5, h6)[id] {
@@ -922,7 +944,7 @@ html.dark .astro-code span {
 .docs-main {
   flex: 1;
   min-width: 0;
-  padding: 3rem 2rem 4rem;
+  padding: 3rem 3.5rem 4rem;
   max-width: 860px;
 }
 
@@ -938,7 +960,7 @@ html.dark .astro-code span {
   width: var(--toc-width);
   max-height: calc(100vh - var(--nav-height));
   overflow-y: auto;
-  padding: 3rem 0 3rem 1.25rem;
+  padding: 3rem 0 3rem 1.75rem;
   font-size: 0.8125rem;
 
   /* A long outline still scrolls; it just does not draw a rail of its own

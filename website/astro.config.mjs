@@ -4,10 +4,11 @@ import tailwindcss from '@tailwindcss/vite';
 import remarkMath from 'remark-math';
 import rehypeMathjax from 'rehype-mathjax';
 import pagefind from 'astro-pagefind';
-import { unified } from '@astrojs/markdown-remark';
+import { rehypeHeadingIds, unified } from '@astrojs/markdown-remark';
 import { remarkCallouts } from './src/lib/remark-callouts.js';
 import { remarkDocLinks } from './src/lib/remark-doc-links.js';
 import { remarkSnippets } from './src/lib/remark-snippets.js';
+import { rehypeHeadingAnchors } from './src/lib/rehype-heading-anchors.js';
 import { wasmExamplesDevServer } from './src/lib/wasm-middleware.js';
 import { shikiConfig, defaultHighlightLang } from './src/lib/markdown.js';
 
@@ -29,7 +30,7 @@ export default defineConfig({
     // opt-in now, and the math plugins only run on it.
     processor: unified({
       remarkPlugins: [remarkMath, remarkSnippets, remarkCallouts, [remarkDocLinks, { base: BASE }]],
-      rehypePlugins: [rehypeMathjax],
+      rehypePlugins: [rehypeMathjax, rehypeHeadingIds, rehypeHeadingAnchors],
     }),
     shikiConfig,
     defaultHighlightLang,

@@ -10,6 +10,19 @@ interface PageEntry {
   title: string;
   url: string;
   body: string;
+  description?: string;
+}
+
+function parseFrontmatterField(content: string, field: string): string | undefined {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return undefined;
+  // A folded value (`description: >-`) continues on the indented lines below it.
+  const folded = match[1].match(new RegExp(`^${field}:\\s*>-?\\s*\\n((?:[ \\t]+.*\\n?)+)`, 'm'));
+  if (folded) return folded[1].split('\n').map((line) => line.trim()).filter(Boolean).join(' ');
+  return match[1]
+    .match(new RegExp(`^${field}:\\s*(.+)$`, 'm'))?.[1]
+    ?.trim()
+    .replace(/^["']|["']$/g, '');
 }
 
 function parseFrontmatterTitle(content: string): string | undefined {
@@ -88,7 +101,10 @@ function scanDir(dir: string, baseDir: string, urlPrefix: string): PageEntry[] {
     try { stat = statSync(fullPath); } catch { continue; }
 
     if (stat.isDirectory()) {
-      const sub = scanDir(fullPath, baseDir, `${urlPrefix}/${name}`);
+      // `relPath` below is already relative to `baseDir`, so the prefix must
+      // stay the tree's root — appending the directory here counted it twice
+      // and produced `/docs/components/components/accordion`.
+      const sub = scanDir(fullPath, baseDir, urlPrefix);
       results.push(...sub);
     } else if (extname(name) === '.md') {
       let content = '';
@@ -106,13 +122,36 @@ function scanDir(dir: string, baseDir: string, urlPrefix: string): PageEntry[] {
       const body = expandSnippets(bodyWithoutFrontmatter(content), dir);
 
       try {
-        results.push({ title, url, body });
+        results.push({ title, url, body, description: parseFrontmatterField(content, 'description') });
       } catch (err) {
         console.warn(`[llms] skipping ${fullPath}:`, err);
       }
     }
   }
   return results;
+}
+
+const SECTIONS = (root: string) => [
+  { dir: join(root, 'docs'), prefix: 'docs' },
+  { dir: join(root, 'shell'), prefix: 'shell' },
+  { dir: join(root, 'base'), prefix: 'base' },
+  { dir: join(root, 'zh-CN/docs'), prefix: 'zh-CN/docs' },
+  { dir: join(root, 'zh-CN/shell'), prefix: 'zh-CN/shell' },
+  { dir: join(root, 'zh-CN/base'), prefix: 'zh-CN/base' },
+];
+
+/**
+ * `llms.txt`: the site's table of contents, one line per page pointing at the
+ * markdown behind it. A model reads this to decide what to fetch, where
+ * `llms-full.txt` is everything at once.
+ */
+export function buildLlmsIndex(websiteRoot: string): string {
+  const entries = SECTIONS(websiteRoot).flatMap(({ dir, prefix }) => scanDir(dir, dir, prefix));
+  const lines = entries
+    .sort((a, b) => a.title.localeCompare(b.title, 'en') || a.url.localeCompare(b.url))
+    .map((entry) => `- [${entry.title}](${entry.url}.md)${entry.description ? `: ${entry.description}` : ''}`);
+
+  return `# ${SITE_TITLE}\n\n> ${SITE_DESCRIPTION}\n\n## Table of Contents\n\n${lines.join('\n')}\n`;
 }
 
 export function buildLlmsContent(websiteRoot: string): string {
