@@ -172,8 +172,17 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             });
         }
         Node::Text(val) => {
-            text = val.value.clone();
-            paragraph.push_str(&val.value)
+            // A CommonMark *soft* break lives inside this value as a plain
+            // newline. The renderer treats any newline in a text run as a
+            // line break, so a paragraph hard-wrapped in the source would
+            // render one visual line per source line instead of reflowing to
+            // the available width. Collapse soft breaks to spaces; *hard*
+            // breaks never reach here, they arrive as their own Node::Break.
+            //
+            // The swap is length-preserving, so the inline mark offsets that
+            // callers compute against this text stay valid.
+            text = val.value.replace('\n', " ");
+            paragraph.push_str(&text)
         }
         Node::Emphasis(val) => {
             text = merge_children_with_mark(
