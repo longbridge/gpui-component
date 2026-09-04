@@ -105,7 +105,7 @@ html.dark .alignment-dark { display: block; }
 
   /* Layout */
   --nav-height: 56px;
-  --sidebar-width: 280px;
+  --sidebar-width: 220px;
   --toc-width: 200px;
   --layout-max-width: 1280px;
 }
@@ -492,7 +492,7 @@ html.dark .astro-code span {
   }
 
   h2 {
-    margin-top: 2.75rem;
+    margin-top: 3rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--border);
     font-size: 1.35rem;
@@ -501,7 +501,7 @@ html.dark .astro-code span {
   }
 
   h3 {
-    margin-top: 1.75rem;
+    margin-top: 2rem;
     font-size: 1.02rem;
     font-weight: 640;
     letter-spacing: -0.012em;
@@ -536,7 +536,7 @@ html.dark .astro-code span {
   li > ul, li > ol { margin: 0.25rem 0 0; }
 
   :is(h2, h3, h4) + :not(h2, h3, h4) { margin-top: 0.9rem; }
-  > h1:first-child + h2 { margin-top: 2rem; }
+  > h1:first-child + h2 { margin-top: 2.25rem; }
 
   a {
     text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
@@ -963,20 +963,39 @@ html.dark .astro-code span {
   text-transform: uppercase;
 }
 
-.toc ul { margin: 0; padding: 0; list-style: none; }
+/* A rail down the list gives the entries a shared edge and somewhere for the
+   current one to be marked — the segment lights up in place rather than the
+   text colour changing alone, so the reader's position is visible without
+   reading the labels. */
+.toc ul {
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  list-style: none;
+}
 
 .toc__item a {
   display: block;
-  padding: 0.28rem 0;
+  margin-left: -1px;
+  padding: 0.28rem 0 0.28rem 0.75rem;
+  border-left: 1px solid transparent;
   color: var(--muted-foreground);
   line-height: 1.45;
   text-decoration: none;
-  transition: color 140ms ease;
+  transition: color 140ms ease, border-color 140ms ease;
 }
 
-.toc__item a:hover { color: var(--foreground); }
-.toc__item a.is-current { color: var(--brand); }
-.toc__item--sub a { padding-left: 0.75rem; font-size: 0.78rem; }
+.toc__item a:hover {
+  border-left-color: var(--border-hover);
+  color: var(--foreground);
+}
+
+.toc__item a.is-current {
+  border-left-color: var(--brand);
+  color: var(--brand);
+}
+
+.toc__item--sub a { padding-left: 1.5rem; font-size: 0.78rem; }
 
 /* Below this the three columns stop fitting inside the content box. */
 @media (max-width: 1180px) {
