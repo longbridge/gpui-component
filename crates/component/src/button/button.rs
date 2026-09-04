@@ -1199,9 +1199,7 @@ impl ButtonVariant {
             Self::Default => cx.theme().tokens.button_active.into(),
             Self::Primary => cx.theme().tokens.button_primary_active.into(),
             Self::Secondary => cx.theme().tokens.button_secondary_active.into(),
-            // Every other variant selects with its active surface; the ghost
-            // token sits too close to its hover to read as pressed.
-            Self::Ghost => self.active(outline, cx).bg,
+            Self::Ghost => cx.theme().tokens.secondary_active.into(),
             Self::Danger => cx.theme().tokens.button_danger_active.into(),
             Self::Warning => cx.theme().tokens.button_warning_active.into(),
             Self::Success => cx.theme().tokens.button_success_active.into(),
