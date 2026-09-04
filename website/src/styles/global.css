@@ -36,6 +36,7 @@ html.dark .alignment-dark { display: block; }
 
   --selection: #55a0fc;
   --success: #22c55e;
+  --warning: #d97706;
 
   --code-bg: #ffffff;
   --code-fg: #000000;
@@ -123,6 +124,7 @@ html.dark .alignment-dark { display: block; }
   --accent: #262626;
   --accent-foreground: #fafafa;
   --destructive: #e44a4f;
+  --warning: #f0a03c;
   --border: #262626;
   --input: #2f2f2f;
   --ring: #d4d4d4;
@@ -498,6 +500,16 @@ html.dark .astro-code span {
     letter-spacing: -0.012em;
   }
 
+  /* Tailwind's preflight zeroes block margins, so prose needs its own vertical
+     rhythm: without this every paragraph, list and code block butted directly
+     against the next one. Headings set their own top margin below. */
+  p, ul, ol, pre, table, blockquote, .callout, details {
+    margin-block: 1.15rem;
+  }
+
+  > :first-child { margin-top: 0; }
+  > :last-child { margin-bottom: 0; }
+
   p, ul, ol, blockquote { max-width: 46rem; }
   p, li { line-height: 1.75; }
   ul, ol { padding-left: 1.2rem; }
@@ -506,7 +518,7 @@ html.dark .astro-code span {
   li > p { margin: 0; }
   li > ul, li > ol { margin: 0.25rem 0 0; }
 
-  h2 + p, h3 + p, h2 + ul, h3 + ul { margin-top: 0.9rem; }
+  h2 + *, h3 + *, h4 + * { margin-top: 0.9rem; }
   > h1:first-child + h2 { margin-top: 2.5rem; }
 
   a {
@@ -520,7 +532,6 @@ html.dark .astro-code span {
   /* VitePress-style containers (`:::tip`), turned into asides by
      `remark-callouts`. One shape, tinted by kind. */
   .callout {
-    margin: 1.5rem 0;
     padding: 0.9rem 1.1rem;
     border: 1px solid var(--border);
     border-left: 3px solid var(--callout-accent, var(--border));
@@ -545,8 +556,8 @@ html.dark .astro-code span {
   .callout--note { --callout-accent: var(--muted-foreground); }
   .callout--warning,
   .callout--caution,
-  .callout--important { --callout-accent: #d97706; }
-  .callout--danger { --callout-accent: #dc2626; }
+  .callout--important { --callout-accent: var(--warning); }
+  .callout--danger { --callout-accent: var(--destructive); }
 
   /* GFM footnotes. The markdown pipeline emits `<h2 class="sr-only">` as the
      section's accessible name, but Tailwind only generates classes it finds in
@@ -619,7 +630,6 @@ html.dark .astro-code span {
   th:first-child, td:first-child { padding-left: 0.75rem; }
 
   blockquote {
-    margin: 1.5rem 0;
     padding: 0.25rem 0 0.25rem 1.25rem;
     border-left: 2px solid var(--brand);
     color: var(--muted-foreground);
@@ -660,30 +670,6 @@ html.dark .astro-code span {
     font: 0.78em/1.5 var(--font-mono);
   }
 }
-
-/* Custom blocks / admonitions */
-.doc-content .custom-block {
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--foreground);
-  border-radius: 0 var(--radius-card) var(--radius-card) 0;
-  background: var(--sidebar);
-  font-size: 0.9rem;
-}
-
-.doc-content .custom-block-title {
-  margin-bottom: 0.4rem;
-  color: var(--foreground);
-  font: 620 0.68rem/1 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.doc-content .custom-block p { margin: 0.5rem 0 0; line-height: 1.7; }
-.doc-content .custom-block.warning { border-left-color: #f59e0b; }
-.doc-content .custom-block.danger { border-left-color: var(--destructive); }
-.doc-content .custom-block.info,
-.doc-content .custom-block.tip { border-left-color: var(--data-3); }
 
 /* ====================================================================
    Nav bar (docs layout)

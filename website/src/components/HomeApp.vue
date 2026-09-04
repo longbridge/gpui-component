@@ -6,10 +6,16 @@ import {
     Braces,
     Check,
     Copy,
+    Gauge,
     Layers3,
+    LayoutDashboard,
+    List,
     Monitor,
+    Palette,
     Scale,
+    SquareCode,
     Star,
+    Table2,
 } from "lucide-vue-next";
 
 const props = defineProps<{

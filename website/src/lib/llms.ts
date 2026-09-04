@@ -22,6 +22,36 @@ function bodyWithoutFrontmatter(content: string): string {
   return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 }
 
+/** The entry prints the title itself, so a leading `# Title` would repeat it. */
+function withoutLeadingHeading(body: string, title: string): string {
+  const match = body.match(/^#\s+(.+?)\s*(?:\r?\n|$)/);
+  if (!match || match[1].trim() !== title.trim()) return body;
+  return body.slice(match[0].length).trimStart();
+}
+
+/**
+ * Cleans up markup a reader of the plain-text bundle cannot resolve:
+ * VitePress container fences, which are noise without their renderer, and
+ * in-repo `.md` links, which point at source paths rather than pages.
+ */
+function forPlainText(body: string, url: string): string {
+  const dir = url.replace(/\/[^/]*$/, '');
+  return body
+    // `:::tip` / `::: warning Title` open a callout; `:::` closes it. Keep any
+    // title as a plain line so the emphasis is not lost entirely.
+    .replace(/^:::[ \t]*[a-z]+[ \t]*(.*)$/gim, (_, title: string) => (title.trim() ? `**${title.trim()}**` : ''))
+    .replace(/^:::[ \t]*$/gm, '')
+    .replace(/\]\(([^)]+?)\.md(#[^)]*)?\)/g, (whole: string, target: string, hash = '') => {
+      if (/^[a-z][a-z\d+.-]*:/i.test(target) || target.startsWith('//')) return whole;
+      const path = target.startsWith('/')
+        ? target
+        : new URL(target, `https://x${dir}/`).pathname.replace(/\/index$/, '');
+      return `](${path}${hash})`;
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function scanDir(dir: string, baseDir: string, urlPrefix: string): PageEntry[] {
   const results: PageEntry[] = [];
   let entries: string[];
@@ -80,7 +110,8 @@ export function buildLlmsContent(websiteRoot: string): string {
   for (const { dir, prefix } of sections) {
     const entries = scanDir(dir, dir, prefix);
     for (const entry of entries) {
-      pages.push(`# ${entry.title}\n\nSource: ${entry.url}\n\n${entry.body}`);
+      const body = forPlainText(withoutLeadingHeading(entry.body, entry.title), entry.url);
+      pages.push(`# ${entry.title}\n\nSource: ${entry.url}\n\n${body}`);
     }
   }
 
