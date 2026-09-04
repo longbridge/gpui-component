@@ -167,8 +167,13 @@ export function generateSidebar(config: SidebarGeneratorConfig): SidebarItem[] {
   return [rootGroup];
 }
 
-// Pre-generate sidebars at build time
-const WEBSITE_ROOT = new URL('../..', import.meta.url).pathname;
+// Pre-generate sidebars at build time.
+//
+// Not `import.meta.url`: Astro rearranges server assets during the build, so
+// walking up from this module's own location stopped landing on the content
+// directories and every sidebar generated empty. Astro runs from the project
+// root, which is the stable anchor. (`llms.ts` had the same fault.)
+const WEBSITE_ROOT = process.cwd();
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 export const enDocsSidebar = generateSidebar({

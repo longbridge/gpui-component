@@ -12,8 +12,11 @@ interface Skill {
 }
 
 async function loadSkills(): Promise<Skill[]> {
-    const thisFile = fileURLToPath(import.meta.url);
-    const repoRoot = join(dirname(thisFile), '../../..');
+    // Not `import.meta.url`: Astro rearranges server assets during the build,
+    // so walking up from this module stopped reaching the repository and the
+    // page rendered empty. `process.cwd()` is website/; the skills live one
+    // level above it.
+    const repoRoot = join(process.cwd(), '..');
     const dirs = [join(repoRoot, 'skills'), join(repoRoot, '.claude/skills')];
     const skills: Skill[] = [];
 

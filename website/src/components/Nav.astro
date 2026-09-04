@@ -90,7 +90,7 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
       ))}
 
       <div class="site-nav__dropdown">
-        <button class="site-nav__dropdown-btn site-nav__link" type="button">
+        <button class="site-nav__dropdown-btn site-nav__link" type="button" aria-haspopup="true" aria-expanded="false">
           {resourcesLabel}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 9l6 6 6-6"/>
@@ -179,6 +179,44 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
 </nav>
 
 <script>
+  // Visibility is owned by CSS (`:hover`, `:focus-within`), so `aria-expanded`
+  // is derived from the element rather than tracked separately — two sources of
+  // truth drift apart. Escape adds the one state CSS cannot express: dismissed
+  // while the trigger still holds focus.
+  document.querySelectorAll<HTMLElement>('.site-nav__dropdown').forEach((group) => {
+    const btn = group.querySelector<HTMLButtonElement>('.site-nav__dropdown-btn');
+    if (!btn) return;
+
+    const sync = () => {
+      const open = !group.classList.contains('is-dismissed') && group.matches(':hover, :focus-within');
+      btn.setAttribute('aria-expanded', String(open));
+    };
+
+    for (const event of ['pointerenter', 'focusin']) {
+      group.addEventListener(event, () => requestAnimationFrame(sync));
+    }
+
+    group.addEventListener('pointerleave', () => {
+      group.classList.remove('is-dismissed');
+      requestAnimationFrame(sync);
+    });
+
+    // Escape moves focus from a menu item back to the trigger, which fires
+    // focusout on the way — clearing the flag here would reopen the menu the
+    // keypress just closed. Only a focus leaving the group counts.
+    group.addEventListener('focusout', (event) => {
+      if (!group.contains(event.relatedTarget as Node)) group.classList.remove('is-dismissed');
+      requestAnimationFrame(sync);
+    });
+
+    group.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      group.classList.add('is-dismissed');
+      btn.focus();
+      sync();
+    });
+  });
+
   const toggle = document.getElementById('theme-toggle');
   const sun = toggle?.querySelector('.theme-toggle__sun') as HTMLElement | null;
   const moon = toggle?.querySelector('.theme-toggle__moon') as HTMLElement | null;

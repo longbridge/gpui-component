@@ -471,11 +471,11 @@ html.dark .astro-code span {
   h1 { margin-bottom: 1rem; }
 
   > h1:first-child {
-    margin-bottom: 0.85rem;
-    font-size: clamp(2rem, 3.6vw, 2.7rem);
+    margin-bottom: 1rem;
+    font-size: clamp(1.75rem, 2.6vw, 2rem);
     font-weight: 660;
-    letter-spacing: -0.038em;
-    line-height: 1.05;
+    letter-spacing: -0.03em;
+    line-height: 1.25;
   }
 
   > h1:first-child + p {
@@ -524,7 +524,7 @@ html.dark .astro-code span {
   li > p { margin: 0; }
   li > ul, li > ol { margin: 0.25rem 0 0; }
 
-  h2 + *, h3 + *, h4 + * { margin-top: 0.9rem; }
+  :is(h2, h3, h4) + :not(h2, h3, h4) { margin-top: 0.9rem; }
   > h1:first-child + h2 { margin-top: 2.5rem; }
 
   a {
@@ -762,7 +762,8 @@ html.dark .astro-code span {
   cursor: pointer;
   transition: background 140ms ease;
 }
-.site-nav__dropdown:hover .site-nav__dropdown-btn { background: var(--secondary); }
+.site-nav__dropdown:hover .site-nav__dropdown-btn,
+.site-nav__dropdown:focus-within .site-nav__dropdown-btn { background: var(--secondary); }
 
 .site-nav__dropdown-menu {
   position: absolute;
@@ -779,7 +780,13 @@ html.dark .astro-code span {
   transition: opacity 140ms ease, visibility 140ms ease;
 }
 
-.site-nav__dropdown:hover .site-nav__dropdown-menu {
+/* One rule decides visibility. `.is-dismissed` — set by Escape, which closes
+   the menu while the trigger keeps focus, a state neither `:hover` nor
+   `:focus-within` can express — is folded in as `:not()` rather than as a
+   second rule of equal specificity, whose outcome would depend on the order
+   the bundler happens to emit. */
+.site-nav__dropdown:not(.is-dismissed):hover .site-nav__dropdown-menu,
+.site-nav__dropdown:not(.is-dismissed):focus-within .site-nav__dropdown-menu {
   opacity: 1;
   visibility: visible;
 }
@@ -814,20 +821,44 @@ html.dark .astro-code span {
   scrollbar-gutter: stable;
 }
 
+/* The sidebar's scrollbar stays out of the way: invisible at rest, fading in
+   while the reader scrolls (`data-scrollbar-visible`, set in DocsLayout) and
+   out again shortly after. `scrollbar-width`/`-color` are reset to `auto`
+   against the global `thin` rule — with a non-auto value, macOS Chrome uses
+   its own scrollbar and ignores the ::-webkit geometry below. */
+.docs-sidebar {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
 .docs-sidebar::-webkit-scrollbar { width: 4px; }
+
 .docs-sidebar::-webkit-scrollbar-track {
-  margin-top: 2rem;
-  margin-bottom: 2rem;
-  border-radius: 999px;
+  margin-block: 2rem;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 180ms ease;
+}
+
+.docs-sidebar::-webkit-scrollbar-thumb {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 180ms ease;
+}
+
+.docs-sidebar[data-scrollbar-visible]::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
 }
-.docs-sidebar::-webkit-scrollbar-thumb {
-  min-height: 3rem;
-  border: 0;
-  border-radius: 999px;
+
+.docs-sidebar[data-scrollbar-visible]::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
 }
-.docs-sidebar::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+.docs-sidebar[data-scrollbar-visible]::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
 
 /* Sidebar group heading */
 .sidebar-group__title {
@@ -1085,6 +1116,19 @@ html.dark .astro-code span {
   background: var(--secondary);
   color: var(--muted-foreground);
   font: 0.68rem/1.4 var(--font-mono);
+}
+
+/* Tracking that reads as restrained emphasis on Latin caps pulls short CJK
+   labels apart — `文档`, `本页内容` — because Chinese has no case for the
+   uppercase to act on, leaving only the extra space. The Vue components already
+   narrow their own kickers this way; these four had been left behind. */
+html[lang^="zh"] :is(
+  .sidebar-group__title,
+  .toc__label,
+  .doc-pager__label,
+  .component-example__label
+) {
+  letter-spacing: 0.05em;
 }
 
 /* ====================================================================
