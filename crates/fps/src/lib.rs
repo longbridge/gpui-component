@@ -3,10 +3,19 @@
 //!
 //! Frame data comes from GPUI's own frame trace
 //! ([`gpui::FrameTimingCollector`]). The rate and the interval count frames
-//! *presented*, stamped with their own present time, so they agree with the
-//! platform's overlay (Metal's HUD counts the same drawables); the frame cost
-//! is what the framework actually spent in `Window::draw`, rather than an
+//! *presented*, stamped with their own present time; the frame cost is what
+//! the framework actually spent in `Window::draw`, rather than an
 //! approximation measured from the outside.
+//!
+//! Expect a lower rate here than the platform's overlay reports, and read it
+//! as a different measurement rather than a disagreement. GPUI presents only
+//! a frame it has drawn, so this is the rate the application produced. Metal's
+//! HUD, on a composited window, reports the rate that window reaches the
+//! display at -- on a 120 Hz panel a flat 120.00 at 8.33 ms, held there while
+//! the application hands it 58 new frames a second, and held there still while
+//! an idle retained-mode window hands it none. A rate below the display's is
+//! therefore not a dropped frame in itself; `FRAME` and `DROP` are what say
+//! whether the frames that were produced arrived on time.
 //!
 //! Render it wherever it should appear, guarded by your own flag:
 //!

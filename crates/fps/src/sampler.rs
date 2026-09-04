@@ -80,10 +80,16 @@ impl FrameSampler {
     /// Frames presented per second, over the frames still inside
     /// [`FPS_WINDOW`].
     ///
-    /// Presented, not drawn: it is the same count the platform's own overlay
-    /// keeps -- Metal's HUD counts drawables handed to the display -- so the
-    /// two agree on the figure. A drawn frame that was never presented did not
+    /// Presented, not drawn: a drawn frame that was never presented did not
     /// reach the screen and is not a frame the reader saw.
+    ///
+    /// This is not the figure the platform's own overlay shows, and it is not
+    /// meant to be. GPUI presents a frame only when it has drawn one, so this
+    /// counts what the application produced. Metal's HUD, on a composited
+    /// window, reports the rate the window reaches the display at, which is
+    /// the display's own: a 120 Hz panel reads a flat 120.00 at 8.33 ms while
+    /// the application hands it 58 new frames a second. Both are honest about
+    /// different things.
     ///
     /// `n` frames span `n - 1` intervals, so the rate is derived from the
     /// elapsed span rather than from the raw count; that keeps the readout
