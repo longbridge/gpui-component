@@ -288,6 +288,9 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) display_map: DisplayMap,
     pub(super) undo_manager: UndoManager,
     pub(super) search_session: super::SearchSession,
+    /// Advances every time search is explicitly invoked. See
+    /// [`InputBaseState::search_activation_revision`].
+    pub(super) search_activation_revision: u64,
     pub(super) searchable: bool,
     pub(super) replaceable: bool,
     pub(super) soft_wrap: bool,
@@ -617,6 +620,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             text: "".into(),
             display_map: DisplayMap::new(text_style.font(), window.rem_size(), None),
             search_session: super::SearchSession::default(),
+            search_activation_revision: 0,
             searchable: false,
             replaceable: true,
             soft_wrap: true,

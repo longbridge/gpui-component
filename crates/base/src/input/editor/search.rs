@@ -19,8 +19,6 @@ pub struct SearchMatcher {
 #[derive(Debug, Clone)]
 pub struct SearchSession {
     pub open: bool,
-    /// Advances whenever search is explicitly invoked, including while already open.
-    pub activation_revision: u64,
     pub replace_mode: bool,
     pub case_insensitive: bool,
     pub query: String,
@@ -33,7 +31,6 @@ impl Default for SearchSession {
     fn default() -> Self {
         Self {
             open: false,
-            activation_revision: 0,
             replace_mode: false,
             case_insensitive: true,
             query: String::new(),
@@ -47,7 +44,6 @@ impl Default for SearchSession {
 impl SearchSession {
     pub(crate) fn open(&mut self, replace_mode: bool, replaceable: bool) {
         self.open = true;
-        self.activation_revision = self.activation_revision.wrapping_add(1);
         self.replace_mode = replace_mode && replaceable;
     }
 
@@ -63,10 +59,20 @@ impl SearchSession {
 }
 
 impl<M: InputModeKind> InputBaseState<M> {
+    /// Open the search session, or re-invoke it if it is already open.
+    ///
+    /// This is not idempotent: every call advances
+    /// [`InputBaseState::search_activation_revision`], and the presentation
+    /// layer answers that by re-focusing the search field and selecting its
+    /// contents, the same as pressing the shortcut a second time. Call it from
+    /// an action or another user gesture, never from a render pass or an
+    /// observer that runs every frame — that would re-select the field under
+    /// the user on every frame and make it impossible to type.
     pub fn open_search(&mut self, replace_mode: bool, cx: &mut Context<Self>) {
         if !self.searchable {
             return;
         }
+        self.search_activation_revision = self.search_activation_revision.wrapping_add(1);
         self.search_session
             .open(replace_mode, self.is_replaceable());
         let selected = self.selected_text().to_string();
@@ -90,6 +96,16 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub fn search_session(&self) -> &SearchSession {
         &self.search_session
+    }
+
+    /// A counter that advances every time [`InputBaseState::open_search`] runs,
+    /// including while the session is already open.
+    ///
+    /// Re-invoking search leaves the session itself identical, so a presentation
+    /// layer that decides what to rebuild by comparing session state cannot see
+    /// the second request. Fold this into that comparison to notice it.
+    pub fn search_activation_revision(&self) -> u64 {
+        self.search_activation_revision
     }
 
     #[doc(hidden)]
@@ -363,18 +379,6 @@ impl DoubleEndedIterator for SearchMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn opening_an_active_session_advances_the_activation_revision() {
-        let mut session = SearchSession::default();
-
-        session.open(false, true);
-        let first_revision = session.activation_revision;
-        session.open(false, true);
-
-        assert!(session.open);
-        assert_ne!(session.activation_revision, first_revision);
-    }
 
     #[test]
     fn finds_navigates_and_preserves_replacement_position() {
