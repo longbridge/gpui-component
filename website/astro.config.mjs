@@ -1,7 +1,6 @@
 import { defineConfig } from 'astro/config';
 import vue from '@astrojs/vue';
 import tailwindcss from '@tailwindcss/vite';
-import { ViteToml } from 'vite-plugin-toml';
 import remarkMath from 'remark-math';
 import rehypeMathjax from 'rehype-mathjax';
 import pagefind from 'astro-pagefind';
@@ -29,6 +28,6 @@ export default defineConfig({
   },
 
   vite: {
-    plugins: [tailwindcss(), ViteToml(), wasmExamplesDevServer(BASE)],
+    plugins: [tailwindcss(), wasmExamplesDevServer(BASE)],
   },
 });
