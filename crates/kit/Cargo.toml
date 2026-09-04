@@ -71,10 +71,6 @@ gpui-base.workspace = true
 gpui-component = { workspace = true, optional = true }
 gpui-kit-assets = { workspace = true, optional = true }
 
-# `reqwest_client` pulls in tokio's default runtime, which does not build on wasm.
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-reqwest_client.workspace = true
-
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
 

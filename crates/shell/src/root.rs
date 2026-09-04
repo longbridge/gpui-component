@@ -159,9 +159,16 @@ pub struct ShellRoot {
 /// Where the performance HUD sits over the window and how it behaves.
 ///
 /// What a script's `show_fps_monitor(options)` names, with the same defaults
-/// `gpui_fps` gives an overlay a Rust host places by hand -- except
-/// `continuous`, which is off: a HUD a script switches on is there to watch
-/// the application's own frames, not to drive a redraw loop of its own.
+/// `gpui_fps` gives an overlay a Rust host places by hand.
+///
+/// Including `continuous`. A HUD that only observes counts how often the
+/// window had a reason to redraw, and in a retained-mode application that is
+/// demand rather than speed: it reads far below the platform's own overlay --
+/// 26-58 against Metal's 113-120 on the same window -- and the conclusion a
+/// reader draws is that the framework cannot hold a frame rate. Sustaining the
+/// frames is what makes the number mean "can hold", and the display's refresh
+/// rate bounds it for free. A script that wants the observing behaviour asks
+/// for `continuous: false`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FpsHudRequest {
     /// Corner or edge of the window.
@@ -177,7 +184,7 @@ impl Default for FpsHudRequest {
     fn default() -> Self {
         Self {
             anchor: Anchor::TopRight,
-            continuous: false,
+            continuous: true,
             frame_budget: None,
         }
     }
