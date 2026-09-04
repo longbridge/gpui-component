@@ -524,7 +524,12 @@ html.dark .astro-code span {
 
   p, ul, ol, blockquote { max-width: 46rem; }
   p, li { line-height: 1.75; }
-  ul, ol { padding-left: 1.2rem; }
+  /* Tailwind's preflight sets `list-style: none`, so prose lists lost their
+     markers — a bulleted list read as a run of indented lines. */
+  ul { list-style: disc; padding-left: 1.2rem; }
+  ol { list-style: decimal; padding-left: 1.2rem; }
+  ul ul { list-style: circle; }
+  ul ul ul { list-style: square; }
   li::marker { color: var(--muted-foreground); }
   li + li { margin-top: 0.25rem; }
   li > p { margin: 0; }
@@ -1208,7 +1213,11 @@ html[lang^="zh"] :is(
 
 /* A native <dialog>: the browser owns the backdrop, the top layer, focus
    trapping and Escape, so none of that is reimplemented here. */
-#search-modal {
+/* A closed dialog is `display: none` by the UA stylesheet; setting `display`
+   unconditionally overrode that and left the panel sitting in the page flow. */
+#search-modal { display: none; }
+
+#search-modal[open] {
   display: flex;
   flex-direction: column;
   width: min(42rem, calc(100% - 2rem));
