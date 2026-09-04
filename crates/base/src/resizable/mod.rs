@@ -455,6 +455,56 @@ mod tests {
         assert_eq!(followup_frame, settled_frame);
     }
 
+    struct CallerStateHarness {
+        width: Pixels,
+        state: gpui::Entity<ResizableState>,
+    }
+
+    impl Render for CallerStateHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(self.width).h(px(100.)).child(
+                h_resizable("caller-state")
+                    .with_state(&self.state)
+                    .child(
+                        resizable_panel()
+                            .size(px(240.))
+                            .child(div().size_full().debug_selector(|| "cs-sidebar".into())),
+                    )
+                    .child(resizable_panel().child(div().size_full())),
+            )
+        }
+    }
+
+    /// A group whose state the caller owns (`with_state`, as the dock does)
+    /// has no `use_keyed_state` observer behind it, so the settling frame has
+    /// to be scheduled by the deferred notify rather than by that observer.
+    #[gpui::test]
+    fn caller_owned_state_settles_on_the_same_frame(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| ResizableState::default()));
+        let (view, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| CallerStateHarness {
+                width: px(800.),
+                state,
+            }
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+
+        view.update(cx, |view, cx| {
+            view.width = px(1200.);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let settled = cx.debug_bounds("cs-sidebar").unwrap().size.width;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let followup = cx.debug_bounds("cs-sidebar").unwrap().size.width;
+
+        assert_eq!(followup, settled, "settling frame must not be pending");
+    }
+
     struct ResizableHarness {
         state: gpui::Entity<ResizableState>,
         resizes: Rc<Cell<usize>>,

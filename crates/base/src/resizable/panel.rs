@@ -183,13 +183,18 @@ impl RenderOnce for ResizablePanelGroup {
 
                         if size_changed {
                             state.adjust_to_container_size(cx);
-                            // Size adjustment happens after this frame's layout has
-                            // already been computed. A refresh requested during the
-                            // draw can be coalesced into that same draw, so defer it
-                            // until the current effect cycle has completed. Otherwise
-                            // the settling frame can remain pending until pointer input
-                            // triggers a repaint, making the divider jump on hover.
-                            window.defer(cx, |window, _| window.refresh());
+                            // The adjustment lands after this frame's layout has
+                            // already been computed, and a notify raised during a
+                            // draw only records the view as dirty without scheduling
+                            // a frame for it. Defer the notify so it runs once the
+                            // draw has finished and can schedule the settling frame.
+                            // Otherwise that frame stays pending until some later
+                            // input repaints the window, and the divider appears to
+                            // jump on hover.
+                            let state = cx.entity();
+                            window.defer(cx, move |_, cx| {
+                                state.update(cx, |_, cx| cx.notify());
+                            });
                         }
                     })
                 }
