@@ -1154,6 +1154,7 @@ html.dark .astro-code span {
   align-items: center;
   gap: 0.45rem;
   width: 13rem;
+  min-width: 0;
   height: 2rem;
   padding: 0 0.5rem 0 0.6rem;
   border: 1px solid var(--border);
@@ -1210,8 +1211,23 @@ html[lang^="zh"] :is(
   .docs-main--full { padding: 1.75rem 0 3rem; }
 }
 
-@media (max-width: 767px) {
-  .site-nav__search-key { display: none; }
+/* The bar runs out of room for a full-width field before it runs out of room
+   for its links, so the field gives up width in steps: full, narrower, then
+   an icon button once the label goes. */
+@media (max-width: 1080px) {
+  .site-nav__search-btn { width: 9.5rem; }
+}
+
+@media (max-width: 900px) {
+  .site-nav__search-btn {
+    width: 2rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* Scoped to the button so it outranks the shared key-cap rule, which is
+     defined further down the file and would otherwise win on source order. */
+  .site-nav__search-btn .site-nav__search-key { display: none; }
 
   /* Hidden from view but kept in the accessibility tree, so the button keeps
      its name once only the icon shows. */
@@ -1224,7 +1240,10 @@ html[lang^="zh"] :is(
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
 
+/* The docs shell keeps its own, narrower gutter at phone width. */
+@media (max-width: 640px) {
   .docs-layout { width: calc(100% - 2rem); }
 }
 
