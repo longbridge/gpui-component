@@ -80,9 +80,9 @@ const src = computed(() => {
     if (kind.value === "base") {
         const query = new URLSearchParams({ component: component.value });
         if (props.devVersion) query.set("v", props.devVersion);
-        return `${base}/examples/base/?${query.toString()}`;
+        return `${base}/examples/base?${query.toString()}`;
     }
-    return `${base}/gallery/?story=${encodeURIComponent(storyName.value ?? '')}`;
+    return `${base}/gallery?story=${encodeURIComponent(storyName.value ?? '')}`;
 });
 
 const windowTitle = computed(() =>

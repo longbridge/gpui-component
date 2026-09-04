@@ -517,6 +517,73 @@ html.dark .astro-code span {
   }
   a:hover { text-decoration-color: currentColor; }
 
+  /* VitePress-style containers (`:::tip`), turned into asides by
+     `remark-callouts`. One shape, tinted by kind. */
+  .callout {
+    margin: 1.5rem 0;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--callout-accent, var(--border));
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--callout-accent, var(--secondary)) 6%, transparent);
+  }
+
+  .callout > :first-child { margin-top: 0; }
+  .callout > :last-child { margin-bottom: 0; }
+  .callout p { max-width: none; }
+
+  .callout__title {
+    margin-bottom: 0.4rem;
+    color: var(--foreground);
+    font-size: 0.9rem;
+    font-weight: 640;
+    letter-spacing: -0.01em;
+  }
+
+  .callout--tip { --callout-accent: var(--brand); }
+  .callout--info,
+  .callout--note { --callout-accent: var(--muted-foreground); }
+  .callout--warning,
+  .callout--caution,
+  .callout--important { --callout-accent: #d97706; }
+  .callout--danger { --callout-accent: #dc2626; }
+
+  /* GFM footnotes. The markdown pipeline emits `<h2 class="sr-only">` as the
+     section's accessible name, but Tailwind only generates classes it finds in
+     source, and this one comes out of rendered markdown — so without a rule
+     here the label rendered as a full-size heading in the middle of the page. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .footnotes {
+    margin-top: 3.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.85rem;
+  }
+
+  .footnotes ol { padding-left: 1.1rem; }
+  .footnotes p { max-width: none; line-height: 1.65; }
+
+  /* Footnotes are where bare URLs turn up; let them wrap instead of pushing
+     the page sideways. */
+  .footnotes a { overflow-wrap: anywhere; }
+
+  .footnotes .data-footnote-backref {
+    text-decoration: none;
+    margin-left: 0.15rem;
+  }
+
   table {
     display: table;
     width: 100%;

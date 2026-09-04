@@ -66,13 +66,13 @@ const copy = isZh
   <div class="site-footer__brand">
     <strong>GPUI Kit</strong>
     <p>
-      {copy.prefix}
-      <a href="https://longbridge.com" target="_blank" rel="noopener noreferrer">Longbridge</a>{copy.suffix}
+      {copy.prefix}{' '}<a href="https://longbridge.com" target="_blank" rel="noopener noreferrer">Longbridge</a
+      >{copy.suffix}
     </p>
     <!-- The one place the site names GPUI's origin. See DESIGN.md, "Attribution". -->
     <p>
-      {copy.builtOn}
-      <a href="https://gpui.rs" target="_blank" rel="noopener noreferrer">GPUI</a>{copy.attributionMid}<a
+      {copy.builtOn}{' '}<a href="https://gpui.rs" target="_blank" rel="noopener noreferrer">GPUI</a
+      >{copy.attributionMid}<a
         href="https://zed.dev"
         target="_blank"
         rel="noopener noreferrer">Zed Industries</a
@@ -93,9 +93,8 @@ const copy = isZh
   </nav>
 
   <p class="site-footer__credits">
-    {copy.iconCredits}
-    <a href="https://lucide.dev" target="_blank" rel="noopener noreferrer">Lucide</a>
-    {copy.and}
-    <a href="https://isocons.app" target="_blank" rel="noopener noreferrer">Isocons</a>{copy.period}
+    {copy.iconCredits}{' '}<a href="https://lucide.dev" target="_blank" rel="noopener noreferrer">Lucide</a
+    >{' '}{copy.and}{' '}<a href="https://isocons.app" target="_blank" rel="noopener noreferrer">Isocons</a
+    >{copy.period}
   </p>
 </footer>
