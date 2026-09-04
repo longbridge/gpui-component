@@ -10,18 +10,18 @@
 //!
 //! # One module per crate
 //!
-//! The declarations are three ambient modules, not one: `"gpui-kit"` for GPUI's own
+//! The declarations include `"gpui-kit"` for GPUI's own
 //! elements and what this runtime adds, `"gpui-base"` for gpui-base's layout
 //! helpers, components and theme, and `"gpui-fps"` for its performance overlay.
-//! A name belongs to exactly one of them.
+//! `"gpui"` is a compatibility alias for `"gpui-kit"`.
 //!
 //! That is a contract about provenance rather than a filing convenience. An
 //! import line says which layer a script depends on, so a script that never
 //! reaches for a component says so, and the next layer to arrive —
 //! `gpui-component`, whose components are the reason the seam exists — needs a
 //! list and a `declare module`, not a renaming of everything already here.
-//! Nothing is re-exported for convenience: a name reachable from two specifiers
-//! stops saying where it came from, which is the property being bought.
+//! Apart from the explicit `"gpui"` alias, names are not re-exported for
+//! convenience, preserving the layer named by each import.
 //!
 //! The dependency runs upward only. `"gpui-base"` names what it borrows from
 //! `"gpui-kit"` in an import at the top of its block; `"gpui-kit"` refers down to a
@@ -210,6 +210,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
     out.push_str("}\n\n");
+    out.push_str("declare module \"gpui\" {\n  export * from \"gpui-kit\";\n}\n\n");
     out.push_str("declare module \"gpui-base\" {\n");
     out.push_str(BASE_IMPORTS);
     out.push_str(&base_color_token_type());
@@ -595,8 +596,9 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
 
 /// The specifiers one `gpui-kit.d.ts` declares. A script importing any of them
 /// wants the file beside it.
-const BUILTIN_SPECIFIERS: [&str; 5] = [
+const BUILTIN_SPECIFIERS: [&str; 6] = [
     "gpui-kit",
+    "gpui",
     "gpui-base",
     crate::DEFAULT_COMPONENT_MODULE,
     "gpui-shell",
@@ -875,12 +877,12 @@ const PREAMBLE: &str = "\
 //
 //   \"gpui-kit\"   GPUI's own elements, plus what this runtime adds: views,
 //                the style surface, the window, storage, scheduling.
+//   \"gpui\"       Compatibility alias for \"gpui-kit\".
 //   \"gpui-base\"  gpui-base's layout helpers, components and theme.
 //   \"gpui-fps\"   gpui-fps's performance overlay.
 //
-// A name belongs to exactly one of them. Nothing is re-exported for
-// convenience: a name reachable from two specifiers stops saying where it came
-// from.
+// Except for the explicit \"gpui\" compatibility alias, a name belongs to
+// exactly one module and is not re-exported for convenience.
 //
 // The style surface here is generated from the same tables the runtime
 // dispatches through, so a style method that type-checks exists at run time,
@@ -4136,6 +4138,9 @@ mod tests {
             assert!(!method.is_empty(), "a method line has no name");
         }
         assert!(declarations.contains("declare module \"gpui-kit\" {"));
+        assert!(
+            declarations.contains("declare module \"gpui\" {\n  export * from \"gpui-kit\";\n}")
+        );
         // The global declaration follows the module blocks, and has to stay
         // outside it: a `declare module` body cannot introduce a global, and
         // this file is only in script mode because it has no top-level import

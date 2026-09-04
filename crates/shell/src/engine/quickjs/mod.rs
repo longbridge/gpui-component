@@ -1009,10 +1009,8 @@ mod window_api;
 /// One module per crate that provides the capability, so an import says which
 /// layer a script depends on: `gpui-base`'s components come from `"gpui-base"`,
 /// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui-kit"` carries only what GPUI
-/// itself and this runtime provide. A name belongs to exactly one of them —
-/// nothing is re-exported for convenience, because a name reachable from two
-/// specifiers stops saying anything about where it came from, and the next
-/// layer to arrive would have to be told apart from the ones already here.
+/// itself and this runtime provide. `"gpui"` is an explicit compatibility alias
+/// for that module; other names belong to exactly one layer.
 ///
 /// Anything installed onto `globalThis.__gpui` must be listed in one of these
 /// or no `import { … }` will see it.
@@ -1195,6 +1193,7 @@ macro_rules! builtin_modules {
 
 builtin_modules![
     (GpuiModule, "gpui-kit", exports::GPUI),
+    (GpuiAliasModule, "gpui", exports::GPUI),
     (GpuiBaseModule, "gpui-base", exports::GPUI_BASE),
     (GpuiShellModule, "gpui-shell", exports::GPUI_SHELL),
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
@@ -9718,6 +9717,20 @@ mod module_lifecycle_tests {
     use crate::dependencies::{GitDependencyStore, MaterializedDependency};
     use std::collections::BTreeMap;
     use std::process::Command;
+
+    #[test]
+    fn gpui_module_exports_div() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        runtime
+            .load_source(
+                "gpui-import.js",
+                r#"
+import { div, View } from "gpui";
+export default class Panel extends View { render() { return div(); } }
+"#,
+            )
+            .expect("gpui is an importable built-in module");
+    }
 
     #[test]
     fn registrations_for_the_same_root_are_generation_scoped_and_leased() {
