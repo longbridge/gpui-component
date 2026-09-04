@@ -235,6 +235,13 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
                 ..Default::default()
             });
         }
+        Node::Break(_) => {
+            // Hard line break (trailing two spaces / backslash). Mirror the
+            // inline-HTML <br> path: emit a newline inline node so the break
+            // renders instead of silently concatenating adjacent lines.
+            text.push('\n');
+            paragraph.push(InlineNode::new("\n"));
+        }
         Node::InlineMath(raw) => {
             text = raw.value.clone();
             paragraph.push(
@@ -600,6 +607,28 @@ mod tests {
         );
         assert_eq!(image.width, None);
         assert_eq!(image.height, None);
+    }
+
+    /// A CommonMark hard break — two trailing spaces or a trailing backslash —
+    /// renders as a newline, instead of joining the two lines.
+    #[test]
+    fn test_hard_break_renders_newline() {
+        for source in [
+            "Owner: Jane  \nPersona: assistant",
+            "Owner: Jane\\\nPersona: assistant",
+        ] {
+            let mut cx = NodeContext::default();
+            let document = parse(source, &mut cx).unwrap();
+
+            let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+                panic!("expected paragraph");
+            };
+
+            assert_eq!(paragraph.children.len(), 3, "source: {source:?}");
+            assert_eq!(paragraph.children[0].text.as_ref(), "Owner: Jane");
+            assert_eq!(paragraph.children[1].text.as_ref(), "\n");
+            assert_eq!(paragraph.children[2].text.as_ref(), "Persona: assistant");
+        }
     }
 
     #[derive(Debug, Clone, PartialEq)]
