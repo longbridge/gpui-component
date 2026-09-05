@@ -100,5 +100,5 @@ the [`gpui-component` Editor](../../docs/components/editor.md).
 ## Runnable example
 
 ```bash
-cargo run -p gpui-base --example components -- editor
+cargo run -p gpui-base-examples -- editor
 ```
