@@ -432,7 +432,7 @@ where
 
         // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        // Keep the configured index so it can be used again when filtered rows return.
+        // Use the fallback for this measurement without overwriting the caller's configured index.
         let requested = self.item_to_measure_index;
         let item_to_measure = if requested.section < sections_count
             && requested.row < self.delegate.items_count(requested.section, cx)
