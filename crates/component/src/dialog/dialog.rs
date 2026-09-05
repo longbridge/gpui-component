@@ -654,7 +654,6 @@ impl RenderOnce for Dialog {
                                             .ghost()
                                             .icon(IconName::Close)
                                             .accessibility_label(t!("Dialog.close"))
-                                            .tooltip(t!("Dialog.close"))
                                             .on_click(|_, window, cx| {
                                                 window.dispatch_action(Box::new(Cancel), cx)
                                             })
