@@ -253,8 +253,8 @@ impl Button {
             border_edges: Edges::all(true),
             size: Size::Medium,
             tooltip: None,
-            tooltip_builder: None,
             tooltip_placement: None,
+            tooltip_builder: None,
             on_click: None,
             focus_ring_enabled: true,
             on_hover: None,
@@ -365,6 +365,9 @@ impl Button {
     }
 
     /// Prefer a side for the tooltip, falling back when it does not fit.
+    ///
+    /// Applies to [`Self::tooltip`] and [`Self::tooltip_with_action`].
+    /// Omitting placement keeps automatic positioning.
     pub fn tooltip_placement(mut self, placement: Placement) -> Self {
         self.tooltip_placement = Some(placement);
         self

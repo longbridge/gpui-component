@@ -307,7 +307,12 @@ Button::new("custom-btn")
 Button::new("btn")
     .label("Hover me")
     .tooltip("This is a helpful tooltip")
+    .tooltip_placement(Placement::Bottom)
 ```
+
+Use `.tooltip_placement(...)` to prefer a side for either `.tooltip(...)` or
+`.tooltip_with_action(...)`. The tooltip still flips when that side does not fit.
+Omit placement to keep automatic positioning.
 
 ### Custom Children
 
@@ -331,10 +336,3 @@ Button::new("btn")
 [ProgressCircle]: https://docs.rs/gpui-component/latest/gpui_component/progress/struct.ProgressCircle.html
 [Icon]: https://docs.rs/gpui-component/latest/gpui_component/icon/struct.Icon.html
 [IconName]: https://docs.rs/gpui-component/latest/gpui_component/icon/enum.IconName.html
-
-## Tooltip placement
-
-Use `.tooltip_placement(Placement::Bottom)` to prefer a side for a button tooltip.
-It applies to both `.tooltip(...)` and `.tooltip_with_action(...)`.
-The managed tooltip still flips when the preferred side does not fit. Omitting
-placement keeps the existing automatic positioning.
