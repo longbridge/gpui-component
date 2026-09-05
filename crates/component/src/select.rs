@@ -440,6 +440,22 @@ where
             })
             .child(title)
     }
+
+    fn accessibility_value(&self) -> SharedString {
+        let Some((_, item)) = self.state.selection.first() else {
+            return self
+                .state
+                .placeholder
+                .clone()
+                .unwrap_or_else(|| t!("Select.placeholder").into());
+        };
+
+        if let Some(prefix) = self.title_prefix.as_ref() {
+            format!("{}{}", prefix, item.title()).into()
+        } else {
+            item.title()
+        }
+    }
 }
 
 impl<D> Render for SelectState<D>
@@ -765,6 +781,7 @@ where
         });
 
         let is_open = self.state.read(cx).state.open;
+        let accessibility_value = self.state.read(cx).accessibility_value();
         let content_focus_handle = self.state.read(cx).state.list.focus_handle(cx);
         let open_state = self.state.clone();
 
@@ -776,6 +793,7 @@ where
             })
             .focus_handle(&focus_handle)
             .content_focus_handle(&content_focus_handle)
+            .accessibility_value(accessibility_value)
             .on_open_change(move |open, _, cx| {
                 open_state.update(cx, |state, cx| state.set_open(open, cx));
             })
@@ -788,7 +806,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext as _, TestAppContext};
+    use gpui::{AppContext as _, RenderOnce as _, TestAppContext};
 
     use crate::{
         IndexPath,
@@ -904,6 +922,34 @@ mod tests {
                 state.read(cx).selected_index(cx),
                 Some(IndexPath::new(0).section(1)),
             );
+        });
+    }
+    #[gpui::test]
+    fn test_select_accessibility_value_tracks_placeholder_and_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let window = cx.add_empty_window();
+        window.update(|window, cx| {
+            let items = SearchableVec::new(vec!["Safari", "Books"]);
+            let state = cx.new(|cx| SelectState::new(items, None, window, cx));
+
+            _ = Select::new(&state)
+                .placeholder("All sources")
+                .accessibility_label("History source")
+                .render(window, cx);
+            assert_eq!(state.read(cx).accessibility_value(), "All sources");
+
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Safari", window, cx);
+            });
+
+            assert_eq!(state.read(cx).accessibility_value(), "Safari");
+            state.read(cx).state.list.clone().update(cx, |list, cx| {
+                list.set_query("Books", window, cx);
+            });
+            // Searching moves the cursor, not the committed accessible value.
+            assert_eq!(state.read(cx).accessibility_value(), "Safari");
+            state.update(cx, |state, _| state.title_prefix = Some("Source: ".into()));
+            assert_eq!(state.read(cx).accessibility_value(), "Source: Safari");
         });
     }
 }
