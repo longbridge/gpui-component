@@ -220,7 +220,7 @@ fn configure_windows(
         SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
     };
 
-    let hwnd = HWND(handle.hwnd as _);
+    let hwnd: HWND = handle.hwnd as _;
     if hwnd.is_invalid() {
         return;
     }
@@ -231,16 +231,16 @@ fn configure_windows(
 
         if behavior.is_skip_taskbar() {
             // WS_EX_TOOLWINDOW: hide from taskbar
-            ex_style |= WS_EX_TOOLWINDOW.0;
+            ex_style |= WS_EX_TOOLWINDOW;
             // WS_EX_NOACTIVATE: don't steal focus
-            ex_style |= WS_EX_NOACTIVATE.0;
+            ex_style |= WS_EX_NOACTIVATE;
         }
 
         if behavior.is_click_through() {
             // WS_EX_TRANSPARENT: click-through
-            ex_style |= WS_EX_TRANSPARENT.0;
+            ex_style |= WS_EX_TRANSPARENT;
             // WS_EX_LAYERED: required for transparent styles
-            ex_style |= WS_EX_LAYERED.0;
+            ex_style |= WS_EX_LAYERED;
         }
 
         // Apply extended styles
