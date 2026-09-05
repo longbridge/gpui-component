@@ -653,8 +653,8 @@ impl RenderOnce for Dialog {
                                             .small()
                                             .ghost()
                                             .icon(IconName::Close)
-                                            .accessibility_label(t!("Dock.Close"))
-                                            .tooltip(t!("Dock.Close"))
+                                            .accessibility_label(t!("Dialog.close"))
+                                            .tooltip(t!("Dialog.close"))
                                             .on_click(|_, window, cx| {
                                                 window.dispatch_action(Box::new(Cancel), cx)
                                             })
