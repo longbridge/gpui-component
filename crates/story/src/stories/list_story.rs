@@ -336,7 +336,7 @@ impl CompanyListDelegate {
 }
 
 impl ListDelegate for CompanyListDelegate {
-    fn item_aria_label(&self, index: IndexPath, _: &App) -> Option<SharedString> {
+    fn item_accessibility_label(&self, index: IndexPath, _: &App) -> Option<SharedString> {
         let company = self.matched_companies.get(index.section)?.get(index.row)?;
         Some(
             format!(

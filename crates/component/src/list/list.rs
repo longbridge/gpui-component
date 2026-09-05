@@ -471,7 +471,7 @@ where
         let id = SharedString::from(format!("list-item-{}", ix));
 
         let total_items = self.rows_cache.items_count();
-        let aria_label = self.delegate.item_aria_label(ix, cx);
+        let aria_label = self.delegate.item_accessibility_label(ix, cx);
 
         div()
             .id(id)
@@ -796,7 +796,7 @@ mod row_label_tests {
             2
         }
 
-        fn item_aria_label(&self, index: IndexPath, _: &App) -> Option<SharedString> {
+        fn item_accessibility_label(&self, index: IndexPath, _: &App) -> Option<SharedString> {
             (index.row == 0).then(|| "Acme, up 2 percent".into())
         }
 

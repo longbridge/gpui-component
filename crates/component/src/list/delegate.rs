@@ -27,7 +27,7 @@ pub trait ListDelegate: Sized + 'static {
     /// Return the accessible name of a row, independently of its rendered children.
     ///
     /// The default leaves the row unnamed so its children retain their existing semantics.
-    fn item_aria_label(&self, _: IndexPath, _: &App) -> Option<SharedString> {
+    fn item_accessibility_label(&self, _: IndexPath, _: &App) -> Option<SharedString> {
         None
     }
 
