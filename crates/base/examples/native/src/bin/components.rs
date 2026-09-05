@@ -1,3 +1,4 @@
+#[path = "../../../showcase/mod.rs"]
 mod showcase;
 
 use std::sync::Arc;
