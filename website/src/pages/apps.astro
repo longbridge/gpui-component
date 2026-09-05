@@ -1,6 +1,8 @@
 ---
 import DocsLayout from '../layouts/DocsLayout.astro';
+import { getShowcaseApps } from '../lib/showcases.mjs';
 import AppsApp from '../components/AppsApp.vue';
+const apps = await getShowcaseApps();
 ---
 
 <DocsLayout
@@ -8,5 +10,5 @@ import AppsApp from '../components/AppsApp.vue';
   description="Desktop apps built with GPUI Kit — from a production trading terminal to database clients, terminals, and system utilities."
   lang="en"
 >
-  <AppsApp client:load lang="en" />
+  <AppsApp apps={apps} client:load lang="en" />
 </DocsLayout>

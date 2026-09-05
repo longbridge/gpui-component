@@ -231,26 +231,46 @@ through motion alone.
 
 ## App Stories
 
-`AppsApp.vue` lists the applications people have shipped with the library — the
-strongest available answer to "is this real?", and the reason it sits in the
-navbar rather than inside the Resources menu. Submissions come from
-[discussion #989](https://github.com/longbridge/gpui-kit/discussions/989).
+`AppsApp.vue` lists reviewed applications built with GPUI Kit. Submit and review
+apps through PRs in [longbridge/gpui-kit-showcases](https://github.com/longbridge/gpui-kit-showcases).
 
-- **The screenshots are the authors' own published GitHub URLs**, used as
-  submitted. They must not be wrapped in `.mac-window`: most already contain a
-  real titlebar, and a second set of traffic lights around one turns a real
-  screenshot into a mock. A hairline frame and one shared 16:10 crop, anchored
-  to the top, is what makes a row of them align.
-- **Order is the only ranking.** It reads as editorial judgement — how complete
-  and shipped an app is first, GitHub traction second — and is maintained by
-  hand when an entry is added.
-- **No star counts.** A hard-coded number goes stale, and resolving one
-  repository per app at build time would exhaust the unauthenticated GitHub
-  rate limit that `src/lib/github.ts` already draws on for the single nav-bar
-  count. The facts a card does carry — platforms, open source or commercial,
-  whether it is still in development — do not expire.
-- Copy for both locales lives in one `copy` object plus a per-app
-  `blurb: { en, zh }`, so an entry cannot be added in one language only.
+- **Manifests are the source of truth.** Each app has `apps/<app-id>/manifest.json`
+  and local preview images in the Showcase repository. `author` and an English-only
+  `description` are required; the project link field is `website`. The Astro pages
+  load these at build time with `src/lib/showcases.mjs` and pass serializable data
+  to the Vue app; no duplicated hard-coded app list.
+- **Screenshots show the complete window.** Authors must preserve all four corners
+  and edges in a clear, tidy capture. Images are archived unchanged and referenced
+  using raw GitHub URLs pinned to the checked-out commit. Cards use a shared 16:10
+  area with `object-fit: contain`, retaining the whole image. Do not wrap them in
+  `.mac-window` or add a second title bar.
+- **Featured is editorial.** Maintainers select `featured: true` using project
+  history, implementation, completeness, and quality. Featured apps appear first,
+  in `order.json` order; remaining featured IDs follow alphabetically. Other apps
+  appear in a separate group sortable by first inclusion time or GitHub Stars.
+  Search and category filters apply to both groups. Failed or unavailable star
+  counts remain unknown and sort after known counts, never as invented zeroes.
+- **Metadata freshness.** `publishedAt` records first inclusion in App Stories,
+  not the application's original release date, and remains unchanged for updates.
+  GitHub Stars are refreshed in the Showcase repository after merges and weekly,
+  then committed to manifests before dispatching the website release. Website
+  builds read these cached values. A failed lookup preserves prior values; missing
+  manifests or images fail the build, preventing a broken catalog deployment.
+- **Optional detail pages.** An app README enables `/apps/<id>` and its Chinese
+  route. The catalog’s shared Bun validator and renderer enforce the 10 KB limit,
+  official-link allowlist, local media and product-only content rules. The catalog
+  checkout’s locked dependencies must be installed before building.
+- **Review before publication.** Explain before the list that every merged app PR is listed, Featured is not
+  guaranteed, and maintainers adjust Featured as apps evolve.
+  The submission CTA links to the repository's PR instructions.
+- **Automatic publishing.** On approved changes merged to Showcase `main`, its
+  workflow validates the catalog, updates and commits GitHub Stars, and dispatches GPUI Kit's `release-docs.yml`.
+  Release Docs checks out the latest Showcase `main` at `.showcases` and provides
+  `SHOWCASES_DIR` to the website build. The Showcase repository needs a dedicated
+  `DOCS_DISPATCH_TOKEN` secret with Actions: write on GPUI Kit.
+- **Local development.** Clone the Showcase repository at `../gpui-kit-showcases`
+  alongside GPUI Kit, or set `SHOWCASES_DIR` to an existing checkout. Local builds
+  read that checkout, allowing manifests and website changes to be tested together.
 
 ## Files
 
