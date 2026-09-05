@@ -153,19 +153,23 @@ fn configure_macos(
     behavior: &WindowBehavior,
 ) {
     use objc2::runtime::NSObject;
-    use objc2::{msg_send, ClassType};
-    use objc2_app_kit::NSWindow;
+    use objc2::msg_send;
+    use objc2_app_kit::{NSView, NSWindow};
 
-    let ns_window_ptr = handle.ns_window as *mut NSObject;
-    if ns_window_ptr.is_null() {
+    // Get the NSWindow from the NSView handle
+    let ns_view_ptr = handle.ns_view as *mut NSObject;
+    if ns_view_ptr.is_null() {
         return;
     }
-    let ns_window: &NSWindow = unsafe { &*ns_window_ptr.cast::<NSWindow>() };
+    let ns_view: &NSView = unsafe { &*ns_view_ptr.cast::<NSView>() };
+    let Some(ns_window) = ns_view.window() else {
+        return;
+    };
 
     unsafe {
         // Configure collection behavior (taskbar / alt-tab / spaces)
         if behavior.is_skip_taskbar() || behavior.is_always_on_top() {
-            let mut collection_behavior: objc2::runtime::NSUInteger = 0;
+            let mut collection_behavior: usize = 0;
 
             if behavior.is_skip_taskbar() {
                 // NSWindowCollectionBehavior::CanJoinAllSpaces
