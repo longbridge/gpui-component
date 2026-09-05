@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, VecDeque},
-    time::Duration,
-};
+use std::{collections::VecDeque, time::Duration};
 
 use gpui::{
     WindowId,
@@ -22,76 +19,6 @@ const FPS_WINDOW: Duration = Duration::from_secs(1);
 /// and there is nothing to fix, so the default reading has to be a healthy
 /// one.
 const WARMUP_FRAMES: u32 = 8;
-
-/// The band a gap between presents has to fall in to be taken for the
-/// display's frame period.
-///
-/// Below the floor it is a catch-up burst rather than a refresh — the fastest
-/// panels ship at 240Hz, a period of 4.2ms. Above the ceiling it is the
-/// application not having had anything to draw: an idle window presents twice
-/// a second, and believing that gap would put the refresh rate at 2Hz.
-const SHORTEST_PLAUSIBLE_REFRESH: Duration = Duration::from_micros(3_000);
-const LONGEST_PLAUSIBLE_REFRESH: Duration = Duration::from_millis(50);
-
-/// Gaps are grouped this finely before being counted. Coarse enough that
-/// vsync jitter lands in one bucket, fine enough to tell the common rates
-/// apart: 6.5-7.0ms is 143-154Hz, and nothing else ships in there.
-const REFRESH_BUCKET: Duration = Duration::from_micros(500);
-
-/// How many buckets either side of the busiest one are averaged with it.
-///
-/// Bucketing truncates the very group it is measuring: the jitter around the
-/// period spills into the neighbours, so the busiest bucket holds a
-/// distribution cut off on both sides and its mean sits below the period. On a
-/// 144Hz panel that read 149. Averaging across the neighbourhood puts the
-/// centre back, and the clusters worth telling apart — one refresh against
-/// two — are far further than this reaches.
-const REFRESH_SPREAD: u32 = 2;
-
-/// The refresh rates panels actually ship at.
-///
-/// The estimate comes from timestamps that jitter, so it lands *near* the
-/// panel's rate rather than on it, and "near 144" printed as 146 is a headline
-/// above a ceiling it is supposed to be held to. Snapping to the rate a real
-/// display would have turns a good estimate into the right number. A panel
-/// that is on none of these keeps the raw estimate rather than being rounded
-/// to a rate it does not have.
-const STANDARD_REFRESH_RATES: &[f32] = &[
-    24., 25., 30., 48., 50., 60., 72., 75., 90., 100., 120., 144., 165., 180., 240., 360.,
-];
-
-/// How far the estimate may sit from a standard rate and still be taken for
-/// it.
-///
-/// Deliberately tight. A wide tolerance would snap an 85Hz panel up to 90 and
-/// print a ceiling above the one it is enforcing, which is the failure this
-/// whole cap exists to avoid; the jitter it has to absorb is a percent or two,
-/// so it never needs to reach that far.
-const REFRESH_SNAP_TOLERANCE: f32 = 0.025;
-
-/// How many times a gap has to recur before it is believed to be the display's
-/// period rather than a one-off.
-///
-/// A real refresh recurs every frame of every scroll, so the threshold costs
-/// nothing to clear and a glitch never clears it.
-const REFRESH_SUPPORT: u32 = 8;
-
-/// What share of the busiest group a faster one needs before it is taken for a
-/// cadence of its own, as a divisor.
-///
-/// The wanted figure is the display's *ceiling*, and a variable refresh panel
-/// spends most of its time below it: a ProMotion window that scrolls at 120Hz
-/// and settles at 60 has its 60Hz group win on count, and capping at 60 would
-/// be capping at the rate it happened to rest at. A real second cadence
-/// arrives in bulk; the jitter skirt around one does not.
-const REFRESH_MINORITY: u32 = 4;
-
-/// And it has to be at least twice as fast, which the skirt never is.
-///
-/// A window presenting slower than the panel misses whole refreshes, so the
-/// cadences below the ceiling are its halves and thirds — far outside the
-/// millisecond of jitter that spills into the buckets next door.
-const REFRESH_SEPARATION: u32 = 2;
 
 /// One drawn frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -121,32 +48,6 @@ pub(crate) struct FrameSampler {
     /// frame in it onto one instant -- the rate then depends on how often the
     /// HUD looked, not on how often the window presented.
     present_times: VecDeque<Instant>,
-    /// How often each plausible gap between two consecutive presents has been
-    /// seen, grouped to [`REFRESH_BUCKET`].
-    ///
-    /// Stands in for the display's frame period, which GPUI does not expose.
-    /// Frames are handed to the compositor on vsync, so a window drawing back
-    /// to back presents one refresh apart over and over: the period is the gap
-    /// that keeps happening, and the estimate is the busiest group's mean.
-    ///
-    /// The mean of the busiest group rather than the shortest gap anywhere,
-    /// twice over. A present is stamped when GPUI finished handing the frame
-    /// over rather than when the display scanned it out, so the gaps jitter by
-    /// a millisecond either way and the shortest of them is the low tail, not
-    /// the period — that read 164 on a 144Hz panel. And one gap on its own is
-    /// no evidence at all: two presents 5.9ms apart there is the compositor
-    /// catching up, not a 169Hz display.
-    ///
-    /// Empty until the window has drawn back to back at all, which one that
-    /// has only ever drawn on demand never does — so an application nobody has
-    /// touched yet is left uncapped rather than held to the rate at which it
-    /// happened to be idling.
-    ///
-    /// The failure mode is a window so slow that no two frames ever land
-    /// adjacent: its cap comes out as its own worst cadence. It reads low
-    /// either way, and the rows below say why.
-    refresh_candidates: BTreeMap<u32, RefreshCandidate>,
-    /// How many more frames are dropped before the statistics begin.
     warmup: u32,
     /// Whether the backlog has been discarded yet.
     ///
@@ -166,7 +67,6 @@ impl FrameSampler {
             window_id,
             samples: VecDeque::with_capacity(capacity),
             present_times: VecDeque::new(),
-            refresh_candidates: BTreeMap::new(),
             warmup: WARMUP_FRAMES,
             drained_backlog: false,
             capacity,
@@ -230,45 +130,6 @@ impl FrameSampler {
             return 0.;
         }
         (self.present_times.len() - 1) as f32 / span
-    }
-
-    /// The fastest cadence this window has repeatedly presented at, taken as
-    /// the display's refresh rate. `None` until some gap has recurred often
-    /// enough to mean something — see [`refresh_candidates`].
-    ///
-    /// [`refresh_candidates`]: FrameSampler::refresh_candidates
-    pub(crate) fn peak_present_rate(&self) -> Option<f32> {
-        let busiest = self
-            .refresh_candidates
-            .values()
-            .filter(|candidate| candidate.hits >= REFRESH_SUPPORT)
-            .map(|candidate| candidate.hits)
-            .max()?;
-        let mode = *self
-            .refresh_candidates
-            .iter()
-            .find(|(_, candidate)| candidate.hits == busiest)
-            .map(|(bucket, _)| bucket)?;
-        let peak = self
-            .refresh_candidates
-            .iter()
-            .find(|(bucket, candidate)| {
-                *bucket * REFRESH_SEPARATION <= mode
-                    && candidate.hits >= REFRESH_SUPPORT
-                    && candidate.hits * REFRESH_MINORITY >= busiest
-            })
-            .map_or(mode, |(bucket, _)| *bucket);
-
-        let (hits, total) = self
-            .refresh_candidates
-            .range(peak.saturating_sub(REFRESH_SPREAD)..=peak + REFRESH_SPREAD)
-            .fold((0u32, Duration::ZERO), |(hits, total), (_, candidate)| {
-                (hits + candidate.hits, total + candidate.total)
-            });
-        // The peak is inside its own neighbourhood, and it cleared the support
-        // threshold to be the peak, so the count is never zero here.
-        let mean = total.as_secs_f32() / hits as f32;
-        (mean > 0.).then(|| snap_to_standard_refresh(1. / mean))
     }
 
     /// Mean time between consecutive presents inside [`FPS_WINDOW`], as the
@@ -385,18 +246,7 @@ impl FrameSampler {
     /// Records when frames were presented and forgets the ones that have aged
     /// out of [`FPS_WINDOW`] as of `now`. `presented` must be in order.
     fn ingest_presents(&mut self, presented: impl IntoIterator<Item = Instant>, now: Instant) {
-        for present in presented {
-            if let Some(previous) = self.present_times.back()
-                && let Some(interval) = present.checked_duration_since(*previous)
-                && (SHORTEST_PLAUSIBLE_REFRESH..=LONGEST_PLAUSIBLE_REFRESH).contains(&interval)
-            {
-                let bucket = (interval.as_micros() / REFRESH_BUCKET.as_micros()) as u32;
-                let candidate = self.refresh_candidates.entry(bucket).or_default();
-                candidate.hits = candidate.hits.saturating_add(1);
-                candidate.total = candidate.total.saturating_add(interval);
-            }
-            self.present_times.push_back(present);
-        }
+        self.present_times.extend(presented);
 
         while let Some(oldest) = self.present_times.front() {
             if now.duration_since(*oldest) > FPS_WINDOW {
@@ -406,24 +256,6 @@ impl FrameSampler {
             }
         }
     }
-}
-
-/// The standard refresh rate within [`REFRESH_SNAP_TOLERANCE`] of `rate`, or
-/// `rate` itself when no panel ships at anything near it.
-fn snap_to_standard_refresh(rate: f32) -> f32 {
-    STANDARD_REFRESH_RATES
-        .iter()
-        .copied()
-        .find(|standard| (rate - standard).abs() <= standard * REFRESH_SNAP_TOLERANCE)
-        .unwrap_or(rate)
-}
-
-/// One group of near-equal gaps between presents: how often it has come up,
-/// and their sum, so the group can report its mean.
-#[derive(Default)]
-struct RefreshCandidate {
-    hits: u32,
-    total: Duration,
 }
 
 /// A sample of the resource usage shown beside the frame numbers.
@@ -729,82 +561,6 @@ mod tests {
             0.,
             "a window that opened is not a window that is dropping frames"
         );
-    }
-
-    #[test]
-    fn the_peak_present_rate_stands_in_for_the_refresh_rate() {
-        let mut sampler = warmed_sampler(WindowId::from(1), 256);
-        let start = Instant::now();
-
-        // Idle: one present every half second says nothing about the display,
-        // and must not be mistaken for a 2Hz one.
-        let idle = Duration::from_millis(500);
-        let presents: Vec<Instant> = (0..8).map(|frame| start + idle * frame).collect();
-        sampler.ingest_presents(presents, start + idle * 7);
-        assert_eq!(sampler.peak_present_rate(), None);
-
-        // A single short gap is the compositor catching up, not a display.
-        let after_idle = start + idle * 7;
-        sampler.ingest_presents([after_idle + Duration::from_micros(5_900)], after_idle);
-        assert_eq!(
-            sampler.peak_present_rate(),
-            None,
-            "one 5.9ms gap must not pass for a 169Hz panel"
-        );
-
-        // Then the window is scrolled: frames land on a 144Hz vsync, stamped
-        // when GPUI handed each one over rather than when it was scanned out,
-        // so the gaps jitter by up to a millisecond around 6.944ms.
-        let jitter = [-900i64, -300, 0, 200, 700, -100, 400, -600];
-        let began = start + Duration::from_secs(10);
-        let mut at = began;
-        let mut presents = vec![at];
-        for frame in 0..60 {
-            let offset = jitter[frame % jitter.len()];
-            at += Duration::from_micros((6_944 + offset) as u64);
-            presents.push(at);
-        }
-        sampler.ingest_presents(presents, at);
-        assert_eq!(
-            sampler.peak_present_rate(),
-            Some(144.),
-            "the estimate must land on the panel's rate, not near it"
-        );
-    }
-
-    #[test]
-    fn a_variable_refresh_panel_is_capped_by_its_ceiling_not_its_resting_rate() {
-        let mut sampler = warmed_sampler(WindowId::from(1), 512);
-        let start = Instant::now();
-
-        // A ProMotion window: a short scroll at 120Hz, then a long stretch
-        // settled at 60. The 60Hz group wins on count and is not the ceiling.
-        let mut at = start;
-        let mut presents = vec![at];
-        for _ in 0..30 {
-            at += Duration::from_micros(8_333);
-            presents.push(at);
-        }
-        for _ in 0..120 {
-            at += Duration::from_micros(16_667);
-            presents.push(at);
-        }
-        sampler.ingest_presents(presents, at);
-
-        assert_eq!(sampler.peak_present_rate(), Some(120.));
-    }
-
-    #[test]
-    fn an_estimate_near_a_standard_rate_becomes_it() {
-        assert_eq!(snap_to_standard_refresh(143.1), 144.);
-        assert_eq!(snap_to_standard_refresh(146.), 144.);
-        assert_eq!(snap_to_standard_refresh(120.5), 120.);
-        assert_eq!(snap_to_standard_refresh(59.4), 60.);
-        // Between two rates, and closer to neither than the tolerance allows.
-        assert_eq!(snap_to_standard_refresh(155.), 155.);
-        // A panel that ships at nothing standard keeps its own rate rather
-        // than being rounded up to a ceiling it does not have.
-        assert_eq!(snap_to_standard_refresh(85.), 85.);
     }
 
     #[test]

@@ -54,36 +54,36 @@ The frame cost already answers the question. `FRAME` is what a full redraw
 costs, so its reciprocal is the rate those redraws could sustain, and nothing
 has to be drawn to find it. The HUD never requests a frame.
 
-### Why MAX is capped by the display
+### Why MAX is capped by asking, not by measuring
 
-Counting presents had a ceiling for free: frames go to the compositor on vsync,
-so a counted rate can never exceed the refresh rate. A derived figure has no
-such ceiling — a frame drawn in 3ms reads as 333, a rate nobody could ever see
-— so the cap is applied explicitly.
+A frame drawn in 3ms reads as 333, and no panel will ever show that. Counting
+presents had the ceiling for free — frames go to the compositor on vsync — and
+a figure derived from frame cost has no such bound, so the cap is applied
+explicitly.
 
-GPUI does not expose the refresh rate, so the sampler infers it from the gaps
-between presents:
+It cannot be inferred. The gaps between a window's presents are whole multiples
+of the panel's period, so they bound it **from below and never from above**:
+41.7ms is six refreshes at 144Hz and one at 24Hz, and nothing in the timing
+distinguishes them. Every estimate tried read a real window wrong — 169 and 149
+from the shortest and the densest gaps, 75 from a window drawing every other
+refresh, and 24 from an application whose own timer happened to fire every
+41.7ms.
 
-- Gaps outside 3ms–50ms are ignored. Below is a compositor catch-up burst, not
-  a refresh; above is the application having had nothing to draw.
-- The rest are grouped to half a millisecond and counted. A gap has to recur
-  before it means anything: two presents 5.9ms apart on a 144Hz panel is a
-  hiccup, not a 169Hz display.
-- The estimate is the mean of the busiest group and its neighbours, because
-  bucketing truncates the group it is measuring and the busiest bucket alone
-  reads high.
-- A faster group is preferred when it is at least twice as fast and arrives in
-  bulk. A variable refresh panel spends most of its time below its ceiling: a
-  ProMotion window that scrolls at 120Hz and rests at 60 must be capped at 120,
-  not at the rate it happened to rest at.
-- The result is snapped to a standard refresh rate when it lands within 2.5% of
-  one, so a 144Hz panel reads 144 rather than 146. A panel that ships at
-  nothing standard keeps its own rate rather than being rounded up to a ceiling
-  it does not have.
+So the platform is asked instead. GPUI hands out the platform's own display
+handle through `DisplayId`, and the HUD takes it from there:
 
-Until the window has presented back to back often enough for that to mean
-something — which a window nobody has touched never does — there is no cap, and
-`MAX` is whatever the frame cost implies.
+- **macOS** — `CGDisplayCopyDisplayMode` on the `CGDirectDisplayID`. A built-in
+  panel reports no fixed rate, which is the truth on ProMotion, and is read as
+  no cap.
+- **Windows** — `EnumDisplaySettingsW` on the monitor's device name.
+- **Wayland** — the outputs are enumerated on a second connection and matched
+  to GPUI's displays by the identity it derives from their names, because
+  object ids are per-connection and mean nothing across one.
+- **X11 and everything else** — no query, so no cap.
+
+The answer is re-asked when the window moves to another display and not
+otherwise. Where nobody will say, the reading is left uncapped rather than held
+to a guess: a ceiling under the truth hides the figure the reader came for.
 
 ## The rows
 
