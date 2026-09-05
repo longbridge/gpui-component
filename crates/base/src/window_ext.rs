@@ -220,8 +220,8 @@ fn configure_windows(
         SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
     };
 
-    let hwnd: HWND = handle.hwnd as _;
-    if hwnd.is_invalid() {
+    let hwnd: HWND = handle.hwnd.get() as *mut _;
+    if hwnd.is_null() {
         return;
     }
 
