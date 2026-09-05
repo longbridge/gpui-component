@@ -41,6 +41,16 @@ test('rejects missing screenshots instead of publishing a broken page', async t 
   await app(root, 'broken', { previews: ['preview1.png'] });
   await assert.rejects(loadShowcases(root, revision), /preview1.png/);
 });
+test('loads AVIF previews while verifying their format', async t => {
+  const root = await fixture(t);
+  await app(root, 'avif-app', { previews: ['preview0.avif'] });
+  const path = join(root, 'apps/avif-app/preview0.avif');
+  await writeFile(path, Buffer.from('0000001c6674797061766966000000006d696631617669666d696166', 'hex'));
+  const [result] = await loadShowcases(root, revision);
+  assert(result.image.endsWith('/preview0.avif'));
+  await writeFile(path, Buffer.from('89504e470d0a1a0a', 'hex'));
+  await assert.rejects(loadShowcases(root, revision), /image format/);
+});
 
 test('rejects unsafe links, paths and missing descriptions', async t => {
   for (const extra of [{ website: 'javascript:alert(1)' }, { previews: ['../outside.png'] }, { description: '' }]) {
