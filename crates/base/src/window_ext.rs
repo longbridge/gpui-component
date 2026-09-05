@@ -153,7 +153,7 @@ fn configure_macos(
     behavior: &WindowBehavior,
 ) {
     use objc2::msg_send;
-    use objc2_app_kit::{NSView, NSWindow};
+    use objc2_app_kit::NSView;
 
     // Get the NSWindow from the NSView handle
     let ns_view_ptr = handle.ns_view.as_ptr() as *mut NSView;
@@ -213,11 +213,11 @@ fn configure_windows(
     handle: raw_window_handle::Win32WindowHandle,
     behavior: &WindowBehavior,
 ) {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        self, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SET_WINDOW_POS_FLAGS,
-        WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, SetWindowLongW,
-        SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SET_WINDOW_POS_FLAGS, WS_EX_LAYERED,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, SetWindowLongW, SetWindowPos,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
     };
 
     let hwnd = HWND(handle.hwnd as _);
