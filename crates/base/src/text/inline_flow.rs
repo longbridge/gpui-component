@@ -5,16 +5,16 @@ use std::{
 
 use gpui::{
     AbsoluteLength, AnyElement, App, AvailableSpace, Bounds, DefiniteLength, Element, ElementId,
-    GlobalElementId, HighlightStyle, InspectorElementId, InteractiveElement as _, IntoElement,
-    LayoutId, LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine, SharedString,
-    SharedUri, Size, StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun, TextStyle,
-    WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative, size,
+    GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement, LayoutId,
+    LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine, SharedString, SharedUri, Size,
+    StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun, TextStyle, WhiteSpace,
+    Window, img, point, prelude::FluentBuilder as _, px, relative, size,
 };
 
 use crate::text::text_view::{LinkClickHandlerFn, handle_link_click};
 
 use super::{
-    inline::{Inline, InlineState},
+    inline::{Inline, InlineHighlight, InlineState, text_runs},
     node::LinkMark,
     utils::image_source,
 };
@@ -32,7 +32,7 @@ pub(super) enum InlineFlowItem {
         state: Arc<Mutex<InlineState>>,
         text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        highlights: Vec<(Range<usize>, InlineHighlight)>,
     },
     Image {
         url: SharedUri,
@@ -63,7 +63,7 @@ enum PositionedFragment {
         source_range: Range<usize>,
         text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        highlights: Vec<(Range<usize>, InlineHighlight)>,
     },
     Image {
         item_ix: usize,
@@ -76,7 +76,7 @@ enum MeasureItem {
     Text {
         text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        highlights: Vec<(Range<usize>, InlineHighlight)>,
     },
     Image {
         url: SharedUri,
@@ -96,7 +96,7 @@ enum LineFragmentKind {
     Text {
         text: SharedString,
         links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        highlights: Vec<(Range<usize>, InlineHighlight)>,
     },
     Image,
 }
@@ -432,12 +432,12 @@ fn layout_flow(
                         let subtext = SharedString::from(text[local_start..local_end].to_string());
                         let highlights =
                             slice_ranges(highlights, local_start, local_end, |range, style| {
-                                (range, *style)
+                                (range, style.clone())
                             });
                         let links = slice_ranges(links, local_start, local_end, |range, link| {
                             (range, link.clone())
                         });
-                        let runs = runs_for_highlights(&subtext, text_style, highlights.clone());
+                        let runs = text_runs(subtext.len(), text_style, &highlights);
                         let shaped_line = shape_line(subtext.clone(), font_size, &runs, window);
                         let width = shaped_line.width();
                         line_width += width;
@@ -545,36 +545,42 @@ fn line_ranges(
 
     for hard_line in hard_lines {
         let mut item_start = 0;
-        let wrap_fragments = items
-            .iter()
-            .enumerate()
-            .filter_map(|(ix, item)| {
-                let item_end = item_start + item.len();
-                let fragment = if item_end <= hard_line.start || item_start >= hard_line.end {
-                    None
-                } else {
-                    match item {
-                        MeasureItem::Text { text, .. } => {
-                            let start = hard_line.start.max(item_start) - item_start;
-                            let end = hard_line.end.min(item_end) - item_start;
-                            (start < end).then(|| WrapLineFragment::text(&text[start..end]))
+        let mut wrap_fragments = Vec::new();
+        for (ix, item) in items.iter().enumerate() {
+            let item_end = item_start + item.len();
+            if item_end > hard_line.start && item_start < hard_line.end {
+                match item {
+                    MeasureItem::Text {
+                        text, highlights, ..
+                    } => {
+                        let start = hard_line.start.max(item_start) - item_start;
+                        let end = hard_line.end.min(item_end) - item_start;
+                        if start < end {
+                            push_text_wrap_fragments(
+                                &mut wrap_fragments,
+                                text,
+                                highlights,
+                                start..end,
+                                text_style,
+                                font_size,
+                                window,
+                            );
                         }
-                        MeasureItem::Image { .. } => (hard_line.start <= item_start
-                            && item_end <= hard_line.end)
-                            .then(|| {
-                                WrapLineFragment::element(
-                                    image_sizes[ix]
-                                        .expect("image size should be measured before wrapping")
-                                        .width,
-                                    IMAGE_LEN,
-                                )
-                            }),
                     }
-                };
-                item_start = item_end;
-                fragment
-            })
-            .collect::<Vec<_>>();
+                    MeasureItem::Image { .. } => {
+                        if hard_line.start <= item_start && item_end <= hard_line.end {
+                            wrap_fragments.push(WrapLineFragment::element(
+                                image_sizes[ix]
+                                    .expect("image size should be measured before wrapping")
+                                    .width,
+                                IMAGE_LEN,
+                            ));
+                        }
+                    }
+                }
+            }
+            item_start = item_end;
+        }
 
         let boundaries = wrapper
             .wrap_line(&wrap_fragments, wrap_width)
@@ -595,6 +601,50 @@ fn line_ranges(
     }
 
     ranges
+}
+
+/// Appends the wrap fragments for `range` of `text`. The line wrapper
+/// measures text fragments in the body font, so a span whose highlight sets
+/// another family is shaped with the same run the renderer uses and enters
+/// the wrapper as one fixed-width element: it breaks around, not inside.
+fn push_text_wrap_fragments<'a>(
+    fragments: &mut Vec<WrapLineFragment<'a>>,
+    text: &'a str,
+    highlights: &[(Range<usize>, InlineHighlight)],
+    range: Range<usize>,
+    text_style: &TextStyle,
+    font_size: Pixels,
+    window: &mut Window,
+) {
+    let mut cursor = range.start;
+    for (highlight_range, highlight) in highlights {
+        if highlight.font_family.is_none() {
+            continue;
+        }
+        let start = highlight_range.start.max(cursor);
+        let end = highlight_range.end.min(range.end);
+        if start >= end {
+            continue;
+        }
+        if cursor < start {
+            fragments.push(WrapLineFragment::text(&text[cursor..start]));
+        }
+        let span = &text[start..end];
+        let runs = text_runs(
+            span.len(),
+            text_style,
+            &[(0..span.len(), highlight.clone())],
+        );
+        let width = window
+            .text_system()
+            .layout_line(span, font_size, &runs, None)
+            .width;
+        fragments.push(WrapLineFragment::element(width, span.len()));
+        cursor = end;
+    }
+    if cursor < range.end {
+        fragments.push(WrapLineFragment::text(&text[cursor..range.end]));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -692,34 +742,6 @@ fn inline_image_size_for_line(
     size((height * aspect_ratio).max(px(1.)), height.max(px(1.)))
 }
 
-fn runs_for_highlights(
-    text: &str,
-    default_style: &TextStyle,
-    highlights: Vec<(Range<usize>, HighlightStyle)>,
-) -> Vec<TextRun> {
-    let mut runs = Vec::new();
-    let mut ix = 0;
-
-    for (range, highlight) in highlights {
-        if ix < range.start {
-            runs.push(default_style.clone().to_run(range.start - ix));
-        }
-        runs.push(
-            default_style
-                .clone()
-                .highlight(highlight)
-                .to_run(range.len()),
-        );
-        ix = range.end;
-    }
-
-    if ix < text.len() {
-        runs.push(default_style.to_run(text.len() - ix));
-    }
-
-    runs
-}
-
 fn shape_line(
     text: SharedString,
     font_size: Pixels,
@@ -765,5 +787,105 @@ mod tests {
         let measured = inline_image_size_for_line(None, px(20.));
 
         assert_eq!(measured, size(px(15.), px(15.)));
+    }
+
+    /// Line breaking must see the width of an inline code span in its own
+    /// family. With a body-font-only wrapper the span below is measured at
+    /// half its shaped width, the line is kept whole, and the flow reports a
+    /// width past `wrap_width`.
+    #[test]
+    fn inline_code_near_the_wrap_width_does_not_overflow_the_flow() {
+        use super::super::inline::test_fonts::{BODY, MONO, WideMonoTextSystem};
+        use gpui::{AbsoluteLength, Empty, HighlightStyle, TestApp};
+
+        let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+        let mut window = app.open_window(|_, _| Empty);
+
+        let font_size = px(10.);
+        let text_style = TextStyle {
+            font_family: SharedString::from(BODY),
+            font_size: AbsoluteLength::Pixels(font_size),
+            ..Default::default()
+        };
+        let lead = SharedString::from("See ");
+        let tail_text = " with code_span_here end";
+        let code = tail_text.find("code_span_here").unwrap();
+        let code_range = code..code + "code_span_here".len();
+        let code_highlight = InlineHighlight {
+            style: HighlightStyle::default(),
+            font_family: Some(SharedString::from(MONO)),
+        };
+        let items = vec![
+            MeasureItem::Text {
+                text: lead.clone(),
+                links: vec![],
+                highlights: vec![],
+            },
+            MeasureItem::Image {
+                url: SharedUri::from("https://example.com/badge.png"),
+                width: None,
+                height: None,
+            },
+            MeasureItem::Text {
+                text: SharedString::from(tail_text),
+                links: vec![],
+                highlights: vec![(code_range.clone(), code_highlight)],
+            },
+        ];
+        let image_size = size(px(10.), px(10.));
+        let image_sizes = vec![None, Some(image_size), None];
+        // Body text, the image and the mono span fill the wrap width exactly;
+        // the trailing "end" only fits if the span is under-measured.
+        let wrap_width = WideMonoTextSystem::width_of("See  with  ", BODY, font_size)
+            + image_size.width
+            + WideMonoTextSystem::width_of("code_span_here", MONO, font_size);
+
+        let layout = window.update(|_, window, _| {
+            layout_flow(&items, &image_sizes, &text_style, Some(wrap_width), window)
+        });
+
+        assert!(
+            layout.size.width <= wrap_width,
+            "flow width {:?} exceeds wrap width {:?}",
+            layout.size.width,
+            wrap_width
+        );
+        let mono_fragment_width = layout
+            .fragments
+            .iter()
+            .find_map(|fragment| match fragment {
+                PositionedFragment::Text { text, size, .. } if text.contains("code_span_here") => {
+                    Some(size.width)
+                }
+                _ => None,
+            })
+            .expect("the code span is laid out as a text fragment");
+        assert!(
+            mono_fragment_width >= WideMonoTextSystem::width_of("code_span_here", MONO, font_size),
+            "the code span fragment is shaped in the mono family"
+        );
+        // The image sits vertically centred in its line, so line membership is
+        // read off the text fragments only.
+        let text_lines = layout
+            .fragments
+            .iter()
+            .filter_map(|fragment| match fragment {
+                PositionedFragment::Text { text, origin, .. } => Some((text.trim(), origin.y)),
+                PositionedFragment::Image { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        let first_y = text_lines[0].1;
+        assert!(
+            text_lines
+                .iter()
+                .any(|(text, y)| text.contains("code_span_here") && *y == first_y),
+            "the span stays on the first line: {text_lines:?}"
+        );
+        assert!(
+            text_lines
+                .iter()
+                .any(|(text, y)| *text == "end" && *y > first_y),
+            "the trailing word wraps to a second line: {text_lines:?}"
+        );
     }
 }

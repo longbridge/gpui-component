@@ -55,6 +55,7 @@ pub(crate) fn base_text_view_style(theme: &crate::Theme) -> gpui_base::TextViewS
             background_color: Some(theme.accent),
             ..Default::default()
         })
+        .with_inline_code_font_family(Some(theme.mono_font_family.clone()))
         .with_dark(theme.is_dark())
 }
 

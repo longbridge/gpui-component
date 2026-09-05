@@ -266,6 +266,10 @@ pub(super) fn resolve_component_style(
     // a dark theme.
     let is_dark = themed.is_dark() || legacy.is_dark;
 
+    let inline_code_font_family = legacy
+        .inline_code_font_family
+        .or_else(|| themed.inline_code_font_family().cloned());
+
     let mut style = themed
         .with_paragraph_gap(legacy.paragraph_gap)
         .with_heading_base_font_size(legacy.heading_base_font_size)
@@ -274,6 +278,7 @@ pub(super) fn resolve_component_style(
         .with_table_head(table_head)
         .with_table_cell(table_cell)
         .with_inline_code(inline_code)
+        .with_inline_code_font_family(inline_code_font_family)
         .with_dark(is_dark);
     if let Some(heading_font_size) = legacy.heading_font_size {
         style = style.with_heading_font_size(move |level, base| heading_font_size(level, base));

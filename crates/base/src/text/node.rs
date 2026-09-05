@@ -20,7 +20,7 @@ use crate::{
         CodeBlockActionsFn, CodeBlockHighlighterFn, LinkClickHandlerFn, MarkdownExtensions,
         MarkdownNode, TableActionsFn,
         document::NodeRenderOptions,
-        inline::{Inline, InlineState},
+        inline::{Inline, InlineHighlight, InlineState, combine_highlights, text_runs},
         inline_flow::{InlineFlow, InlineFlowItem},
         text_view::handle_link_click,
     },
@@ -1305,7 +1305,10 @@ impl CodeBlock {
                             .code_block_highlighter
                             .as_ref()
                             .map(|highlighter| self.highlighted_styles(highlighter))
-                            .unwrap_or_default(),
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|(range, style)| (range, InlineHighlight::from(style)))
+                            .collect(),
                         node_cx.link_click_handler.clone(),
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
@@ -1354,7 +1357,66 @@ impl PartialEq for NodeContext {
     }
 }
 
+/// The highlight a text mark renders with. The link decoration is applied by
+/// the caller, which also has to record the link range.
+fn mark_highlight(mark: &TextMark, node_cx: &NodeContext) -> InlineHighlight {
+    let mut highlight = HighlightStyle::default();
+    if mark.bold {
+        highlight.font_weight = Some(FontWeight::BOLD);
+    }
+    if mark.italic {
+        highlight.font_style = Some(FontStyle::Italic);
+    }
+    if mark.strikethrough {
+        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+            thickness: gpui::px(1.),
+            ..Default::default()
+        });
+    }
+    if mark.underline {
+        highlight.underline = Some(gpui::UnderlineStyle {
+            thickness: gpui::px(1.),
+            ..Default::default()
+        });
+    }
+    let mut font_family = None;
+    if mark.code {
+        highlight = highlight.highlight(node_cx.style.inline_code_highlight());
+        font_family = node_cx.style.inline_code_font_family().cloned();
+    }
+    if let Some(color) = mark.highlight {
+        highlight.background_color = Some(color);
+    }
+    InlineHighlight {
+        style: highlight,
+        font_family,
+    }
+}
+
 impl Paragraph {
+    /// The highlights over [`Self::text`], for measuring the paragraph with
+    /// the runs it renders with. Link colors are left out: they do not move
+    /// glyphs.
+    fn inline_highlights(&self, node_cx: &NodeContext) -> Vec<(Range<usize>, InlineHighlight)> {
+        let mut highlights = vec![];
+        let mut offset = 0;
+        for inline_node in &self.children {
+            let node_highlights = inline_node
+                .marks
+                .iter()
+                .map(|(range, mark)| {
+                    (
+                        (offset + range.start)..(offset + range.end),
+                        mark_highlight(mark, node_cx),
+                    )
+                })
+                .collect::<Vec<_>>();
+            highlights = combine_highlights(highlights, node_highlights);
+            offset += inline_node.text.len();
+        }
+        highlights
+    }
+
     fn render(&self, node_cx: &NodeContext, _window: &mut Window, cx: &mut App) -> AnyElement {
         let span = self.span;
         let children = &self.children;
@@ -1371,7 +1433,7 @@ impl Paragraph {
         let mut child_nodes: Vec<AnyElement> = vec![];
 
         let mut text = String::new();
-        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut highlights: Vec<(Range<usize>, InlineHighlight)> = vec![];
         let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
         let mut offset = 0;
 
@@ -1442,36 +1504,11 @@ impl Paragraph {
                 let mut node_highlights = vec![];
                 for (range, style) in &inline_node.marks {
                     let inner_range = (offset + range.start)..(offset + range.end);
-
-                    let mut highlight = HighlightStyle::default();
-                    if style.bold {
-                        highlight.font_weight = Some(FontWeight::BOLD);
-                    }
-                    if style.italic {
-                        highlight.font_style = Some(FontStyle::Italic);
-                    }
-                    if style.strikethrough {
-                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
-                    }
-                    if style.underline {
-                        highlight.underline = Some(gpui::UnderlineStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
-                    }
-                    if style.code {
-                        highlight = highlight.highlight(node_cx.style.inline_code_highlight());
-                    }
-                    if let Some(color) = style.highlight {
-                        highlight.background_color = Some(color);
-                    }
+                    let mut highlight = mark_highlight(style, node_cx);
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(node_cx.style.link());
-                        highlight.underline = Some(gpui::UnderlineStyle {
+                        highlight.style.color = Some(node_cx.style.link());
+                        highlight.style.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
                         });
@@ -1489,7 +1526,7 @@ impl Paragraph {
                     node_highlights.push((inner_range, highlight));
                 }
 
-                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                highlights = combine_highlights(highlights, node_highlights);
                 offset += text_len;
             }
             ix += 1;
@@ -1527,7 +1564,7 @@ impl Paragraph {
     fn inline_flow_items(&self, node_cx: &NodeContext, _cx: &mut App) -> Vec<InlineFlowItem> {
         let mut items = Vec::new();
         let mut text = String::new();
-        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut highlights: Vec<(Range<usize>, InlineHighlight)> = vec![];
         let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
         let mut offset = 0;
 
@@ -1564,36 +1601,11 @@ impl Paragraph {
                 let mut node_highlights = vec![];
                 for (range, style) in &inline_node.marks {
                     let inner_range = (offset + range.start)..(offset + range.end);
-
-                    let mut highlight = HighlightStyle::default();
-                    if style.bold {
-                        highlight.font_weight = Some(FontWeight::BOLD);
-                    }
-                    if style.italic {
-                        highlight.font_style = Some(FontStyle::Italic);
-                    }
-                    if style.strikethrough {
-                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
-                    }
-                    if style.underline {
-                        highlight.underline = Some(gpui::UnderlineStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
-                    }
-                    if style.code {
-                        highlight = highlight.highlight(node_cx.style.inline_code_highlight());
-                    }
-                    if let Some(color) = style.highlight {
-                        highlight.background_color = Some(color);
-                    }
+                    let mut highlight = mark_highlight(style, node_cx);
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(node_cx.style.link());
-                        highlight.underline = Some(gpui::UnderlineStyle {
+                        highlight.style.color = Some(node_cx.style.link());
+                        highlight.style.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
                         });
@@ -1610,7 +1622,7 @@ impl Paragraph {
                     node_highlights.push((inner_range, highlight));
                 }
 
-                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                highlights = combine_highlights(highlights, node_highlights);
                 offset += text_len;
             }
         }
@@ -1629,6 +1641,73 @@ impl Paragraph {
 
         items
     }
+}
+
+const CELL_PAD_PX: f32 = 16.0; // px_2 horizontal padding
+const CELL_MIN_PX: f32 = 48.0;
+const CELL_BORDER_PX: f32 = 1.0; // border_r_1 drawn by every column but the last
+
+/// The max-content width of every table column: the widest cell line,
+/// shaped with the runs the cell renders with, plus the cell's padding and
+/// border. Never capped: a cap would clip overflowing text *and* leave it
+/// outside the scrollable width, making it unreachable.
+fn measure_table_columns(
+    table: &Table,
+    col_count: usize,
+    node_cx: &NodeContext,
+    window: &mut Window,
+) -> Vec<f32> {
+    let text_style = window.text_style();
+    let font_size = text_style.font_size.to_pixels(window.rem_size());
+    let mut col_w = vec![CELL_MIN_PX; col_count];
+    for row in table.children.iter() {
+        for (ix, cell) in row.children.iter().enumerate() {
+            let Some(slot) = col_w.get_mut(ix) else {
+                continue;
+            };
+            let text = cell.children.text();
+            let highlights = cell.children.inline_highlights(node_cx);
+            let mut w = 0.0_f32;
+            let mut line_start = 0;
+            for line in text.split('\n') {
+                let start = line_start + (line.len() - line.trim_start().len());
+                let line_end = line_start + line.len();
+                line_start = line_end + 1;
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let end = start + line.len();
+                let line_highlights = highlights
+                    .iter()
+                    .filter_map(|(range, highlight)| {
+                        let clipped = range.start.max(start)..range.end.min(end);
+                        (clipped.start < clipped.end).then(|| {
+                            (
+                                clipped.start - start..clipped.end - start,
+                                highlight.clone(),
+                            )
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let runs = text_runs(line.len(), &text_style, &line_highlights);
+                let line_w = window
+                    .text_system()
+                    .layout_line(line, font_size, &runs, None)
+                    .width;
+                w = w.max(f32::from(line_w));
+            }
+            // Border-box widths, so the padding and border the cell draws
+            // must leave the measured text its full width.
+            let border = if ix + 1 < col_count {
+                CELL_BORDER_PX
+            } else {
+                0.
+            };
+            *slot = slot.max(w + CELL_PAD_PX + border);
+        }
+    }
+    col_w
 }
 
 impl Paragraph {
@@ -2034,8 +2113,6 @@ impl BlockNode {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        const CELL_PAD_PX: f32 = 16.0; // px_2 horizontal padding
-        const CELL_MIN_PX: f32 = 48.0;
         // Shrinking columns stop (and the table starts to scroll) at a floor
         // scaled to their content: roughly the width at which the text wraps
         // to `CELL_WRAP_MAX_LINES` lines, clamped between the two bounds so
@@ -2044,43 +2121,9 @@ impl BlockNode {
         const CELL_WRAP_MAX_LINES: f32 = 2.0;
         const CELL_WRAP_MIN_PX: f32 = 160.0;
         const CELL_WRAP_MAX_PX: f32 = 480.0;
-        const CELL_BORDER_PX: f32 = 1.0; // border_r_1 drawn by every column but the last
         const TABLE_BORDER_PX: f32 = 2.0; // the track's border_1, left + right
 
-        // Measure the widest text per column (max-content width). Never
-        // capped: a cap would clip overflowing text *and* leave it outside
-        // the scrollable width, making it unreachable.
-        let text_style = window.text_style();
-        let font_size = text_style.font_size.to_pixels(window.rem_size());
-        let mut col_w = vec![CELL_MIN_PX; col_count];
-        for row in table.children.iter() {
-            for (ix, cell) in row.children.iter().enumerate() {
-                let Some(slot) = col_w.get_mut(ix) else {
-                    continue;
-                };
-                let mut w = 0.0_f32;
-                for line in cell.children.text().split('\n') {
-                    let line = line.trim();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let run = text_style.to_run(line.len());
-                    let line_w = window
-                        .text_system()
-                        .layout_line(line, font_size, &[run], None)
-                        .width;
-                    w = w.max(f32::from(line_w));
-                }
-                // Border-box widths, so the padding and border the cell draws
-                // must leave the measured text its full width.
-                let border = if ix + 1 < col_count {
-                    CELL_BORDER_PX
-                } else {
-                    0.
-                };
-                *slot = slot.max(w + CELL_PAD_PX + border);
-            }
-        }
+        let col_w = measure_table_columns(table, col_count, node_cx, window);
         let style = &node_cx.style;
         // Nowrap cells (via the `table_cell` refinement, which cascades to
         // the cell text) must never shrink below their single-line content,
@@ -2454,6 +2497,53 @@ impl BlockNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Table columns are sized from shaped text, so a column of inline code
+    /// has to be measured in the code family. Measured in the body font, the
+    /// wide-mono test font makes `col_w` come out at half the rendered width.
+    #[test]
+    fn table_column_of_inline_code_cells_fits_the_mono_width() {
+        use crate::text::inline::test_fonts::{MONO, WideMonoTextSystem};
+        use gpui::{Empty, TestApp};
+
+        let code = "method_name()";
+        let mut paragraph = Paragraph::default();
+        paragraph
+            .push(InlineNode::new(code).marks(vec![(0..code.len(), TextMark::default().code())]));
+        let table = Table {
+            children: vec![TableRow {
+                children: vec![TableCell {
+                    children: paragraph,
+                    width: None,
+                }],
+            }],
+            column_aligns: vec![],
+            span: None,
+        };
+        let node_cx = NodeContext {
+            style: TextViewStyle::default().with_inline_code_font_family(Some(MONO.into())),
+            ..Default::default()
+        };
+
+        let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+        let mut window = app.open_window(|_, _| Empty);
+        let (col_w, font_size) = window.update(|_, window, _| {
+            let font_size = window.text_style().font_size.to_pixels(window.rem_size());
+            (
+                measure_table_columns(&table, 1, &node_cx, window),
+                font_size,
+            )
+        });
+
+        let mono_w = f32::from(WideMonoTextSystem::width_of(code, MONO, font_size));
+        assert!(
+            col_w[0] >= mono_w + CELL_PAD_PX,
+            "col_w {} must fit the mono width {} plus padding {}",
+            col_w[0],
+            mono_w,
+            CELL_PAD_PX
+        );
+    }
 
     #[test]
     fn code_block_highlights_are_cached_by_highlighter_identity() {
