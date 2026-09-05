@@ -3409,6 +3409,8 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "web-time",
+ "windows-sys 0.59.0",
+ "x11-dl",
 ]
 
 [[package]]

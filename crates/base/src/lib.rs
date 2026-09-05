@@ -35,6 +35,7 @@ mod link;
 mod list_settings;
 #[cfg(all(target_os = "macos", not(test)))]
 mod macos_accessibility;
+pub mod window_ext;
 mod measure;
 pub mod motion;
 mod nav_stack;
@@ -116,6 +117,7 @@ pub use macos_accessibility::install_window_hit_test_forwarder;
 #[doc(hidden)]
 pub use measure::measurement_enabled;
 pub use measure::{Measure, measure, measure_if};
+pub use window_ext::{WindowBehavior, configure, make_floating, make_overlay, set_click_through};
 pub use motion::{
     Discrete, DiscreteError, Easing, EasingError, Interpolate, IterationCount, Keyframe,
     KeyframeError, Keyframes, LinearStop, MotionPhase, MotionReveal, MotionStatus, MotionTransform,
