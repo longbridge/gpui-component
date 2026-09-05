@@ -491,3 +491,10 @@ impl ListDelegate for ContactListDelegate {
     }
 }
 ```
+
+## Accessible row names
+
+For composite rows, implement `ListDelegate::item_aria_label` to provide a concise
+name on the list-item container. Return `None` to leave the existing child
+semantics unchanged. The hook receives the current `IndexPath` and `App`; it does
+not change the row's visible content or selection behavior.
