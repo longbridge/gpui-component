@@ -208,6 +208,7 @@ pub struct TextSelectionRegistration {
     scope: TextSelectionScopeId,
     document_order: u64,
     text_bounds: Vec<Bounds<Pixels>>,
+    self_scroll: bool,
 }
 
 impl TextSelectionRegistration {
@@ -220,7 +221,17 @@ impl TextSelectionRegistration {
             scope: TextSelectionScopeId::default(),
             document_order: 0,
             text_bounds: Vec::new(),
+            self_scroll: false,
         }
+    }
+
+    /// Marks a participant that scrolls its own content in response to
+    /// [`TextSelectionEvent::AutoScroll`]. Drag auto-scroll then drives it
+    /// directly, measured against its own bounds, instead of synthesizing a
+    /// wheel event for the nearest scrollable ancestor.
+    pub fn with_self_scroll(mut self, self_scroll: bool) -> Self {
+        self.self_scroll = self_scroll;
+        self
     }
 
     /// Sets the participant's content scroll offset.
@@ -270,6 +281,11 @@ impl TextSelectionRegistration {
     /// Returns the stable logical document order.
     pub const fn document_order(&self) -> u64 {
         self.document_order
+    }
+
+    /// Returns whether the participant scrolls its own content on auto-scroll.
+    pub const fn self_scroll(&self) -> bool {
+        self.self_scroll
     }
 
     /// Returns the glyph-bearing bounds used to reject blank-only gestures.
@@ -1142,7 +1158,7 @@ impl WindowSelectionState {
     ) {
         if !cx.has_active_drag() {
             self.update_impl(position, Some(window), cx);
-            self.update_auto_scroll(position, Some(window), cx);
+            self.update_auto_scroll(position, window, cx);
         }
     }
 
@@ -1455,7 +1471,7 @@ impl WindowSelectionState {
     fn update_auto_scroll(
         &mut self,
         position: Point<Pixels>,
-        window: Option<&Window>,
+        window: &Window,
         cx: &mut Context<Self>,
     ) {
         // A finished gesture keeps its anchor for shift-click extension; only
@@ -1463,20 +1479,21 @@ impl WindowSelectionState {
         if !self.is_selecting {
             return;
         }
-        let Some(anchor) = self.anchor.as_ref().filter(|anchor| anchor.inside) else {
+        let Some((_, registration)) = self.anchor_registration() else {
             return;
         };
-        let Some(participant) = anchor.participant.as_ref().and_then(WeakEntity::upgrade) else {
+        // Exactly one writer per drag: a participant that scrolls its own
+        // content is notified directly; anything else gets a synthetic wheel.
+        if registration.self_scroll {
+            self.auto_scroll.stop();
+            self.update_participant_auto_scroll(position, cx);
             return;
-        };
-        let Some(registration) = self.participants.get(&participant.entity_id()) else {
-            return;
-        };
+        }
         // The content mask is the nearest clipping viewport established by a
         // scrollable ancestor. It remains stable as the participant itself
         // moves, so selection keeps scrolling the same related region even
         // after the anchor text has moved out of view.
-        let visible_bounds = registration.registration.hitbox.content_mask.bounds;
+        let visible_bounds = registration.hitbox.content_mask.bounds;
         // Keeps the synthesized wheel event hit-testing inside the mask.
         const HIT_TEST_INSET: Pixels = px(1.);
         // A collapsed mask leaves an empty clamp range below — stop.
@@ -1487,11 +1504,6 @@ impl WindowSelectionState {
             return;
         }
         let delta = AutoScroll::compute_delta(position.y, visible_bounds);
-        let Some(window) = window else {
-            participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
-            return;
-        };
-
         let event_position = point(
             position.x.clamp(
                 visible_bounds.left() + HIT_TEST_INSET,
@@ -1525,32 +1537,41 @@ impl WindowSelectionState {
         });
     }
 
+    /// Drives the anchor participant's own scrolling, measured against the
+    /// participant's element bounds rather than any ancestor viewport.
     fn update_participant_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
-        let Some(anchor) = self.anchor.as_ref().filter(|anchor| anchor.inside) else {
+        let Some((participant, registration)) = self.anchor_registration() else {
             return;
         };
-        let Some(participant) = anchor.participant.as_ref().and_then(WeakEntity::upgrade) else {
-            return;
-        };
-        let Some(registration) = self.participants.get(&participant.entity_id()) else {
-            return;
-        };
-        let delta = AutoScroll::compute_delta(position.y, registration.registration.bounds);
+        let delta = AutoScroll::compute_delta(position.y, registration.bounds);
         participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
     }
 
     fn stop_anchor_auto_scroll(&mut self, cx: &mut App) {
         self.auto_scroll.stop();
-        let Some(participant) = self
-            .anchor
-            .as_ref()
-            .filter(|anchor| anchor.inside)
-            .and_then(|anchor| anchor.participant.as_ref())
-            .and_then(WeakEntity::upgrade)
-        else {
+        let Some(participant) = self.anchor_participant() else {
             return;
         };
         participant.update(cx, |state, cx| state.set_auto_scroll(None, cx));
+    }
+
+    /// The live participant owning the anchor of the current gesture.
+    fn anchor_participant(&self) -> Option<Entity<SelectableTextState>> {
+        self.anchor
+            .as_ref()
+            .filter(|anchor| anchor.inside)?
+            .participant
+            .as_ref()?
+            .upgrade()
+    }
+
+    /// The anchor participant together with its current frame registration.
+    fn anchor_registration(
+        &self,
+    ) -> Option<(Entity<SelectableTextState>, Rc<TextSelectionRegistration>)> {
+        let participant = self.anchor_participant()?;
+        let registration = self.participants.get(&participant.entity_id())?;
+        Some((participant, registration.registration.clone()))
     }
 
     fn prune_dead_participants(&mut self) {
