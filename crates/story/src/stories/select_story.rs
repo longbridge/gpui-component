@@ -45,7 +45,7 @@ pub struct SelectStory {
     country_select: Entity<SelectState<SearchableVec<SelectGroup<Country>>>>,
     fruit_select: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select1: Entity<SelectState<Vec<&'static str>>>,
-    language_select: Entity<SelectState<SearchableVec<&'static str>>>,
+    simple_select2: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select3: Entity<SelectState<Vec<SharedString>>>,
     menu_max_h_select: Entity<SelectState<Vec<&'static str>>>,
     disabled_select: Entity<SelectState<Vec<SharedString>>>,
@@ -140,7 +140,7 @@ impl SelectStory {
                         cx,
                     )
                 }),
-                language_select: cx.new(|cx| {
+                simple_select2: cx.new(|cx| {
                     let mut select = SelectState::new(SearchableVec::new(vec![]), None, window, cx)
                         .searchable(true);
 
@@ -288,7 +288,7 @@ impl Render for SelectStory {
                     .w(px(280.))
                     .items_center()
                     .child(
-                        Select::new(&self.language_select)
+                        Select::new(&self.simple_select2)
                             .accessibility_label("Programming language")
                             .w(px(280.))
                             .with_size(self.size)
@@ -378,7 +378,7 @@ impl Render for SelectStory {
                             ))
                             .child(format!(
                                 "Language: {:?}",
-                                self.language_select.read(cx).selected_value()
+                                self.simple_select2.read(cx).selected_value()
                             ))
                             .child("This is other text."),
                     ),
