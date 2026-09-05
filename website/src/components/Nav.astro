@@ -134,7 +134,7 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
 
       <!-- Language switch -->
       <a href={langSwitchHref} class="site-nav__lang-btn site-nav__link">
-        {langLabel}
+        <span>{langLabel}</span>
       </a>
 
       <!-- Theme toggle -->
@@ -257,14 +257,25 @@ const resourcesLabel = isZh ? '资源' : 'Resources';
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.76rem;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
 .site-nav__lang-btn {
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-weight: 560;
 }
+
+/* Give toolbar labels the same centered line box as their icons. */
+.site-nav__actions .site-nav__link { height: 2rem; padding-block: 0; }
+.github-star-btn__label,
+.site-nav__lang-btn > span {
+  display: inline-flex;
+  align-items: center;
+  height: 1rem;
+  line-height: 1rem;
+}
+.site-nav__actions svg { display: block; flex-shrink: 0; }
 
 .site-nav__burger {
   display: none;
