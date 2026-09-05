@@ -432,15 +432,17 @@ where
 
         // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
+        // Keep the configured index so it can be used again when filtered rows return.
         let requested = self.item_to_measure_index;
-        let item_to_measure = (requested.section < sections_count
-            && requested.row < self.delegate.items_count(requested.section, cx))
-        .then_some(requested)
-        .or_else(|| {
+        let item_to_measure = if requested.section < sections_count
+            && requested.row < self.delegate.items_count(requested.section, cx)
+        {
+            Some(requested)
+        } else {
             (0..sections_count)
                 .find(|section| self.delegate.items_count(*section, cx) > 0)
                 .map(|section| IndexPath::default().section(section))
-        });
+        };
         if let Some(index) = item_to_measure {
             measured_size.item_size = self
                 .render_list_item(index, window, cx)
@@ -856,9 +858,29 @@ mod measurement_tests {
                         );
                         assert_eq!(list.item_to_measure_index, requested);
                     }
-                    list.delegate.counts = vec![0, 0];
-                    list.prepare_items_if_needed(window, cx);
-                    assert_eq!(list.rows_cache.items_count(), 0);
+                    let requested = IndexPath::new(1).section(1);
+                    list.set_item_to_measure_index(requested, window, cx);
+                    // Filtering removes the requested row, then all rows, before restoring it.
+                    for (counts, expected_height) in [
+                        (vec![0, 2], Some(48.)),
+                        (vec![0, 1], Some(36.)),
+                        (vec![0, 0], None),
+                        (vec![0, 2], Some(48.)),
+                    ] {
+                        list.delegate.counts = counts;
+                        list.prepare_items_if_needed(window, cx);
+                        if let Some(height) = expected_height {
+                            let position = list
+                                .rows_cache
+                                .position_of(&IndexPath::new(0).section(1))
+                                .unwrap();
+                            assert_eq!(list.rows_cache.entries_sizes[position].height, px(height));
+                        } else {
+                            assert_eq!(list.rows_cache.items_count(), 0);
+                            assert!(list.rows_cache.entries_sizes.is_empty());
+                        }
+                        assert_eq!(list.item_to_measure_index, requested);
+                    }
                 });
                 div()
             },
