@@ -209,7 +209,11 @@ fn configure_windows(
     behavior: &WindowBehavior,
 ) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::*;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        self, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SET_WINDOW_POS_FLAGS,
+        WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, SetWindowLongW,
+        SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    };
 
     let hwnd = HWND(handle.hwnd as _);
     if hwnd.is_invalid() {
@@ -218,46 +222,34 @@ fn configure_windows(
 
     unsafe {
         // Build extended window styles
-        let mut ex_style: WINDOW_EX_STYLE = WINDOW_EX_STYLE(0);
+        let mut ex_style: u32 = 0;
 
         if behavior.is_skip_taskbar() {
             // WS_EX_TOOLWINDOW: hide from taskbar
-            ex_style |= WS_EX_TOOLWINDOW;
+            ex_style |= WS_EX_TOOLWINDOW.0;
             // WS_EX_NOACTIVATE: don't steal focus
-            ex_style |= WS_EX_NOACTIVATE;
+            ex_style |= WS_EX_NOACTIVATE.0;
         }
 
         if behavior.is_click_through() {
             // WS_EX_TRANSPARENT: click-through
-            ex_style |= WS_EX_TRANSPARENT;
+            ex_style |= WS_EX_TRANSPARENT.0;
             // WS_EX_LAYERED: required for transparent styles
-            ex_style |= WS_EX_LAYERED;
+            ex_style |= WS_EX_LAYERED.0;
         }
 
         // Apply extended styles
-        SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style.0 as i32);
+        let _ = SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style as i32);
+
+        // Build set-window-pos flags
+        let flags: SET_WINDOW_POS_FLAGS =
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW;
 
         // Set z-order
         if behavior.is_always_on_top() {
-            SetWindowPos(
-                hwnd,
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
+            let _ = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
         } else {
-            SetWindowPos(
-                hwnd,
-                HWND_NOTOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
+            let _ = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
         }
     }
 }
