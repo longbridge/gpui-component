@@ -237,7 +237,7 @@ apps through PRs in [longbridge/gpui-kit-showcases](https://github.com/longbridg
 - **Manifests are the source of truth.** Each app has `apps/<app-id>/manifest.json`
   and local preview images in the Showcase repository. `author` and an English-only
   `description` are required; the project link field is `website`. The Astro pages
-  load these at build time with `src/lib/showcases.mjs` and pass serializable data
+  load these at build time with `src/lib/showcases.ts` and pass serializable data
   to the Vue app; no duplicated hard-coded app list.
 - **Screenshots show the complete window.** Authors must preserve all four corners
   and edges in a clear, tidy capture. Images are archived unchanged and referenced

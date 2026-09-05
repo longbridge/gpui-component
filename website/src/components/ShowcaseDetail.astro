@@ -1,6 +1,6 @@
 ---
 import DocsLayout from '../layouts/DocsLayout.astro';
-import { getShowcaseReadme } from '../lib/showcases.mjs';
+import { getShowcaseReadme } from '../lib/showcases.ts';
 const { app, lang = 'en' } = Astro.props;
 const isZh = lang === 'zh-CN';
 const html = await getShowcaseReadme(app);

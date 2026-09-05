@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { selectShowcases } from '../src/lib/showcase-browser.mjs';
+import { selectShowcases } from '../src/lib/showcase-browser.ts';
 const apps = [
   { id: 'picked', name: 'Picked', featured: true, category: 'dev', description: 'A database', author: 'Database Team', platforms: ['Linux'], stars: 1, publishedAt: '2026-01-01' },
   { id: 'older', name: 'Older', featured: false, category: 'dev', description: 'A terminal', platforms: ['Linux'], stars: 100, publishedAt: '2026-01-01' },

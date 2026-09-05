@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { selectShowcases } from "../lib/showcase-browser.mjs";
+import { selectShowcases } from "../lib/showcase-browser.ts";
 import { computed, ref } from "vue";
 import { ArrowRight, ArrowUpRight, Boxes, Github, Monitor } from "lucide-vue-next";
 

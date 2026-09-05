@@ -80,13 +80,13 @@ async function catalogModule(name) {
 let catalog;
 export function getShowcaseApps() {
   return catalog ??= (async () => {
-    const { validateCatalog } = await catalogModule('validate.mjs');
+    const { validateCatalog } = await catalogModule('validate.ts');
     await validateCatalog(showcaseRoot());
     return loadShowcases(showcaseRoot());
   })();
 }
 export async function getShowcaseReadme(app) {
-  const { renderReadme } = await catalogModule('readme.mjs');
+  const { renderReadme } = await catalogModule('readme.ts');
   const markdown = await readFile(join(showcaseRoot(), 'apps', app.id, 'README.md'), 'utf8');
   return renderReadme(markdown, app, app.mediaBase);
 }

@@ -1,6 +1,6 @@
 ---
 import DocsLayout from '../layouts/DocsLayout.astro';
-import { getShowcaseApps } from '../lib/showcases.mjs';
+import { getShowcaseApps } from '../lib/showcases.ts';
 import AppsApp from '../components/AppsApp.vue';
 const apps = await getShowcaseApps();
 ---

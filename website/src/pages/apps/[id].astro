@@ -1,6 +1,6 @@
 ---
 import ShowcaseDetail from '../../components/ShowcaseDetail.astro';
-import { getShowcaseApps } from '../../lib/showcases.mjs';
+import { getShowcaseApps } from '../../lib/showcases.ts';
 export async function getStaticPaths() {
   return (await getShowcaseApps()).filter(app => app.hasReadme).map(app => ({ params: { id: app.id }, props: { app } }));
 }

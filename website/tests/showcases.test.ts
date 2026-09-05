@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { loadShowcases } from '../src/lib/showcases.mjs';
+import { loadShowcases } from '../src/lib/showcases.ts';
 
 const revision = 'a'.repeat(40);
 async function fixture(t) {
