@@ -3385,7 +3385,6 @@ dependencies = [
  "futures",
  "gpui-pre",
  "gpui-pre-macros",
- "gpui-pre-platform",
  "gpui-pre-reqwest-client",
  "gpui-pre-sum-tree",
  "html5ever 0.27.0",
@@ -3405,10 +3404,20 @@ dependencies = [
  "serde_json",
  "smallvec",
  "smol",
- "syntect",
  "tracing",
  "unicode-segmentation",
  "web-time",
+]
+
+[[package]]
+name = "gpui-base-examples"
+version = "0.6.0"
+dependencies = [
+ "gpui-base",
+ "gpui-pre",
+ "gpui-pre-platform",
+ "gpui-pre-reqwest-client",
+ "syntect",
 ]
 
 [[package]]

@@ -45,5 +45,5 @@ Editor 没有独立字体设置，而是使用环境文本样式。可在外层�
 ## 可运行示例
 
 ```bash
-cargo run -p gpui-base --example components -- editor
+cargo run -p gpui-base-examples -- editor
 ```
