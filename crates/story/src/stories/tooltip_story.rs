@@ -2,7 +2,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use gpui_kit::component::{
-    IconName,
+    IconName, Placement,
     button::{Button, ButtonVariant, ButtonVariants, Toggle},
     checkbox::Checkbox,
     clipboard::Clipboard,
@@ -80,17 +80,24 @@ impl Render for TooltipStory {
                         Button::new("btn0")
                             .label("Search")
                             .with_variant(ButtonVariant::Primary)
-                            .tooltip("This is a search Button."),
+                            .tooltip("This is a search Button.")
+                            .tooltip_placement(Placement::Left),
                     )
-                    .child(Button::new("btn1").label("Info").tooltip_with_action(
-                        "This is a tooltip with Action for display keybinding.",
-                        &Info,
-                        Some("Tooltip"),
-                    ))
+                    .child(
+                        Button::new("btn1")
+                            .label("Info")
+                            .tooltip_placement(Placement::Bottom)
+                            .tooltip_with_action(
+                                "This is a tooltip with Action for display keybinding.",
+                                &Info,
+                                Some("Tooltip"),
+                            ),
+                    )
                     .child(
                         Button::new("btn3")
                             .label("Hover me")
-                            .tooltip("This is tooltip 3"),
+                            .tooltip_placement(Placement::Right)
+                            .tooltip("This tooltip prefers the right side."),
                     ),
             )
             .child(

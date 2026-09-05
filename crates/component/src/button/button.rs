@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use crate::ThemeStyled as _;
 use crate::{
-    ActiveTheme, Colorize as _, Disableable, Icon, RoleOverride, Selectable, Sizable, Size,
-    StyleSized, StyledExt,
+    ActiveTheme, Colorize as _, Disableable, Icon, Placement, RoleOverride, Selectable, Sizable,
+    Size, StyleSized, StyledExt,
     button::ButtonIcon,
     h_flex,
     select::Caret,
@@ -209,6 +209,7 @@ pub struct Button {
         SharedString,
         Option<(Rc<Box<dyn gpui::Action>>, Option<SharedString>)>,
     )>,
+    tooltip_placement: Option<Placement>,
     tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> gpui::AnyView>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
@@ -253,6 +254,7 @@ impl Button {
             size: Size::Medium,
             tooltip: None,
             tooltip_builder: None,
+            tooltip_placement: None,
             on_click: None,
             focus_ring_enabled: true,
             on_hover: None,
@@ -359,6 +361,12 @@ impl Button {
     /// Set the tooltip of the button.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.tooltip = Some((tooltip.into(), None));
+        self
+    }
+
+    /// Prefer a side for the tooltip, falling back when it does not fit.
+    pub fn tooltip_placement(mut self, placement: Placement) -> Self {
+        self.tooltip_placement = Some(placement);
         self
     }
 
@@ -530,6 +538,7 @@ impl RenderOnce for Button {
         let hoverable = self.hoverable();
         let disabled = self.disabled;
         let loading = self.loading;
+        let tooltip_placement = self.tooltip_placement;
         let hover_group = self.hover_group;
         let hover_group_held = self.hover_group_held;
         let mut base = self.base;
@@ -771,9 +780,11 @@ impl RenderOnce for Button {
         })
         .map(|this| {
             if let Some(builder) = self.tooltip_builder {
-                this.managed_tooltip(move |window, cx| builder(window, cx))
+                this.managed_tooltip_with_placement(tooltip_placement, move |window, cx| {
+                    builder(window, cx)
+                })
             } else if let Some((tooltip, action)) = self.tooltip {
-                this.managed_tooltip(move |window, cx| {
+                this.managed_tooltip_with_placement(tooltip_placement, move |window, cx| {
                     Tooltip::new(tooltip.clone())
                         .when_some(action.clone(), |this, (action, context)| {
                             this.action(

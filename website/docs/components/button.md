@@ -331,3 +331,10 @@ Button::new("btn")
 [ProgressCircle]: https://docs.rs/gpui-component/latest/gpui_component/progress/struct.ProgressCircle.html
 [Icon]: https://docs.rs/gpui-component/latest/gpui_component/icon/struct.Icon.html
 [IconName]: https://docs.rs/gpui-component/latest/gpui_component/icon/enum.IconName.html
+
+## Tooltip placement
+
+Use `.tooltip_placement(Placement::Bottom)` to prefer a side for a button tooltip.
+It applies to both `.tooltip(...)` and `.tooltip_with_action(...)`.
+The managed tooltip still flips when the preferred side does not fit. Omitting
+placement keeps the existing automatic positioning.
