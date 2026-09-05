@@ -7,15 +7,15 @@ WebAssembly previews exercise the same Rust code without producing one binary pe
 Run an individual component natively:
 
 ```bash
-cargo run -p gpui-base-examples --bin components -- button
-cargo run -p gpui-base-examples --bin components -- alert-dialog
-cargo run -p gpui-base-examples --bin components -- virtual-list
+cargo run -p gpui-base-examples -- button
+cargo run -p gpui-base-examples -- alert-dialog
+cargo run -p gpui-base-examples -- virtual-list
 ```
 
 Run without a component slug to show the overview:
 
 ```bash
-cargo run -p gpui-base-examples --bin components
+cargo run -p gpui-base-examples
 ```
 
 Motion has a separate example because it demonstrates continuous behavior rather than a component catalog entry. It contains focused pages for transitions, springs, keyframes, presence, and stagger:
