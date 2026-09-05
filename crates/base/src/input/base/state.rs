@@ -1874,6 +1874,18 @@ impl<M: InputModeKind> InputBaseState<M> {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
+        self.scroll_to_with_padding(offset, direction, direction.is_some(), cx);
+    }
+
+    /// Reveal an offset with independently chosen direction restriction and padding.
+    /// Search uses surrounding lines without restricting movement to match order.
+    pub(crate) fn scroll_to_with_padding(
+        &mut self,
+        offset: usize,
+        direction: Option<MoveDirection>,
+        use_surrounding_lines: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return;
         };
@@ -1921,7 +1933,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         // `TextElement::layout_cursor` so both scroll-into-view paths agree
         // (a mismatch flickered on `Down` at end-of-buffer with a small
         // `cursor_surrounding_lines` override).
-        let edge_height = if direction.is_some() && self.is_code_editor() {
+        let edge_height = if use_surrounding_lines && self.is_code_editor() {
             super::element::cursor_surrounding_padding(
                 self.mode.is_auto_grow(),
                 self.cursor_surrounding_lines,
@@ -3454,16 +3466,28 @@ mod tests {
         });
     }
 
-    /// Search navigation must reveal the selected match even when the user has
-    /// manually scrolled the viewport past it.
     #[gpui::test]
-    fn test_next_search_match_scrolls_back_to_match_after_manual_scroll(cx: &mut TestAppContext) {
+    fn test_next_search_match_reveals_with_padding_after_manual_scroll(cx: &mut TestAppContext) {
+        assert_search_reveals_with_padding_after_manual_scroll(false, cx);
+    }
+
+    #[gpui::test]
+    fn test_previous_search_match_reveals_with_padding_after_manual_scroll(
+        cx: &mut TestAppContext,
+    ) {
+        assert_search_reveals_with_padding_after_manual_scroll(true, cx);
+    }
+
+    fn assert_search_reveals_with_padding_after_manual_scroll(
+        previous: bool,
+        cx: &mut TestAppContext,
+    ) {
         let input_view = InputView::new(cx);
         let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
         let input = input_view.input;
-        let text = (0..80)
+        let text = (0..160)
             .map(|row| {
-                if matches!(row, 0 | 4 | 70) {
+                if matches!(row, 20 | 60 | 100) {
                     format!("match on row {row}")
                 } else {
                     format!("line {row}")
@@ -3471,45 +3495,58 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let second_match_start = text.match_indices("match").nth(1).unwrap().0;
-        let second_match = second_match_start..second_match_start + "match".len();
-
+        let start = text.match_indices("match").nth(1).unwrap().0;
+        let expected_match = start..start + "match".len();
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
+                state.set_cursor_surrounding_lines(Some(3), window, cx);
                 state.set_value(text, window, cx);
                 state.set_search_query("match", true, cx);
+                if previous {
+                    state.search_session.matcher.next();
+                    state.search_session.matcher.next();
+                }
             });
         });
         cx.run_until_parked();
-
         cx.update(|_, cx| {
             input.update(cx, |state, cx| {
-                state.set_scroll_offset(point(px(0.), px(-1_000.)), cx);
+                let line_height = state.last_layout.as_ref().unwrap().line_height;
+                let y = if previous { px(0.) } else { -line_height * 80. };
+                state.set_scroll_offset(point(px(0.), y), cx);
             });
         });
         cx.run_until_parked();
         input.read_with(&cx, |state, _| {
-            assert!(
-                state
-                    .visible_row_range()
-                    .is_some_and(|visible| visible.start > 4),
-                "manual scroll should move the second match above the viewport"
-            );
+            let visible = state.visible_row_range().unwrap();
+            if previous {
+                assert!(visible.end <= 60, "target must be below the viewport");
+            } else {
+                assert!(visible.start > 60, "target must be above the viewport");
+            }
         });
-
         cx.update(|_, cx| {
             input.update(cx, |state, cx| {
-                assert_eq!(state.next_search_match(cx), Some(second_match));
+                let range = if previous {
+                    state.previous_search_match(cx)
+                } else {
+                    state.next_search_match(cx)
+                };
+                assert_eq!(range, Some(expected_match));
+                assert_eq!(state.search_session.matcher.label(), "2/3");
             });
         });
         cx.run_until_parked();
-
         input.read_with(&cx, |state, _| {
+            assert!(state.visible_row_range().unwrap().contains(&60));
+            let line_height = state.last_layout.as_ref().unwrap().line_height;
+            let target_y = line_height * 60. + state.scroll_handle.offset().y;
+            // Three lines of edge clearance include the matched line itself.
+            assert!(target_y >= line_height * 2. - px(0.1));
             assert!(
-                state
-                    .visible_row_range()
-                    .is_some_and(|visible| visible.contains(&4)),
-                "the newly active match should be visible after navigation"
+                target_y + line_height * 3.
+                    <= state.last_bounds.as_ref().unwrap().size.height + px(0.1),
+                "search must preserve the configured surrounding-line padding"
             );
         });
     }

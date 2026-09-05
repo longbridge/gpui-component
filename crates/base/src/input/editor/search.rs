@@ -142,7 +142,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         let range = self.search_session.matcher.next()?;
         // Match order does not describe viewport direction after a manual
         // scroll. Always allow search navigation to reveal the active match.
-        self.scroll_to(range.end, None, cx);
+        self.scroll_to_with_padding(range.end, None, true, cx);
         Some(range)
     }
 
@@ -150,7 +150,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         let range = self.search_session.matcher.next_back()?;
         // Match order does not describe viewport direction after a manual
         // scroll. Always allow search navigation to reveal the active match.
-        self.scroll_to(range.start, None, cx);
+        self.scroll_to_with_padding(range.start, None, true, cx);
         Some(range)
     }
 
