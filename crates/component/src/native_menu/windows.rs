@@ -17,7 +17,9 @@ use windows::Win32::Graphics::GdiPlus::{
     GdipGetImageThumbnail, GdiplusShutdown, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpImage,
 };
 use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+};
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MENUITEMINFOW, MF_CHECKED, MF_GRAYED,
@@ -147,9 +149,16 @@ unsafe fn apply_menu_theme(hwnd: HWND, dark_mode: bool) {
 
     static UXTHEME_MODULE: OnceLock<isize> = OnceLock::new();
     let module = *UXTHEME_MODULE.get_or_init(|| {
-        unsafe { LoadLibraryW(windows::core::w!("uxtheme.dll")) }
-            .map(|module| module.0 as isize)
-            .unwrap_or_default()
+        // Restrict this system DLL to System32 to prevent application-directory DLL planting.
+        unsafe {
+            LoadLibraryExW(
+                windows::core::w!("uxtheme.dll"),
+                HANDLE::default(),
+                LOAD_LIBRARY_SEARCH_SYSTEM32,
+            )
+        }
+        .map(|module| module.0 as isize)
+        .unwrap_or_default()
     });
     if module == 0 {
         return;
