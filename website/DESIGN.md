@@ -244,9 +244,10 @@ apps through PRs in [longbridge/gpui-kit-showcases](https://github.com/longbridg
   using raw GitHub URLs pinned to the checked-out commit. Cards use a shared 16:10
   area with `object-fit: contain`, retaining the whole image. Do not wrap them in
   `.mac-window` or add a second title bar.
-- **Featured is editorial.** Maintainers select `featured: true` using project
-  history, implementation, completeness, and quality. Featured apps appear first,
-  in `order.json` order; remaining featured IDs follow alphabetically. Other apps
+- **Featured is editorial.** Maintainers list app IDs in the catalog's root
+  `featured.json` using project history, implementation, completeness, and quality.
+  The array defines both selection and display order; app manifests have no
+  `featured` field. Featured apps appear first. Other apps
   appear in a separate group sortable by first inclusion time or GitHub Stars.
   Search and category filters apply to both groups. Failed or unavailable star
   counts remain unknown and sort after known counts, never as invented zeroes.

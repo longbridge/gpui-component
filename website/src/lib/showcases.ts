@@ -32,7 +32,7 @@ export async function loadShowcases(root, revision) {
     }
     if (manifest.stars != null && (!Number.isInteger(manifest.stars) || manifest.stars < 0)) fail('stars must be a nonnegative integer');
     if (manifest.starsUpdatedAt != null && !Number.isFinite(Date.parse(manifest.starsUpdatedAt))) fail('invalid starsUpdatedAt');
-    if (manifest.featured !== undefined && typeof manifest.featured !== 'boolean') fail('featured must be a boolean');
+    if (Object.hasOwn(manifest, 'featured')) fail('featured belongs in root featured.json, not the manifest');
     if (manifest.publishedAt !== undefined && (typeof manifest.publishedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(manifest.publishedAt) || !Number.isFinite(Date.parse(manifest.publishedAt)))) fail('invalid publishedAt');
     if (manifest.building !== undefined && typeof manifest.building !== 'boolean') fail('building must be a boolean');
     if (!Array.isArray(manifest.previews) || !manifest.previews.length) fail('at least one preview is required');
@@ -55,19 +55,18 @@ export async function loadShowcases(root, revision) {
     const mediaBase = `https://raw.githubusercontent.com/longbridge/gpui-kit-showcases/${revision}/apps/${id}`;
     apps.push({ hasReadme, mediaBase, previews: manifest.previews.map(name => `${mediaBase}/${name}`), id, name: manifest.name, author: manifest.author, category: manifest.category, platforms: manifest.platforms,
       website: manifest.website ?? null, source: manifest.source ?? null, description: manifest.description,
-      building: manifest.building ?? false, featured: manifest.featured ?? false,
+      building: manifest.building ?? false, featured: false,
       publishedAt: manifest.publishedAt ?? null, stars: manifest.stars ?? null,
       starsUpdatedAt: manifest.starsUpdatedAt ?? null,
       image: `https://raw.githubusercontent.com/longbridge/gpui-kit-showcases/${revision}/apps/${id}/${manifest.previews[0]}` });
   }
   if (!apps.length) throw new Error('Showcase catalog is empty');
-  let order = [];
-  try { order = JSON.parse(await readFile(join(root, 'order.json'), 'utf8')); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const order = JSON.parse(await readFile(join(root, 'featured.json'), 'utf8'));
   if (!Array.isArray(order) || new Set(order).size !== order.length || order.some(id => !apps.some(app => app.id === id))) {
-    throw new Error('Invalid Showcase order.json');
+    throw new Error('Invalid Showcase featured.json');
   }
   const rank = id => { const index = order.indexOf(id); return index < 0 ? order.length : index; };
+  for (const app of apps) app.featured = order.includes(app.id);
   return apps.sort((a, b) => rank(a.id) - rank(b.id));
 }
 
