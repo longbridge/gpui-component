@@ -152,19 +152,20 @@ fn configure_macos(
     handle: raw_window_handle::AppKitWindowHandle,
     behavior: &WindowBehavior,
 ) {
-    use objc2::runtime::NSObject;
     use objc2::msg_send;
     use objc2_app_kit::{NSView, NSWindow};
 
     // Get the NSWindow from the NSView handle
-    let ns_view_ptr = handle.ns_view as *mut NSObject;
+    let ns_view_ptr = handle.ns_view.as_ptr() as *mut NSView;
     if ns_view_ptr.is_null() {
         return;
     }
-    let ns_view: &NSView = unsafe { &*ns_view_ptr.cast::<NSView>() };
+    let ns_view = unsafe { &*ns_view_ptr };
     let Some(ns_window) = ns_view.window() else {
         return;
     };
+    // Use a reference for msg_send! (Retained<NSWindow> is not MessageReceiver)
+    let ns_window_ref = &*ns_window;
 
     unsafe {
         // Configure collection behavior (taskbar / alt-tab / spaces)
@@ -187,18 +188,18 @@ fn configure_macos(
                 collection_behavior |= 1 << 0;
             }
 
-            let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
+            let _: () = msg_send![ns_window_ref, setCollectionBehavior: collection_behavior];
         }
 
         // Configure window level (always on top)
         if behavior.is_always_on_top() {
             // NSFloatingWindowLevel = 3, use 5 to be above floating
-            let _: () = msg_send![ns_window, setLevel: 5];
+            let _: () = msg_send![ns_window_ref, setLevel: 5];
         }
 
         // Configure click-through
         if behavior.is_click_through() {
-            let _: () = msg_send![ns_window, setIgnoresMouseEvents: true];
+            let _: () = msg_send![ns_window_ref, setIgnoresMouseEvents: true];
         }
     }
 }
