@@ -37,14 +37,11 @@ export async function loadShowcases(root, revision) {
     if (manifest.building !== undefined && typeof manifest.building !== 'boolean') fail('building must be a boolean');
     if (!Array.isArray(manifest.previews) || !manifest.previews.length) fail('at least one preview is required');
     for (const name of manifest.previews) {
-      if (typeof name !== 'string' || !/^preview\d*\.(png|jpe?g|webp|avif)$/i.test(name)) fail('invalid preview filename');
+      if (typeof name !== 'string' || !/^preview\d*\.png$/i.test(name)) fail('invalid preview filename');
       const path = await realpath(join(dir, name));
       if (!path.startsWith(await realpath(dir) + sep)) fail('preview must stay inside the app folder');
       const bytes = await readFile(path);
-      const valid = /\.png$/i.test(name) ? bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
-        : /\.jpe?g$/i.test(name) ? bytes[0] === 255 && bytes[1] === 216
-        : /\.avif$/i.test(name) ? bytes.length >= 16 && bytes.readUInt32BE(0) >= 16 && bytes.readUInt32BE(0) <= bytes.length && bytes.toString('ascii', 4, 8) === 'ftyp' && ['avif', 'avis'].includes(bytes.toString('ascii', 8, 12))
-        : bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+      const valid = bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
       if (!valid) fail(`invalid image format: ${name}`);
     }
     let hasReadme = false;
