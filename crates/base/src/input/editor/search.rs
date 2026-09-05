@@ -4,7 +4,9 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use super::{InputBaseState, Replace, RopeExt as _, Search, movement::MoveDirection};
+use super::{
+    InputBaseState, Replace, RopeExt as _, Search, movement::MoveDirection, state::ScrollPadding,
+};
 
 /// Stateful, presentation-independent search engine used by text inputs.
 #[derive(Debug, Clone)]
@@ -139,20 +141,18 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn next_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
-        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next()?;
-        let direction = (self.search_session.matcher.current_match_index() > previous)
-            .then_some(MoveDirection::Down);
-        self.scroll_to(range.end, direction, cx);
+        // Match order does not describe viewport direction after a manual
+        // scroll. Always allow search navigation to reveal the active match.
+        self.scroll_to_with_padding(range.end, None, ScrollPadding::SurroundingLines, cx);
         Some(range)
     }
 
     pub fn previous_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
-        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next_back()?;
-        let direction = (self.search_session.matcher.current_match_index() < previous)
-            .then_some(MoveDirection::Up);
-        self.scroll_to(range.start, direction, cx);
+        // Match order does not describe viewport direction after a manual
+        // scroll. Always allow search navigation to reveal the active match.
+        self.scroll_to_with_padding(range.start, None, ScrollPadding::SurroundingLines, cx);
         Some(range)
     }
 
