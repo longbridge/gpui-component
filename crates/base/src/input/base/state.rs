@@ -38,6 +38,12 @@ use crate::input::{
 };
 use crate::{AutoScroll, StepAction};
 
+/// Vertical clearance to retain when revealing a text position.
+pub(crate) enum ScrollPadding {
+    Minimal,
+    SurroundingLines,
+}
+
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
 pub struct Enter {
@@ -1874,7 +1880,12 @@ impl<M: InputModeKind> InputBaseState<M> {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
-        self.scroll_to_with_padding(offset, direction, direction.is_some(), cx);
+        let padding = if direction.is_some() {
+            ScrollPadding::SurroundingLines
+        } else {
+            ScrollPadding::Minimal
+        };
+        self.scroll_to_with_padding(offset, direction, padding, cx);
     }
 
     /// Reveal an offset with independently chosen direction restriction and padding.
@@ -1883,7 +1894,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         &mut self,
         offset: usize,
         direction: Option<MoveDirection>,
-        use_surrounding_lines: bool,
+        padding: ScrollPadding,
         cx: &mut Context<Self>,
     ) {
         let Some(last_layout) = self.last_layout.as_ref() else {
@@ -1933,16 +1944,17 @@ impl<M: InputModeKind> InputBaseState<M> {
         // `TextElement::layout_cursor` so both scroll-into-view paths agree
         // (a mismatch flickered on `Down` at end-of-buffer with a small
         // `cursor_surrounding_lines` override).
-        let edge_height = if use_surrounding_lines && self.is_code_editor() {
-            super::element::cursor_surrounding_padding(
-                self.mode.is_auto_grow(),
-                self.cursor_surrounding_lines,
-                last_layout.visible_range.len(),
-                line_height,
-            )
-        } else {
-            line_height
-        };
+        let edge_height =
+            if matches!(padding, ScrollPadding::SurroundingLines) && self.is_code_editor() {
+                super::element::cursor_surrounding_padding(
+                    self.mode.is_auto_grow(),
+                    self.cursor_surrounding_lines,
+                    last_layout.visible_range.len(),
+                    line_height,
+                )
+            } else {
+                line_height
+            };
         if row_offset_y - edge_height + line_height < -scroll_offset.y {
             // Scroll up
             scroll_offset.y = -row_offset_y + edge_height - line_height;

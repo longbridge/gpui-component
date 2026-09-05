@@ -4,7 +4,9 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use super::{InputBaseState, Replace, RopeExt as _, Search, movement::MoveDirection};
+use super::{
+    InputBaseState, Replace, RopeExt as _, Search, movement::MoveDirection, state::ScrollPadding,
+};
 
 /// Stateful, presentation-independent search engine used by text inputs.
 #[derive(Debug, Clone)]
@@ -142,7 +144,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         let range = self.search_session.matcher.next()?;
         // Match order does not describe viewport direction after a manual
         // scroll. Always allow search navigation to reveal the active match.
-        self.scroll_to_with_padding(range.end, None, true, cx);
+        self.scroll_to_with_padding(range.end, None, ScrollPadding::SurroundingLines, cx);
         Some(range)
     }
 
@@ -150,7 +152,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         let range = self.search_session.matcher.next_back()?;
         // Match order does not describe viewport direction after a manual
         // scroll. Always allow search navigation to reveal the active match.
-        self.scroll_to_with_padding(range.start, None, true, cx);
+        self.scroll_to_with_padding(range.start, None, ScrollPadding::SurroundingLines, cx);
         Some(range)
     }
 
