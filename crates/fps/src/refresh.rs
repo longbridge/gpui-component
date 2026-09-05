@@ -50,10 +50,7 @@ mod platform {
 #[cfg(target_os = "windows")]
 mod platform {
     use super::*;
-    use windows::{
-        Win32::{Foundation::*, Graphics::Gdi::*},
-        core::*,
-    };
+    use windows::{Win32::Graphics::Gdi::*, core::*};
 
     pub(super) fn refresh_rate(display: &dyn PlatformDisplay) -> Option<Duration> {
         let id: u64 = display.id().into();
