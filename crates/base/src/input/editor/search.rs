@@ -81,19 +81,25 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.search_session
             .open(replace_mode, self.is_replaceable());
         let selected = self.selected_text().to_string();
-        if !selected.is_empty() {
-            self.search_session.query = selected;
-        }
-        self.search_session.anchor_offset = self
-            .last_layout
-            .as_ref()
-            .map(|layout| layout.visible_range_offset.start);
-        self.search_session.matcher.update_query(
-            &self.search_session.query,
-            self.search_session.case_insensitive,
-        );
+        let query = if selected.is_empty() {
+            self.search_session.query.clone()
+        } else {
+            selected
+        };
+        let query_changed = query != self.search_session.query;
+        // A retained query resumes its previous occurrence. Only a new query
+        // is anchored to the current viewport.
+        self.search_session.anchor_offset = if query_changed {
+            self.last_layout
+                .as_ref()
+                .map(|layout| layout.visible_range_offset.start)
+        } else {
+            None
+        };
+        let case_insensitive = self.search_session.case_insensitive;
+        self.search_session.update_query(query, case_insensitive);
         self.search_session.matcher.update(&self.text);
-        if let Some(anchor) = self.search_session.anchor_offset {
+        if query_changed && let Some(anchor) = self.search_session.anchor_offset {
             self.search_session.matcher.update_cursor_by_offset(anchor);
         }
         cx.notify();
@@ -410,16 +416,16 @@ mod tests {
     }
 
     #[test]
-    fn identical_query_keeps_the_match_anchored_by_the_open_search_session() {
+    fn identical_query_keeps_the_current_match() {
         let mut session = SearchSession::default();
         session.update_query("foo", true);
         session.matcher.update(&Rope::from("foo bar foo baz foo"));
         session.matcher.update_cursor_by_offset(12);
         assert_eq!(session.matcher.current_match_index(), 2);
 
-        // The styled search panel echoes its input value back into Base when it
-        // opens. That echo must not reset the match chosen from the editor's
-        // visible-range anchor.
+        // Reopening Find and the styled search panel's initial query echo both
+        // update the session with the same query. Neither should reset the
+        // previously active occurrence.
         session.update_query("foo", true);
 
         assert_eq!(session.matcher.current_match_index(), 2);
