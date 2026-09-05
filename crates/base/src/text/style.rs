@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use gpui::{HighlightStyle, Hsla, Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{HighlightStyle, Hsla, Pixels, Rems, SharedString, StyleRefinement, px, rems};
 
-use crate::ColorTokens;
+use crate::{ColorTokens, TypographyTokens};
 
 /// TextViewStyle used to customize the style for [`super::TextView`].
 ///
@@ -26,6 +26,7 @@ pub struct TextViewStyle {
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
     inline_code: HighlightStyle,
+    inline_code_font_family: Option<SharedString>,
     is_dark: bool,
 }
 
@@ -52,6 +53,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_font_family == other.inline_code_font_family
             && self.is_dark == other.is_dark
     }
 }
@@ -69,6 +71,7 @@ impl TextViewStyle {
             &theme.tokens.colors,
             theme.appearance == crate::ThemeAppearance::Dark,
         )
+        .with_inline_code_font_family(Some(theme.tokens.typography.mono.clone()))
     }
 
     /// Derives rich-text colors from one palette.
@@ -95,6 +98,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
+            inline_code_font_family: Some(TypographyTokens::default().mono),
             is_dark,
         }
     }
@@ -174,6 +178,15 @@ impl TextViewStyle {
     /// which keeps [`TextViewStyle::default`] usable without a theme.
     pub fn with_inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Sets the font family inline code spans are shaped in.
+    ///
+    /// Defaults to the theme's mono family. `None` keeps inline code in the
+    /// body face, with only [`Self::with_inline_code`] distinguishing it.
+    pub fn with_inline_code_font_family(mut self, family: Option<SharedString>) -> Self {
+        self.inline_code_font_family = family;
         self
     }
 
@@ -289,6 +302,11 @@ impl TextViewStyle {
         self.inline_code
     }
 
+    /// The font family inline code spans are shaped in, if any.
+    pub fn inline_code_font_family(&self) -> Option<&SharedString> {
+        self.inline_code_font_family.as_ref()
+    }
+
     /// Whether content-specific assets should use their dark variant.
     pub fn is_dark(&self) -> bool {
         self.is_dark
@@ -321,6 +339,7 @@ mod tests {
         assert!(base != base.clone().with_table_cell(table));
 
         assert!(base != base.clone().with_dark(true));
+        assert!(base != base.clone().with_inline_code_font_family(None));
     }
 
     #[test]
@@ -377,7 +396,13 @@ mod tests {
         theme.tokens.colors.border = gpui::rgb(0x778899).into();
         theme.tokens.colors.selection = gpui::rgb(0x55a0fc).into();
 
+        theme.tokens.typography.mono = "Test Mono".into();
+
         let style = TextViewStyle::from_theme(&theme);
+        assert_eq!(
+            style.inline_code_font_family().map(|f| f.as_ref()),
+            Some("Test Mono")
+        );
         assert_eq!(style.foreground(), theme.tokens.colors.foreground);
         assert_eq!(style.link(), theme.tokens.colors.primary);
         assert_eq!(style.selection(), theme.tokens.colors.selection);

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{HighlightStyle, Pixels, Rems, SharedString, StyleRefinement, px, rems};
 
 use crate::highlighter::HighlightTheme;
 
@@ -47,7 +47,11 @@ pub struct TextViewStyle {
     /// Default is [`HighlightStyle::default()`], the `background_color` will
     /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
-    /// Whether content-specific rendering should use dark-mode assets.
+    /// The font family for inline code spans.
+    ///
+    /// `None` keeps the themed family (`cx.theme().mono_font_family`); set
+    /// `Some` to shape inline code in another family.
+    pub inline_code_font_family: Option<SharedString>,
     /// Whether content-specific rendering should use dark-mode assets.
     pub is_dark: bool,
 }
@@ -64,6 +68,7 @@ impl Default for TextViewStyle {
             table_head: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
             inline_code: HighlightStyle::default(),
+            inline_code_font_family: None,
             is_dark: false,
         }
     }
@@ -87,6 +92,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_font_family == other.inline_code_font_family
             && self.is_dark == other.is_dark
     }
 }
@@ -114,6 +120,12 @@ impl TextViewStyle {
     /// Set style for inline code spans.
     pub fn inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+    /// Set the font family for inline code spans. Defaults to the themed
+    /// mono family.
+    pub fn inline_code_font_family(mut self, family: impl Into<SharedString>) -> Self {
+        self.inline_code_font_family = Some(family.into());
         self
     }
     /// Set extra style for the table container.
