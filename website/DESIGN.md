@@ -241,16 +241,32 @@ apps through PRs in [longbridge/gpui-kit-showcases](https://github.com/longbridg
   to the Vue app; no duplicated hard-coded app list.
 - **Screenshots show the complete window.** Authors must preserve all four corners
   and edges in a clear, tidy capture. Images are archived unchanged and referenced
-  using raw GitHub URLs pinned to the checked-out commit. Cards use a shared 16:10
-  area with `object-fit: contain`, retaining the whole image. Do not wrap them in
+  using raw GitHub URLs pinned to the checked-out commit. Cards use a shared 16:9
+  area with `object-fit: cover` and top-center positioning, filling the card edge
+  to edge. The archived image remains unchanged; previews may crop the bottom
+  or sides. Do not wrap them in
   `.mac-window` or add a second title bar.
 - **Featured is editorial.** Maintainers list app IDs in the catalog's root
   `featured.json` using project history, implementation, completeness, and quality.
   The array defines both selection and display order; app manifests have no
-  `featured` field. Featured apps appear first. Other apps
-  appear in a separate group sortable by first inclusion time or GitHub Stars.
-  Search and category filters apply to both groups. Failed or unavailable star
+  `featured` field. Featured apps appear first, six per page, and keep their editorial order.
+  The heading shows the total selection count; pagination remains independent
+  of All apps filters.
+  All apps includes the entire catalog, including Featured, with nine apps per page.
+  Search, category, and sort changes return to page one. Its search, category
+  filters, and sorting controls live below the All apps heading and only affect
+  that section. Use the site’s neutral tokens and control radii for a compact,
+  thin-bordered search/filter panel, with counts at the trailing section edge.
+  The section and controls remain visible when no apps match. Failed or unavailable star
   counts remain unknown and sort after known counts, never as invented zeroes.
+- **Card hierarchy.** Use image, name and author, description, platform/date row,
+  then a shared footer. Development status belongs beside the identity. Platform
+  text is unboxed on the left; dates use `YYYY/MM/DD` on the right. In the footer,
+  Commercial precedes the Lucide Star and compact count on the left. Globe and
+  GitHub icon links sit on the right with accessible names and tooltips. Do not
+  add an Open source label, Stars suffix, or Read story row; the image opens
+  available story details. Keep footer centers and colors aligned, and absorb
+  unequal description length before metadata so cards align within each row.
 - **Metadata freshness.** `publishedAt` records first inclusion in App Stories,
   not the application's original release date, and remains unchanged for updates.
   GitHub Stars are refreshed in the Showcase repository after merges and weekly,
@@ -261,7 +277,8 @@ apps through PRs in [longbridge/gpui-kit-showcases](https://github.com/longbridg
   route. The catalog’s shared Bun validator and renderer enforce the 10 KB limit,
   official-link allowlist, local media and product-only content rules. The catalog
   checkout’s locked dependencies must be installed before building.
-- **Review before publication.** Explain before the list that every merged app PR is listed, Featured is not
+- **Review before publication.** Keep a labeled selection-policy disclosure before
+  the list explaining that every merged app PR is listed, Featured is not
   guaranteed, and maintainers adjust Featured as apps evolve.
   The submission CTA links to the repository's PR instructions.
 - **Automatic publishing.** On approved changes merged to Showcase `main`, its
