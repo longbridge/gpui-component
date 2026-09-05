@@ -29,6 +29,7 @@ members = [
     "examples/markdown_table",
     "crates/shell",
     "crates/component-shell",
+    "crates/rquickjs-compat",
 ]
 resolver = "2"
 
@@ -137,15 +138,22 @@ lsp-types = { opt-level = 3 }
 gpui-pre-reqwest-client = { opt-level = 3 }
 markdown = { opt-level = 3 }
 xml5ever = { opt-level = 3 }
-# `rquickjs` is a facade that re-exports `rquickjs-core`, so naming it alone
-# optimises neither the interpreter nor the bindings. `rquickjs-sys` builds
+# `quickjs-jit` is a facade that re-exports `quickjs-jit-core`, so naming it alone
+# optimises neither the interpreter nor the bindings. `quickjs-jit-sys` builds
 # QuickJS itself through `cc`, which reads this package's opt-level; without
 # these two a debug build spends roughly three times as long in every script
 # render. See `website/shell/hosting.md`.
-rquickjs = { opt-level = 3 }
-rquickjs-sys = { opt-level = 3 }
-rquickjs-core = { opt-level = 3 }
+quickjs-jit = { opt-level = 3 }
+quickjs-jit-runtime = { opt-level = 3 }
+quickjs-jit-sys = { opt-level = 3 }
+quickjs-jit-core = { opt-level = 3 }
 cap-std = { opt-level = 3 }
+
+[patch.crates-io]
+# LLRT's public modules still name their compatible binding dependency
+# `rquickjs`. Route those dependencies through a source-compatible facade so
+# the shell and LLRT share the exact same quickjs-jit types and VM.
+rquickjs = { path = "crates/rquickjs-compat" }
 
 [workspace.metadata.typos]
 files.extend-exclude = ["**/fixtures/*"]
