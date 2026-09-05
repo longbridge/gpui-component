@@ -223,6 +223,8 @@ where
     }
 
     /// Set a specific list item for measurement.
+    ///
+    /// If the item is absent, measure the first item in the first non-empty section.
     pub fn set_item_to_measure_index(
         &mut self,
         ix: IndexPath,
@@ -430,10 +432,21 @@ where
 
         // Measure the item_height and section header/footer height.
         let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        measured_size.item_size = self
-            .render_list_item(self.item_to_measure_index, window, cx)
-            .into_any_element()
-            .layout_as_root(available_space, window, cx);
+        let requested = self.item_to_measure_index;
+        let item_to_measure = (requested.section < sections_count
+            && requested.row < self.delegate.items_count(requested.section, cx))
+        .then_some(requested)
+        .or_else(|| {
+            (0..sections_count)
+                .find(|section| self.delegate.items_count(*section, cx) > 0)
+                .map(|section| IndexPath::default().section(section))
+        });
+        if let Some(index) = item_to_measure {
+            measured_size.item_size = self
+                .render_list_item(index, window, cx)
+                .into_any_element()
+                .layout_as_root(available_space, window, cx);
+        }
 
         if let Some(mut el) = self
             .delegate
@@ -776,5 +789,79 @@ where
             .size_full()
             .refine_style(&self.style)
             .child(self.state.clone())
+    }
+}
+
+#[cfg(test)]
+mod measurement_tests {
+    use super::*;
+    use crate::list::ListItem;
+    use gpui::TestAppContext;
+
+    struct Delegate {
+        counts: Vec<usize>,
+    }
+
+    impl ListDelegate for Delegate {
+        type Item = ListItem;
+        fn sections_count(&self, _: &App) -> usize {
+            self.counts.len()
+        }
+        fn items_count(&self, section: usize, _: &App) -> usize {
+            self.counts[section]
+        }
+        fn set_selected_index(
+            &mut self,
+            _: Option<IndexPath>,
+            _: &mut Window,
+            _: &mut Context<ListState<Self>>,
+        ) {
+        }
+        fn render_item(
+            &mut self,
+            index: IndexPath,
+            _: &mut Window,
+            _: &mut Context<ListState<Self>>,
+        ) -> Option<ListItem> {
+            (index.row < *self.counts.get(index.section)?)
+                .then(|| ListItem::new(index.row).h(px(if index.row == 0 { 36. } else { 48. })))
+        }
+    }
+
+    #[gpui::test]
+    fn measures_an_existing_row_when_the_requested_item_is_absent(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let window = cx.add_empty_window();
+        window.draw(
+            gpui::point(px(0.), px(0.)),
+            size(px(300.), px(300.)),
+            |window, cx| {
+                let list = cx.new(|cx| ListState::new(Delegate { counts: vec![0, 2] }, window, cx));
+                list.update(cx, |list, cx| {
+                    for (requested, expected_height) in [
+                        (IndexPath::default(), 36.),
+                        (IndexPath::new(1).section(1), 48.),
+                        (IndexPath::new(99).section(1), 36.),
+                        (IndexPath::new(0).section(99), 36.),
+                    ] {
+                        list.set_item_to_measure_index(requested, window, cx);
+                        list.prepare_items_if_needed(window, cx);
+                        let position = list
+                            .rows_cache
+                            .position_of(&IndexPath::new(0).section(1))
+                            .unwrap();
+                        assert_eq!(
+                            list.rows_cache.entries_sizes[position].height,
+                            px(expected_height)
+                        );
+                        assert_eq!(list.item_to_measure_index, requested);
+                    }
+                    list.delegate.counts = vec![0, 0];
+                    list.prepare_items_if_needed(window, cx);
+                    assert_eq!(list.rows_cache.items_count(), 0);
+                });
+                div()
+            },
+        );
     }
 }
