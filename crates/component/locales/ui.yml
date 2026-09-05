@@ -222,6 +222,12 @@ ColorPicker:
     zh-TW: 透明度
     it: Alfa
 Dialog:
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+    zh-TW: 關閉
+    it: Chiudi
   ok:
     en: OK
     zh-CN: 确定
