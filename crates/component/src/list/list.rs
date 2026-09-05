@@ -782,7 +782,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod row_label_tests {
     use super::*;
     use crate::list::ListItem;
     use gpui::{Element as _, TestAppContext, accesskit};
