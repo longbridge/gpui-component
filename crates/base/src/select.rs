@@ -1,9 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    AccessibleAction, AnyElement, App, ElementId, FocusHandle, InteractiveElement as _,
+    IntoElement, KeyBinding, ParentElement, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::StyledExt as _;
@@ -47,6 +48,7 @@ pub struct Select {
     focus_handle: Option<FocusHandle>,
     content_focus_handle: Option<FocusHandle>,
     accessibility_label: Option<SharedString>,
+    accessibility_value: Option<SharedString>,
     style: StyleRefinement,
     children: Vec<AnyElement>,
     on_open_change: Option<OpenChangeHandler>,
@@ -64,6 +66,7 @@ impl Select {
             focus_handle: None,
             content_focus_handle: None,
             accessibility_label: None,
+            accessibility_value: None,
             style: StyleRefinement::default(),
             children: Vec::new(),
             on_open_change: None,
@@ -79,7 +82,7 @@ impl Select {
         self
     }
 
-    /// Prevents keyboard interaction and removes the trigger from tab traversal.
+    /// Prevents keyboard and accessible activation and removes the trigger from tab traversal.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -100,6 +103,14 @@ impl Select {
     /// Sets the accessible name exposed by the controlled root.
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessibility_label = Some(label.into());
+        self
+    }
+
+    /// Sets the committed value exposed by the controlled root.
+    ///
+    /// Supply a readable selection title, not the current search query or cursor.
+    pub fn accessibility_value(mut self, value: impl Into<SharedString>) -> Self {
+        self.accessibility_value = Some(value.into());
         self
     }
 
@@ -167,11 +178,36 @@ impl RenderOnce for Select {
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
+            .when_some(self.accessibility_value, |this, value| {
+                this.aria_value(value)
+            })
             .key_context(self.key_context)
             .when_some(
                 focus_handle.clone().filter(|_| !disabled),
                 |this, handle| this.track_focus(&handle.tab_stop(true)),
             )
+            .when(!disabled, |this| {
+                let on_open_change = on_open_change.clone();
+                let content_focus_handle = content_focus_handle.clone();
+                let focus_handle = focus_handle.clone();
+
+                // Platform adapters may flatten the trigger child.
+                // Expose activation on the semantic root itself.
+                this.on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
+                    if let Some(handler) = on_open_change.as_ref() {
+                        handler(!open, window, cx);
+                    }
+
+                    let next_focus = if open {
+                        focus_handle.as_ref()
+                    } else {
+                        content_focus_handle.as_ref()
+                    };
+                    if let Some(handle) = next_focus {
+                        handle.focus(window, cx);
+                    }
+                })
+            })
             .on_action({
                 let on_open_change = on_open_change.clone();
                 let content_focus_handle = content_focus_handle.clone();
@@ -261,7 +297,9 @@ impl RenderOnce for Select {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Focusable, Render, TestAppContext, VisualTestContext, px};
+    use gpui::{
+        Context, Element as _, Focusable, Render, TestAppContext, VisualTestContext, accesskit, px,
+    };
     use std::sync::{Arc, Mutex};
 
     struct SelectHarness {
@@ -386,10 +424,32 @@ mod tests {
         );
     }
 
-    #[test]
-    fn accepts_application_owned_accessible_label() {
-        let _ = Select::new("a11y-select")
-            .open(true)
-            .accessibility_label("Country");
+    #[gpui::test]
+    fn projects_application_owned_accessible_state(cx: &mut TestAppContext) {
+        let window = cx.add_empty_window();
+        window.update(|window, cx| {
+            let mut info = |select: Select| {
+                let mut node = accesskit::Node::new(Role::ComboBox);
+                select
+                    .render(window, cx)
+                    .into_element()
+                    .write_a11y_info(&mut node);
+                node
+            };
+            let enabled = info(
+                Select::new("enabled")
+                    .open(true)
+                    .accessibility_label("Programming language")
+                    .accessibility_value("Rust"),
+            );
+            let disabled = info(Select::new("disabled").disabled(true));
+
+            assert_eq!(enabled.label(), Some("Programming language"));
+            assert_eq!(enabled.value(), Some("Rust"));
+            assert_eq!(enabled.is_expanded(), Some(true));
+            assert_eq!(disabled.is_expanded(), Some(false));
+            assert!(enabled.supports_action(accesskit::Action::Click));
+            assert!(!disabled.supports_action(accesskit::Action::Click));
+        });
     }
 }
