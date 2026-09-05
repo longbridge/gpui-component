@@ -82,7 +82,7 @@ impl Select {
         self
     }
 
-    /// Prevents keyboard interaction and removes the trigger from tab traversal.
+    /// Prevents keyboard and accessible activation and removes the trigger from tab traversal.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -106,7 +106,9 @@ impl Select {
         self
     }
 
-    /// Sets the current value exposed by the controlled root.
+    /// Sets the committed value exposed by the controlled root.
+    ///
+    /// Supply a readable selection title, not the current search query or cursor.
     pub fn accessibility_value(mut self, value: impl Into<SharedString>) -> Self {
         self.accessibility_value = Some(value.into());
         self
@@ -189,8 +191,8 @@ impl RenderOnce for Select {
                 let content_focus_handle = content_focus_handle.clone();
                 let focus_handle = focus_handle.clone();
 
-                // AccessKit maps this root to AXPopUpButton on macOS; its painted trigger child
-                // may be flattened. Register Click here so AXPress activates the controlled select.
+                // Platform adapters may flatten the trigger child.
+                // Expose activation on the semantic root itself.
                 this.on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
                     if let Some(handler) = on_open_change.as_ref() {
                         handler(!open, window, cx);
@@ -437,13 +439,15 @@ mod tests {
             let enabled = info(
                 Select::new("enabled")
                     .open(true)
-                    .accessibility_label("History source")
-                    .accessibility_value("All sources"),
+                    .accessibility_label("Programming language")
+                    .accessibility_value("Rust"),
             );
             let disabled = info(Select::new("disabled").disabled(true));
 
-            assert_eq!(enabled.label(), Some("History source"));
-            assert_eq!(enabled.value(), Some("All sources"));
+            assert_eq!(enabled.label(), Some("Programming language"));
+            assert_eq!(enabled.value(), Some("Rust"));
+            assert_eq!(enabled.is_expanded(), Some(true));
+            assert_eq!(disabled.is_expanded(), Some(false));
             assert!(enabled.supports_action(accesskit::Action::Click));
             assert!(!disabled.supports_action(accesskit::Action::Click));
         });
