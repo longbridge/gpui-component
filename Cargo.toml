@@ -70,6 +70,8 @@ log = "0.4"
 lsp-types = { version = "0.97.0", features = ["proposed"] }
 notify = "7.0.0"
 raw-window-handle = "0.6.2"
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+x11-dl = "2"
 ropey = { version = "=2.0.0-beta.1", features = [
     "metric_chars",
     "metric_lines_lf",
