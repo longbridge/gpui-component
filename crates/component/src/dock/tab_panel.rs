@@ -28,7 +28,7 @@ use gpui_base::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, IconName, Selectable as _, Sizable as _,
+    ActiveTheme as _, IconName, Selectable as _, Sizable as _, Size,
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, PanelControl, PanelHandle, PanelStyle, SkinShared, ToggleZoom},
     h_flex,
@@ -369,9 +369,17 @@ impl TabGroupSkin {
         let title_style = handle.and_then(|handle| handle.title_style(cx));
         let drag = tab_drag(group, ix, cx);
 
+        let title_h = match self.shared.tab_size() {
+            Size::Size(h) => h,
+            Size::XSmall => px(20.),
+            Size::Small => px(24.),
+            Size::Large => px(36.),
+            _ => px(30.),
+        };
+
         h_flex()
             .justify_between()
-            .h(px(30.))
+            .h(title_h)
             .py_2()
             .pl_3()
             .pr_2()
