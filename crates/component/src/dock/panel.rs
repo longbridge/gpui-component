@@ -138,14 +138,10 @@ pub trait Panel: gpui_base::dock::Panel {
         true
     }
 
-    /// Customize this panel's own tab in the tab bar.
-    ///
-    /// The tab group builds a fully wired [`Tab`] -- its index, label,
-    /// selected state, click-to-activate, and drag/drop are already set --
-    /// and hands it here for the panel to do final tweaks to e.g. styling.
-    /// Returns the (possibly customized) tab, so the tab bar's own layout
-    /// and behavior are preserved. The default returns it untouched.
-    fn render_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) -> Tab {
+    /// Final tweak to this panel's fully-wired tab (styling, label, suffix).
+    /// The default returns it untouched. `&self`: it runs inside the tab bar's
+    /// render, so `&mut self` would risk re-entrancy on the panel entity.
+    fn render_tab(&self, tab: Tab, window: &mut Window, cx: &App) -> Tab {
         tab
     }
 }
@@ -161,7 +157,7 @@ pub trait PanelView: gpui_base::dock::PanelView {
     fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu;
     fn zoom_control(&self, cx: &App) -> Option<PanelControl>;
     fn inner_padding(&self, cx: &App) -> bool;
-    fn render_tab(&self, tab: Tab, window: &mut Window, cx: &mut App) -> Tab;
+    fn render_tab(&self, tab: Tab, window: &mut Window, cx: &App) -> Tab;
 }
 
 impl<T: Panel> PanelView for Entity<T> {
@@ -200,8 +196,8 @@ impl<T: Panel> PanelView for Entity<T> {
         self.read(cx).inner_padding(cx)
     }
 
-    fn render_tab(&self, tab: Tab, window: &mut Window, cx: &mut App) -> Tab {
-        self.update(cx, |this, cx| this.render_tab(tab, window, cx))
+    fn render_tab(&self, tab: Tab, window: &mut Window, cx: &App) -> Tab {
+        self.read(cx).render_tab(tab, window, cx)
     }
 }
 

@@ -502,33 +502,38 @@ impl TabGroupSkin {
                                 Some(tab_name) => this.child(tab_name),
                                 None => this.child(panel_title(panel, window, cx)),
                             })
-                            // A per-tab close (X) button, shown only when the
-                            // panel reports itself closable and the group can
-                            // actually close it. `is_draggable` is the same
-                            // gate `TabGroup::close_panel` checks -- false for a
-                            // locked layout or a group's last visible panel --
-                            // so the button never draws when a click would do
-                            // nothing. Stops propagation so the click never also
-                            // selects the tab, and closes by id so it targets
-                            // this tab regardless of which one is active.
-                            .when(group.is_draggable() && panel.closable(cx), |this| {
-                                this.suffix(
-                                    Button::new(("close-tab", ix))
-                                        .icon(IconName::Close)
-                                        .xsmall()
-                                        .ghost()
-                                        .tab_stop(false)
-                                        .debug_selector(|| CLOSE_BUTTON_SELECTOR.to_string())
-                                        .on_click({
-                                            let group = group.clone();
-                                            let panel_id = panel.panel_id(cx);
-                                            move |_, window, cx| {
-                                                cx.stop_propagation();
-                                                group.close(panel_id, window, cx);
-                                            }
-                                        }),
-                                )
-                            })
+                            // Per-tab close (X) button. The gate mirrors
+                            // `TabGroup::close_panel`: container permits closing
+                            // (not a dock's last group), group is draggable, and
+                            // the panel is closable; plus `!collapsed`, since a
+                            // collapsed strip is a way back in, not a place to
+                            // close. Stops propagation so the click closes by id
+                            // without also selecting the tab.
+                            .when(
+                                !collapsed
+                                    && group.is_close_permitted()
+                                    && group.is_draggable()
+                                    && panel.closable(cx),
+                                |this| {
+                                    this.suffix(
+                                        Button::new(("close-tab", ix))
+                                            .icon(IconName::Close)
+                                            .xsmall()
+                                            .ghost()
+                                            .tab_stop(false)
+                                            .tooltip(t!("Dock.Close"))
+                                            .debug_selector(|| CLOSE_BUTTON_SELECTOR.to_string())
+                                            .on_click({
+                                                let group = group.clone();
+                                                let panel_id = panel.panel_id(cx);
+                                                move |_, window, cx| {
+                                                    cx.stop_propagation();
+                                                    group.close(panel_id, window, cx);
+                                                }
+                                            }),
+                                    )
+                                },
+                            )
                             // A collapsed group shows no tab as active: the
                             // strip is a way back in, not a selection. The
                             // comparison is against the panel on screen, not
@@ -1536,7 +1541,7 @@ mod tests {
     }
 
     impl Panel for TabProbe {
-        fn render_tab(&mut self, tab: Tab, _: &mut Window, _: &mut Context<Self>) -> Tab {
+        fn render_tab(&self, tab: Tab, _: &mut Window, _: &App) -> Tab {
             self.rendered_tab.set(true);
             tab
         }
@@ -1673,6 +1678,50 @@ mod tests {
         assert!(
             !activated.get(),
             "stop_propagation keeps the close click from also selecting the tab"
+        );
+    }
+
+    /// A collapsed group offers no close button, though the same group does
+    /// while open. Before/after collapse isolates `!collapsed`; nothing else
+    /// changes.
+    #[gpui::test]
+    fn a_collapsed_group_draws_no_close_button(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("skin", None, window, cx).with_renderer(DockSkin::new(cx))
+        });
+        // Two closable panels so the group is draggable (not on its last
+        // visible panel) and offers close buttons while open.
+        cx.update(|window, cx| {
+            let a = TabProbe::new(true, Rc::new(Cell::new(false)), cx);
+            let b = TabProbe::new(true, Rc::new(Cell::new(false)), cx);
+            let layout = DockLayout::tabs()
+                .panel_view(panel_handle(a), cx)
+                .panel_view(panel_handle(b), cx);
+            area.update(cx, |area, cx| {
+                area.set_dock(DockPlacement::Bottom, layout, window, cx);
+                if !area.is_dock_open(DockPlacement::Bottom) {
+                    area.toggle_dock(DockPlacement::Bottom, window, cx);
+                }
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            cx.debug_bounds(CLOSE_BUTTON_SELECTOR).is_some(),
+            "an open group with two closable panels offers a close button"
+        );
+
+        // Collapse the bottom dock: its strip stays clickable, but the close
+        // buttons on it must not.
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| area.toggle_dock(DockPlacement::Bottom, window, cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            cx.debug_bounds(CLOSE_BUTTON_SELECTOR).is_none(),
+            "a collapsed group must not offer a close button"
         );
     }
 }
