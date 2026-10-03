@@ -208,6 +208,7 @@ impl ResizableState {
         panel_ix: usize,
         bounds: Bounds<Pixels>,
         size_range: &Range<Pixels>,
+        fixed: bool,
     ) -> bool {
         let Some(panel) = self.panels.get(panel_ix) else {
             return true;
@@ -215,6 +216,7 @@ impl ResizableState {
         self.sizes.get(panel_ix).map(|size| size.as_f32()) == Some(PANEL_MIN_SIZE.as_f32())
             || panel.bounds != bounds
             || panel.size_range != *size_range
+            || panel.fixed != fixed
     }
 
     pub(crate) fn update_panel_size(
@@ -222,8 +224,10 @@ impl ResizableState {
         panel_ix: usize,
         bounds: Bounds<Pixels>,
         size_range: Range<Pixels>,
+        fixed: bool,
         cx: &mut Context<Self>,
     ) {
+        self.panels[panel_ix].fixed = fixed;
         let size = bounds.size.along(self.axis);
         // This check is only necessary to stop the very first panel from resizing on its own
         // it needs to be passed when the panel is freshly created so we get the initial size,
@@ -330,6 +334,10 @@ impl ResizableState {
 
             while changed > px(0.) && ix < old_sizes.len() - 1 {
                 ix += 1;
+                // A fixed panel only gives up space to a drag on its own handle.
+                if self.panels[ix].fixed && ix != main_ix + 1 {
+                    continue;
+                }
                 let size_range = self.panel_size_range(ix);
                 let available_size = (new_sizes[ix] - size_range.start).max(px(0.));
                 let to_reduce = changed.min(available_size);
@@ -342,6 +350,9 @@ impl ResizableState {
 
             while changed > px(0.) && ix > 0 {
                 ix -= 1;
+                if self.panels[ix].fixed {
+                    continue;
+                }
                 let size_range = self.panel_size_range(ix);
                 let available_size = (new_sizes[ix] - size_range.start).max(px(0.));
                 let to_reduce = changed.min(available_size);
@@ -386,17 +397,36 @@ impl ResizableState {
             return;
         }
 
-        let container_size = self.container_size();
-        let total = self.sizes.iter().map(|s| s.as_f32()).sum::<f32>();
+        // Fixed panels keep their size; the other panels share what is left
+        // in the same proportions as before. A container too small for the
+        // fixed panels leaves every size alone, so the proportions survive
+        // until it grows again.
+        let sum = |fixed: bool| {
+            self.panels
+                .iter()
+                .zip(&self.sizes)
+                .filter(|(panel, _)| panel.fixed == fixed)
+                .map(|(_, size)| size.as_f32())
+                .sum::<f32>()
+        };
+        let (fixed_size, total) = (px(sum(true)), sum(false));
         if !total.is_finite() || total <= 0. {
             return;
         }
         let total_size = px(total);
+        let available = self.container_size() - fixed_size;
+        if available <= px(0.) {
+            return;
+        }
 
         for i in 0..self.panels.len() {
+            if self.panels[i].fixed {
+                self.panels[i].size = Some(self.sizes[i]);
+                continue;
+            }
             let size = self.sizes[i];
             let ratio = size / total_size;
-            let new_size = container_size * ratio;
+            let new_size = available * ratio;
 
             self.sizes[i] = new_size;
             self.panels[i].size = Some(new_size);
@@ -412,6 +442,8 @@ pub(crate) struct ResizablePanelState {
     pub size: Option<Pixels>,
     pub size_range: Range<Pixels>,
     bounds: Bounds<Pixels>,
+    /// See [`ResizablePanel::fixed`].
+    pub(crate) fixed: bool,
 }
 
 #[cfg(test)]
@@ -478,6 +510,122 @@ mod tests {
         // state on the follow-up frame does not move the divider again.
         assert_ne!(settled_frame, before);
         assert_eq!(followup_frame, settled_frame);
+    }
+
+    struct FixedPanelHarness {
+        width: Pixels,
+        fixed: bool,
+        state: gpui::Entity<ResizableState>,
+    }
+
+    impl Render for FixedPanelHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(self.width).h(px(100.)).child(
+                h_resizable("fixed-panel")
+                    .with_state(&self.state)
+                    .child(
+                        resizable_panel()
+                            .size(px(240.))
+                            .size_range(px(100.)..px(480.))
+                            .when(self.fixed, |panel| panel.fixed())
+                            .child(div().size_full().debug_selector(|| "fp-sidebar".into())),
+                    )
+                    .child(
+                        resizable_panel()
+                            .size(px(400.))
+                            .child(div().size_full().debug_selector(|| "fp-main".into())),
+                    )
+                    .child(
+                        resizable_panel()
+                            .child(div().size_full().debug_selector(|| "fp-aside".into())),
+                    ),
+            )
+        }
+    }
+
+    /// A fixed panel keeps its size when the container resizes, the other
+    /// panels share the rest in their proportions, and a container briefly
+    /// too small for the fixed panel does not lose those proportions. A drag
+    /// on another handle does not take space from it either.
+    #[gpui::test]
+    fn fixed_panel_keeps_its_size_across_a_container_resize(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| ResizableState::default()));
+        let (view, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| FixedPanelHarness {
+                width: px(840.),
+                fixed: true,
+                state,
+            }
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        let widths = |cx: &mut VisualTestContext| {
+            ["fp-sidebar", "fp-main", "fp-aside"].map(|selector| {
+                cx.debug_bounds(selector)
+                    .expect("every panel must lay out")
+                    .size
+                    .width
+            })
+        };
+        assert_eq!(widths(cx), [px(240.), px(400.), px(200.)]);
+
+        for (width, expected) in [
+            (px(1140.), Some([px(240.), px(600.), px(300.)])),
+            (px(200.), None),
+            (px(600.), Some([px(240.), px(240.), px(120.)])),
+        ] {
+            view.update(cx, |view, cx| {
+                view.width = width;
+                cx.notify();
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            if let Some(expected) = expected {
+                assert_eq!(widths(cx), expected, "{width:?}");
+            }
+        }
+
+        // Dragging the main panel below its minimum takes the rest from the
+        // panel after it, not from the fixed sidebar before it.
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.resize_panel(1, px(50.), window, cx));
+            window.draw(cx).clear(cx);
+        });
+        assert_eq!(widths(cx), [px(240.), px(100.), px(260.)]);
+    }
+
+    /// A panel made fixed after its first frame, while its bounds stay the
+    /// same, keeps its size on the next container resize.
+    #[gpui::test]
+    fn panel_made_fixed_in_place_keeps_its_size_across_a_container_resize(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| ResizableState::default()));
+        let (view, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| FixedPanelHarness {
+                width: px(840.),
+                fixed: false,
+                state,
+            }
+        });
+        let draw = |cx: &mut VisualTestContext, update: fn(&mut FixedPanelHarness)| {
+            view.update(cx, |view, cx| {
+                update(view);
+                cx.notify();
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        };
+        draw(cx, |_| {});
+        draw(cx, |view| view.fixed = true);
+        draw(cx, |view| view.width = px(1140.));
+
+        let sidebar = cx
+            .debug_bounds("fp-sidebar")
+            .expect("the sidebar must lay out");
+        assert_eq!(sidebar.size.width, px(240.));
     }
 
     struct CallerStateHarness {
