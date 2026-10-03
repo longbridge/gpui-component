@@ -372,6 +372,18 @@ Editor::new(&editor)
 These are the ordinary [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
 methods every element has, so `font_weight` and `line_height` work the same way.
 
+## Sizes
+
+```rust
+Editor::new(&editor).large()
+Editor::new(&editor) // medium (default)
+Editor::new(&editor).xsmall()
+```
+
+Unlike `Textarea`, the size changes only the padding around the code, not the
+font size (see [Font](#font)). `xsmall` leaves no padding above and below the
+code.
+
 ## Appearance
 
 ```rust
