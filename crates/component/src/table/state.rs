@@ -700,7 +700,7 @@ where
             .map(|col_ix| {
                 let column = self.delegate().column(col_ix, cx);
                 ColGroup {
-                    width: column.width,
+                    width: column.width.max(column.min_width).min(column.max_width),
                     bounds: Bounds::default(),
                     column,
                 }
@@ -1219,7 +1219,9 @@ where
         let mut changed = false;
         if let Some(col_group) = self.col_groups.get_mut(ix) {
             if col_group.is_resizable() {
-                let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
+                let new_width = size
+                    .max(col_group.column.min_width)
+                    .min(col_group.column.max_width);
                 if col_group.width != new_width {
                     col_group.width = new_width;
                     changed = true;
@@ -2650,5 +2652,67 @@ where
                         ),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{App, TestAppContext};
+
+    use super::*;
+
+    struct WidthsDelegate;
+
+    impl TableDelegate for WidthsDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            3
+        }
+
+        fn rows_count(&self, _: &App) -> usize {
+            0
+        }
+
+        fn column(&self, col_ix: usize, _: &App) -> Column {
+            match col_ix {
+                0 => Column::new("narrow", "Narrow")
+                    .min_width(px(80.))
+                    .width(px(40.)),
+                1 => Column::new("wide", "Wide")
+                    .max_width(px(120.))
+                    .width(px(300.)),
+                // `min_width` above `max_width` must not panic.
+                _ => Column::new("inverted", "Inverted")
+                    .min_width(px(200.))
+                    .max_width(px(100.)),
+            }
+        }
+
+        fn render_td(
+            &mut self,
+            _: usize,
+            _: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div()
+        }
+    }
+
+    #[gpui::test]
+    fn initial_column_width_is_clamped(cx: &mut TestAppContext) {
+        cx.skip_drawing();
+        let window = cx.add_window(|window, cx| TableState::new(WidthsDelegate, window, cx));
+
+        let widths = window
+            .update(cx, |table, _, _| {
+                table
+                    .col_groups
+                    .iter()
+                    .map(|col_group| col_group.width)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap();
+
+        assert_eq!(widths, [px(80.), px(120.), px(100.)]);
     }
 }
