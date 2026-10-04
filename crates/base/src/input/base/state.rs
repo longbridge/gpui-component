@@ -8385,6 +8385,35 @@ mod tests {
         });
     }
 
+    #[gpui::test]
+    fn test_prewrap_counts_wrapped_rows_before_the_first_paint(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let text = "select id, name, email, phone from users where active\nlimit 10";
+        for (soft_wrap, wraps) in [(true, true), (false, false)] {
+            let mut input = None;
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                let editor = cx.new(|cx| {
+                    let mut state = crate::input::EditorState::new(window, cx)
+                        .soft_wrap(soft_wrap)
+                        .default_value(text);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    state
+                });
+                input = Some(editor);
+                gpui::EmptyView
+            });
+            let rows = input
+                .unwrap()
+                .read_with(cx, |state, _| state.wrap_row_count());
+            // Two lines; at 120px the first wraps unless soft wrap is off.
+            assert_eq!(rows > 2, wraps, "soft_wrap({soft_wrap}): {rows} rows");
+            if !wraps {
+                assert_eq!(rows, 2);
+            }
+        }
+    }
+
     /// Soft wrap is on by default, for every mode that can wrap.
     ///
     /// The default lives in the shared constructor, where a mode-specific
@@ -11290,6 +11319,39 @@ impl InputBaseState<crate::input::EditorMode> {
             *l = line_number;
         }
         self
+    }
+
+    /// The number of rows the text takes once soft wrapped, the count the
+    /// scroll height uses.
+    ///
+    /// The buffer's line count undercounts it whenever a line wraps, so a host
+    /// that sizes an editor to its content, such as a read-only one, uses this.
+    /// It is 0 until the editor is laid out or [`Self::prewrap`] is called.
+    pub fn wrap_row_count(&self) -> usize {
+        self.display_map.wrap_row_count()
+    }
+
+    /// Wrap the text for `font`, `font_size` and `width` before the first
+    /// layout, so that [`Self::wrap_row_count`] is known on the first frame.
+    ///
+    /// Call it after setting the value. `width` is the width the text wraps
+    /// at: the editor's text width, without its line-number gutter and
+    /// padding. Once the editor has been laid out this does nothing, and
+    /// layout keeps the wrap up to date.
+    pub fn prewrap(
+        &mut self,
+        font: gpui::Font,
+        font_size: Pixels,
+        width: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        if self.last_layout.is_some() {
+            return;
+        }
+        self.display_map.set_font(font, font_size, cx);
+        self.display_map
+            .on_layout_changed(self.soft_wrap.then_some(width), cx);
+        self.display_map.ensure_text_prepared(&self.text, cx);
     }
 
     /// Set line number.
