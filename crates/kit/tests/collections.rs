@@ -286,6 +286,49 @@ fn table_retains_navigation_positions_when_selection_mode_changes(cx: &mut TestA
 }
 
 #[gpui_kit::test]
+fn table_home_and_end_select_the_first_and_last_row(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (handle, handle_content) =
+        common::open_window(cx, Some(size(px(640.), px(320.))), |window, cx| {
+            cx.new(|cx| Records {
+                table: cx.new(|cx| TableState::new(Rows, window, cx)),
+            })
+        });
+    cx.update_window(handle.into(), |_, window, cx| {
+        let table = handle_content.clone().read(cx).table.clone();
+        window.render_frame(cx);
+        window.click(("row", 1usize), cx);
+        window.press("end", cx);
+        assert_eq!(table.read(cx).selected_row(), Some(199));
+        window.press("home", cx);
+        assert_eq!(table.read(cx).selected_row(), Some(0));
+
+        // A selected column still moves to the first or last column.
+        table.update(cx, |table, cx| table.set_selected_col(0, cx));
+        window.press("end", cx);
+        assert_eq!(table.read(cx).selected_col(), Some(1));
+    })
+    .unwrap();
+
+    // Without selectable rows, Home and End move the column as before.
+    let (handle, handle_content) =
+        common::open_window(cx, Some(size(px(640.), px(320.))), |window, cx| {
+            cx.new(|cx| Records {
+                table: cx.new(|cx| TableState::new(Rows, window, cx).row_selectable(false)),
+            })
+        });
+    cx.update_window(handle.into(), |_, window, cx| {
+        let table = handle_content.clone().read(cx).table.clone();
+        table.focus_handle(cx).focus(window, cx);
+        window.render_frame(cx);
+        window.press("end", cx);
+        assert_eq!(table.read(cx).selected_col(), Some(1));
+        assert_eq!(table.read(cx).selected_row(), None);
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn table_selects_rows_and_keyboard_scrolls_virtualized_content(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     let (handle, _) = common::open_window(cx, Some(size(px(640.), px(320.))), |window, cx| {
