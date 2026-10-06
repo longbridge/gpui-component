@@ -12,6 +12,7 @@ publish = true
 version = "0.7.1"
 
 [features]
+gpui-fast = ["dep:gpui-fast"]
 inspector = ["wry/devtools"]
 
 [lib]
@@ -20,4 +21,5 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui-fast = { workspace = true, optional = true }
 wry = { version = "0.53.3", package = "lb-wry" }
