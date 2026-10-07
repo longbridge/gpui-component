@@ -5,16 +5,16 @@ mod common;
 use gpui_kit::component::{
     button::Button,
     diff::{
-        Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffLineRange, DiffMode, DiffSide,
-        DiffState,
+        Diff, DiffAnnotation, DiffEvent, DiffFile, DiffLinePosition, DiffLineRange, DiffMode,
+        DiffSide, DiffState,
     },
     input::{Input, InputState},
 };
 use gpui_kit::test::{TestSupportExt as _, TestWindowExt as _};
 use gpui_kit::{
     App, AppContext, Context, Entity, Focusable as _, InputEvent as _, Modifiers, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, TestAppContext, Window,
-    WindowHandle, div, point, prelude::*, px, size,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, ScrollDelta, TestAppContext,
+    Window, WindowHandle, div, point, prelude::*, px, size,
 };
 
 struct Review {
@@ -39,7 +39,7 @@ impl Render for Review {
                     .flex_1()
                     .min_h_0()
                     .annotations(self.annotations.clone())
-                    .annotation_content(move |_, _, _| {
+                    .render_annotation(move |_, _, _| {
                         div()
                             .id("comment-content")
                             .test_support()
@@ -415,7 +415,7 @@ impl Render for Interactions {
             Diff::new(&self.state)
                 .size_full()
                 .annotations([DiffAnnotation::file("file-note", "review.txt")])
-                .annotation_content(|annotation, _, _| {
+                .render_annotation(|annotation, _, _| {
                     div()
                         .id("note-content")
                         .test_support()
@@ -542,15 +542,17 @@ fn header_collapses_its_file_and_shows_file_annotations(cx: &mut TestAppContext)
 struct Viewer {
     state: Entity<DiffState>,
     soft_wrap: bool,
+    line_number: bool,
 }
 
 impl Render for Viewer {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("review")
-            .test_support()
-            .size_full()
-            .child(Diff::new(&self.state).soft_wrap(self.soft_wrap).size_full())
+        div().id("review").test_support().size_full().child(
+            Diff::new(&self.state)
+                .soft_wrap(self.soft_wrap)
+                .line_number(self.line_number)
+                .size_full(),
+        )
     }
 }
 
@@ -565,6 +567,7 @@ fn viewer(
         cx.new(|cx| Viewer {
             state: cx.new(|cx| DiffState::new([file], cx).with_mode(mode)),
             soft_wrap,
+            line_number: true,
         })
     });
     let state = cx.update(|cx| view.read(cx).state.clone());
@@ -612,6 +615,148 @@ fn soft_wrap_grows_rows_instead_of_scrolling(cx: &mut TestAppContext) {
         let wrapped = window.within(("new", 1usize)).find("source").bounds();
         assert!(wrapped.size.height > short.size.height * 2.);
         assert!(wrapped.right() <= window.find("review").bounds().right());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn clearing_gutter_selection_notifies_without_interrupting_shift_extension(
+    cx: &mut TestAppContext,
+) {
+    let (handle, state) = review(
+        cx,
+        "@@ -1,3 +1,3 @@\n one\n-old\n+new\n three\n",
+        None,
+        DiffMode::Split,
+        vec![],
+    );
+    let changes = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let _subscription = cx.update(|cx| {
+        let changes = changes.clone();
+        cx.subscribe(&state, move |_, event: &DiffEvent, _| {
+            if let DiffEvent::SelectionChanged(range) = event {
+                changes.borrow_mut().push(range.clone());
+            }
+        })
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.within(("old", 0usize)).click(("line", 0usize), cx);
+    })
+    .unwrap();
+    assert_eq!(changes.borrow().len(), 1);
+    cx.update_window(handle.into(), |_, window, cx| {
+        let target = window
+            .within(("old", 2usize))
+            .find(("line", 2usize))
+            .bounds()
+            .center();
+        shift_click(window, target, cx);
+    })
+    .unwrap();
+    assert_eq!(changes.borrow().len(), 2);
+    assert!(changes.borrow().iter().all(Option::is_some));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("before-diff", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert!(state.read(cx).selected_lines().is_none()));
+    assert_eq!(changes.borrow().len(), 3);
+    assert!(changes.borrow().last().unwrap().is_none());
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("before-diff", cx);
+    })
+    .unwrap();
+    assert_eq!(changes.borrow().len(), 3);
+}
+
+#[gpui_kit::test]
+fn wheel_axes_stay_independent_when_code_overflows_in_both_directions(cx: &mut TestAppContext) {
+    let line = "let long_line = ".repeat(40);
+    let mut patch = String::from("@@ -1,60 +1,60 @@\n");
+    for tag in ['-', '+'] {
+        for ix in 0..60 {
+            patch.push_str(&format!("{tag}{line}{ix}\n"));
+        }
+    }
+    for mode in [DiffMode::Unified, DiffMode::Split] {
+        let (handle, _) = review(cx, &patch, None, mode, vec![]);
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            let before = window.within(("old", 10usize)).find("source").bounds();
+            window.scroll(
+                "diff-body",
+                ScrollDelta::Pixels(point(px(0.), px(-100.))),
+                cx,
+            );
+            let vertical = window.within(("old", 10usize)).find("source").bounds();
+            assert!(vertical.top() < before.top());
+            assert_eq!(vertical.left(), before.left());
+            window.scroll(
+                "diff-body",
+                ScrollDelta::Pixels(point(px(-100.), px(0.))),
+                cx,
+            );
+            let horizontal = window.within(("old", 10usize)).find("source").bounds();
+            assert!(horizontal.left() < vertical.left());
+            assert_eq!(horizontal.top(), vertical.top());
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
+fn hidden_line_numbers_keep_wrapped_source_aligned_and_selectable(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let long = "changed word ".repeat(24);
+    let patch = format!("@@ -1,3 +1,4 @@\n keep\n-old\n+{long}\n+extra\n tail\n");
+    let file = patch_document(&patch);
+    let (handle, view) = common::open_window(cx, Some(size(px(480.), px(480.))), |_, cx| {
+        cx.new(|cx| Viewer {
+            state: cx.new(|cx| DiffState::new([file], cx).with_mode(DiffMode::Split)),
+            soft_wrap: true,
+            line_number: false,
+        })
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let keep = window.within(("new", 0usize)).find("source").bounds();
+        let changed = window.within(("new", 1usize)).find("source").bounds();
+        let extra = window.within(("new", 2usize)).find("source").bounds();
+        let viewport = window.find("review").bounds();
+        assert!(keep.left() > viewport.left() + viewport.size.width / 2. + window.rem_size());
+        assert!(keep.right() < viewport.right());
+        assert_eq!(keep.left(), changed.left());
+        assert_eq!(changed.left(), extra.left());
+        assert!(changed.size.height > keep.size.height * 2.);
+        assert!(extra.top() >= changed.bottom());
+        window.within(("new", 2usize)).click("source", cx);
+        window.press(
+            if cfg!(target_os = "macos") {
+                "cmd-a"
+            } else {
+                "ctrl-a"
+            },
+            cx,
+        );
+        let state = view.read(cx).state.clone();
+        let expected = format!("keep\n{long}\nextra\ntail\n");
+        assert_eq!(state.read(cx).selected_text(cx), expected);
+        view.update(cx, |view, cx| {
+            view.line_number = true;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert!(
+            window
+                .within(("new", 0usize))
+                .find("source")
+                .bounds()
+                .left()
+                > keep.left()
+        );
+        assert_eq!(state.read(cx).selected_text(cx), expected);
     })
     .unwrap();
 }
