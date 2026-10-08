@@ -1,4 +1,6 @@
 mod common;
+use std::ops::Range;
+
 use gpui_kit::component::{
     list::ListItem,
     table::{Column, ColumnSort, DataTable, TableDelegate, TableSelection, TableState},
@@ -257,6 +259,165 @@ fn table_keyboard_leaves_rows_unselected_when_rows_are_not_selectable(cx: &mut T
     .unwrap();
 }
 
+/// A table recording the visible row and column ranges it reports to its delegate.
+struct TableProbe {
+    rows_count: usize,
+    columns_count: usize,
+    left_columns_count: usize,
+    visible_row_ranges: Vec<Range<usize>>,
+    visible_column_ranges: Vec<Range<usize>>,
+}
+impl TableProbe {
+    fn new(rows_count: usize) -> Self {
+        Self {
+            rows_count,
+            columns_count: 2,
+            left_columns_count: 0,
+            visible_row_ranges: Vec::new(),
+            visible_column_ranges: Vec::new(),
+        }
+    }
+}
+impl TableDelegate for TableProbe {
+    fn columns_count(&self, _: &App) -> usize {
+        self.columns_count
+    }
+    fn rows_count(&self, _: &App) -> usize {
+        self.rows_count
+    }
+    fn column(&self, col_ix: usize, _: &App) -> Column {
+        Column::new(format!("column-{col_ix}"), format!("Column {col_ix}"))
+            .width(px(180.))
+            .when(col_ix < self.left_columns_count, |column| {
+                column.fixed_left()
+            })
+    }
+    fn render_td(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        div().child(format!("{row_ix}:{col_ix}"))
+    }
+    fn visible_rows_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) {
+        self.visible_row_ranges.push(visible_range);
+    }
+
+    fn visible_columns_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) {
+        self.visible_column_ranges.push(visible_range);
+    }
+}
+struct TableProbeView {
+    table: Entity<TableState<TableProbe>>,
+    stripe: bool,
+}
+impl Render for TableProbeView {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .child(DataTable::new(&self.table).stripe(self.stripe))
+    }
+}
+fn open_table_probe(
+    cx: &mut TestAppContext,
+    rows_count: usize,
+    stripe: bool,
+) -> (gpui_kit::AnyWindowHandle, Entity<TableState<TableProbe>>) {
+    open_table_probe_with_delegate(cx, TableProbe::new(rows_count), stripe)
+}
+
+fn open_table_probe_with_delegate(
+    cx: &mut TestAppContext,
+    delegate: TableProbe,
+    stripe: bool,
+) -> (gpui_kit::AnyWindowHandle, Entity<TableState<TableProbe>>) {
+    cx.update(gpui_kit::init);
+    let (handle, content) =
+        common::open_window(cx, Some(size(px(640.), px(320.))), move |window, cx| {
+            cx.new(|cx| TableProbeView {
+                table: cx.new(|cx| TableState::new(delegate, window, cx)),
+                stripe,
+            })
+        });
+    let table = cx
+        .update_window(handle.into(), |_, _, cx| content.read(cx).table.clone())
+        .unwrap();
+    (handle.into(), table)
+}
+
+#[gpui_kit::test]
+fn table_reports_one_row_and_empty_visible_ranges(cx: &mut TestAppContext) {
+    let (handle, table) = open_table_probe(cx, 1, false);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            table.read(cx).delegate().visible_row_ranges.last(),
+            Some(&(0..1))
+        );
+
+        table.update(cx, |table, cx| {
+            table.delegate_mut().rows_count = 0;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert_eq!(
+            table.read(cx).delegate().visible_row_ranges.last(),
+            Some(&(0..0))
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn table_visible_range_stops_at_the_last_row_under_stripe_filler(cx: &mut TestAppContext) {
+    let (handle, table) = open_table_probe(cx, 3, true);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        let reported = table.read(cx).delegate().visible_row_ranges.clone();
+        assert!(!reported.is_empty());
+        assert!(
+            reported.iter().all(|range| range.end <= 3),
+            "reported past the last row: {reported:?}"
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn table_reports_one_scrollable_column_with_and_without_fixed_columns(cx: &mut TestAppContext) {
+    for left_columns_count in [0, 1] {
+        let delegate = TableProbe {
+            columns_count: left_columns_count + 1,
+            left_columns_count,
+            ..TableProbe::new(3)
+        };
+        let (handle, table) = open_table_probe_with_delegate(cx, delegate, false);
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            let state = table.read(cx);
+            // Column ranges are relative to the scrollable columns, excluding
+            // the fixed prefix. Repeated row rendering reports a change once.
+            assert_eq!(state.delegate().visible_column_ranges, vec![0..1]);
+            assert_eq!(state.visible_range().cols(), &(0..1));
+
+            window.render_frame(cx);
+            assert_eq!(table.read(cx).delegate().visible_column_ranges, vec![0..1]);
+        })
+        .unwrap();
+    }
+}
 #[derive(Default)]
 struct SortableRows {
     sorts: Vec<(usize, ColumnSort)>,
