@@ -7,7 +7,8 @@ use crate::{
     StyledExt as _, WindowExt as _,
     button::ButtonVariant,
     dialog::{
-        Dialog, DialogButtonProps, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+        Dialog, DialogButtonProps, DialogDescription, DialogEntrance, DialogFooter, DialogHeader,
+        DialogTitle,
     },
     h_flex, v_flex,
 };
@@ -267,6 +268,14 @@ impl AlertDialog {
     /// down, e.g. in the vertical middle of the window.
     pub fn margin_top(mut self, margin_top: impl Into<Pixels>) -> Self {
         self.base = self.base.margin_top(margin_top);
+        self
+    }
+
+    /// Sets how the alert dialog enters, defaulting to [`DialogEntrance::SlideDown`].
+    ///
+    /// Shares the surface, backdrop, and reduced-motion policy of [`Dialog::entrance`].
+    pub fn entrance(mut self, entrance: DialogEntrance) -> Self {
+        self.base = self.base.entrance(entrance);
         self
     }
 
