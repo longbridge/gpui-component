@@ -1,7 +1,7 @@
 mod common;
 use gpui_kit::component::{
     list::ListItem,
-    table::{Column, DataTable, TableDelegate, TableSelection, TableState},
+    table::{Column, ColumnSort, DataTable, TableDelegate, TableSelection, TableState},
     tree::{Tree, TreeItem, TreeState},
 };
 use gpui_kit::test::TestWindowExt;
@@ -253,6 +253,89 @@ fn table_keyboard_leaves_rows_unselected_when_rows_are_not_selectable(cx: &mut T
             assert_eq!(window.find(("row", 0usize)).selected(), Some(false));
         }
         assert!(window.find(("row", 0usize)).visible());
+    })
+    .unwrap();
+}
+
+#[derive(Default)]
+struct SortableRows {
+    sorts: Vec<(usize, ColumnSort)>,
+}
+impl TableDelegate for SortableRows {
+    fn columns_count(&self, _: &App) -> usize {
+        2
+    }
+    fn rows_count(&self, _: &App) -> usize {
+        3
+    }
+    fn column(&self, ix: usize, _: &App) -> Column {
+        let column = Column::new(
+            format!("column-{ix}"),
+            if ix == 0 { "Name" } else { "Status" },
+        )
+        .width(px(180.));
+        if ix == 0 { column.sortable() } else { column }
+    }
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: ColumnSort,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) {
+        self.sorts.push((col_ix, sort));
+    }
+    fn render_td(
+        &mut self,
+        row: usize,
+        col: usize,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        div().child(format!("{row}:{col}"))
+    }
+}
+struct SortableRecords {
+    table: Entity<TableState<SortableRows>>,
+}
+impl Render for SortableRecords {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(DataTable::new(&self.table))
+    }
+}
+
+#[gpui_kit::test]
+fn table_sort_icon_is_a_labelled_button_that_cycles_the_sort(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (handle, handle_content) =
+        common::open_window(cx, Some(size(px(640.), px(320.))), |window, cx| {
+            cx.new(|cx| SortableRecords {
+                table: cx.new(|cx| TableState::new(SortableRows::default(), window, cx)),
+            })
+        });
+    cx.update_window(handle.into(), |_, window, cx| {
+        let table = handle_content.clone().read(cx).table.clone();
+        window.render_frame(cx);
+
+        let icon = window.find(("icon-sort", 0usize));
+        assert_eq!(icon.role(), Some(gpui_kit::Role::Button));
+        assert_eq!(icon.label(), Some("Sort by Name"));
+        assert!(window.try_find(("icon-sort", 1usize)).is_none());
+        assert_eq!(table.read(cx).selected_col(), None);
+
+        for _ in 0..3 {
+            window.click(("icon-sort", 0usize), cx);
+        }
+        assert_eq!(
+            table.read(cx).delegate().sorts,
+            vec![
+                (0, ColumnSort::Descending),
+                (0, ColumnSort::Ascending),
+                (0, ColumnSort::Default),
+            ]
+        );
+        // The click also reaches the column header, which selects the column.
+        assert_eq!(table.read(cx).selected_col(), Some(0));
     })
     .unwrap();
 }
