@@ -116,6 +116,7 @@ actions!(
         MoveToNextWord,
         Escape,
         ToggleCodeActions,
+        ShowCompletions,
         Search,
         Replace,
         GoToDefinition,
