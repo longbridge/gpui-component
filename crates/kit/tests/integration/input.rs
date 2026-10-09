@@ -128,6 +128,20 @@ fn masked_input_handles_typing_without_reporting_secret_value(cx: &mut TestAppCo
 }
 
 #[gpui_kit::test]
+fn masked_input_is_a_password_field(cx: &mut TestAppContext) {
+    let (handle, _) = inputs(cx);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+        assert_eq!(
+            window.find("secret").role(),
+            Some(gpui_kit::Role::PasswordInput)
+        );
+        assert_eq!(window.find("first").role(), Some(gpui_kit::Role::TextInput));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn existing_gpui_keyboard_editing_updates_observed_value(cx: &mut TestAppContext) {
     let (handle, handle_content) = inputs(cx);
     cx.update_window(handle.into(), |_, window, cx| {
