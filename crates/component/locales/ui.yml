@@ -326,6 +326,16 @@ Input:
     zh-CN: 显示代码操作
     zh-HK: 顯示代碼操作
     zh-TW: 顯示程式碼動作
+  Show Password:
+    en: Show password
+    zh-CN: 显示密码
+    zh-HK: 顯示密碼
+    zh-TW: 顯示密碼
+  Hide Password:
+    en: Hide password
+    zh-CN: 隐藏密码
+    zh-HK: 隱藏密碼
+    zh-TW: 隱藏密碼
 Settings:
   search_placeholder:
     en: Search...
