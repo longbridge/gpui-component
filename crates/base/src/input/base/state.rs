@@ -10,6 +10,7 @@ use gpui::{
     Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
     UTF16Selection, WeakFocusHandle, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
+use gpui::{Autocapitalize, TextInputAction, TextInputConfiguration};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::borrow::Cow;
@@ -473,6 +474,10 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
+    /// Overrides for [`Self::text_input_configuration`].
+    pub(super) input_action: Option<TextInputAction>,
+    pub(super) autocorrect: Option<bool>,
+    pub(super) autocapitalize: Option<Autocapitalize>,
     pub(super) show_whitespaces: bool,
     /// This flag tells the renderer to prefer the end of the current visual line.
     pub(crate) cursor_line_end_affinity: bool,
@@ -843,6 +848,9 @@ impl<M: InputModeKind> InputBaseState<M> {
             masked: false,
             clean_on_escape: false,
             submit_on_enter: false,
+            input_action: None,
+            autocorrect: None,
+            autocapitalize: None,
             show_whitespaces: false,
             loading: false,
             pattern: None,
@@ -1262,6 +1270,61 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn set_submit_on_enter(&mut self, submit: bool, cx: &mut Context<Self>) {
         self.submit_on_enter = submit;
         cx.notify();
+    }
+
+    /// Set the action a software keyboard shows on its enter key, like Search
+    /// or Send. Pressing it still emits [`InputEvent::PressEnter`].
+    ///
+    /// Default is [`TextInputAction::Done`] for a single-line input (and a
+    /// multi-line one that submits on enter), and [`TextInputAction::Enter`]
+    /// (a line break) for a multi-line input.
+    pub fn input_action(mut self, action: TextInputAction) -> Self {
+        self.input_action = Some(action);
+        self
+    }
+
+    /// Set whether the platform may autocorrect the text and offer word
+    /// suggestions.
+    ///
+    /// Default is `true` for plain text, `false` for a masked input, an input
+    /// with a mask pattern and a code editor.
+    pub fn autocorrect(mut self, autocorrect: bool) -> Self {
+        self.autocorrect = Some(autocorrect);
+        self
+    }
+
+    /// Set how a software keyboard capitalizes the text.
+    ///
+    /// Default is [`Autocapitalize::Sentences`] for plain text, and
+    /// [`Autocapitalize::None`] where autocorrect is off by default.
+    pub fn autocapitalize(mut self, autocapitalize: Autocapitalize) -> Self {
+        self.autocapitalize = Some(autocapitalize);
+        self
+    }
+
+    /// The text assistance a platform IME (a software keyboard) should give
+    /// this input, from [`Self::input_action`], [`Self::autocorrect`] and
+    /// [`Self::autocapitalize`] or the defaults they describe.
+    pub fn text_input_configuration(&self) -> TextInputConfiguration {
+        let plain_text = !self.masked && self.mask_pattern.is_none() && !self.is_code_editor();
+        let autocorrect = self.autocorrect.unwrap_or(plain_text);
+        let input_action =
+            self.input_action
+                .unwrap_or(if self.is_multi_line() && !self.submit_on_enter {
+                    TextInputAction::Enter
+                } else {
+                    TextInputAction::Done
+                });
+        TextInputConfiguration {
+            autocorrect,
+            autocapitalize: self.autocapitalize.unwrap_or(if plain_text {
+                Autocapitalize::Sentences
+            } else {
+                Autocapitalize::None
+            }),
+            suggestions: autocorrect,
+            input_action,
+        }
     }
 
     /// Set whether to show whitespace characters.
@@ -4680,6 +4743,14 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
 
         None
     }
+
+    fn text_input_configuration(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> TextInputConfiguration {
+        InputBaseState::text_input_configuration(self)
+    }
 }
 
 impl<M: InputModeKind> Focusable for InputBaseState<M> {
@@ -4859,6 +4930,55 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn text_input_configuration_follows_the_input(cx: &mut TestAppContext) {
+        use crate::input::{InputState, TextareaState};
+
+        cx.update(crate::init);
+        let mut states = None;
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            states = Some((
+                cx.new(|cx| InputState::new(window, cx)),
+                cx.new(|cx| InputState::new(window, cx).masked(true)),
+                cx.new(|cx| TextareaState::new(window, cx)),
+                cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .input_action(TextInputAction::Search)
+                        .autocapitalize(Autocapitalize::None)
+                }),
+            ));
+            gpui::EmptyView
+        });
+        let (plain, masked, textarea, search) = states.unwrap();
+
+        cx.read(|cx| {
+            assert_eq!(
+                plain.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    autocorrect: true,
+                    autocapitalize: Autocapitalize::Sentences,
+                    suggestions: true,
+                    input_action: TextInputAction::Done,
+                }
+            );
+            assert_eq!(
+                masked.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    input_action: TextInputAction::Done,
+                    ..Default::default()
+                }
+            );
+            assert_eq!(
+                textarea.read(cx).text_input_configuration().input_action,
+                TextInputAction::Enter
+            );
+            let search = search.read(cx).text_input_configuration();
+            assert_eq!(search.input_action, TextInputAction::Search);
+            assert_eq!(search.autocapitalize, Autocapitalize::None);
+            assert!(search.autocorrect);
+        });
+    }
 
     #[gpui::test]
     fn test_multicursor_unicode_completion_uses_post_edit_start(cx: &mut TestAppContext) {
