@@ -1826,7 +1826,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn same_size_style_reflow_invalidates_finished_selection(cx: &mut TestAppContext) {
+    fn same_size_style_reflow_keeps_finished_selection(cx: &mut TestAppContext) {
         let (chat, cx) = setup(true, cx);
         drag(cx, point(px(0.), px(15.)), point(px(300.), px(15.)));
         assert_eq!(window_selected_text(cx).trim(), "Hello world");
@@ -1839,7 +1839,7 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        assert_eq!(window_selected_text(cx), "");
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
     }
 
     #[gpui::test]

@@ -19,19 +19,29 @@ struct VirtualBlockSelection {
     anchor: Option<CachedBlockEndpoint>,
     cursor: Option<CachedBlockEndpoint>,
     coverage: TextSelectionCoverage,
+    is_selecting: bool,
 }
 
 impl VirtualBlockSelection {
-    fn update(&mut self, snapshot: Option<TextSelectionSnapshot>, entity_id: EntityId) {
+    fn update(&mut self, snapshot: Option<TextSelectionSnapshot>, entity_id: EntityId) -> bool {
         let Some(snapshot) = snapshot else {
+            let changed = self.anchor.is_some() || self.cursor.is_some();
             *self = Self::default();
-            return;
+            return changed;
         };
 
+        // Origin and scroll changes only alter the window projection. They must
+        // not turn a held logical range back into a hit test in reflowed text.
+        let changed = self.anchor.map(|cached| cached.endpoint) != Some(snapshot.anchor())
+            || self.cursor.map(|cached| cached.endpoint) != Some(snapshot.cursor())
+            || self.coverage != snapshot.coverage()
+            || self.is_selecting != snapshot.is_selecting();
         self.coverage = snapshot.coverage();
+        self.is_selecting = snapshot.is_selecting();
 
         Self::update_endpoint(&mut self.anchor, snapshot.anchor(), entity_id);
         Self::update_endpoint(&mut self.cursor, snapshot.cursor(), entity_id);
+        changed
     }
 
     fn update_endpoint(
@@ -103,10 +113,12 @@ impl TextViewSelectionAdapter {
                     TextSelectionEvent::SelectionChanged(snapshot) => {
                         let snapshot = *snapshot;
                         let _ = view_for_events.update(cx, |state, cx| {
-                            state.preserve_inline_selection = false;
-                            blocks_for_events
+                            let changed = blocks_for_events
                                 .borrow_mut()
                                 .update(snapshot, selection_id);
+                            if snapshot.is_none() || changed {
+                                state.preserve_inline_selection = false;
+                            }
                             state.is_selecting =
                                 snapshot.is_some_and(|snapshot| snapshot.is_selecting());
                             cx.notify();
