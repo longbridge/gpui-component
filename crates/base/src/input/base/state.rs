@@ -2163,23 +2163,29 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         if let Some(handler) = self.context_menu_handler.clone() {
             let capabilities = self.context_menu_capabilities();
-            cx.defer_in(window, move |this, window, cx| {
+            let state = cx.weak_entity();
+            window.defer(cx, move |window, cx| {
+                let Some(state) = state.upgrade() else {
+                    return;
+                };
                 let previous_focus = window.focused(cx);
                 handler(NativeMenu::new(), capabilities, position, window, cx);
                 // A drawn menu takes focus synchronously; native menus leave it
-                // on the input. Capture it here, while the input is already
-                // borrowed, rather than re-entering the state from its handler.
-                if window.focused(cx) == previous_focus
-                    && !this.focus_handle.is_focused(window)
-                    && this.has_selection_focus(window, cx)
-                {
-                    // A custom handler can reuse an already-focused popup.
-                    return;
-                }
-                let menu_focus = window.focused(cx).filter(|focus| {
-                    Some(focus) != previous_focus.as_ref() && *focus != this.focus_handle
+                // on the input. Capture it after the handler, which runs with
+                // the input released so that it can read the state.
+                state.update(cx, |this, cx| {
+                    if window.focused(cx) == previous_focus
+                        && !this.focus_handle.is_focused(window)
+                        && this.has_selection_focus(window, cx)
+                    {
+                        // A custom handler can reuse an already-focused popup.
+                        return;
+                    }
+                    let menu_focus = window.focused(cx).filter(|focus| {
+                        Some(focus) != previous_focus.as_ref() && *focus != this.focus_handle
+                    });
+                    this.set_selection_focus(menu_focus, cx);
                 });
-                this.set_selection_focus(menu_focus, cx);
             });
         }
     }
@@ -5959,7 +5965,10 @@ mod tests {
                 let calls2 = calls.clone();
                 let items2 = items.clone();
                 let menu_focus = menu_focus.clone();
+                let input = cx.weak_entity();
                 state.on_context_menu(Rc::new(move |menu, _, _, window, cx| {
+                    // Panics if the input is still being updated.
+                    input.update(cx, |state, _| state.cursor()).unwrap();
                     calls2.set(calls2.get() + 1);
                     items2.set(menu.items.len());
                     menu_focus.focus(window, cx);
