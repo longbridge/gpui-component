@@ -296,6 +296,11 @@ Input:
     zh-CN: 全部替换
     zh-HK: 全部替換
     zh-TW: 全部取代
+  Clear:
+    en: Clear
+    zh-CN: 清除
+    zh-HK: 清除
+    zh-TW: 清除
   Cut:
     en: Cut
     zh-CN: 剪切
