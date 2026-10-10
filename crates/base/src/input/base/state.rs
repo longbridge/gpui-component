@@ -2163,23 +2163,32 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         if let Some(handler) = self.context_menu_handler.clone() {
             let capabilities = self.context_menu_capabilities();
-            cx.defer_in(window, move |this, window, cx| {
+            let input = cx.weak_entity();
+            // The handler runs with the input released, so a custom builder can
+            // read it (cursor, selection, text) to build its items.
+            window.defer(cx, move |window, cx| {
+                if input.upgrade().is_none() {
+                    return;
+                }
                 let previous_focus = window.focused(cx);
                 handler(NativeMenu::new(), capabilities, position, window, cx);
                 // A drawn menu takes focus synchronously; native menus leave it
-                // on the input. Capture it here, while the input is already
-                // borrowed, rather than re-entering the state from its handler.
-                if window.focused(cx) == previous_focus
-                    && !this.focus_handle.is_focused(window)
-                    && this.has_selection_focus(window, cx)
-                {
-                    // A custom handler can reuse an already-focused popup.
-                    return;
-                }
-                let menu_focus = window.focused(cx).filter(|focus| {
-                    Some(focus) != previous_focus.as_ref() && *focus != this.focus_handle
-                });
-                this.set_selection_focus(menu_focus, cx);
+                // on the input. Capture it here rather than in the handler.
+                input
+                    .update(cx, |this, cx| {
+                        if window.focused(cx) == previous_focus
+                            && !this.focus_handle.is_focused(window)
+                            && this.has_selection_focus(window, cx)
+                        {
+                            // A custom handler can reuse an already-focused popup.
+                            return;
+                        }
+                        let menu_focus = window.focused(cx).filter(|focus| {
+                            Some(focus) != previous_focus.as_ref() && *focus != this.focus_handle
+                        });
+                        this.set_selection_focus(menu_focus, cx);
+                    })
+                    .ok();
             });
         }
     }
@@ -5999,6 +6008,29 @@ mod tests {
             })
         });
         assert_eq!(calls.get(), 2);
+    }
+
+    #[gpui::test]
+    fn context_menu_handler_can_read_its_input(cx: &mut TestAppContext) {
+        use std::{cell::Cell, rc::Rc};
+        cx.update(crate::init);
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        let cursor = Rc::new(Cell::new(None));
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hello", window, cx);
+                let weak = cx.weak_entity();
+                let cursor = cursor.clone();
+                state.on_context_menu(Rc::new(move |_, _, _, _, cx| {
+                    cursor.set(weak.upgrade().map(|input| input.read(cx).cursor()));
+                }));
+                state.handle_right_click_menu(point(px(0.), px(0.)), 2, window, cx);
+            })
+        });
+        assert_eq!(cursor.get(), Some(2));
     }
 
     #[gpui::test]
