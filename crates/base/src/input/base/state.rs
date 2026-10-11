@@ -2591,8 +2591,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         let old_offset = self.scroll_handle.offset();
         self.update_scroll_offset(Some(old_offset + delta), cx);
 
-        // Only stop propagation if the offset actually changed
-        if self.scroll_handle.offset() != old_offset {
+        // Text that has room to scroll keeps a scroll over it even where the
+        // text ends, so reaching the end does not scroll the region around the
+        // input; text that fits leaves the scroll to that region.
+        if self.scroll_handle.offset() != old_offset || self.overflows_along(delta) {
             cx.stop_propagation();
         }
 
@@ -2602,6 +2604,15 @@ impl<M: InputModeKind> InputBaseState<M> {
         // The handles follow the text; the menu would sit over whatever
         // scrolls underneath it, so it steps aside until the finger lifts.
         self.edit_menu_on_scroll(event.touch_phase, cx);
+    }
+
+    /// Whether the text has room to scroll along an axis `delta` moves on.
+    fn overflows_along(&self, delta: Point<Pixels>) -> bool {
+        let vertical = self.is_multi_line()
+            && delta.y != px(0.)
+            && self.scroll_size.height > self.input_bounds.size.height;
+        let horizontal = delta.x != px(0.) && self.scroll_size.width > self.input_bounds.size.width;
+        vertical || horizontal
     }
 
     pub(super) fn update_scroll_offset(
