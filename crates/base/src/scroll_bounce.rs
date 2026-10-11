@@ -411,8 +411,10 @@ impl Element for ScrollBounce {
     }
 }
 
+/// The stretch past an edge and its return, shared with the input's own
+/// scrolling.
 #[derive(Default)]
-struct Physics {
+pub(crate) struct Physics {
     position: f32,
     velocity: f32,
     dragging: bool,
@@ -422,7 +424,11 @@ struct Physics {
 }
 
 impl Physics {
-    fn offset(&self) -> f32 {
+    pub(crate) fn is_dragging(&self) -> bool {
+        self.dragging
+    }
+
+    pub(crate) fn offset(&self) -> f32 {
         if self.dragging {
             let d = self.extent.max(1.);
             let tracking = self.motion.tracking;
@@ -432,7 +438,7 @@ impl Physics {
         }
     }
 
-    fn begin(&mut self, extent: f32) {
+    pub(crate) fn begin(&mut self, extent: f32) {
         let offset = self.offset();
         // A displaced edge keeps the extent it was stretched under. The
         // rubber-band curve saturates at the extent, so re-reading a viewport
@@ -450,7 +456,7 @@ impl Physics {
     }
 
     /// Apply finger displacement. Return the part that crosses back into the list.
-    fn pull(&mut self, delta: f32) -> f32 {
+    pub(crate) fn pull(&mut self, delta: f32) -> f32 {
         let previous = self.position;
         let next = previous + delta;
         if previous != 0. && previous.signum() != next.signum() {
@@ -462,7 +468,7 @@ impl Physics {
         }
     }
 
-    fn release(&mut self) {
+    pub(crate) fn release(&mut self) {
         self.position = self.offset();
         self.dragging = false;
         if self.position != 0. {
@@ -470,9 +476,52 @@ impl Physics {
         }
     }
 
+    /// Throw the edge outward, as a fling that runs into it does: about
+    /// `distance` farther at its peak, and never past `max`. Only an edge at
+    /// rest or still moving outward takes it. Returns whether it did.
+    pub(crate) fn kick(&mut self, distance: f32, max: f32) -> bool {
+        let Some(omega) = self.motion.omega() else {
+            return false;
+        };
+        let sign = distance.signum();
+        let (position, velocity) = (self.position * sign, self.velocity * sign);
+        if self.dragging || distance == 0. || position < 0. || velocity < 0. {
+            return false;
+        }
+        let current = Self::peak(position, velocity, omega);
+        let target = (current + distance.abs()).min(max.abs());
+        if target <= current {
+            return false;
+        }
+        // The peak grows with the velocity: find the one that reaches the
+        // target from where the edge is now.
+        let (mut low, mut high) = (velocity, target * omega * std::f32::consts::E);
+        for _ in 0..24 {
+            let mid = (low + high) / 2.;
+            if Self::peak(position, mid, omega) < target {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+        self.velocity = high * sign;
+        true
+    }
+
+    /// How far an edge at `position`, moving outward at `velocity`, gets
+    /// before the critically damped spring turns it back.
+    fn peak(position: f32, velocity: f32, omega: f32) -> f32 {
+        let c = velocity + omega * position;
+        if c <= 0. {
+            return position;
+        }
+        let t = velocity / (omega * c);
+        (position + c * t) * (-omega * t).exp()
+    }
+
     /// Exact critically damped spring integration, independent of refresh rate.
-    fn step(&mut self, seconds: f32) -> bool {
-        if self.dragging || self.position == 0. {
+    pub(crate) fn step(&mut self, seconds: f32) -> bool {
+        if self.dragging || (self.position == 0. && self.velocity == 0.) {
             return false;
         }
         let Some(omega) = self.motion.omega() else {

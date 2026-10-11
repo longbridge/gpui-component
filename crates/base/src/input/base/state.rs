@@ -32,6 +32,7 @@ use super::{
     kind::InputModeKind,
     mask_pattern::normalize_number_input,
     mode::LayoutMode,
+    overscroll::Overscroll,
     undo_manager::{EditIntent, UndoManager},
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -485,6 +486,10 @@ pub struct InputBaseState<M: InputModeKind> {
     /// The maximum value for [`super::NumberInput`]. See [`Self::max`].
     pub(crate) number_max: Option<f64>,
     pub(crate) scroll_handle: ScrollHandle,
+    /// Whether the text stretches past its ends, see [`Self::scroll_bounce`].
+    scroll_bounce: bool,
+    /// The text's stretch past an end, while it lasts.
+    pub(super) overscroll: Overscroll,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
@@ -853,6 +858,8 @@ impl<M: InputModeKind> InputBaseState<M> {
             column_select_start: None,
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
+            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            overscroll: Overscroll::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             editor_scrollbar_snapshot: Cell::new(None),
             longest_line_width: Cell::new(None),
@@ -2589,7 +2596,33 @@ impl<M: InputModeKind> InputBaseState<M> {
         let delta = event.delta.pixel_delta(line_height);
 
         let old_offset = self.scroll_handle.offset();
-        self.update_scroll_offset(Some(old_offset + delta), cx);
+        let bounces = self.scroll_bounce
+            && !cx.reduce_motion()
+            && delta.y.abs() >= delta.x.abs()
+            && self.overflows_vertically();
+        if bounces {
+            let mut overscroll = std::mem::take(&mut self.overscroll);
+            let stretched = overscroll.packet(
+                delta.y.as_f32(),
+                event.touch_phase,
+                self.input_bounds.size.height.as_f32(),
+                cx.background_executor().now(),
+                |dy| {
+                    let before = self.scroll_handle.offset();
+                    self.update_scroll_offset(
+                        Some(point(before.x + delta.x, before.y + px(dy))),
+                        cx,
+                    );
+                    (self.scroll_handle.offset().y - before.y).as_f32()
+                },
+            );
+            self.overscroll = overscroll;
+            if stretched {
+                cx.notify();
+            }
+        } else {
+            self.update_scroll_offset(Some(old_offset + delta), cx);
+        }
 
         // Text that has room to scroll keeps a scroll over it even where the
         // text ends, so reaching the end does not scroll the region around the
@@ -2611,12 +2644,15 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// alone does not claim the scroll.
     fn overflows_along(&self, delta: Point<Pixels>) -> bool {
         if delta.y.abs() >= delta.x.abs() {
-            self.is_multi_line()
-                && delta.y != px(0.)
-                && self.scroll_size.height > self.input_bounds.size.height
+            delta.y != px(0.) && self.overflows_vertically()
         } else {
             self.scroll_size.width > self.input_bounds.size.width
         }
+    }
+
+    /// Whether multi-line text is taller than the input.
+    fn overflows_vertically(&self) -> bool {
+        self.is_multi_line() && self.scroll_size.height > self.input_bounds.size.height
     }
 
     pub(super) fn update_scroll_offset(
@@ -5650,6 +5686,145 @@ mod tests {
                 f(crate::input::InputState::new(window, cx))
             })
         }
+    }
+
+    /// Sends one trackpad packet straight to the input.
+    fn swipe<M: InputModeKind>(
+        view: &InputView<M>,
+        cx: &mut VisualTestContext,
+        dy: f32,
+        phase: gpui::TouchPhase,
+    ) {
+        cx.update(|window, cx| {
+            view.input.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Pixels(point(px(0.), px(dy))),
+                        touch_phase: phase,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                )
+            })
+        });
+    }
+
+    fn long_text() -> String {
+        (0..60)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_stretches_past_the_end_and_springs_back(cx: &mut TestAppContext) {
+        use gpui::TouchPhase::{Ended, Moved, Started};
+
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let drawn_at = |cx: &mut VisualTestContext| {
+            view.input
+                .read_with(cx, |state, _| state.last_bounds.unwrap().origin.y)
+        };
+
+        swipe(&view, &mut cx, -20., Started);
+        swipe(&view, &mut cx, -100_000., Moved);
+        let (end, stretch) = view.input.read_with(&cx, |state, _| {
+            (state.scroll_handle.offset().y, state.overscroll.offset())
+        });
+        assert!(end < px(0.), "the text scrolled to its end");
+        assert!(stretch < 0., "the rest stretched the edge: {stretch}");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let stretched_at = drawn_at(&mut cx);
+
+        swipe(&view, &mut cx, 0., Ended);
+        for _ in 0..120 {
+            cx.executor()
+                .advance_clock(std::time::Duration::from_millis(16));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+        view.input.read_with(&cx, |state, _| {
+            assert_eq!(state.overscroll.offset(), 0., "the edge sprang back");
+            assert_eq!(
+                state.scroll_handle.offset().y,
+                end,
+                "scrolling stayed exact"
+            );
+        });
+        assert_eq!(
+            stretched_at - drawn_at(&mut cx),
+            px(stretch),
+            "the stretch only moved where the text was drawn"
+        );
+    }
+
+    /// Swipes far past the end of the text and returns where the text
+    /// scrolled to and how far its edge stretched.
+    fn swipe_past_the_end(
+        view: &InputView<TextareaMode>,
+        cx: &mut VisualTestContext,
+    ) -> (Pixels, f32) {
+        use gpui::TouchPhase::{Moved, Started};
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        swipe(view, cx, -20., Started);
+        swipe(view, cx, -100_000., Moved);
+        view.input.read_with(cx, |state, _| {
+            (state.scroll_handle.offset().y, state.overscroll.offset())
+        })
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_stays_put_under_reduced_motion(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (end, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(end < px(0.), "the text still scrolls");
+        assert_eq!(stretch, 0., "the edge does not stretch");
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[gpui::test]
+    fn test_scroll_bounce_is_off_by_default_on_the_desktop(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| state.default_value(long_text()));
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (end, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(end < px(0.), "the text scrolls");
+        assert_eq!(stretch, 0., "the edge does not stretch");
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_leaves_text_that_fits(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value("one line")
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (end, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert_eq!((end, stretch), (px(0.), 0.));
+    }
+
+    #[gpui::test]
+    fn test_turning_scroll_bounce_off_drops_the_stretch(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (_, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(stretch < 0., "the edge stretched: {stretch}");
+        view.input
+            .update(&mut cx, |state, cx| state.set_scroll_bounce(false, cx));
+        assert_eq!(
+            view.input
+                .read_with(&cx, |state, _| state.overscroll.offset()),
+            0.
+        );
     }
 
     /// The frame is laid out by the application, which should not have to
@@ -11196,6 +11371,27 @@ impl InputBaseState<crate::input::InputMode> {
 /// Methods shared by the two multi-line modes, and reachable on neither a
 /// single-line input nor anything else.
 impl<M: crate::input::MultiLineMode> InputBaseState<M> {
+    /// Set whether text taller than the input stretches past its top and
+    /// bottom and springs back when a trackpad swipe, a fling or a mouse
+    /// wheel runs into an end. The default follows [`crate::ScrollBounce`]:
+    /// on on iOS and Android, off elsewhere. Under reduced motion the text
+    /// stops at its ends without stretching.
+    pub fn scroll_bounce(mut self, scroll_bounce: bool) -> Self {
+        self.scroll_bounce = scroll_bounce;
+        self
+    }
+
+    /// Update whether the text stretches past its ends, see
+    /// [`InputBaseState::scroll_bounce`]. Turning it off drops a stretch in
+    /// progress.
+    pub fn set_scroll_bounce(&mut self, scroll_bounce: bool, cx: &mut Context<Self>) {
+        if self.scroll_bounce != scroll_bounce {
+            self.scroll_bounce = scroll_bounce;
+            self.overscroll.reset();
+            cx.notify();
+        }
+    }
+
     /// Whether the built-in search panel and its shortcut are enabled. Off by
     /// default, on for the code editor.
     ///

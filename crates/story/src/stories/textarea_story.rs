@@ -73,6 +73,7 @@ impl TextareaStory {
                 .rows(10)
                 .placeholder("Enter text here...")
                 .searchable(true)
+                .scroll_bounce(true)
                 .default_value(
                     unindent::unindent(
                         r#"Hello 世界，this is GPUI component.

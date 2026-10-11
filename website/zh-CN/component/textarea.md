@@ -43,6 +43,18 @@ Textarea::new(&message)
 
 只要文本框中的内容可以滚动，在文本框上的滚动就只作用于文本框，滚到文本末尾也不会带动外层页面；内容未超出文本框时，滚动交给外层页面。
 
+## 滚动回弹
+
+```rust
+let notes = cx.new(|cx| {
+    TextareaState::new(window, cx)
+        .rows(10)
+        .scroll_bounce(true)
+});
+```
+
+开启 `scroll_bounce(true)` 后，内容高于文本框时，触控板滑动、惯性滚动或鼠标滚轮到达顶部或底部会让文本越过边缘，再弹回原位；外框保持不动。iOS 和 Android 默认开启，其他平台默认关闭；系统要求减弱动态效果时，文本停在边缘，不会越过。
+
 ## 值与事件
 
 ```rust
