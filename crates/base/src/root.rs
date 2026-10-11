@@ -512,4 +512,100 @@ mod tests {
         }
         assert_ne!(ids[0], ids[1]);
     }
+    mod nested_traps {
+        use super::*;
+        use crate::FocusTrapElement as _;
+        use gpui::{FocusHandle, VisualTestContext, px};
+        fn assert_trapped_focus(
+            cx: &mut VisualTestContext,
+            container: &FocusHandle,
+            expected: &FocusHandle,
+        ) {
+            cx.update(|window, cx| {
+                window.draw(cx).clear(cx);
+                assert_eq!(window.focused(cx).as_ref(), Some(expected));
+                assert!(container.contains_focused(window, cx));
+            });
+        }
+        struct NestedTraps {
+            containers: Vec<FocusHandle>,
+            controls: Vec<[FocusHandle; 2]>,
+            depth: usize,
+        }
+
+        impl Render for NestedTraps {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let mut child = div().into_any_element();
+                for index in (0..self.depth).rev() {
+                    let control = |side: usize| {
+                        div()
+                            .id(("nested-control", index * 2 + side))
+                            .track_focus(&self.controls[index][side])
+                            .tab_index(0)
+                            .size(px(10.))
+                    };
+                    child = div()
+                        .tab_stop(false)
+                        .child(control(0))
+                        .child(child)
+                        .child(control(1))
+                        .focus_trap(("nested-trap", index), &self.containers[index])
+                        .into_any_element();
+                }
+                div().tab_group().size_full().child(child)
+            }
+        }
+
+        #[gpui::test]
+        fn nested_traps_keep_the_innermost_scope_across_close_and_reopen(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let (containers, controls) = cx.update(|cx| {
+                (
+                    (0..6).map(|_| cx.focus_handle()).collect::<Vec<_>>(),
+                    (0..6)
+                        .map(|_| {
+                            [
+                                cx.focus_handle().tab_stop(true),
+                                cx.focus_handle().tab_stop(true),
+                            ]
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            });
+            let (root, cx) = cx.add_window_view({
+                let containers = containers.clone();
+                let controls = controls.clone();
+                move |window, cx| {
+                    let view = cx.new(|_| NestedTraps {
+                        containers,
+                        controls,
+                        depth: 6,
+                    });
+                    Root::new(view, window, cx)
+                }
+            });
+            let view = root.read_with(cx, |root, _| {
+                root.view.clone().downcast::<NestedTraps>().unwrap()
+            });
+
+            // Retain every container handle while inner scopes disappear and
+            // return. Rendered containment, not registration order or ownership
+            // lifetime, must decide which remaining scope handles Tab.
+            for depth in [6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6] {
+                view.update(cx, |view, cx| {
+                    view.depth = depth;
+                    cx.notify();
+                });
+                let index = depth - 1;
+                cx.update(|window, cx| {
+                    controls[index][1].focus(window, cx);
+                    window.draw(cx).clear(cx);
+                });
+                cx.dispatch_action(Tab);
+                assert_trapped_focus(cx, &containers[index], &controls[index][0]);
+                cx.dispatch_action(TabPrev);
+                assert_trapped_focus(cx, &containers[index], &controls[index][1]);
+            }
+        }
+    }
 }
