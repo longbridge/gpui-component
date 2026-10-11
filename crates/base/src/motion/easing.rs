@@ -1,6 +1,6 @@
 use std::{fmt, num::NonZeroU32, rc::Rc, sync::Arc};
 
-use crate::animation::cubic_bezier;
+use crate::animation::{cubic_bezier, unclamped_cubic_bezier};
 
 /// The point at which a stepped easing jumps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -175,6 +175,12 @@ impl Easing {
         ))
     }
 
+    /// Map elapsed `progress`, clamped to `0..=1`, through the curve.
+    ///
+    /// The output may leave `0..=1`: a cubic Bézier with y control points
+    /// outside that range anticipates or overshoots, and linear stops or a
+    /// custom curve may do the same. Clamp the result where it drives an
+    /// opacity or a color.
     #[inline]
     pub fn sample(&self, progress: f32) -> f32 {
         let progress = progress.clamp(0.0, 1.0);
@@ -184,7 +190,9 @@ impl Easing {
             Self::EaseIn => cubic_bezier(0.42, 0.0, 1.0, 1.0)(progress),
             Self::EaseOut => cubic_bezier(0.0, 0.0, 0.58, 1.0)(progress),
             Self::EaseInOut => cubic_bezier(0.42, 0.0, 0.58, 1.0)(progress),
-            Self::CubicBezier { x1, y1, x2, y2 } => cubic_bezier(*x1, *y1, *x2, *y2)(progress),
+            Self::CubicBezier { x1, y1, x2, y2 } => {
+                unclamped_cubic_bezier(*x1, *y1, *x2, *y2)(progress)
+            }
             Self::Steps { count, position } => {
                 let count = count.get() as f32;
                 let (jumps, offset) = match position {

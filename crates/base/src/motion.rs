@@ -679,6 +679,19 @@ mod css_timing_tests {
     }
 
     #[test]
+    fn cubic_bezier_easing_keeps_anticipation_and_overshoot() {
+        let anticipate = Easing::cubic_bezier(1.0, -0.4, 0.35, 0.95).unwrap();
+        let overshoot = Easing::cubic_bezier(0.175, 0.885, 0.32, 1.275).unwrap();
+
+        assert!(anticipate.sample(0.2) < 0.0);
+        assert!(overshoot.sample(0.8) > 1.0);
+        for easing in [anticipate, overshoot] {
+            assert_eq!(easing.sample(-1.0), 0.0);
+            assert_eq!(easing.sample(2.0), 1.0);
+        }
+    }
+
+    #[test]
     fn step_easing_observes_css_jump_positions() {
         let start = Easing::steps(4, StepPosition::JumpStart).unwrap();
         let end = Easing::steps(4, StepPosition::JumpEnd).unwrap();

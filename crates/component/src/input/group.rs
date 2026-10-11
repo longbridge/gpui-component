@@ -185,9 +185,14 @@ impl RenderOnce for InputGroup {
         let duration = motion.duration_fast;
         let easing = motion.easing_move.clone();
         // The border and background colors transition; the ring outside them
-        // changes immediately, like the standalone input's.
+        // changes immediately, like the standalone input's. A color cannot
+        // overshoot its target, so the theme curve is clamped.
         let (border, background) = window.with_id(self.id.clone(), |window| {
-            let transition = || gpui_base::Transition::new(duration).easing(easing.clone());
+            let transition = || {
+                let easing = easing.clone();
+                gpui_base::Transition::new(duration)
+                    .ease(move |progress| easing.sample(progress).clamp(0., 1.))
+            };
             (
                 gpui_base::transition("border-color", appearance.border, transition(), window, cx),
                 gpui_base::transition(
