@@ -82,16 +82,25 @@ impl FocusTrapManager {
 
     /// Find which focus trap contains the currently focused element
     fn find_active_trap(window: &Window, cx: &App) -> Option<FocusHandle> {
-        for (_id, container_handle) in Self::global(cx).traps.iter() {
+        let mut active: Option<FocusHandle> = None;
+        for container_handle in Self::global(cx).traps.values() {
             let Some(container) = container_handle.upgrade() else {
                 continue;
             };
 
-            if container.contains_focused(window, cx) {
-                return Some(container.clone());
+            if container.contains_focused(window, cx)
+                && active
+                    .as_ref()
+                    .is_none_or(|current| current.contains(&container, window))
+            {
+                // A child scope must confine navigation even if its ancestor
+                // was registered first (or visited first by the HashMap).
+                // Use the rendered focus tree so closing and reopening a
+                // retained scope cannot leave registration order in control.
+                active = Some(container);
             }
         }
-        None
+        active
     }
 
     /// Cleanup any traps with dropped handles
