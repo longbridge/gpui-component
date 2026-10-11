@@ -3365,7 +3365,8 @@ impl<M: InputModeKind> Element for TextElement<M> {
         };
 
         // The gutter paints over horizontally scrolling text, so the text is
-        // clipped to its own side of the gutter.
+        // clipped to its own side of the gutter. A gutter without line numbers
+        // still holds the fold icons and the margin, so it clips the text too.
         let gutter_bounds = editor_gutter_bounds(
             input_bounds,
             prepaint.last_layout.line_number_width,
@@ -3373,7 +3374,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
             editor_paddings,
             prepaint.last_layout.gutter_side,
         );
-        let text_mask = prepaint.line_numbers.is_some().then(|| ContentMask {
+        let text_mask = (prepaint.last_layout.line_number_width > px(0.)).then(|| ContentMask {
             bounds: editor_text_bounds(
                 window.content_mask().bounds,
                 gutter_bounds,
@@ -3647,6 +3648,9 @@ impl<M: InputModeKind> Element for TextElement<M> {
         }
 
         // Paint inline completion first line suffix (after cursor on same line)
+        //
+        // It paints after the gutter and the fold icons so its background covers
+        // the text it overlaps, and so it stays in its own mask.
         window.with_content_mask(text_mask, |window| {
             if focused {
                 if let Some(first_line) = &prepaint.ghost_first_line {
@@ -5098,17 +5102,22 @@ mod tests {
                 );
             });
 
-            for (side, placement) in [
-                (Side::Left, ScrollbarPlacement::BottomRight),
-                (Side::Right, ScrollbarPlacement::BottomRight),
-                (Side::Left, ScrollbarPlacement::BottomLeft),
-                (Side::Right, ScrollbarPlacement::BottomLeft),
+            for (line_number, side, placement) in [
+                (true, Side::Left, ScrollbarPlacement::BottomRight),
+                (true, Side::Right, ScrollbarPlacement::BottomRight),
+                (true, Side::Left, ScrollbarPlacement::BottomLeft),
+                (true, Side::Right, ScrollbarPlacement::BottomLeft),
+                // Without line numbers the gutter holds only the fold icons.
+                (false, Side::Left, ScrollbarPlacement::BottomRight),
+                (false, Side::Right, ScrollbarPlacement::BottomRight),
             ] {
                 editor.update(cx, |state, cx| {
+                    state.set_line_number(line_number, window, cx);
                     state.set_gutter_side(side, cx);
                     state.set_scrollbar_placement(placement, cx);
                     state.set_scroll_offset(point(px(-100.), px(0.)), cx);
                 });
+                // Deferred scroll is committed by prepaint and reflected next frame.
                 window.draw(cx).clear(cx);
                 window.draw(cx).clear(cx);
                 let state = editor.read(cx);
@@ -5139,14 +5148,14 @@ mod tests {
                 for painted in [backgrounds, underlines] {
                     assert!(
                         painted.iter().any(|(bounds, _)| bounds.intersects(&gutter)),
-                        "{side:?} gutter, {placement:?}: the text runs under the gutter"
+                        "{side:?} gutter, line numbers {line_number}, {placement:?}: the text runs under the gutter"
                     );
                     for (bounds, mask) in painted {
                         // A content mask is snapped to whole device pixels.
                         let shown = bounds.intersect(&mask).intersect(&gutter);
                         assert!(
                             shown.size.width < gpui::ScaledPixels::from(1.),
-                            "{side:?} gutter, {placement:?}: {bounds:?} under {mask:?} shows through the gutter {gutter:?}"
+                            "{side:?} gutter, line numbers {line_number}, {placement:?}: {bounds:?} under {mask:?} shows through the gutter {gutter:?}"
                         );
                     }
                 }
