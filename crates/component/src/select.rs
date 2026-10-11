@@ -1024,4 +1024,53 @@ mod tests {
             );
         });
     }
+    #[derive(Clone)]
+    struct RemoteChoice {
+        value: &'static str,
+        title: &'static str,
+        unavailable: bool,
+    }
+    impl super::SelectItem for RemoteChoice {
+        type Value = &'static str;
+        fn value(&self) -> &&'static str {
+            &self.value
+        }
+        fn title(&self) -> gpui::SharedString {
+            self.title.into()
+        }
+        fn disabled(&self) -> bool {
+            self.unavailable
+        }
+    }
+
+    #[gpui::test]
+    fn disabled_items_cannot_be_confirmed(cx: &mut TestAppContext) {
+        use crate::list::ListDelegate as _;
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        for unavailable in [true, false] {
+            let state = cx.update(|window, cx| {
+                let state = cx.new(|cx| {
+                    SelectState::new(
+                        vec![RemoteChoice {
+                            value: "main",
+                            title: "Main",
+                            unavailable,
+                        }],
+                        Some(IndexPath::new(0)),
+                        window,
+                        cx,
+                    )
+                });
+                state.update(cx, |state, cx| state.set_open(true, cx));
+                let list = state.read(cx).state.list.clone();
+                list.update(cx, |list, cx| {
+                    list.delegate_mut().confirm(false, window, cx)
+                });
+                state
+            });
+            cx.run_until_parked();
+            cx.update(|_, cx| assert_eq!(state.read(cx).state.open, unavailable));
+        }
+    }
 }
