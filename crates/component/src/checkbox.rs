@@ -123,6 +123,19 @@ impl Checkbox {
         self.tab_index = tab_index;
         self
     }
+
+    /// The name assistive technology announces for this checkbox.
+    ///
+    /// An explicit [`Self::accessibility_label`] wins, then the visible label,
+    /// and finally the element id. That last fallback keeps a checkbox drawn
+    /// without a label addressable — and distinguishable from its neighbours —
+    /// instead of exposing an empty name to UIA, VoiceOver and the like.
+    fn accessible_name(&self, cx: &App) -> SharedString {
+        self.accessibility_label
+            .clone()
+            .or_else(|| self.label.as_ref().map(|label| label.get_text(cx)))
+            .unwrap_or_else(|| self.id.to_string().into())
+    }
 }
 
 impl InteractiveElement for Checkbox {
@@ -231,11 +244,9 @@ impl RenderOnce for Checkbox {
             _ => 1.,
         });
 
+        let accessibility_label = self.accessible_name(cx);
         let base = self.base;
         let children = self.children;
-        let accessibility_label = self
-            .accessibility_label
-            .or_else(|| self.label.as_ref().map(|label| label.get_text(cx)));
         let on_click = self.on_click.clone();
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
@@ -266,9 +277,7 @@ impl RenderOnce for Checkbox {
             .tab_stop(self.tab_stop)
             .tab_index(self.tab_index)
             .track_focus(&focus_handle)
-            .when_some(accessibility_label, |this, label| {
-                this.accessibility_label(label)
-            })
+            .accessibility_label(accessibility_label)
             .when_some(on_click, |this, on_click| {
                 this.on_change(move |_, _, window, cx| {
                     window.prevent_default();
@@ -388,6 +397,23 @@ mod tests {
             matches!(named.label.as_ref(), Some(Text::String(label)) if label.as_ref() == "Remember me"),
             "and must not change what is drawn"
         );
+    }
+
+    #[gpui::test]
+    fn an_unlabeled_checkbox_is_named_after_its_id(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            // No label and no explicit name: the id keeps the control addressable.
+            let unnamed = Checkbox::new("todo-1");
+            assert_eq!(&*unnamed.accessible_name(cx), "todo-1");
+
+            // An explicit accessibility label still wins.
+            let named = Checkbox::new("todo-2").accessibility_label("Mark as done");
+            assert_eq!(&*named.accessible_name(cx), "Mark as done");
+
+            // A visible label is used when no explicit name is given.
+            let labeled = Checkbox::new("todo-3").label("Remember me");
+            assert_eq!(&*labeled.accessible_name(cx), "Remember me");
+        });
     }
 
     struct CheckboxHarness {
