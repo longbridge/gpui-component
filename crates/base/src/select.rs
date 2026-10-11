@@ -277,7 +277,6 @@ impl RenderOnce for Select {
                         return;
                     }
 
-                    cx.propagate();
                     if open {
                         if let Some(handler) = on_confirm.as_ref() {
                             handler(window, cx);
@@ -319,6 +318,8 @@ mod tests {
         focus_handle: FocusHandle,
         content_focus_handle: FocusHandle,
         changes: Arc<Mutex<Vec<bool>>>,
+        parent_confirms: Arc<Mutex<usize>>,
+        confirmations: Arc<Mutex<usize>>,
         /// Every step of a close, in the order it ran.
         closing: Arc<Mutex<Vec<&'static str>>>,
     }
@@ -332,6 +333,8 @@ mod tests {
                 content_focus_handle: cx.focus_handle(),
                 changes: Arc::new(Mutex::new(Vec::new())),
                 closing: Arc::new(Mutex::new(Vec::new())),
+                parent_confirms: Arc::new(Mutex::new(0)),
+                confirmations: Arc::new(Mutex::new(0)),
             }
         }
     }
@@ -349,24 +352,33 @@ mod tests {
             let opened = self.closing.clone();
             let dismissed = self.closing.clone();
 
-            Select::new("select")
-                .open(self.open)
-                .disabled(self.disabled)
-                .focus_handle(&self.focus_handle)
-                .content_focus_handle(&self.content_focus_handle)
-                .on_open_change(move |open, _, cx| {
-                    changes.lock().unwrap().push(open);
-                    opened
-                        .lock()
-                        .unwrap()
-                        .push(if open { "open" } else { "close" });
-                    state.update(cx, |state, cx| {
-                        state.open = open;
-                        cx.notify();
-                    });
+            let parent_confirms = self.parent_confirms.clone();
+            let confirmations = self.confirmations.clone();
+            div()
+                .on_action(move |_: &Confirm, _, _| {
+                    *parent_confirms.lock().unwrap() += 1;
                 })
-                .on_dismiss(move |_, _| dismissed.lock().unwrap().push("dismiss"))
-                .child(div().track_focus(&self.content_focus_handle).size(px(20.)))
+                .child(
+                    Select::new("select")
+                        .open(self.open)
+                        .disabled(self.disabled)
+                        .focus_handle(&self.focus_handle)
+                        .content_focus_handle(&self.content_focus_handle)
+                        .on_open_change(move |open, _, cx| {
+                            changes.lock().unwrap().push(open);
+                            opened
+                                .lock()
+                                .unwrap()
+                                .push(if open { "open" } else { "close" });
+                            state.update(cx, |state, cx| {
+                                state.open = open;
+                                cx.notify();
+                            });
+                        })
+                        .on_confirm(move |_, _| *confirmations.lock().unwrap() += 1)
+                        .on_dismiss(move |_, _| dismissed.lock().unwrap().push("dismiss"))
+                        .child(div().track_focus(&self.content_focus_handle).size(px(20.))),
+                )
         }
     }
 
@@ -409,6 +421,19 @@ mod tests {
         cx.update(|window, cx| {
             assert!(state.read(cx).open);
             assert!(state.read(cx).content_focus_handle.is_focused(window));
+        });
+    }
+
+    #[gpui::test]
+    fn confirm_is_consumed_when_opening_and_accepting(cx: &mut TestAppContext) {
+        let (cx, state) = harness(cx, false);
+        cx.simulate_keystrokes("enter");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_keystrokes("enter");
+        state.read_with(cx, |state, _| {
+            assert!(state.open);
+            assert_eq!(*state.confirmations.lock().unwrap(), 1);
+            assert_eq!(*state.parent_confirms.lock().unwrap(), 0);
         });
     }
 
