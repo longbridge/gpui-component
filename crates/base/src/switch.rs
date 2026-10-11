@@ -359,7 +359,8 @@ impl RenderOnce for Switch {
         let disabled = self.disabled;
         let style = self.resolved_style();
 
-        self.base
+        let inner = self
+            .base
             .test_support()
             .role(Role::Switch)
             .aria_toggled(if checked {
@@ -391,7 +392,85 @@ impl RenderOnce for Switch {
                 },
             )
             .children(self.children)
-            .refine_style(&style)
+            .refine_style(&style);
+        SwitchSemantics {
+            inner: inner.into_element(),
+            disabled,
+        }
+    }
+}
+
+// Amend the existing node without adding a wrapper node or focus stop.
+struct SwitchSemantics<E: gpui::Element> {
+    inner: E,
+    disabled: bool,
+}
+impl<E: gpui::Element> IntoElement for SwitchSemantics<E> {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+impl<E: gpui::Element> gpui::Element for SwitchSemantics<E> {
+    type RequestLayoutState = E::RequestLayoutState;
+    type PrepaintState = E::PrepaintState;
+    fn id(&self) -> Option<ElementId> {
+        self.inner.id()
+    }
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        self.inner.source_location()
+    }
+    fn request_layout(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        inspector: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        self.inner.request_layout(id, inspector, window, cx)
+    }
+    fn prepaint(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        inspector: Option<&gpui::InspectorElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        self.inner
+            .prepaint(id, inspector, bounds, layout, window, cx)
+    }
+    fn paint(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        inspector: Option<&gpui::InspectorElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.inner
+            .paint(id, inspector, bounds, layout, prepaint, window, cx)
+    }
+    fn a11y_role(&self) -> Option<Role> {
+        self.inner.a11y_role()
+    }
+    fn write_a11y_info(&self, node: &mut gpui::accesskit::Node) {
+        self.inner.write_a11y_info(node);
+        if self.disabled {
+            node.set_disabled();
+            node.remove_action(gpui::accesskit::Action::Click);
+            node.remove_action(gpui::accesskit::Action::Focus);
+        }
+    }
+    fn a11y_synthetic_children(
+        &mut self,
+        prepaint: &mut Self::PrepaintState,
+        builder: &mut gpui::A11ySubtreeBuilder,
+    ) {
+        self.inner.a11y_synthetic_children(prepaint, builder);
     }
 }
 
@@ -702,6 +781,7 @@ mod tests {
                             Switch::new("enabled")
                                 .checked(true)
                                 .accessibility_label("Airplane mode")
+                                .aria_description("Disable wireless connections")
                                 .on_change(|_, _, _, _| {}),
                         );
                         let disabled = info(
@@ -726,14 +806,15 @@ mod tests {
 
         assert_eq!(enabled.role(), Role::Switch);
         assert_eq!(enabled.label(), Some("Airplane mode"));
+        assert_eq!(enabled.description(), Some("Disable wireless connections"));
         assert_eq!(enabled.toggled(), Some(Toggled::True));
         assert!(enabled.supports_action(accesskit::Action::Click));
 
         assert_eq!(disabled.role(), Role::Switch);
         assert_eq!(disabled.toggled(), Some(Toggled::False));
         assert!(!disabled.supports_action(accesskit::Action::Click));
-        // GPUI currently has no aria-disabled setter. Keep the limitation
-        // explicit instead of claiming an AccessKit disabled state.
-        assert!(!disabled.is_disabled());
+        assert!(!enabled.is_disabled());
+        assert!(disabled.is_disabled());
+        assert!(!disabled.supports_action(accesskit::Action::Focus));
     }
 }
