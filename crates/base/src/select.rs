@@ -15,6 +15,11 @@ const CONTEXT: &str = "Select";
 #[doc(hidden)]
 pub fn init(cx: &mut App) {
     cx.bind_keys([
+        KeyBinding::new(
+            "space",
+            Confirm { secondary: false },
+            Some("Select && !Input"),
+        ),
         KeyBinding::new("up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
@@ -308,8 +313,10 @@ impl RenderOnce for Select {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::InputState;
     use gpui::{
-        Context, Element as _, Focusable, Render, TestAppContext, VisualTestContext, accesskit, px,
+        AppContext as _, Context, Element as _, Entity, Focusable, Render, TestAppContext,
+        VisualTestContext, accesskit, px,
     };
     use std::sync::{Arc, Mutex};
 
@@ -318,6 +325,7 @@ mod tests {
         disabled: bool,
         focus_handle: FocusHandle,
         content_focus_handle: FocusHandle,
+        search_input: Option<Entity<InputState>>,
         changes: Arc<Mutex<Vec<bool>>>,
         /// Every step of a close, in the order it ran.
         closing: Arc<Mutex<Vec<&'static str>>>,
@@ -330,6 +338,7 @@ mod tests {
                 disabled,
                 focus_handle: cx.focus_handle(),
                 content_focus_handle: cx.focus_handle(),
+                search_input: None,
                 changes: Arc::new(Mutex::new(Vec::new())),
                 closing: Arc::new(Mutex::new(Vec::new())),
             }
@@ -348,6 +357,7 @@ mod tests {
             let changes = self.changes.clone();
             let opened = self.closing.clone();
             let dismissed = self.closing.clone();
+            let confirmed = self.closing.clone();
 
             Select::new("select")
                 .open(self.open)
@@ -366,7 +376,13 @@ mod tests {
                     });
                 })
                 .on_dismiss(move |_, _| dismissed.lock().unwrap().push("dismiss"))
-                .child(div().track_focus(&self.content_focus_handle).size(px(20.)))
+                .on_confirm(move |_, _| confirmed.lock().unwrap().push("confirm"))
+                .when_some(self.search_input.clone(), |this, input| {
+                    this.child(crate::Input::new(&input))
+                })
+                .when(self.search_input.is_none(), |this| {
+                    this.child(div().track_focus(&self.content_focus_handle).size(px(20.)))
+                })
         }
     }
 
@@ -410,6 +426,56 @@ mod tests {
             assert!(state.read(cx).open);
             assert!(state.read(cx).content_focus_handle.is_focused(window));
         });
+    }
+
+    #[gpui::test]
+    fn space_opens_and_confirms_a_non_searchable_select(cx: &mut TestAppContext) {
+        let (cx, state) = harness(cx, false);
+        cx.simulate_keystrokes("space");
+        cx.update(|window, cx| {
+            assert!(state.read(cx).open);
+            assert!(state.read(cx).content_focus_handle.is_focused(window));
+            window.draw(cx).clear(cx);
+        });
+        cx.simulate_keystrokes("space");
+        assert_eq!(
+            &*state
+                .read_with(cx, |state, _| state.closing.clone())
+                .lock()
+                .unwrap(),
+            &["open", "confirm"]
+        );
+    }
+
+    #[gpui::test]
+    fn space_in_a_select_search_input_remains_text(cx: &mut TestAppContext) {
+        let (cx, state) = harness(cx, false);
+        let input = cx.update(|window, cx| {
+            let input = cx.new(|cx| InputState::new(window, cx));
+            state.update(cx, |state, cx| {
+                state.content_focus_handle = input.focus_handle(cx);
+                state.search_input = Some(input.clone());
+                cx.notify();
+            });
+            window.draw(cx).clear(cx);
+            input
+        });
+        cx.simulate_keystrokes("space");
+        cx.update(|window, cx| {
+            assert!(state.read(cx).open);
+            assert!(input.focus_handle(cx).is_focused(window));
+            window.draw(cx).clear(cx);
+        });
+        cx.simulate_input("two words");
+        assert_eq!(input.read_with(cx, |input, _| input.value()), "two words");
+        assert_eq!(
+            &*state
+                .read_with(cx, |state, _| state.closing.clone())
+                .lock()
+                .unwrap(),
+            &["open"]
+        );
+        assert!(state.read_with(cx, |state, _| state.open));
     }
 
     #[gpui::test]
@@ -459,7 +525,7 @@ mod tests {
     fn disabled_select_is_not_keyboard_interactive(cx: &mut TestAppContext) {
         let (cx, state) = harness(cx, true);
 
-        cx.simulate_keystrokes("down enter");
+        cx.simulate_keystrokes("down enter space");
         assert!(!state.read_with(cx, |state, _| state.open));
         assert!(
             state
