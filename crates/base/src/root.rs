@@ -514,7 +514,6 @@ mod tests {
     }
     mod nested_traps {
         use super::*;
-        use crate::FocusTrapElement as _;
         use gpui::{FocusHandle, VisualTestContext, px};
         fn assert_trapped_focus(
             cx: &mut VisualTestContext,
