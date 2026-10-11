@@ -194,7 +194,10 @@ where
                         let after_indices: Vec<IndexPath> =
                             selection.iter().map(|(ix, _)| *ix).collect();
                         let changed = before_indices != after_indices;
-                        let should_close = changed && !multiple;
+                        let should_close = !multiple
+                            && selection
+                                .iter()
+                                .any(|(_, selected)| selected.value() == item.value());
 
                         let new_selection = weak_confirm.update(cx, |this, cx| {
                             this.state.selection = selection;
@@ -467,7 +470,10 @@ where
 
         let after_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
         let changed = before_indices != after_indices;
-        let should_close = changed && !self.multiple;
+        let should_close = !self.multiple
+            && selection
+                .iter()
+                .any(|(_, selected)| selected.value() == item.value());
 
         self.state.selection = selection;
         self.state.sync_snapshot(cx);
@@ -1646,5 +1652,47 @@ mod tests {
     where
         <D::Item as SearchableListItem>::Value: PartialEq + Clone,
     {
+    }
+    #[gpui::test]
+    fn current_item_acceptance_closes_without_change(cx: &mut TestAppContext) {
+        use crate::list::ListDelegate as _;
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        for through_list in [false, true] {
+            let state = cx.update(|window, cx| {
+                cx.new(|cx| {
+                    ComboboxState::new(
+                        SearchableVec::new(vec!["React", "Vue"]),
+                        vec![IndexPath::new(0)],
+                        window,
+                        cx,
+                    )
+                })
+            });
+            let collector =
+                cx.update(|_, cx| cx.new(|cx| TestComboboxEventCollector::new(&state, cx)));
+            cx.update(|window, cx| {
+                state.update(cx, |state, cx| {
+                    state.set_open(true, cx);
+                    if through_list {
+                        state.state.list.update(cx, |list, cx| {
+                            list.delegate_mut().confirm(false, window, cx)
+                        });
+                    } else {
+                        state.handle_item_select(IndexPath::new(0), window, cx);
+                    }
+                })
+            });
+            cx.run_until_parked();
+            cx.update(|_, cx| {
+                assert!(!state.read(cx).state.open);
+                assert_eq!(state.read(cx).selected_values(), vec!["React"]);
+                assert_eq!(
+                    collector.read(cx).event_count.get(),
+                    1,
+                    "only Confirm, no Change"
+                );
+            });
+        }
     }
 }
