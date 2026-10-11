@@ -181,8 +181,10 @@ where
 
                         let changes = Self::selection_changes(multiple, &selection, ix, &item);
 
-                        let before_indices: Vec<IndexPath> =
-                            selection.iter().map(|(ix, _)| *ix).collect();
+                        let before_values: Vec<_> = selection
+                            .iter()
+                            .map(|(_, item)| item.value().clone())
+                            .collect();
 
                         // on_will_change is called directly — entity-handle access would
                         // re-enter the ListState lock that defer_in holds for this callback.
@@ -191,9 +193,11 @@ where
                             .delegate
                             .on_will_change(&mut selection, &changes);
 
-                        let after_indices: Vec<IndexPath> =
-                            selection.iter().map(|(ix, _)| *ix).collect();
-                        let changed = before_indices != after_indices;
+                        let after_values: Vec<_> = selection
+                            .iter()
+                            .map(|(_, item)| item.value().clone())
+                            .collect();
+                        let changed = before_values != after_values;
                         let should_close = changed && !multiple;
 
                         let new_selection = weak_confirm.update(cx, |this, cx| {
@@ -457,7 +461,10 @@ where
         let changes = Self::selection_changes(self.multiple, &self.state.selection, ix, &item);
 
         let mut selection = self.state.selection.clone();
-        let before_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
+        let before_values: Vec<_> = selection
+            .iter()
+            .map(|(_, item)| item.value().clone())
+            .collect();
 
         self.state.list.update(cx, |list, _cx| {
             list.delegate_mut()
@@ -465,8 +472,11 @@ where
                 .on_will_change(&mut selection, &changes);
         });
 
-        let after_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
-        let changed = before_indices != after_indices;
+        let after_values: Vec<_> = selection
+            .iter()
+            .map(|(_, item)| item.value().clone())
+            .collect();
+        let changed = before_values != after_values;
         let should_close = changed && !self.multiple;
 
         self.state.selection = selection;
@@ -1646,5 +1656,73 @@ mod tests {
     where
         <D::Item as SearchableListItem>::Value: PartialEq + Clone,
     {
+    }
+    fn assert_filtered_row_replacement(cx: &mut TestAppContext, through_list: bool) {
+        use crate::list::ListDelegate as _;
+
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            cx.new(|cx| {
+                ComboboxState::new(
+                    SearchableVec::new(vec!["React", "Vue"]),
+                    vec![IndexPath::new(0)],
+                    window,
+                    cx,
+                )
+                .searchable(true)
+            })
+        });
+        let collector = cx.update(|_, cx| cx.new(|cx| TestComboboxEventCollector::new(&state, cx)));
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_open(true, cx);
+                state.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Vue", window, cx);
+                    list.set_selected_index(Some(IndexPath::new(0)), window, cx);
+                });
+                assert_eq!(state.selected_values(), vec!["React"]);
+                assert_eq!(
+                    state
+                        .state
+                        .list
+                        .read(cx)
+                        .delegate()
+                        .delegate
+                        .item(IndexPath::new(0)),
+                    Some(&"Vue"),
+                );
+                if through_list {
+                    state.state.list.update(cx, |list, cx| {
+                        list.delegate_mut().confirm(false, window, cx);
+                    });
+                } else {
+                    state.handle_item_select(IndexPath::new(0), window, cx);
+                }
+            });
+        });
+
+        cx.update(|_, cx| {
+            assert_eq!(state.read(cx).selected_values(), vec!["Vue"]);
+            assert!(
+                !state.read(cx).state.open,
+                "single selection must close the popover"
+            );
+            assert_eq!(collector.read(cx).event_count.get(), 2);
+        });
+    }
+
+    #[gpui::test]
+    fn test_filtered_row_replacement_direct(cx: &mut TestAppContext) {
+        assert_filtered_row_replacement(cx, false);
+    }
+
+    #[gpui::test]
+    fn test_filtered_row_replacement_list_confirm(cx: &mut TestAppContext) {
+        assert_filtered_row_replacement(cx, true);
     }
 }
