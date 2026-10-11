@@ -11,6 +11,29 @@ use std::{any::TypeId, rc::Rc};
 actions!(root, [Tab, TabPrev]);
 const CONTEXT: &str = "Root";
 
+/// Scan at most one cycle of the rendered tab order, preserving containment
+/// regardless of how many controls exist behind a modal. GPUI exposes traversal
+/// but not candidate enumeration. This scan is synchronous: only the final
+/// focus path is published at the next draw, not the background candidates.
+fn advance_focus(window: &mut Window, cx: &mut App, advance: fn(&mut Window, &mut App)) {
+    let Some(container) = crate::active_focus_trap(window, cx) else {
+        advance(window, cx);
+        return;
+    };
+
+    advance(window, cx);
+    let first_candidate = window.focused(cx);
+    while !container.contains_focused(window, cx) {
+        advance(window, cx);
+        if window.focused(cx) == first_candidate {
+            // The trap has no rendered tab stops. Its own handle remains a
+            // safe focus target even when excluded from ordinary tab order.
+            container.focus(window, cx);
+            break;
+        }
+    }
+}
+
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("tab", Tab, Some(CONTEXT)),
@@ -192,73 +215,11 @@ impl Root {
         root.update(cx, |root, cx| f(root, window, cx))
     }
     fn on_action_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
-        // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = crate::active_focus_trap(window, cx) {
-            // We're in a focus trap - try to focus next, then check if we're still inside
-            let before_focus = window.focused(cx);
-
-            // Try normal focus navigation
-            window.focus_next(cx);
-
-            // Check if we're still in the trap
-            if !container_focus_handle.contains_focused(window, cx) {
-                // We jumped out of the trap - need to cycle back to the beginning
-                // Find the first focusable element in the trap by continuing to focus_next
-                let mut attempts = 0;
-                const MAX_ATTEMPTS: usize = 100; // Prevent infinite loop
-
-                while !container_focus_handle.contains_focused(window, cx)
-                    && attempts < MAX_ATTEMPTS
-                {
-                    window.focus_next(cx);
-                    attempts += 1;
-
-                    // If we cycled back to where we started, restore original focus
-                    if window.focused(cx) == before_focus {
-                        break;
-                    }
-                }
-            }
-            return;
-        }
-
-        // Normal tab navigation
-        window.focus_next(cx);
+        advance_focus(window, cx, Window::focus_next);
     }
 
     fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
-        // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = crate::active_focus_trap(window, cx) {
-            // We're in a focus trap - try to focus previous, then check if we're still inside
-            let before_focus = window.focused(cx);
-
-            // Try normal focus navigation
-            window.focus_prev(cx);
-
-            // Check if we're still in the trap
-            if !container_focus_handle.contains_focused(window, cx) {
-                // We jumped out of the trap - need to cycle back to the end
-                // Find the last focusable element in the trap by continuing to focus_prev
-                let mut attempts = 0;
-                const MAX_ATTEMPTS: usize = 100; // Prevent infinite loop
-
-                while !container_focus_handle.contains_focused(window, cx)
-                    && attempts < MAX_ATTEMPTS
-                {
-                    window.focus_prev(cx);
-                    attempts += 1;
-
-                    // If we cycled back to where we started, restore original focus
-                    if window.focused(cx) == before_focus {
-                        break;
-                    }
-                }
-            }
-            return;
-        }
-
-        // Normal tab navigation
-        window.focus_prev(cx);
+        advance_focus(window, cx, Window::focus_prev);
     }
 
     fn on_action_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
@@ -312,7 +273,206 @@ impl Render for Root {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::TestAppContext;
+    use crate::FocusTrapElement as _;
+    use gpui::{
+        FocusHandle, KeyDownEvent, KeyUpEvent, Keystroke, StatefulInteractiveElement as _,
+        Subscription, TestAppContext, VisualTestContext, px,
+    };
+    use std::cell::Cell;
+
+    struct TrapContent {
+        background: Vec<FocusHandle>,
+        container: FocusHandle,
+        controls: Vec<FocusHandle>,
+        background_clicks: Rc<Cell<usize>>,
+        _focus_subscriptions: Vec<Subscription>,
+    }
+
+    impl Render for TrapContent {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .tab_group()
+                .size_full()
+                .children(self.background.iter().enumerate().map(|(index, handle)| {
+                    let clicks = self.background_clicks.clone();
+                    div()
+                        .id(("background", index))
+                        .track_focus(handle)
+                        .tab_index(0)
+                        .size(px(1.))
+                        .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
+                }))
+                .child(
+                    div()
+                        .id("trap")
+                        .track_focus(&self.container)
+                        .tab_stop(false)
+                        .children(self.controls.iter().enumerate().map(|(index, handle)| {
+                            div()
+                                .id(("control", index))
+                                .track_focus(handle)
+                                .tab_index(0)
+                                .size(px(1.))
+                        }))
+                        .focus_trap("modal", &self.container),
+                )
+        }
+    }
+
+    fn trap_harness(
+        cx: &mut TestAppContext,
+        control_count: usize,
+    ) -> (
+        &mut VisualTestContext,
+        FocusHandle,
+        Vec<FocusHandle>,
+        Vec<FocusHandle>,
+        [Rc<Cell<usize>>; 2],
+    ) {
+        cx.update(crate::init);
+        let (container, controls, background) = cx.update(|cx| {
+            (
+                cx.focus_handle(),
+                (0..control_count)
+                    .map(|_| cx.focus_handle().tab_stop(true))
+                    .collect::<Vec<_>>(),
+                // Regression: traversing past the modal must cross more than
+                // the former 100-attempt limit before reaching its other end.
+                (0..256)
+                    .map(|_| cx.focus_handle().tab_stop(true))
+                    .collect::<Vec<_>>(),
+            )
+        });
+        let background_focuses = Rc::new(Cell::new(0));
+        let background_clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let container = container.clone();
+            let controls = controls.clone();
+            let background = background.clone();
+            let background_focuses = background_focuses.clone();
+            let background_clicks = background_clicks.clone();
+            move |window, cx| {
+                let content = cx.new(|cx| {
+                    let subscriptions = background
+                        .iter()
+                        .map(|handle| {
+                            let focuses = background_focuses.clone();
+                            cx.on_focus(handle, window, move |_, _, _| {
+                                focuses.set(focuses.get() + 1)
+                            })
+                        })
+                        .collect();
+                    TrapContent {
+                        background,
+                        container,
+                        controls,
+                        background_clicks,
+                        _focus_subscriptions: subscriptions,
+                    }
+                });
+                Root::new(content, window, cx)
+            }
+        });
+        cx.update(|window, _| window.activate_window());
+        cx.executor().run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (
+            cx,
+            container,
+            controls,
+            background,
+            [background_focuses, background_clicks],
+        )
+    }
+
+    fn assert_trapped_focus(
+        cx: &mut VisualTestContext,
+        container: &FocusHandle,
+        expected: &FocusHandle,
+    ) {
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            assert_eq!(window.focused(cx).as_ref(), Some(expected));
+            assert!(container.contains_focused(window, cx));
+        });
+    }
+
+    #[gpui::test]
+    fn focus_trap_wraps_forward_past_more_than_100_background_stops(cx: &mut TestAppContext) {
+        let (cx, container, controls, _, background_events) = trap_harness(cx, 2);
+        cx.update(|window, cx| {
+            controls[1].focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+
+        cx.dispatch_action(Tab);
+        assert_trapped_focus(cx, &container, &controls[0]);
+        cx.dispatch_action(Tab);
+        assert_trapped_focus(cx, &container, &controls[1]);
+        assert!(background_events.iter().all(|count| count.get() == 0));
+    }
+
+    #[gpui::test]
+    fn focus_trap_wraps_backward_past_more_than_100_background_stops(cx: &mut TestAppContext) {
+        let (cx, container, controls, _, background_events) = trap_harness(cx, 2);
+        cx.update(|window, cx| {
+            controls[0].focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+
+        cx.dispatch_action(TabPrev);
+        assert_trapped_focus(cx, &container, &controls[1]);
+        cx.dispatch_action(TabPrev);
+        assert_trapped_focus(cx, &container, &controls[0]);
+        assert!(background_events.iter().all(|count| count.get() == 0));
+    }
+
+    #[gpui::test]
+    fn focus_trap_without_tab_stops_keeps_its_container_focused(cx: &mut TestAppContext) {
+        let (cx, container, _, _, background_events) = trap_harness(cx, 0);
+        cx.update(|window, cx| {
+            container.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+
+        cx.dispatch_action(Tab);
+        assert_trapped_focus(cx, &container, &container);
+        cx.dispatch_action(TabPrev);
+        assert_trapped_focus(cx, &container, &container);
+        assert!(background_events.iter().all(|count| count.get() == 0));
+    }
+
+    #[gpui::test]
+    fn inactive_focus_trap_does_not_capture_background_navigation(cx: &mut TestAppContext) {
+        let (cx, _, _, background, background_events) = trap_harness(cx, 2);
+        cx.update(|window, cx| {
+            background[0].focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        // Prove that the observers used by the containment regressions really
+        // receive native focus notifications when a background control is used.
+        assert_eq!(background_events[0].get(), 1);
+
+        cx.dispatch_action(Tab);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            assert_eq!(window.focused(cx), Some(background[1].clone()));
+        });
+        cx.dispatch_action(TabPrev);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            assert_eq!(window.focused(cx), Some(background[0].clone()));
+        });
+        assert_eq!(background_events[0].get(), 3);
+        let keystroke = Keystroke::parse("enter").unwrap();
+        cx.simulate_event(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke });
+        assert_eq!(background_events[1].get(), 1);
+    }
 
     struct Content;
     impl Render for Content {
