@@ -153,7 +153,10 @@ impl RenderOnce for ProgressCircle {
                 .easing(cx.theme().motion_tokens().easing_move.clone()),
             window,
             cx,
-        );
+        )
+        // An overshooting theme curve may carry the value past either end, but
+        // the ring cannot sweep more than once around.
+        .clamp(0., 100.);
 
         let color = self.color.unwrap_or(cx.theme().progress_bar);
 

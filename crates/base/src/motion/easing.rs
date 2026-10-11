@@ -175,6 +175,12 @@ impl Easing {
         ))
     }
 
+    /// Map elapsed `progress`, clamped to `0..=1`, through the curve.
+    ///
+    /// The output may leave `0..=1`: a cubic Bézier with y control points
+    /// outside that range anticipates or overshoots, and linear stops or a
+    /// custom curve may do the same. Clamp the result where it drives an
+    /// opacity or a color.
     #[inline]
     pub fn sample(&self, progress: f32) -> f32 {
         let progress = progress.clamp(0.0, 1.0);
