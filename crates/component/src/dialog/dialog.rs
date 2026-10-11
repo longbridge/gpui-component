@@ -659,7 +659,9 @@ impl RenderOnce for Dialog {
             ))
         } else {
             let easing = motion.easing_enter.clone();
-            Animation::new(motion.duration_normal).with_easing(move |delta| easing.sample(delta))
+            // The delta drives opacity, so keep an overshooting theme curve in range.
+            Animation::new(motion.duration_normal)
+                .with_easing(move |delta| easing.sample(delta).clamp(0., 1.))
         };
 
         anchored()

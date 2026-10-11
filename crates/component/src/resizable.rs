@@ -89,13 +89,16 @@ pub(crate) fn render_resize_handle(
         window,
         cx,
     );
+    // An overshooting theme curve may carry the length past its target, but
+    // the opacity has to stay a valid alpha.
     let opacity = transition(
         "resizable-handle-indicator-opacity",
         target_opacity,
         policy,
         window,
         cx,
-    );
+    )
+    .clamp(0., 1.);
 
     div()
         // The hairline fills the handle's content area exactly, so it has

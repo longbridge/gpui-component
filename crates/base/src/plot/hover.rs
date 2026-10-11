@@ -160,13 +160,15 @@ pub(super) fn track_hover(
     } else {
         motion.exit().clone()
     };
+    // The progress fades a presentation, so an overshooting curve is clamped.
     let progress = transition(
         (HOVER_MEMORY, "progress"),
         if hovered { 1. } else { 0. },
         policy,
         window,
         cx,
-    );
+    )
+    .clamp(0., 1.);
 
     memory.update(cx, |memory, _| {
         if let (Some(live), Some(cursor)) = (live, cursor) {
