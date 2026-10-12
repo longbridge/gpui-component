@@ -10,8 +10,11 @@
 #![allow(dead_code)] // removed once the facade uses everything
 
 mod id;
+mod inline;
 mod kind;
+mod marks;
 
 
 pub use id::BlockId;
 pub use kind::BlockKind;
+pub use marks::{MarkChange, MarkKind, MarkSet, MarkState};
