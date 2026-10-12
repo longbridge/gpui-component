@@ -141,11 +141,18 @@ type_complexity = "allow"
 # https://github.com/longbridge/gpui-kit/pull/2149
 useless_conversion = "allow"
 
+# Keep Cargo's default of 256 codegen units. Incremental builds re-codegen
+# whole units, so with 16 units a one-line change in gpui-component or
+# gpui-base took about 50% more CPU to rebuild.
 [profile.dev]
-codegen-units = 16
 debug = "limited"
 split-debuginfo = "unpacked"
 
+# These speed up the debug application at run time; opt-level 1 rendered the
+# `text_view_scroll` bench frames 22-25% slower to save about 9% of a clean
+# build's CPU, and nothing on an incremental one. Proc-macro crates are left
+# out: they only run inside the compiler, and expanding gpui's macros takes as
+# long unoptimized, so optimizing them only adds compile time.
 [profile.dev.package]
 resvg = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
@@ -155,9 +162,7 @@ smol = { opt-level = 3 }
 gpui-pre = { opt-level = 3 }
 gpui-fast = { opt-level = 3 }
 gpui-fast-platform = { opt-level = 3 }
-gpui-fast-macros = { opt-level = 3 }
 gpui-pre-platform = { opt-level = 3 }
-gpui-pre-macros = { opt-level = 3 }
 tree-sitter = { opt-level = 3 }
 gpui-pre-sum-tree = { opt-level = 3 }
 ropey = { opt-level = 3 }
