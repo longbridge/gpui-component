@@ -1174,7 +1174,14 @@ impl DiffState {
         let target = if forward {
             // Scrolled to the end, the list clamps any later change below the
             // top, so the top never passes it and the key would stop there.
-            let at_end = self.list.is_scrolled_to_end() == Some(true);
+            // The last row's bounds answer even when the rows above the
+            // viewport were never measured, as after a jump to the end.
+            let at_end = self
+                .list
+                .item_count()
+                .checked_sub(1)
+                .and_then(|last| self.list.bounds_for_item(last))
+                .is_some_and(|last| last.bottom() <= self.list.viewport_bounds().bottom());
             groups
                 .get(groups.partition_point(|ix| *ix <= top))
                 .copied()

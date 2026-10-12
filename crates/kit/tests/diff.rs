@@ -723,6 +723,15 @@ fn next_change_wraps_once_the_list_is_scrolled_to_its_end(cx: &mut TestAppContex
     };
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
+        // Previous change from the top jumps to the end, past rows no frame
+        // has measured yet.
+        state.update(cx, |state, cx| state.previous_change(cx));
+        window.render_frame(cx);
+        assert!(!first_drawn(window));
+        state.update(cx, |state, cx| state.next_change(cx));
+        window.render_frame(cx);
+        assert!(first_drawn(window), "next change stopped after a jump");
+
         // At the end, the last changes sit below the top where the list cannot
         // scroll them up to it.
         let mut left_the_first = false;
