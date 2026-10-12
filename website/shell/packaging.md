@@ -111,7 +111,7 @@ rsync -a --exclude node_modules --exclude gpui-kit.d.ts --exclude jsconfig.json 
   --exclude AGENTS.md clock/ "$app/Contents/Resources/app/"
 ```
 
-`iconutil -c icns Clock.iconset` makes `Clock.icns` from a folder of PNGs. For one bundle that runs on both Apple silicon and Intel, merge the two release binaries first:
+`iconutil -c icns Clock.iconset` makes `Clock.icns` from a folder of PNG images. For one bundle that runs on both Apple silicon and Intel, merge the two release binaries first:
 
 ```bash
 lipo -create -output Clock \
