@@ -101,9 +101,9 @@ fn check_materializes_valid_typed_children_and_preserves_print_spec() {
 }
 
 /// A scroll area keeps its position in window element state, which GPUI only
-/// hands out while a frame is drawn. `check` used to materialize outside a
-/// frame, so any application with a scrollbar aborted the process instead of
-/// being checked.
+/// hands out while a frame is drawn, so `check` materializes inside one. This
+/// covers the scroll path end to end; the abort it guards against depended on
+/// an application's stored state and is not reproduced here.
 #[test]
 fn check_materializes_a_scroll_area() {
     let app = CheckApp::new(
