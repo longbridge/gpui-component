@@ -310,15 +310,13 @@ mod tests {
         assert!(background_hovered.get());
     }
 
-    /// A popup that may open later, rendering is counted.
+    /// A popup that may open later.
     struct ClosedHarness {
         open: bool,
-        renders: Rc<Cell<usize>>,
     }
 
     impl Render for ClosedHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            self.renders.set(self.renders.get() + 1);
             let popup = Popup::new(
                 "popup",
                 div()
@@ -342,18 +340,11 @@ mod tests {
     /// each row that shows. Opened, it places its content at once.
     #[gpui::test]
     fn a_closed_popup_asks_for_no_frame_and_opens_at_once(cx: &mut gpui::TestAppContext) {
-        let renders = Rc::new(Cell::new(0));
-        let (view, window) = cx.add_window_view({
-            let renders = renders.clone();
-            move |_, _| ClosedHarness {
-                open: false,
-                renders,
-            }
+        let (view, window) = cx.add_window_view(|_, _| ClosedHarness { open: false });
+        window.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            assert_eq!(window.simulate_next_frame(cx), 0, "no frame was asked for");
         });
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        cx.run_until_parked();
-        window.update(|window, cx| window.draw(cx).clear(cx));
-        assert_eq!(renders.get(), 1, "no frame was asked for");
 
         view.update(window, |harness, cx| {
             harness.open = true;
