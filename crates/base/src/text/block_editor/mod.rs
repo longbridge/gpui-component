@@ -18,6 +18,8 @@ mod order;
 mod position;
 mod selection;
 mod step;
+mod transaction;
+mod undo;
 
 
 pub use document::{BlockRef, DocumentRef};
@@ -26,3 +28,4 @@ pub use kind::BlockKind;
 pub use marks::{MarkChange, MarkKind, MarkSet, MarkState};
 pub use position::{Affinity, BlockPosition, PositionError};
 pub use selection::{BlockSelection, SelectionError};
+pub use transaction::{EditOrigin, Transaction};
