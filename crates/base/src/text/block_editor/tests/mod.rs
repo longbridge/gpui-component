@@ -1,4 +1,5 @@
 mod commands;
+mod props;
 mod repro;
 mod round_trip;
 mod undo;
