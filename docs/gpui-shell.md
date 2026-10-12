@@ -21,7 +21,7 @@ Two documents come before this one: [Architecture](ARCHITECTURE.md) for the
 `gpui-base` seam this runtime sits on, and [Styling and
 Motion](STYLING-AND-MOTION.md) for the token model it exposes to scripts.
 
-The runtime is real and runnable — `cargo run -p gpui-shell -- examples/js_todolist`
+The runtime is real and runnable — `cargo run -p gpui-shell -- run examples/js_todolist`
 opens a working application — but it is not complete. §26 states plainly what
 exists and what does not.
 
@@ -2096,8 +2096,9 @@ import { Button } from "gpui-component"; // product visuals, ready-made
 Four points decided it then, and all four held. The protocol is one thing and
 the registries are two, which is exactly what separating the render protocol
 from component bindings bought. The crate dependency stays out of the runtime
-entirely: it lives in `crates/component-shell`, so linking `gpui-shell` alone
-keeps `gpui-component` out of the tree. The two module names are distinct,
+core: the catalog lives in `gpui_shell::components`, behind the `components`
+feature, so building `gpui-shell` without it keeps `gpui-component` out of the
+tree. The two module names are distinct,
 because both export `Button` with overlapping method names and different
 semantics, and in JavaScript they can be imported into the same file — the
 module name is the only thing that can distinguish them. And migration is a
@@ -2107,13 +2108,17 @@ change, the business logic and the state do not.
 ### 14.7 The component registry
 
 §14.6 described a second registry as the natural next step. It exists.
-`crates/component-shell` registers the `gpui-component` catalog against a
-registry API that `crates/shell` owns and that names no component. The
-dependency runs one way and only one way: the adapter uses both the runtime and
-the component library, and the runtime uses neither. `gpui_shell::init`
-installs the base layer; `gpui_component_shell::init` installs the catalog and
-then the runtime. A host that wants the protocol without the catalog links
-`gpui-shell` alone and gets an empty registry, which declares no module at all.
+`gpui_shell::components` (the default `components` feature) registers the
+`gpui-component` catalog against the registry API the rest of the crate owns,
+and that API names no component: the catalog is written against the public
+surface exactly as an embedding host's own catalog would be, and nothing
+outside `components` refers to it. It used to be a separate crate,
+`gpui-component-shell`; it moved in so that `gpui-shell` is the one package and
+the one command, and Cargo forbids the dependency cycle a feature on a separate
+crate would have needed. `gpui_shell::init` installs the base layer;
+`gpui_shell::components::init` installs the catalog and then the runtime. A
+host that wants the protocol without the catalog builds `gpui-shell` without
+the feature and gets an empty registry, which declares no module at all.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
@@ -3074,6 +3079,17 @@ the host policy, and `PluginManager::load` requires the host to authorize the
 inert manifest before code runs. A contribution registry is also missing: there
 is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
 `gpui.register_theme` for a script to register into.
+
+The command line host runs **one application per process**: `gpui-shell run <name>`
+runs the installed application `~/.gpui-shell/apps/<name>` (or
+`$GPUI_SHELL_HOME/apps/<name>`), `gpui-shell run -d <directory>` runs a directory,
+and with no argument it runs the application packaged beside the executable
+(`Contents/Resources/app` in a macOS bundle, `app` elsewhere). An installed or
+packaged application keeps its storage under its manifest `id`; a directory run
+by path is keyed by its path (§23). `list` reads manifests without executing
+anything, and `agents` writes generated development instructions for coding
+agents. Multi-application hosting stays the job of an embedding host and
+`PluginManager`.
 
 Today the grant comes from the host directly. Running a directory from the
 command line is an explicit act of trust, the same as `node app.js`, and

@@ -4692,6 +4692,64 @@ export default class Code extends View {
     );
 }
 
+/// A keystroke repaints the cells inside `ShellRoot`'s cached content.
+///
+/// `OtpState` is a plain entity that the cells read while they are built, so
+/// its `notify` dirties no view of its own. The first key also switches the
+/// window to keyboard modality, which refreshes every view and hides the
+/// problem; the second key has only the state's notification to go on.
+#[gpui::test]
+fn every_otp_keystroke_repaints_the_cached_script_content(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui-kit";
+import { OtpState, OtpInput } from "gpui-base";
+
+export default class Code extends View {
+  init() { this.code = OtpState.new(4); }
+  render(cx) {
+    return OtpInput.new(this.code).flex().gap(8).cell_style((cell) => cell.size(40));
+  }
+}
+"#;
+    let view_type = runtime.load_source("otp-repaint", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let (_root, context) = cx.add_window_view(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime_for_view, object));
+        crate::root::ShellRoot::new(view.into(), window, cx)
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let state = runtime
+        .entities()
+        .first_otp()
+        .expect("the script's OTP state");
+    context.update(|window, cx| {
+        state.update(cx, |state, cx| state.focus(window, cx));
+    });
+    context.simulate_keystrokes("1");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let materialized = runtime.metrics().read().materializations();
+    context.simulate_keystrokes("2");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "12"
+    );
+    assert!(
+        runtime.metrics().read().materializations() > materialized,
+        "the second digit must rebuild the cells on the next frame, not wait for the pointer"
+    );
+}
+
 /// `change` reports every edit; `complete` reports the transition to a full
 /// code. They are separate because validation and submit affordances need the
 /// former while verification requests need the latter.
@@ -6251,6 +6309,36 @@ fn an_unknown_built_in_module_names_the_ones_that_exist(cx: &mut TestAppContext)
             "the refusal must name {expected}: {message}"
         );
     }
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+/// The component module belongs to a runtime with a catalog. One without it
+/// says how to get one instead of listing the module as one it has.
+#[gpui::test]
+fn the_component_module_without_a_catalog_names_the_host_that_has_it(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-no-catalog-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    std::fs::write(
+        directory.join("main.js"),
+        "import { View } from \"gpui-kit\";\n\
+         import { Button } from \"gpui-component\";\n\
+         export default class Panel extends View { render() { return Button.new(\"x\"); } }\n",
+    )
+    .expect("main.js");
+
+    let message = runtime
+        .load_app(&directory, "main.js")
+        .expect_err("a bare runtime has no component module")
+        .to_string();
+    assert!(message.contains("`components`"), "{message}");
+    assert!(!message.contains("built-in modules are"), "{message}");
 
     let _ = std::fs::remove_dir_all(directory);
 }

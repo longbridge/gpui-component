@@ -9,7 +9,7 @@ repository = "https://github.com/longbridge/gpui-kit/tree/main/crates/webview"
 readme = "README.md"
 edition.workspace = true
 publish = true
-version = "0.7.1"
+version = "0.7.3"
 
 [features]
 # GPUI Fast is always used; this feature is kept so existing manifests that enable it still resolve.
@@ -23,7 +23,7 @@ doctest = false
 anyhow.workspace = true
 # Enabling `gpui-fast` here selects GPUI Fast for the application's `gpui-kit` too, through
 # feature unification, so applications need no extra configuration.
-gpui-kit = { path = "../kit", version = "0.7.1", default-features = false, features = ["gpui-fast"] }
+gpui-kit = { path = "../kit", version = "0.7.3", default-features = false, features = ["gpui-fast"] }
 log = "0.4"
 wry = { version = "0.53.3", package = "lb-wry" }
 

@@ -3952,18 +3952,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-component-shell"
-version = "0.7.1"
-dependencies = [
- "gpui-base",
- "gpui-component",
- "gpui-fast",
- "gpui-pre",
- "gpui-shell",
- "serde_json",
-]
-
-[[package]]
 name = "gpui-component-story"
 version = "0.7.1"
 dependencies = [
@@ -4916,6 +4904,7 @@ dependencies = [
  "chrono",
  "fs2",
  "gpui-base",
+ "gpui-component",
  "gpui-fast",
  "gpui-fast-platform",
  "gpui-fps",

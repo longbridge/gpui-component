@@ -96,7 +96,7 @@ export default class Hello extends View {
 ```
 
 ```bash
-cargo run -p gpui-shell -- hello
+cargo run -p gpui-shell -- run ./hello
 ```
 
 Four things in that file are worth naming now, because everything else builds on them.
@@ -114,19 +114,63 @@ Four things in that file are worth naming now, because everything else builds on
 A script directory can also be run directly, without writing a host. This is how the bundled example runs, and how a script is usually developed before it is loaded by the application that will own it. `gpui-shell` is not published to crates.io, so clone the repository and run it from the root:
 
 ```bash
-cargo run -p gpui-shell -- examples/js_todolist
+cargo run -p gpui-shell -- run examples/js_todolist
 ```
 
 That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
 
 The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` by default, takes the class that module default-exports, constructs one instance, and mounts it as the window's root View. If the directory contains `gpui-shell.json`, the binary validates that manifest first and uses its declared `entry` and capabilities.
 
+An argument that contains a path separator — `./hello`, `examples/js_todolist` — is a directory. A bare name is an **installed** application instead, described below; `-d` / `--dir <directory>` always means a directory.
+
+## Install the runtime
+
+Each GitHub release carries a prebuilt `gpui-shell` for macOS (Apple silicon and Intel), Linux x86-64 and Windows x86-64. It is built with the [`gpui-component`](./examples.md) catalog, so an application may import styled components from `"gpui-component"` as well as `"gpui-base"`.
+
+```bash
+curl -fsSL https://gpui-kit.com/shell/install.sh | sh
+```
+
+The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps`. `GPUI_SHELL_VERSION=v0.7.1` pins a release. `GPUI_SHELL_HOME` moves the `~/.gpui-shell` directory — installed applications and the Git dependency cache; `gpui-shell` reads it as well, so keep it exported. Asset names carry no version (`gpui-shell-aarch64-apple-darwin.tar.gz`, with a `.sha256` beside it), so a Homebrew formula or a mise `ubi` backend can download `releases/latest/download/<asset>` too.
+
+## Installed and packaged applications
+
+`gpui-shell` runs one application per process and has no interface of its own. Where that application comes from is decided by the command line:
+
+| Command                      | Runs                                                        |
+| ---------------------------- | ----------------------------------------------------------- |
+| `gpui-shell run clock`       | the installed application `~/.gpui-shell/apps/clock/`     |
+| `gpui-shell run -d ~/dev/clock` | that directory                                              |
+| `gpui-shell`                 | the application packaged beside the executable              |
+
+To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An installed application keeps its data under its manifest `id`, so moving or reinstalling it does not lose it; a directory run with `--dir` is keyed by its path, which is right while it is being edited.
+
+With no argument, the executable looks for an application next to itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A desktop application is therefore the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
+
+```text
+Clock.app/Contents/
+├── Info.plist          # CFBundleExecutable = gpui-shell
+├── MacOS/gpui-shell
+└── Resources/app/
+    ├── gpui-shell.json
+    └── main.js
+```
+
+## Instructions for coding agents
+
+```bash
+gpui-shell agents                 # print them
+gpui-shell agents -d ./hello      # write ./hello/AGENTS.md
+```
+
+`agents` prints the rules a coding agent needs to write an application for this runtime and the `check` loop that verifies its work: no DOM, state assigned in `init`, `cx.notify()` after a change, single-use elements, capabilities denied by default. The module list and the component catalog in it come from the binary that prints it. Given an application, it writes `AGENTS.md` there, and only ever replaces a file it generated — the first line marks it — so instructions written by hand are left alone.
+
 ## Check a script without running it
 
 JavaScript has no compiler, and this runtime does not add one. What it adds is the thing a compiler would have done for you:
 
 ```bash
-cargo run -p gpui-shell -- check hello
+cargo run -p gpui-shell -- check ./hello
 ```
 
 `check` loads the application and renders one frame into a window that is never shown, then exits `0` on success and `1` on failure. Because the script surface is dynamic — an unknown style method, a wrongly typed argument and a reused element are all runtime facts — building and rendering once is the only honest way to check it. What it catches:
@@ -143,7 +187,7 @@ It opens no window, so it is usable from an editor, from CI, or from an agent lo
 Add `--print-spec` to print the element description that was built:
 
 ```bash
-cargo run -p gpui-shell -- check hello --print-spec
+cargo run -p gpui-shell -- check ./hello --print-spec
 ```
 
 That output is the arena's own debug dump — the tree of components and recorded operations, before anything is materialized. It is useful when the question is "what did my chain actually record?".
@@ -151,7 +195,7 @@ That output is the arena's own debug dump — the tree of components and recorde
 ## Generate TypeScript declarations
 
 ```bash
-cargo run -p gpui-shell -- types hello
+cargo run -p gpui-shell -- types ./hello
 ```
 
 This writes `gpui-kit.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
@@ -171,8 +215,8 @@ Regenerate the file after upgrading the runtime; the output is deterministic, so
 ## Hot-reload
 
 ```bash
-cargo run -p gpui-shell -- hello --watch
-cargo run -p gpui-shell -- hello --dev      # implies --watch
+cargo run -p gpui-shell -- run ./hello --watch
+cargo run -p gpui-shell -- run ./hello --dev      # implies --watch
 ```
 
 `--watch` polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.
@@ -184,17 +228,25 @@ A reload does all of its fallible work before it touches the live View. If the n
 ## Command reference
 
 ```text
-gpui-shell <directory> [--watch] [--dev]
-gpui-shell check <directory> [--print-spec]
-gpui-shell types <directory>
+gpui-shell run [<name> | -d <directory>] [--watch] [--dev]
+gpui-shell
+gpui-shell list
+gpui-shell check <name> | -d <directory> [--print-spec]
+gpui-shell types <name> | -d <directory>
+gpui-shell agents [<name> | -d <directory>]
 gpui-shell --help | --version
 ```
 
-| Argument       | Meaning                                                                  |
-| -------------- | ------------------------------------------------------------------------ |
-| `<directory>`  | The application root, or the `main.js` inside it                         |
-| `check`        | Load and render once without a window; exit `0` or `1`                   |
-| `types`        | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
-| `--watch`      | Reload when the sources change                                           |
-| `--dev`        | Development mode; implies `--watch`                                      |
-| `--print-spec` | With `check`, also print the element description that was built          |
+| Argument               | Meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `<name>`               | An installed application, `~/.gpui-shell/apps/<name>`                 |
+| `-d`, `--dir <dir>`   | The application root, or the `main.js` inside it                         |
+| _(none)_               | The application packaged beside the executable                           |
+| `run`                  | Run one application in a window                                         |
+| `list`                 | Print the installed applications and their requested capabilities        |
+| `check`                | Load and render once without a window; exit `0` or `1`                   |
+| `types`                | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
+| `agents`               | Print, or write as `AGENTS.md`, the instructions for coding agents       |
+| `--watch`              | Reload when the sources change                                           |
+| `--dev`                | Development mode; implies `--watch`                                      |
+| `--print-spec`         | With `check`, also print the element description that was built          |

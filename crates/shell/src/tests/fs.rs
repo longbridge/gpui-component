@@ -282,6 +282,14 @@ export default class Probe extends View {
     for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i));
     this.state = `${JSON.parse(localStorage.getItem("window")).title}|${keys.join(",")}`;
 
+    // A missing entry is `null`, as on the web, so `=== null` finds it.
+    const missing = [
+      localStorage.getItem("absent"),
+      localStorage.key(99),
+      sessionStorage.getItem("absent"),
+    ];
+    this.state += missing.every((value) => value === null) ? "|null" : "|not-null";
+
     // Memory only, and gone with the process: it never reaches the file this
     // test is about, which is the whole distinction between the two.
     sessionStorage.setItem("scratch", "kept for this run");
@@ -326,6 +334,10 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     assert!(
         immediate.contains("Notes|window,theme"),
         "the store should answer from memory without awaiting: {immediate}"
+    );
+    assert!(
+        immediate.contains("|null"),
+        "a missing entry should read as null: {immediate}"
     );
 
     context.run_until_parked();

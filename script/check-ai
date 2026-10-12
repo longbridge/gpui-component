@@ -21,9 +21,9 @@ PROFILES = {
     "shell": [
         ["cargo", "test", "--locked", "-p", "gpui-shell", "--lib", "typings"],
         ["cargo", "test", "--locked", "-p", "gpui-shell", "--lib", "tests::render"],
-        ["cargo", "test", "--locked", "-p", "gpui-component-shell", "--all-targets"],
-        ["npm", "--prefix", "crates/component-shell/tests/types", "ci"],
-        ["npm", "--prefix", "crates/component-shell/tests/types", "test"],
+        ["cargo", "test", "--locked", "-p", "gpui-shell", "--tests"],
+        ["npm", "--prefix", "crates/shell/tests/types", "ci"],
+        ["npm", "--prefix", "crates/shell/tests/types", "test"],
     ],
 }
 

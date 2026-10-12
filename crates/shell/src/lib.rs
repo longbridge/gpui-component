@@ -56,6 +56,10 @@
 pub extern crate gpui_fast as gpui;
 #[cfg(feature = "gpui-fast")]
 extern crate gpui_fast_platform as gpui_platform;
+// The `gpui-component` catalog is written against the public API, as any
+// embedding host's catalog is, so it names this crate the way they do.
+#[cfg(feature = "components")]
+extern crate self as gpui_shell;
 
 pub(crate) mod a11y;
 pub mod action;
@@ -68,6 +72,9 @@ pub use input_tokens::{
     InlineTokenCallbacks, inline_token_click_data, inline_token_context_data,
     inline_token_hover_data, input_token_state_methods, textarea_token_state_methods,
 };
+/// The `gpui-component` catalog, behind the `components` feature.
+#[cfg(feature = "components")]
+pub mod components;
 pub(crate) mod dependencies;
 pub mod dock;
 pub(crate) mod engine;

@@ -1262,7 +1262,9 @@ macro_rules! builtin_modules {
         /// is told which it is talking to rather than only that the import
         /// failed.
         fn builtin_specifiers() -> String {
-            [$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
+            // The component module is only built in when a catalog provides
+            // it, and a catalog that does resolves it before this is reached.
+            [$($module::SPECIFIER),+]
                 .map(|specifier| format!("`{specifier}`"))
                 .join(", ")
         }
@@ -5374,6 +5376,17 @@ impl Resolver for AppModules {
             // runtime does have is the difference between "you typed it wrong"
             // and "this binary is older than the script it is loading" — and
             // the second is what a moved module looks like from here.
+            if name == crate::DEFAULT_COMPONENT_MODULE {
+                return Err(Exception::throw_message(
+                    ctx,
+                    &format!(
+                        "cannot resolve module `{name}`: this runtime has no component \
+                         catalog. `gpui-shell` provides it with its default `components` \
+                         feature; a build without that feature, or an embedding host that \
+                         registers no catalog, does not."
+                    ),
+                ));
+            }
             if !name.starts_with('.') && !name.contains('/') {
                 return Err(Exception::throw_message(
                     ctx,
@@ -6486,11 +6499,13 @@ globalThis.__gpui = (() => {
     get length() {
       return __storage_length(session);
     },
+    // The host answers a missing entry with `undefined`; the Web Storage API
+    // answers `null`, and `if (saved === null)` is how scripts test for it.
     key: (index) => {
       const at = Number(index);
-      return Number.isInteger(at) && at >= 0 ? __storage_key(session, at) : null;
+      return Number.isInteger(at) && at >= 0 ? (__storage_key(session, at) ?? null) : null;
     },
-    getItem: (key) => __storage_get(session, String(key)),
+    getItem: (key) => __storage_get(session, String(key)) ?? null,
     setItem: (key, value) => __storage_set(session, String(key), String(value)),
     removeItem: (key) => __storage_remove(session, String(key)),
     clear: () => __storage_clear(session),
