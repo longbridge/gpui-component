@@ -62,6 +62,13 @@ pub fn main_with_brand_and_components(
 
     let arguments = match invocation {
         Invocation::Run(arguments) => arguments,
+        Invocation::Bare(arguments) => {
+            if installed::bundled().is_none() {
+                println!("{}", help(brand));
+                return;
+            }
+            arguments
+        }
         Invocation::Types(application) => {
             let directory = resolve_or_exit(&application, brand);
             // The root always, whether or not anything there imports the module:
@@ -177,6 +184,10 @@ fn resolve_or_exit(application: &Application, brand: HostBrand) -> PathBuf {
 #[derive(Debug, PartialEq, Eq)]
 enum Invocation {
     Run(Arguments),
+    /// No command at all: the packaged application when there is one, and
+    /// the help otherwise. A bundle's executable is started with no
+    /// arguments, and so is a freshly installed binary typed at a prompt.
+    Bare(Arguments),
     /// Print the installed applications, executing none.
     List,
     /// Load and render once, report, and exit with a status.
@@ -305,7 +316,7 @@ pub fn parse_invocation(
         HostBrand::gpui_shell(),
     )
     .map(|invocation| match invocation {
-        Invocation::Run(_) => InvocationKind::Run,
+        Invocation::Run(_) | Invocation::Bare(_) => InvocationKind::Run,
         Invocation::List => InvocationKind::List,
         Invocation::Check(_) => InvocationKind::Check,
         Invocation::Types(_) => InvocationKind::Types,
@@ -469,7 +480,7 @@ fn parse(
             development,
         })),
         None => match application {
-            None => Ok(Invocation::Run(Arguments {
+            None => Ok(Invocation::Bare(Arguments {
                 application: Application::Bundled,
                 watch,
                 development,
@@ -509,8 +520,9 @@ Arguments:
                {installed}. An argument containing a path
                separator is a path instead, as if given with --dir.
 
-With no arguments, or `run` alone, {name} runs the application packaged
-beside its executable ({bundled}).
+With no arguments, {name} runs the application packaged beside its
+executable ({bundled}), and prints this help when there is none.
+`run` alone runs the packaged application or reports that there is none.
 
 Commands:
   run          Run one application in a window.
@@ -1293,9 +1305,12 @@ mod tests {
     }
 
     #[test]
-    fn no_application_runs_the_bundled_one() {
-        let arguments = run_args(&["--dev"]);
+    fn no_command_is_the_packaged_application_or_the_help() {
+        let Ok(Invocation::Bare(arguments)) = parse_args(&["--dev"]) else {
+            panic!("no command is decided when the command runs");
+        };
         assert_eq!(arguments.application, Application::Bundled);
+        assert!(matches!(parse_args(&[]), Ok(Invocation::Bare(_))));
         assert!(arguments.application.is_installed());
         assert!(!Application::Path(PathBuf::from("app")).is_installed());
     }

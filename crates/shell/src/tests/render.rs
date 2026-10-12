@@ -7654,7 +7654,7 @@ export default class Surface extends View {
       "appearance", "is_window_active", "is_fullscreen", "is_maximized",
       "set_rem_size", "refresh", "focus_next", "focus_prev",
       "activate_window", "minimize_window", "zoom_window", "toggle_fullscreen",
-      "dispatch_action",
+      "start_window_move", "dispatch_action",
     ]) {
       if (typeof window[name] !== "function") this.missing.push(`window.${name}`);
     }

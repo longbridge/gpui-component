@@ -140,11 +140,11 @@ curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 | ---------------------------- | -------------------------------------------------- |
 | `gpui-shell run clock`       | 已安装的应用 `~/.gpui-shell/apps/clock/`         |
 | `gpui-shell run -d ~/dev/clock` | 指定的那个目录                                     |
-| `gpui-shell`                 | 与可执行文件一起打包的应用                         |
+| `gpui-shell`                 | 与可执行文件一起打包的应用；没有则显示 help        |
 
 安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。已安装的应用按 manifest 的 `id` 保存数据，移动或重装都不会丢；用 `--dir` 运行的目录则按路径区分，这正适合正在编辑的源码。
 
-不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。于是一个桌面应用就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
+不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。找不到时就显示 help，所以刚安装好的 `gpui-shell` 在终端里直接运行会先介绍自己的用法。于是一个桌面应用就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
 
 ```text
 Clock.app/Contents/
@@ -252,7 +252,7 @@ gpui-shell --help | --version
 | -------------------- | -------------------------------------------------- |
 | `<name>`             | 已安装的应用，`~/.gpui-shell/apps/<name>`        |
 | `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                     |
-| _（无）_             | 与可执行文件一起打包的应用                         |
+| _（无）_             | 与可执行文件一起打包的应用，没有则显示 help        |
 | `run`                | 在窗口中运行一个应用                               |
 | `new`                | 在新目录中创建一个空白应用                         |
 | `list`               | 列出已安装的应用及其申请的 capabilities            |

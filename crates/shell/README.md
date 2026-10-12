@@ -134,7 +134,7 @@ It runs one application per process and has no interface of its own:
 ```bash
 gpui-shell run clock          # ~/.gpui-shell/apps/clock
 gpui-shell run -d ~/dev/clock # a directory (also: any argument with a path separator)
-gpui-shell                    # the application packaged beside the executable
+gpui-shell                    # the packaged application beside the executable, else this help
 gpui-shell list               # installed applications and what they ask for
 gpui-shell agents -d ./clock  # write AGENTS.md: instructions for coding agents
 ```

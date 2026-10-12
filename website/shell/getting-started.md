@@ -141,11 +141,11 @@ The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps
 | ---------------------------- | ----------------------------------------------------------- |
 | `gpui-shell run clock`       | the installed application `~/.gpui-shell/apps/clock/`     |
 | `gpui-shell run -d ~/dev/clock` | that directory                                              |
-| `gpui-shell`                 | the application packaged beside the executable              |
+| `gpui-shell`                 | the application packaged beside the executable; without one, the help |
 
 To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An installed application keeps its data under its manifest `id`, so moving or reinstalling it does not lose it; a directory run with `--dir` is keyed by its path, which is right while it is being edited.
 
-With no argument, the executable looks for an application next to itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A desktop application is therefore the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
+With no argument, the executable looks for an application next to itself, and prints its help when it finds none — so a freshly installed `gpui-shell` typed at a prompt explains itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A desktop application is therefore the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
 
 ```text
 Clock.app/Contents/
@@ -253,7 +253,7 @@ gpui-shell --help | --version
 | ---------------------- | ------------------------------------------------------------------------ |
 | `<name>`               | An installed application, `~/.gpui-shell/apps/<name>`                 |
 | `-d`, `--dir <dir>`   | The application root, or the `main.js` inside it                         |
-| _(none)_               | The application packaged beside the executable                           |
+| _(none)_               | The application packaged beside the executable, or else this help        |
 | `run`                  | Run one application in a window                                         |
 | `new`                  | Create a blank application in a new directory                            |
 | `list`                 | Print the installed applications and their requested capabilities        |

@@ -6579,6 +6579,7 @@ globalThis.__gpui = (() => {
     activate_window: () => __window_activate(),
     minimize_window: () => __window_minimize(),
     zoom_window: () => __window_zoom(),
+    start_window_move: () => __window_start_move(),
     toggle_fullscreen: () => __window_toggle_fullscreen(),
   };
 

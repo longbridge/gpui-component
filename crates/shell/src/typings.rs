@@ -2328,6 +2328,15 @@ const WINDOW: &str = r#"
     minimize_window(): void;
     /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
     zoom_window(): void;
+    /**
+     * `Window::start_window_move`: hand the pointer to the platform, which
+     * moves the window until the button is released.
+     *
+     * The host opens its window with a title bar the application draws, so
+     * dragging that bar is the application's to do. Call it from the bar's
+     * `on_mouse_down`; anywhere but inside a press it does nothing.
+     */
+    start_window_move(): void;
     /** `Window::toggle_fullscreen`. */
     toggle_fullscreen(): void;
   }
