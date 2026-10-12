@@ -7261,6 +7261,97 @@ export default class Modifiers extends View {
     );
 }
 
+/// A script's title bar is the window's, so `window_control_area` has to
+/// reach GPUI for each of its four areas. A drag area also carries the press
+/// and double-click handling a native title bar would, and none of it may get
+/// in the way of a press on an ordinary element inside the bar.
+#[gpui::test]
+fn a_window_control_area_renders_and_leaves_its_children_clickable(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { h_flex } from "gpui-base";
+
+export default class Bar extends View {
+  init() {
+    this.clicks = 0;
+  }
+
+  render(_cx) {
+    return h_flex()
+      .id("title-bar")
+      .w(300)
+      .h(34)
+      .window_control_area("drag")
+      .child(
+        div()
+          .id("action")
+          .w(40)
+          .h(34)
+          .on_click((_event, cx) => {
+            this.clicks += 1;
+            cx.notify();
+          }),
+      )
+      .child(div().id("close").w(20).h(20).window_control_area("close"))
+      .child(div().id("max").w(20).h(20).window_control_area("max"))
+      .child(div().id("min").w(20).h(20).window_control_area("min"))
+      .child(div().child(`clicks=${this.clicks}`));
+  }
+}
+"#;
+    let view_type = runtime.load_source("title_bar", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_click(point(px(20.), px(17.)), Modifiers::default());
+    context.run_until_parked();
+    // A press dragged across the bar asks the platform to move the window; the
+    // test platform has nothing to move, so this only has to not fail.
+    context.simulate_mouse_down(
+        point(px(200.), px(17.)),
+        gpui::MouseButton::Left,
+        Modifiers::default(),
+    );
+    context.simulate_mouse_move(
+        point(px(210.), px(17.)),
+        Some(gpui::MouseButton::Left),
+        Modifiers::default(),
+    );
+    context.simulate_mouse_up(
+        point(px(210.), px(17.)),
+        gpui::MouseButton::Left,
+        Modifiers::default(),
+    );
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("clicks=1"),
+        "a press on a child of the drag area still clicks it: {tree}"
+    );
+}
+
 /// A script binds a chord to an action, and the action reaches its handler.
 ///
 /// This is the whole loop, and every step of it is the real one: the script

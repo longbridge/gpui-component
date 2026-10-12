@@ -7079,6 +7079,7 @@ impl ShellRuntime {
                 "role",
                 "aria_selected",
                 "aria_active_descendant",
+                "window_control_area",
                 "tab_index",
                 "tab_stop",
                 "href",
@@ -8109,6 +8110,7 @@ impl ShellRuntime {
             | "role"
             | "aria_selected"
             | "aria_active_descendant"
+            | "window_control_area"
             | "track_focus"
             | "track_scroll"
             | "with_item_to_measure_index"

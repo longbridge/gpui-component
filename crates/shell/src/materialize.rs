@@ -558,6 +558,9 @@ struct Behavior {
     /// focus — the highlighted option of a combobox whose input keeps the
     /// keyboard.
     aria_active_descendant: bool,
+    /// `InteractiveElement::window_control_area`: this element is the window's
+    /// drag area or one of its caption buttons.
+    window_control_area: Option<gpui::WindowControlArea>,
 }
 
 impl Behavior {
@@ -595,6 +598,7 @@ impl Behavior {
             || self.on_scroll_wheel.is_some()
             || !self.on_action.is_empty()
             || self.key_context.is_some()
+            || self.window_control_area.is_some()
     }
 }
 
@@ -2004,6 +2008,42 @@ fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> 
     element
 }
 
+/// Marks the element as a window control area, the way gpui-component's
+/// `TitleBar` does.
+///
+/// GPUI's `window_control_area` is a hit-test answer for the platform, and only
+/// Windows asks it. The host opens its window with an application-drawn title
+/// bar on every platform, so a drag area also moves the window itself: a left
+/// press dragged across it starts the platform move, and a double-click does
+/// what a native title bar's would — `titlebar_double_click` on macOS, a zoom on
+/// Linux. Windows keeps its native behaviour through the hit test.
+fn with_window_control<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
+    let Some(area) = behavior.window_control_area else {
+        return element;
+    };
+    let element = element.window_control_area(area);
+    if area != gpui::WindowControlArea::Drag || cfg!(target_os = "windows") {
+        return element;
+    }
+    element
+        // `on_mouse_move` reaches only the hovered element, so a move with the
+        // left button held is a press that is being dragged across this area.
+        .on_mouse_move(|event, window, _| {
+            if event.pressed_button == Some(MouseButton::Left) {
+                window.start_window_move();
+            }
+        })
+        .on_mouse_down(MouseButton::Left, |event, window, _| {
+            if event.click_count == 2 {
+                if cfg!(target_os = "macos") {
+                    window.titlebar_double_click();
+                } else {
+                    window.zoom_window();
+                }
+            }
+        })
+}
+
 /// Reports focus and accessibility calls a component cannot honour.
 ///
 /// Each bound component wires the subset base gives it a builder for; the rest
@@ -2022,6 +2062,10 @@ fn warn_unhonoured_a11y(behavior: &Behavior, component: &str, honoured: &[&str])
         ("role", behavior.role.is_some()),
         ("aria_selected", behavior.aria_selected.is_some()),
         ("aria_active_descendant", behavior.aria_active_descendant),
+        (
+            "window_control_area",
+            behavior.window_control_area.is_some(),
+        ),
     ];
     for (method, called) in asked {
         if called && !honoured.contains(&method) {
@@ -2090,6 +2134,7 @@ fn flex_element(
     let stateful = with_input_handlers(stateful, &behavior, runtime);
     let stateful = components::dock::with_commands(stateful, &behavior, runtime, cx);
     let stateful = with_aria(stateful, &behavior);
+    let stateful = with_window_control(stateful, &behavior);
     let mut stateful = with_active_and_focus(stateful, &states);
     if !behavior.disabled
         && let Some(callback) = behavior.on_click
@@ -3142,6 +3187,21 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
         }
         "aria_selected" => behavior.aria_selected = Some(flag.unwrap_or(true)),
         "aria_active_descendant" => behavior.aria_active_descendant = true,
+        "window_control_area" => {
+            behavior.window_control_area = match args.first().and_then(|value| value.as_str().ok())
+            {
+                Some("drag") => Some(gpui::WindowControlArea::Drag),
+                Some("close") => Some(gpui::WindowControlArea::Close),
+                Some("max") => Some(gpui::WindowControlArea::Max),
+                Some("min") => Some(gpui::WindowControlArea::Min),
+                other => {
+                    tracing::error!(
+                        "`window_control_area` takes \"drag\", \"close\", \"max\" or \"min\", not {other:?}; the area is dropped"
+                    );
+                    None
+                }
+            };
+        }
         "row_count" => behavior.row_count = whole_count(args),
         "column_count" => behavior.column_count = whole_count(args),
         "open" => behavior.open = Some(flag.unwrap_or(true)),
