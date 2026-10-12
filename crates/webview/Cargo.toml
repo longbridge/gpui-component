@@ -9,7 +9,7 @@ repository = "https://github.com/longbridge/gpui-kit/tree/main/crates/webview"
 readme = "README.md"
 edition.workspace = true
 publish = true
-version = "0.7.1"
+version = "0.7.2"
 
 [features]
 gpui-fast = ["dep:gpui-fast"]
