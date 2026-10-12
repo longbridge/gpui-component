@@ -24,6 +24,7 @@ mod step;
 mod transaction;
 mod undo;
 
+#[cfg(test)]
 
 pub use command::{CommandError, EditorCommand};
 pub use document::{BlockRef, DocumentRef};
