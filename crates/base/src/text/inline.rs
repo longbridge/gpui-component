@@ -971,6 +971,7 @@ impl Element for Inline {
             self.layout_selections(&text_layout, &bounds, window, cx);
 
         let Ok(mut state) = self.state.lock() else {
+            _ = text_layout.paint_foreground(window, cx);
             return;
         };
 
