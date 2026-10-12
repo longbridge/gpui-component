@@ -66,6 +66,16 @@ impl DisplayMap {
         self.wrap_map.wrap_pos_to_buffer_pos(wrap_pos)
     }
 
+    /// A number that changes whenever a buffer line may have taken different
+    /// display rows: an edit, a rewrap or a change of folds.
+    #[inline]
+    pub(crate) fn version(&self) -> usize {
+        self.wrap_map
+            .wrapper()
+            .version()
+            .wrapping_add(self.fold_map.version())
+    }
+
     /// Get total number of visible display rows
     #[inline]
     pub fn display_row_count(&self) -> usize {

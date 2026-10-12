@@ -409,6 +409,16 @@ where it is painted: below a multi-line inline completion, rows move down with t
 text. It returns `None` while the row is not laid out. The **Decorations** tab of the Editor showcase
 marks its last three rows with a provider.
 
+`EditorState::display_row_count()`, `buffer_line_to_display_rows(line)` and
+`display_row_to_buffer_line(row)` read the display-row map: how many rows the text
+takes once it is soft-wrapped, less those hidden by folds, and which rows a buffer line
+takes. The map covers the whole text, so lines that are not laid out can be asked
+about too. Every display row is one line height tall, so a row's top in the scrollable
+content is its index times the line height. `display_rows_version()` changes whenever a
+line may have taken different rows: an edit, a rewrap at a new width, a fold opened or
+closed. Something that reads the map, such as a second editor kept level with this one,
+compares it with the version it last read to know when to read again.
+
 ## Value and events
 
 ```rust

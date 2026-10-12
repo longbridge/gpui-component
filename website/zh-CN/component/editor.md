@@ -345,6 +345,13 @@ info 颜色；`GutterMarker::Custom { icon, color }` 按原样绘制给定的图
 文字一起下移。该行尚未布局时返回 `None`。
 Editor 展示页的 **Decorations** 标签用 provider 标记了最后三行。
 
+`EditorState::display_row_count()`、`buffer_line_to_display_rows(line)` 和
+`display_row_to_buffer_line(row)` 读取显示行映射：文本软换行后（扣除折叠隐藏的行）共占多少显示行，
+以及某个缓冲区行占据哪些显示行。映射覆盖整个文本，尚未布局的行同样可以查询。每个显示行的高度都是一个行高，
+因此某个显示行在可滚动内容中的顶部位置等于它的序号乘以行高。每当某行可能占据不同的显示行时——编辑、
+按新的宽度重新换行、展开或折叠——`display_rows_version()` 都会改变。读取映射的一方（例如与本编辑器保持对齐的
+另一个编辑器）将它与上次读取时的版本比较，即可知道何时需要重新读取。
+
 ## 值与事件
 
 ```rust
