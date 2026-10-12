@@ -155,26 +155,27 @@ A regression test can assert on `script_renders` directly; that is what keeps [t
 A debug build of a host is roughly **three times slower per script render** than a release
 build, and the whole difference is in two dependencies. Measured on a live application —
 a market terminal re-rendering on every quote tick — with the runtime's own
-[`RuntimeMetrics`](#watching-what-it-costs):
+[`RuntimeMetrics`](#watching-what-it-costs). The numbers predate the switch from `rquickjs` to
+`quickjs-jit`, whose packages divide the interpreter and the bindings the same way:
 
-| `[profile.dev.package]`          | mean script render | mean materialize |
-| -------------------------------- | ------------------ | ---------------- |
-| nothing, or `rquickjs` alone     | 31.5 ms            | 3.9 ms           |
-| `rquickjs-sys` + `rquickjs-core` | **11.3 ms**        | **1.2 ms**       |
-| release, for comparison          | 11.0 ms            | 1.2 ms           |
+| `[profile.dev.package]`                | mean script render | mean materialize |
+| -------------------------------------- | ------------------ | ---------------- |
+| nothing, or `quickjs-jit` alone        | 31.5 ms            | 3.9 ms           |
+| `quickjs-jit-sys` + `quickjs-jit-core` | **11.3 ms**        | **1.2 ms**       |
+| release, for comparison                | 11.0 ms            | 1.2 ms           |
 
 So:
 
 ```toml
 [profile.dev.package]
-rquickjs-sys = { opt-level = 3 }
-rquickjs-core = { opt-level = 3 }
+quickjs-jit-sys = { opt-level = 3 }
+quickjs-jit-core = { opt-level = 3 }
 ```
 
-**`rquickjs` on its own does nothing**, which is the trap: it is a thin facade that
-re-exports `rquickjs-core`, so naming it optimises neither the interpreter nor the
-bindings. `rquickjs-sys` compiles QuickJS itself — C source, built through `cc`, which
-reads the profile's optimisation level for _that_ package — and `rquickjs-core` is where
+**`quickjs-jit` on its own does nothing**, which is the trap: it is a thin facade that
+re-exports `quickjs-jit-core`, so naming it optimises neither the interpreter nor the
+bindings. `quickjs-jit-sys` compiles QuickJS itself — C source, built through `cc`, which
+reads the profile's optimisation level for _that_ package — and `quickjs-jit-core` is where
 every value that crosses the boundary is converted. An unoptimised interpreter is what
 makes an unoptimised build feel like a different product.
 

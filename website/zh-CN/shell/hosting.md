@@ -144,26 +144,27 @@ reading.structure_repeat_rate();  // 一次重建产出的结构，与它替换�
 
 Host 的 debug 构建，**单次脚本渲染大约比 release 慢三倍**，而差距全部来自两个依赖。
 在一个实时应用上实测——一个每笔行情都重渲染的行情终端，用运行时自带的
-[`RuntimeMetrics`](#观察它花了多少)：
+[`RuntimeMetrics`](#观察它花了多少)。这组数据测于从 `rquickjs` 切换到 `quickjs-jit` 之前，
+`quickjs-jit` 的包以同样的方式拆分解释器和绑定：
 
-| `[profile.dev.package]`          | 平均脚本渲染 | 平均物化   |
-| -------------------------------- | ------------ | ---------- |
-| 不配，或只写 `rquickjs`          | 31.5 ms      | 3.9 ms     |
-| `rquickjs-sys` + `rquickjs-core` | **11.3 ms**  | **1.2 ms** |
-| release（对照）                  | 11.0 ms      | 1.2 ms     |
+| `[profile.dev.package]`                | 平均脚本渲染 | 平均物化   |
+| -------------------------------------- | ------------ | ---------- |
+| 不配，或只写 `quickjs-jit`             | 31.5 ms      | 3.9 ms     |
+| `quickjs-jit-sys` + `quickjs-jit-core` | **11.3 ms**  | **1.2 ms** |
+| release（对照）                        | 11.0 ms      | 1.2 ms     |
 
 所以：
 
 ```toml
 [profile.dev.package]
-rquickjs-sys = { opt-level = 3 }
-rquickjs-core = { opt-level = 3 }
+quickjs-jit-sys = { opt-level = 3 }
+quickjs-jit-core = { opt-level = 3 }
 ```
 
-**只写 `rquickjs` 没有任何作用**，这正是坑所在：它是一个薄门面，把 `rquickjs-core`
-重新导出而已，写它既没优化到解释器，也没优化到绑定。`rquickjs-sys` 编译的是 QuickJS
+**只写 `quickjs-jit` 没有任何作用**，这正是坑所在：它是一个薄门面，把 `quickjs-jit-core`
+重新导出而已，写它既没优化到解释器，也没优化到绑定。`quickjs-jit-sys` 编译的是 QuickJS
 本体——C 源码，经 `cc` 构建，而 `cc` 读的是**那个包**在 profile 里的优化级别；
-`rquickjs-core` 则是每一个跨界值的转换所在。没优化的解释器，正是让 debug 构建
+`quickjs-jit-core` 则是每一个跨界值的转换所在。没优化的解释器，正是让 debug 构建
 用起来像另一个产品的原因。
 
 `llrt_*` 那批**不需要**这么做。同一个应用上实测，它们带来的差异在噪声范围内：
