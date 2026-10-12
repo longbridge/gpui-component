@@ -50,7 +50,9 @@ the executable with no arguments.
 
 `id`, `name` and `entry` are required. `id` is the application's identity and
 keys its data directory, so keep it stable. `shell-version` is the oldest
-runtime the application supports. Unknown fields are rejected.
+runtime the application supports. `window` is the size the window opens at,
+in logical pixels — `"window": { "width": 360, "height": 520 }` — and the host's
+default when absent. Unknown fields are rejected.
 
 ## The smallest application
 

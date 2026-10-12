@@ -2978,6 +2978,13 @@ while producing no information the script did not already carry. The schema is
 generated from the types with `schemars`, following
 `crates/component/src/theme/schema.rs`, so the schema and the parser cannot disagree.
 
+`window` is the one field about presentation rather than permission or
+identity: `{ "width": 360, "height": 520 }` in logical pixels, the size the
+window opens at. It is data because the host opens the window before any
+script runs, so a script cannot say it in time; the person using the
+application can still resize the window, and an absent `window` keeps the
+host's default.
+
 Every parse failure names the field and says what was expected, because this is
 the first thing a plugin author meets and usually the only diagnostic they get:
 nothing has run, so there is no stack to fall back on. Three validation

@@ -156,6 +156,17 @@ Clock.app/Contents/
     └── main.js
 ```
 
+[Packaging](./packaging.md) walks through the `.app`, a Linux archive and desktop entry, and a Windows folder, including signing and notarization.
+
+## Starting a new application
+
+```bash
+gpui-shell new clock
+gpui-shell run -d clock --watch
+```
+
+`new` creates the directory where the command runs, the way `cargo new` does — `clock` here is `./clock`, not an installed application. It writes a `gpui-shell.json` whose `id` comes from the directory name, a `main.js` with a title bar and a button, a `.gitignore`, `jsconfig.json`, `gpui-kit.d.ts` and `AGENTS.md`, and refuses a directory that already has files in it.
+
 ## Instructions for coding agents
 
 ```bash
@@ -230,6 +241,7 @@ A reload does all of its fallible work before it touches the live View. If the n
 ```text
 gpui-shell run [<name> | -d <directory>] [--watch] [--dev]
 gpui-shell
+gpui-shell new <directory>
 gpui-shell list
 gpui-shell check <name> | -d <directory> [--print-spec]
 gpui-shell types <name> | -d <directory>
@@ -243,6 +255,7 @@ gpui-shell --help | --version
 | `-d`, `--dir <dir>`   | The application root, or the `main.js` inside it                         |
 | _(none)_               | The application packaged beside the executable                           |
 | `run`                  | Run one application in a window                                         |
+| `new`                  | Create a blank application in a new directory                            |
 | `list`                 | Print the installed applications and their requested capabilities        |
 | `check`                | Load and render once without a window; exit `0` or `1`                   |
 | `types`                | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |

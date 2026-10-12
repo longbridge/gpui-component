@@ -336,7 +336,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app_assets"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -2379,7 +2379,7 @@ checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
 
 [[package]]
 name = "dialog_overlay"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -2834,7 +2834,7 @@ dependencies = [
 
 [[package]]
 name = "example-brush"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-component-story",
  "gpui-kit",
@@ -2842,7 +2842,7 @@ dependencies = [
 
 [[package]]
 name = "example-dock"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-component-story",
@@ -2854,7 +2854,7 @@ dependencies = [
 
 [[package]]
 name = "example-editor"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "autocorrect",
  "chrono",
@@ -2869,7 +2869,7 @@ dependencies = [
 
 [[package]]
 name = "example-html"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-component-story",
  "gpui-kit",
@@ -2877,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "example-large-text"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-component-story",
  "gpui-kit",
@@ -2885,7 +2885,7 @@ dependencies = [
 
 [[package]]
 name = "example-markdown"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-component-story",
  "gpui-kit",
@@ -2895,7 +2895,7 @@ dependencies = [
 
 [[package]]
 name = "example-stream-markdown"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-component-story",
  "gpui-kit",
@@ -2905,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "example-tig"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-kit",
 ]
@@ -3103,7 +3103,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "focus_trap"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -3200,7 +3200,7 @@ dependencies = [
 
 [[package]]
 name = "fps_monitor"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-fps",
  "gpui-kit",
@@ -3777,7 +3777,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-base"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-base-examples"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "chrono",
  "gpui-base",
@@ -3837,7 +3837,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-base-examples-wasm"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -3856,7 +3856,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -3943,7 +3943,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-story"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3983,7 +3983,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-story-web"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "console_error_panic_hook",
  "console_log",
@@ -4312,7 +4312,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-fps"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "core-graphics 0.24.0",
  "gpui-fast",
@@ -4329,7 +4329,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "chrono",
  "gpui-base",
@@ -4347,7 +4347,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-assets"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-fast",
@@ -4363,7 +4363,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-recipes"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-kit",
 ]
@@ -4896,7 +4896,7 @@ checksum = "4b0d73e1bc02eef886a5947f41b8512708792e9e5d3053d181843311a487f96f"
 
 [[package]]
 name = "gpui-shell"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4933,7 +4933,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-webview"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -5151,7 +5151,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello_world"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -5618,7 +5618,7 @@ dependencies = [
 
 [[package]]
 name = "input"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -6482,7 +6482,7 @@ dependencies = [
 
 [[package]]
 name = "markdown_table"
-version = "0.7.1"
+version = "0.7.3"
 dependencies = [
  "gpui-kit",
 ]

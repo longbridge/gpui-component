@@ -85,6 +85,43 @@ pub struct PluginManifest {
     entry: String,
     dependencies: BTreeMap<String, GitDependency>,
     capabilities: CapabilitiesFile,
+    window: Option<WindowSize>,
+}
+
+/// The size an application's window opens at, in logical pixels.
+///
+/// Only the opening size: the person using the application can still resize
+/// the window, and the host keeps its own default when the manifest is silent.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WindowSize {
+    /// Width in logical pixels.
+    width: f32,
+    /// Height in logical pixels.
+    height: f32,
+}
+
+impl WindowSize {
+    /// Width in logical pixels.
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+
+    /// Height in logical pixels.
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+
+    fn validate(&self) -> Result<(), ManifestProblem> {
+        for (name, value) in [("width", self.width), ("height", self.height)] {
+            if !value.is_finite() || value <= 0. {
+                return Err(ManifestProblem::Window(format!(
+                    "`{name}` must be a positive number of logical pixels, found {value}"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// One JavaScript package fetched from Git before an application starts.
@@ -334,6 +371,16 @@ impl PluginManifest {
         capabilities.validate_placeholders()?;
         capabilities.validate_network()?;
 
+        let window = match fields.get("window") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => {
+                let size: WindowSize = serde_json::from_value(value.clone())
+                    .map_err(|error| ManifestProblem::Window(error.to_string()))?;
+                size.validate()?;
+                Some(size)
+            }
+        };
+
         Ok(Self {
             id,
             name,
@@ -342,6 +389,7 @@ impl PluginManifest {
             entry,
             dependencies,
             capabilities,
+            window,
         })
     }
 
@@ -379,6 +427,11 @@ impl PluginManifest {
         &self.dependencies
     }
 
+    /// The size the window opens at, when the manifest names one.
+    pub fn window(&self) -> Option<WindowSize> {
+        self.window
+    }
+
     /// The grant this manifest asks for, resolved against the two directories
     /// only the host knows.
     ///
@@ -395,7 +448,7 @@ impl PluginManifest {
     }
 }
 
-const FIELDS: [&str; 7] = [
+const FIELDS: [&str; 8] = [
     "id",
     "name",
     "version",
@@ -403,6 +456,7 @@ const FIELDS: [&str; 7] = [
     "entry",
     "dependencies",
     "capabilities",
+    "window",
 ];
 
 fn validate_dependencies(
@@ -654,6 +708,10 @@ struct ManifestFile {
     /// storage — see [`CapabilitiesFile::storage`].
     #[serde(default)]
     capabilities: CapabilitiesFile,
+    /// The size the window opens at, e.g. `{"width": 360, "height": 520}`.
+    /// Absent means the host's default.
+    #[serde(default)]
+    window: Option<WindowSize>,
 }
 
 /// The `capabilities` block, before it is anchored to real directories.
@@ -1021,6 +1079,7 @@ pub enum ManifestProblem {
     },
     Capabilities(String),
     Dependencies(String),
+    Window(String),
 }
 
 /// What each field is for, in one line, appended to the error that reports it
@@ -1119,6 +1178,10 @@ impl std::fmt::Display for ManifestProblem {
             ManifestProblem::Dependencies(error) => write!(
                 f,
                 "invalid `dependencies`: {error}. Use a GitHub owner/repository shorthand or full Git URL with an optional #ref, or an object with a Git URL, exactly one non-empty `branch` or `tag`, and an optional repository-relative `entry`"
+            ),
+            ManifestProblem::Window(error) => write!(
+                f,
+                "invalid `window`: {error}. Expected an object such as {{\"width\": 360, \"height\": 520}}, in logical pixels"
             ),
         }
     }
@@ -2466,6 +2529,43 @@ mod tests {
     }
 
     #[test]
+    fn the_window_size_is_read_from_the_manifest() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "com.example.calc", "name": "Calc", "entry": "main.js",
+                "window": {"width": 360, "height": 520}}"#,
+        )
+        .expect("a window size is a valid manifest field");
+        let window = manifest.window().expect("the size is kept");
+        assert_eq!((window.width(), window.height()), (360., 520.));
+
+        let manifest = PluginManifest::parse(
+            r#"{"id": "com.example.calc", "name": "Calc", "entry": "main.js"}"#,
+        )
+        .expect("the window is optional");
+        assert_eq!(manifest.window(), None);
+    }
+
+    #[test]
+    fn invalid_window_sizes_are_rejected() {
+        for window in [
+            r#"{"width": 0, "height": 520}"#,
+            r#"{"width": 360, "height": -1}"#,
+            r#"{"width": 360}"#,
+            r#"{"width": 360, "height": 520, "x": 0}"#,
+            r#""360x520""#,
+        ] {
+            let source = format!(
+                r#"{{"id": "com.example.calc", "name": "Calc", "entry": "main.js", "window": {window}}}"#
+            );
+            let error = PluginManifest::parse(&source).expect_err(window);
+            assert!(
+                error.to_string().contains("invalid `window`"),
+                "{window}: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn an_omitted_application_version_is_reported_as_unknown() {
         let source = VALID.replace("        \"version\": \"1.2.0\",\n", "");
         let manifest = PluginManifest::parse(&source).expect("version metadata is optional");
@@ -2883,6 +2983,7 @@ mod tests {
         assert_eq!(described.entry, parsed.entry);
         assert_eq!(described.dependencies, parsed.dependencies);
         assert_eq!(described.capabilities, parsed.capabilities);
+        assert_eq!(described.window, parsed.window);
     }
 
     #[test]

@@ -155,6 +155,17 @@ Clock.app/Contents/
     └── main.js
 ```
 
+[Packaging](./packaging.md) 完整介绍了 `.app`、Linux 压缩包与 desktop entry、Windows 文件夹的做法，包括签名与公证。
+
+## 新建应用
+
+```bash
+gpui-shell new clock
+gpui-shell run -d clock --watch
+```
+
+`new` 和 `cargo new` 一样，在命令运行的位置创建目录——这里的 `clock` 指 `./clock`，不是已安装的应用。它会写入 `gpui-shell.json`（`id` 由目录名推出）、一个带标题栏和按钮的 `main.js`、`.gitignore`、`jsconfig.json`、`gpui-kit.d.ts` 和 `AGENTS.md`；目标目录里已有文件时会拒绝创建。
+
 ## 给 coding agent 的开发说明
 
 ```bash
@@ -229,6 +240,7 @@ cargo run -p gpui-shell -- run ./hello --dev      # 隐含 --watch
 ```text
 gpui-shell run [<name> | -d <directory>] [--watch] [--dev]
 gpui-shell
+gpui-shell new <directory>
 gpui-shell list
 gpui-shell check <name> | -d <directory> [--print-spec]
 gpui-shell types <name> | -d <directory>
@@ -242,6 +254,7 @@ gpui-shell --help | --version
 | `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                     |
 | _（无）_             | 与可执行文件一起打包的应用                         |
 | `run`                | 在窗口中运行一个应用                               |
+| `new`                | 在新目录中创建一个空白应用                         |
 | `list`               | 列出已安装的应用及其申请的 capabilities            |
 | `check`              | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
 | `types`              | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |

@@ -40,6 +40,7 @@ const EXIT_USAGE: i32 = 2;
 
 mod agents;
 mod installed;
+mod scaffold;
 
 /// Runs the shipped command-line host with one frozen component catalog.
 ///
@@ -96,6 +97,31 @@ pub fn main_with_brand_and_components(
             }
             return;
         }
+        Invocation::New(directory) => match scaffold::create(&directory, brand, &components) {
+            Ok(created) => {
+                let shown = directory.display();
+                println!("created {}", created.display());
+                println!();
+                println!(
+                    "  {} run -d {shown} --watch   # run it, reloading on save",
+                    brand.name()
+                );
+                println!(
+                    "  {} check -d {shown}         # check it after every change",
+                    brand.name()
+                );
+                println!();
+                println!(
+                    "To install it, copy or link it into {}.",
+                    installed::applications_directory(brand).display()
+                );
+                return;
+            }
+            Err(error) => {
+                eprintln!("{}: {error}", brand.name());
+                std::process::exit(1);
+            }
+        },
         Invocation::Check(arguments) => {
             let directory = resolve_or_exit(&arguments.application, brand);
             // A check reports diagnostics, not progress, so only warnings and
@@ -159,6 +185,8 @@ enum Invocation {
     Types(Application),
     /// Print the development instructions, or write them into an application.
     Agents(Option<Application>),
+    /// Create a blank application in a new directory.
+    New(PathBuf),
     /// Text for stdout, followed by a successful exit.
     Print(String),
 }
@@ -263,6 +291,8 @@ pub enum InvocationKind {
     Types,
     /// Prints or writes the development instructions for coding agents.
     Agents,
+    /// Creates a blank application.
+    New,
     Print,
 }
 
@@ -280,6 +310,7 @@ pub fn parse_invocation(
         Invocation::Check(_) => InvocationKind::Check,
         Invocation::Types(_) => InvocationKind::Types,
         Invocation::Agents(_) => InvocationKind::Agents,
+        Invocation::New(_) => InvocationKind::New,
         Invocation::Print(_) => InvocationKind::Print,
     })
 }
@@ -313,6 +344,7 @@ impl Arguments {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
     Run,
+    New,
     Check,
     Types,
     List,
@@ -366,6 +398,9 @@ fn parse(
         match argument.as_str() {
             // A subcommand rather than a flag, because it does something else
             // entirely: it never shows a window and it exits with a status.
+            "new" if application.is_none() && command.is_none() => {
+                command = Some(Command::New);
+            }
             "run" if application.is_none() && command.is_none() => {
                 command = Some(Command::Run);
             }
@@ -406,6 +441,13 @@ fn parse(
             Some(_) => Err("`list` takes no application".to_owned()),
         },
         Some(Command::Agents) => Ok(Invocation::Agents(application)),
+        // Created where the command runs, the way `cargo new` does: a bare
+        // name is a new directory here, not an installed application.
+        Some(Command::New) => match application {
+            Some(Application::Installed(name)) => Ok(Invocation::New(PathBuf::from(name))),
+            Some(Application::Path(path)) => Ok(Invocation::New(path)),
+            _ => Err("`new` expects the directory to create".to_owned()),
+        },
         Some(Command::Types) => application
             .map(Invocation::Types)
             .ok_or_else(|| "expected an application directory".to_owned()),
@@ -456,6 +498,7 @@ fn help(brand: HostBrand) -> String {
 {version}
 
 Usage: {name} run <name> | --dir <directory> [--watch] [--dev]
+       {name} new <directory>
        {name} list
        {name} check <name> | --dir <directory> [--print-spec]
        {name} types <name> | --dir <directory>
@@ -471,6 +514,9 @@ beside its executable ({bundled}).
 
 Commands:
   run          Run one application in a window.
+  new          Create a blank application in a new directory, relative to
+               where the command runs: manifest, entry module, editor types
+               and {AGENTS}.
   list         Print the installed applications — id, name, version and
                requested capabilities — without running any.
   agents       Print the development instructions a coding agent needs to write
@@ -586,6 +632,11 @@ fn run(
             // application from its source directory, which is where somebody is
             // editing. Nothing is written when the file already matches, and a
             // directory that refuses the write is logged rather than fatal.
+            let window_size = manifest
+                .as_ref()
+                .ok()
+                .and_then(|manifest| manifest.as_ref())
+                .and_then(|manifest| manifest.window());
             let manifest_error = manifest.err();
             let built: Rc<RefCell<Option<Entity<ShellRoot>>>> = Rc::new(RefCell::new(None));
             let sink = built.clone();
@@ -614,7 +665,7 @@ fn run(
             // the window itself; see `ComponentWindowOpener`. Everything after
             // this point only wants a `&mut Window`, so the handle is untyped
             // either way.
-            let options = window_options(&root, brand, cx);
+            let options = window_options(&root, brand, window_size, cx);
             let window = match window_opener {
                 Some(open) => {
                     let mut build = |window: &mut Window, cx: &mut App| build(window, cx).into();
@@ -952,7 +1003,14 @@ fn local_capabilities(
         .exit(true)
 }
 
-fn window_options(root: &Path, brand: HostBrand, cx: &App) -> WindowOptions {
+/// The window an application opens in. `window_size` is the manifest's
+/// `window`; without one the host's default applies.
+fn window_options(
+    root: &Path,
+    brand: HostBrand,
+    window_size: Option<crate::plugin::WindowSize>,
+    cx: &App,
+) -> WindowOptions {
     let title = root
         .file_name()
         .map(|name| format!("{} — {}", name.to_string_lossy(), brand.name()))
@@ -961,7 +1019,9 @@ fn window_options(root: &Path, brand: HostBrand, cx: &App) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
-            size(px(880.), px(720.)),
+            window_size
+                .map(|window| size(px(window.width()), px(window.height())))
+                .unwrap_or(size(px(880.), px(720.))),
             cx,
         ))),
         // A window with no title is unidentifiable in a switcher or a tiling
@@ -1238,6 +1298,20 @@ mod tests {
         assert_eq!(arguments.application, Application::Bundled);
         assert!(arguments.application.is_installed());
         assert!(!Application::Path(PathBuf::from("app")).is_installed());
+    }
+
+    #[test]
+    fn new_takes_the_directory_to_create() {
+        assert_eq!(
+            parse_args(&["new", "clock"]).unwrap(),
+            Invocation::New(PathBuf::from("clock")),
+            "a bare name is a directory here, the way `cargo new` reads it"
+        );
+        assert_eq!(
+            parse_args(&["new", "-d", "apps/clock"]).unwrap(),
+            Invocation::New(PathBuf::from("apps/clock"))
+        );
+        assert!(parse_args(&["new"]).is_err());
     }
 
     #[test]

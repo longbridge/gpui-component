@@ -3977,11 +3977,13 @@ impl gpui::Render for Empty {
 
 use std::ops::Deref;
 
+// The example imports its title bar from `gpui-component`.
+#[cfg(feature = "components")]
 #[gpui::test]
 fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::init(cx));
+    cx.update(crate::components::init);
 
-    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let runtime = crate::components::new_isolated_runtime().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     // The example is the contract with users: if it stops rendering, the
@@ -5622,11 +5624,13 @@ export default class ZeroScale extends View {
 /// state, controlled checkboxes, a dialog, a toast, capability-gated storage,
 /// and a filter that must survive every mutation. If a subsystem regresses,
 /// this is the test that notices.
+// The example imports its title bar from `gpui-component`.
+#[cfg(feature = "components")]
 #[gpui::test]
 fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::init(cx));
+    cx.update(crate::components::init);
 
-    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let runtime = crate::components::new_isolated_runtime().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
