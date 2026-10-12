@@ -7,9 +7,10 @@
 //! serializer. No rendering, input handling or entity yet (design Phase 3).
 //! Everything is behind the off-by-default `block-editor` feature, and
 //! [`BlockEditorModel`] is a spike name.
-#![allow(dead_code)] // removed once the facade uses everything
 
+mod command;
 mod document;
+mod editor;
 mod id;
 mod import;
 mod inline;
@@ -24,7 +25,9 @@ mod transaction;
 mod undo;
 
 
+pub use command::{CommandError, EditorCommand};
 pub use document::{BlockRef, DocumentRef};
+pub use editor::BlockEditorModel;
 pub use id::BlockId;
 pub use kind::BlockKind;
 pub use marks::{MarkChange, MarkKind, MarkSet, MarkState};
