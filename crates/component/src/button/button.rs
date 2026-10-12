@@ -721,13 +721,7 @@ impl RenderOnce for Button {
                     // A loading button keeps its normal colors, but must not react
                     // to the pointer, it is not waiting for another click.
                     .when(interactive, |this| {
-                        this.hover(|this| {
-                            let hover_style = style.hovered(self.outline, cx);
-                            this.bg(hover_style.bg)
-                                .border_color(hover_style.border)
-                                .text_color(hover_style.fg)
-                        })
-                        .active(|this| {
+                        this.active(|this| {
                             let active_style = style.active(self.outline, cx);
                             this.bg(active_style.bg)
                                 .border_color(active_style.border)
@@ -739,6 +733,18 @@ impl RenderOnce for Button {
                                 .group_hover(group, |this| this.bg(idle_bg))
                         })
                     })
+            })
+            .hover(|this| {
+                // Always register the hover style: GPUI only refreshes the cached
+                // hover state while one is present. If a selected button skipped it,
+                // the stale state would keep hover colors after unselecting.
+                if !interactive || selected {
+                    return this;
+                }
+                let hover_style = style.hovered(self.outline, cx);
+                this.bg(hover_style.bg)
+                    .border_color(hover_style.border)
+                    .text_color(hover_style.fg)
             })
             .line_height(relative(1.25))
             .refine_style(&instance_style);
