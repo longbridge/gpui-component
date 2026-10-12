@@ -12,9 +12,9 @@ use gpui_kit::component::{
 };
 use gpui_kit::test::{TestSupportExt as _, TestWindowExt as _};
 use gpui_kit::{
-    App, AppContext, Context, Entity, Focusable as _, InputEvent as _, Modifiers, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, ScrollDelta, TestAppContext,
-    Window, WindowHandle, div, point, prelude::*, px, size,
+    App, AppContext, Context, ElementId, Entity, Focusable as _, InputEvent as _, Modifiers,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Role, ScrollDelta,
+    TestAppContext, Window, WindowHandle, div, point, prelude::*, px, size,
 };
 
 struct Review {
@@ -703,6 +703,39 @@ fn wheel_axes_stay_independent_when_code_overflows_in_both_directions(cx: &mut T
         })
         .unwrap();
     }
+}
+
+#[gpui_kit::test]
+fn next_change_wraps_once_the_list_is_scrolled_to_its_end(cx: &mut TestAppContext) {
+    let patch: String = (0..40)
+        .map(|ix| {
+            let line = ix * 20 + 1;
+            format!("@@ -{line},1 +{line},1 @@\n-old {ix}\n+new {ix}\n")
+        })
+        .collect();
+    let (handle, state) = review(cx, &patch, None, DiffMode::Unified, vec![]);
+    let first_drawn = |window: &Window| {
+        let row = ElementId::from(("new", 0usize));
+        window
+            .find_all("source")
+            .iter()
+            .any(|source| source.path().contains(&row))
+    };
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        // At the end, the last changes sit below the top where the list cannot
+        // scroll them up to it.
+        let mut left_the_first = false;
+        let wrapped = (0..80).any(|_| {
+            state.update(cx, |state, cx| state.next_change(cx));
+            window.render_frame(cx);
+            let first = first_drawn(window);
+            left_the_first |= !first;
+            left_the_first && first
+        });
+        assert!(wrapped, "next change stopped at the end");
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]
