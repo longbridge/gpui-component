@@ -9,12 +9,20 @@
 //! [`BlockEditorModel`] is a spike name.
 #![allow(dead_code)] // removed once the facade uses everything
 
+mod document;
 mod id;
 mod inline;
 mod kind;
 mod marks;
+mod order;
+mod position;
+mod selection;
+mod step;
 
 
+pub use document::{BlockRef, DocumentRef};
 pub use id::BlockId;
 pub use kind::BlockKind;
 pub use marks::{MarkChange, MarkKind, MarkSet, MarkState};
+pub use position::{Affinity, BlockPosition, PositionError};
+pub use selection::{BlockSelection, SelectionError};
