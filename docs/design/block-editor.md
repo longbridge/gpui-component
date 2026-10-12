@@ -1,0 +1,596 @@
+# Block-based WYSIWYG editor for gpui-kit: design proposal
+
+**Status:** Draft for review. A model-only spike of §4–§5 exists as a draft PR from `wabzqem:block-editor-model-spike` (feature `block-editor`); see Appendix B for what it changed in this design.
+**Context:** Taking over [longbridge/gpui-kit#3049](https://github.com/longbridge/gpui-kit/pull/3049), which EnoroF opened and then handed over on 2026-10-08.
+**Author:** Richard Nelson (@wabzqem)
+**Reviewers:** @huacnlee and the gpui-kit maintainers. Also cc @EnoroF.
+**Checked against:** `main` @ `369f7a8f` and PR head @ `47141037` (merge-base `3f1dda6e`). Appendix A lists what was verified and how.
+
+---
+
+## 0. Sources
+
+- The public PR page and @huacnlee's review on #3049 ("Design-level issues" 1–8 and "Suggested path"). Labels **R1**–**R8** below refer to those eight review items.
+- The PR head `47141037` (`crates/base/src/text/editor/{mod,model,input,tests}.rs`, plus its changes to `inline.rs`, `inline_flow.rs`, `node.rs`, `text_view.rs`, `mod.rs`).
+- `main` @ `369f7a8f`, in particular `crates/base/src/text/*`, `crates/base/src/input/base/*`, `crates/base/src/dock/layout/*`, `crates/base/src/undo_history.rs`, `crates/base/src/text_selection.rs`, `crates/component/src/input/input.rs`, and `docs/ARCHITECTURE.md`.
+- Issue #3110 (atomic inline tokens), whose design landed as `gpui_base::input::{InlineToken, InlineTokenSpan, InputContent}`.
+
+Every type and API sketch here is a **proposal**. Statements about existing code were checked against the SHAs above. The few that are still open are marked *(unverified: reason)*.
+
+---
+
+## 1. Goal
+
+Build a block-based WYSIWYG Markdown editor that others can build on. Its foundation is a document model, not a list of commands:
+
+1. **Stable, validated positions** that can address *every* block, including code blocks, tables and cells, images, custom plugin nodes, and content nested in lists or blockquotes.
+2. **One edit path.** Every change is an invertible step, and steps are grouped into transactions. Undo, redo, event payloads, and position mapping all come from that path.
+3. **Serialization that always round-trips through gpui-kit's own parser**, guaranteed by keeping the model normalized.
+4. **A strict render/paint/event contract.** Paint reads a snapshot and records geometry. It never changes the editor model.
+5. **A queryable public API.** Applications can read the caret, selection, active marks, and block kind (enough for toolbar state), and events carry payloads.
+6. **Reuse of the Markdown pipeline.** Parsing, `BlockNode` rendering, and `MarkdownExtensions` plugins keep working through the `InlineInteraction` seam that the review asked us to keep.
+
+## 2. What we keep from #3049
+
+| Keep | Status on `main` @ `369f7a8f` |
+|---|---|
+| `InlineInteraction` + `NodeContext::paragraph_interaction` | Still the right seam, but the patch **does not apply** to main. `inline.rs`, `inline_flow.rs`, `node.rs`, and `text_view.rs` all conflict. `text/` has changed by about 11.9k lines across 46 commits since the merge-base: `Inline` now has a retained layout (`RetainedLayout`, `handed_over`), `range_backgrounds`, and `reveal`; `Paragraph` has a `render_cache`; `NodeContext.style` is `Arc<TextViewStyle>`. Phase 0a is therefore a re-implementation, not a cherry-pick (§7.2). |
+| List-item continuation-line indentation fix in `BlockNode::to_markdown` | Still needed. Main still emits `format!("{}{}", prefix, child.to_markdown())` for list items. |
+| `examples/fixtures/markdown_plugins.rs` extraction | Needs redoing. `examples/markdown/src/main.rs` on main is 1866 lines and has gained `mention.rs`. |
+| `editor/input.rs` (`EntityInputHandler`: UTF-16↔byte mapping, marked text, `bounds_for_range`, `character_index_for_point`) | Carries over once rebased onto the new position types. |
+| Key bindings, `BlinkCursor` reuse | Carry over. `crate::text::selection::word_range_at`, which the PR uses, still exists on main; `crate::text_boundary::word_range_at` is also there and is what the input engine uses. |
+| The editor example | Carries over. It loads `examples/fixtures/test.md` (320 lines). §8 adds a generated fixture of 1000+ blocks for performance work. |
+
+What we replace: `model.rs` (rewritten), the whole-document snapshot undo, the `UndoHistory` use (§5.2), the paint-time `owner.update(..)` in `InlineEditing::paint`, and the `MarkdownEditorState` name.
+
+**What I confirmed about the current PR** (by probing the PR head): typing `c` then `d` in bold after `**ab**` gives `source() == "**ab****c****d**"` with 3 inline nodes (R3). For `# T\n\n- a\n\n```rs\ncode\n```` the model sees 2 editable paragraphs out of 3 top-level blocks, so the code block has no position (R2). The PR builds cleanly and its 24 editor tests pass, alongside 2 probe tests of mine.
+
+## 3. Non-goals for the first landing
+
+- Collaborative editing and CRDTs. The step/mapping design shouldn't rule them out.
+- Byte-exact source preservation. Serialization is *canonical*: it round-trips through our parser but doesn't keep stylistic choices like `*` vs `_` or `-` vs `*`.
+- In-place editing inside code blocks and table cells in Phase 3. Both are addressable from day one, so they can be selected, deleted, moved, and copied. In-place editing arrives in Phase 4.
+- Raw HTML. On main, HTML goes through `format::html::parse` into ordinary nodes, and `BlockNode` has no HTML variant, so the editor sees whatever nodes that produces. Footnote definitions (`BlockNode::Definition`) and frontmatter are kept as opaque atoms.
+- Drag handles, slash menus, and floating toolbars. Applications can build these on the public API.
+- Virtualized rendering (planned, §8).
+
+## 4. Proposed model
+
+### 4.1 Separate the editing model from the render AST
+
+Today the PR's `Document` is a `Vec<BlockNode>` and edits the render AST in place. On main, `BlockNode` and `Paragraph` carry render state (`state: Arc<Mutex<InlineState>>`, `render_cache`), and the PR identifies a paragraph by `Arc::as_ptr(&self.state)` (R1). I propose an editing model that owns identity and invariants, with a cached projection into `BlockNode` for rendering:
+
+```text
+ Markdown ──markdown::parse──▶ BlockNode tree ──import──▶ EditorDocument (ids, invariants)
+                                                              │
+                                           transactions ──────┤
+                                                              ▼
+                                     projection (dirty blocks only) ──▶ BlockNode for rendering
+                                                              │
+                                      serialize (MarkdownSource-based) ──▶ Markdown
+```
+
+The dock already works this way. `PaneTree` (`crates/base/src/dock/layout/tree.rs`) is the single source of truth, has stable `NodeId`s, runs `normalize` inside every edit method, and hands out a borrowed `PaneRef` projection.
+
+### 4.2 Block tree and identity (proposal)
+
+```rust
+/// Opaque and process-unique, allocated from a global AtomicU64 like
+/// dock::NodeId (`next_node_id`) and TextSelectionScopeId::new(). Never reused,
+/// so an id from a discarded document or a pre-`set_source` state can only
+/// ever fail lookup — it can never alias a live block.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct BlockId(NonZeroU64);
+
+pub(crate) struct EditorDocument {
+    revision: u64,                         // bumped per committed transaction
+    root: BlockId,
+    blocks: HashMap<BlockId, BlockEntry>,  // see D4
+    order: OrderIndex,                     // §4.5
+    extensions: Arc<MarkdownExtensions>,
+    link_refs: HashMap<SharedString, LinkMark>,   // as NodeContext::link_refs
+}
+
+struct BlockEntry {
+    parent: Option<BlockId>,
+    kind: BlockKindData,     // private; carries e.g. ColumnumnAlign (sic, main's type name) for tables
+    content: BlockContent,
+}
+
+/// Public, payload-light projection of a block's kind, for matching in toolbar code.
+#[non_exhaustive]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BlockKind {
+    // containers
+    Root, Blockquote, List { ordered: bool }, ListItem { checked: Option<bool> },
+    Table, TableRow, TableCell,
+    // text-bearing leaves
+    Paragraph, Heading { level: u8 }, CodeBlock,
+    // atomic leaves
+    Image, HorizontalRule, Break, Custom, Definition, Unknown,
+}
+
+enum BlockContent {
+    Children(Vec<BlockId>),
+    Inline(InlineText),     // Paragraph, Heading, TableCell
+    Plain(String),          // CodeBlock (language kept in BlockKindData)
+    Atom(AtomData),         // Custom (MarkdownNode), Definition, Break, HorizontalRule, Unknown
+}
+```
+
+The variants mirror main's `BlockNode` (`Root, Paragraph, Heading, Blockquote, List, ListItem, CodeBlock, Custom { .. }, Table, Break, HorizontalRule, Definition, Unknown`). The one addition is that table rows and cells become nodes of their own.
+
+- **Every** node has a `BlockId`, so code blocks, tables, cells, images, and custom nodes all get positions and node selection (R2).
+- Custom nodes keep their `MarkdownNode`. Main's `MarkdownNode::to_markdown()` is what the serializer uses for them, so plugin content round-trips without the editor understanding it.
+
+### 4.3 Position (proposal) (R1)
+
+The name is `BlockPosition`. `gpui_base::input` already exports `Position` (a re-export of `lsp_types::Position`) and `Selection` (`input/base/cursor.rs`). Reusing those names would make glob imports ambiguous.
+
+```rust
+/// A caret location. Plain value type (its fields are the definition),
+/// in the ARCHITECTURE.md sense of `Point` / `Selection`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct BlockPosition {
+    pub block: BlockId,
+    /// UTF-8 byte offset into the block's flat text, on a grapheme boundary.
+    /// For atomic blocks: 0 = before, 1 = after.
+    pub offset: usize,
+    /// Caret side at a soft wrap or mark boundary. Not part of ordering.
+    pub affinity: Affinity,
+}
+
+pub enum Affinity { Upstream, Downstream }
+
+#[non_exhaustive]
+pub enum PositionError {
+    UnknownBlock(BlockId),           // removed, from another document, or from before set_source
+    NotACaretBlock(BlockId),         // e.g. List, TableRow
+    OffsetOutOfBounds { len: usize },
+    NotOnGraphemeBoundary,
+}
+
+impl EditorDocument {
+    pub fn validate(&self, p: BlockPosition) -> Result<BlockPosition, PositionError>;
+    pub fn clamp(&self, p: BlockPosition) -> BlockPosition;
+    pub fn cmp(&self, a: BlockPosition, b: BlockPosition) -> Result<Ordering, PositionError>; // O(1), §4.5
+    pub fn source_offset(&self, p: BlockPosition) -> Option<usize>;            // for persistence
+    pub fn position_at_source_offset(&self, offset: usize) -> Option<BlockPosition>;
+}
+```
+
+- **Stable:** ids come from a counter, not an address, and survive edits, undo, and redo. Undoing a removal re-inserts the recorded entries with their original ids.
+- **Validated:** every public entry point validates its input and returns `Result`. In the PR, `Document::replace` does `ps.iter().find(..).unwrap()` at `model.rs:296` (verified at `47141037`), so a stale position panics. Here it becomes an `Err`.
+- **Serializable:** it is plain data, but only meaningful while its blocks exist. Anything that has to outlive `set_source` or a session goes through `source_offset` (D1).
+
+### 4.4 Selection (proposal)
+
+```rust
+#[derive(Clone, PartialEq, Debug)]
+pub enum BlockSelection {
+    /// Text range, possibly spanning blocks; anchor == head is a caret.
+    Text { anchor: BlockPosition, head: BlockPosition },
+    /// Whole blocks as objects (image, code block, table, run of siblings).
+    Blocks { anchor: BlockId, head: BlockId },
+    /// Rectangular cell range in one table (Phase 4c).
+    Cells { table: BlockId, anchor: (u32, u32), head: (u32, u32) },
+}
+```
+
+`BlockEditorState::set_selection` enforces these rules:
+- `Text` endpoints must be valid caret positions. Atoms between the endpoints count as fully covered, so select-all followed by typing removes the code block too, which fixes the R2 repro. *Spike:* a selection covering the whole document is replaced by one empty paragraph, so typing after select-all gives a plain paragraph (not the first block's kind, e.g. a heading).
+- `Blocks` endpoints are normalized to siblings under their lowest common ancestor.
+
+### 4.5 Document order index (R4)
+
+```rust
+struct OrderIndex {
+    structure_revision: u64,
+    leaves: Vec<BlockId>,             // caret-bearing leaves in document order
+    rank: HashMap<BlockId, u32>,
+}
+```
+
+The index is rebuilt in O(N) only on *structural* steps. Text steps leave it alone. Position comparison and per-block selection-range queries become O(1). The PR, by contrast, calls `selection_in` for every painted paragraph, and each call runs `paragraphs()` and `ordered()`, which is O(P²) per frame.
+
+### 4.6 Inline content, marks, normalization, serialization (R3)
+
+```rust
+pub(crate) struct InlineText {
+    text: String,                      // flat UTF-8; inline atoms occupy one U+FFFC
+    runs: Vec<MarkRun>,                // contiguous, non-overlapping, cover 0..text.len()
+    atoms: Vec<(usize, InlineAtom)>,   // offset of each U+FFFC
+}
+struct MarkRun { len: usize, marks: TextMark }      // TextMark: main's crate-internal storage type
+enum InlineAtom { Image(ImageNode), Custom(MarkdownNode) }
+```
+
+These invariants hold after every step, and a `debug_assert!` checks them after each one:
+- **N1:** no empty runs, and no two adjacent runs with equal `TextMark`.
+- **N2:** every atom has a run of its own.
+- **N3:** run lengths sum to the text length.
+
+**Serializer: extend main's `MarkdownSource` rather than write a new one.** Main already has `MarkdownSource` in `node.rs`. It is a layered serializer that picks the mark spanning the most neighbouring pieces, puts it outermost, and recurses. TextView uses it for selection-as-source and for paragraphs that contain custom nodes. I probed it on main:
+
+| Input runs | `MarkdownSource` output | Reparsed by main's `markdown::parse` |
+|---|---|---|
+| `b`{bold} `c`{bold,italic} `d`{bold} | `**b*c*d**` | ✅ same marks |
+| `a`{bold} `b`{bold} (unmerged equal runs) | `**ab**` | ✅ |
+| `ab`{underline} | `<u>ab</u>` | ✅ underline |
+| `ab`{highlight #336699} | `==ab==` | ❌ literal `==ab==`, no highlight, colour lost |
+| `a `{bold} `b` (trailing space in run) | `**a **b` | ❌ literal text, no emphasis |
+| overlapping ranges 0..3 bold + 1..2 italic | `**bcd***c*d` | ❌ duplicated text (input breaks N1–N3) |
+
+With normalized runs, `MarkdownSource` is already correct for nesting and merging. The editor serializer reuses it and adds three things:
+1. **Whitespace hoisting:** leading and trailing whitespace moves outside the delimiters.
+2. **Literal escaping:** `push_str` currently emits text verbatim.
+3. **Highlight as `<mark>`:** inline `<mark>` *is* parsed by main (`inline_html_mark`, test `inline_html_mark_applies_highlight_colors`), including `color` / `style` attributes (D5).
+
+*Spike finding:* those three were not enough for round-trip. The spike's property tests also needed (a) **flanking-safe delimiters**: `*`, `**` or `~~` between a word character outside and punctuation inside (``a*`x`*``) cannot open or close in CommonMark, so the serializer falls back to `<em>` / `<strong>` / `<s>`, which main's parser reads back; and (b) **code innermost**: nothing inside a code span is parsed, so other marks always wrap the code span rather than the reverse. Both sit behind `hoist_whitespace`, so TextView's default output is unchanged. Reference links are resolved against the document's definitions on import and written back as inline links (canonical form).
+
+**`Paragraph::to_markdown` on main is lossy.** For paragraphs without custom nodes it doesn't use `MarkdownSource`. It rewraps the node text once per mark and overwrites the result each time. Probed on main:
+- `a ***x*** b` → `a *x* b` (bold lost).
+- `a **b*c*d** e` → `a **bcd** e` (italic lost).
+- `a <u>x</u> b` → `a x b` (underline dropped).
+
+`ParsedDocument::to_markdown` is `#[allow(dead_code)]` and documented as "used to generate markdown for test", yet the PR uses it as `source()`. Phase 0d routes `Paragraph::to_markdown` through `MarkdownSource` regardless of the editor work.
+
+On R3's specific string: main's parser reads `**ab****c****d**` back as bold `abcd`, plus a redundant nested bold mark on `c`. So it isn't lossy *in our parser*, but it isn't canonical, and normalization (N1) prevents it from being produced at all. *(Unverified: how other CommonMark implementations read that string. I only tested gpui-kit's parser.)*
+
+**Marks in the public API:** `TextMark` and `LinkMark` aren't re-exported from `gpui_base` on main (`text::node` is private; only `CodeBlock` and `TableData` are re-exported), and both have `pub` fields. So the public mark API is keyed on `TextMark`'s *attributes*, and `TextMark` stays internal storage (D12):
+
+```rust
+#[non_exhaustive]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum MarkKind { Bold, Italic, Strikethrough, Underline, Code, Highlight, Link }
+
+/// Read-only view of the marks at a position. Private fields, readers only.
+pub struct MarkSet { /* wraps TextMark */ }
+impl MarkSet {
+    pub fn has(&self, kind: MarkKind) -> bool;
+    pub fn highlight(&self) -> Option<Hsla>;
+    pub fn link_url(&self) -> Option<&SharedString>;
+}
+
+/// A change to apply over a range. Builder with private fields.
+pub struct MarkChange { /* .set(MarkKind) .clear(MarkKind) .with_link(url, title) .with_highlight(Hsla) */ }
+
+pub enum MarkState { Off, On, Mixed }
+```
+
+Stored marks at a collapsed caret work like the PR's `stored`: they are cleared on caret movement, and inheritance at boundaries follows D6.
+
+## 5. Editing primitives, transactions, history (R6, R7)
+
+### 5.1 Steps
+
+```rust
+pub(crate) enum Step {
+    ReplaceText  { block: BlockId, range: Range<usize>, insert: InlineText },
+    ChangeMarks  { block: BlockId, range: Range<usize>, change: MarkChange, prev: Vec<MarkRun> },
+    InsertBlocks { parent: BlockId, index: usize, blocks: Vec<DetachedBlock> },
+    RemoveBlocks { parent: BlockId, range: Range<usize>, removed: Vec<DetachedBlock> },
+    MoveBlocks   { from: (BlockId, Range<usize>), to: (BlockId, usize) },
+    SetKind      { block: BlockId, kind: BlockKindData, prev: BlockKindData },
+    SplitBlock   { block: BlockId, offset: usize, new_ids: SmallVec<[BlockId; 2]>, depth: u8 },
+    JoinBlocks   { first: BlockId, second: BlockId, at: usize },
+}
+impl Step {
+    fn apply(&self, doc: &mut EditorDocument) -> Result<StepMap, StepError>;
+    fn invert(&self, before: &EditorDocument) -> Step;
+}
+```
+
+- *Spike finding:* only four primitive steps were needed: `ReplaceText`, `InsertBlocks`, `RemoveBlocks`, `SetKind`. Mark changes are a `ReplaceText` of the same text with new runs; split, join and move are composites (move = remove + insert, ids kept). `apply` returns the inverse step directly instead of a separate `invert(&before)`. This kept inversion trivial; a dedicated `ChangeMarks` can come back if undo memory for large mark changes matters.
+- `DetachedBlock` keeps its ids. New ids are allocated when a transaction is *built* and recorded in its steps, so redo reproduces the same ids.
+- A `normalize` pass, the same idea as `PaneTree::normalize`, ends every transaction. It appends its own steps so that undo stays exact. It enforces the structural invariants: a `List` contains only `ListItem`s; a non-empty `ListItem` starts with a leaf; the only empty container allowed is `Root`; and there is always at least one caret leaf. *Spike finding:* one more rule was needed: adjacent sibling lists of the same type are merged, because Markdown cannot write them apart (main's parser reads them back as one list, even with a `*` vs `-` marker switch).
+
+### 5.2 Transactions and history
+
+```rust
+pub struct Transaction {           // private fields
+    steps: Vec<Step>,
+    maps: Vec<StepMap>,
+    selection_before: BlockSelection,
+    selection_after: BlockSelection,
+    origin: EditOrigin,
+}
+#[non_exhaustive]
+pub enum EditOrigin { Typing, Backspace, DeleteForward, Ime, Paste, Cut, Command(&'static str), InputRule(&'static str), Api, Undo, Redo }
+```
+
+**History follows the input engine's `UndoManager` semantics, not `UndoHistory`** (D11). Here is what main actually has:
+- `crate::undo_history::UndoHistory<T>` groups only by elapsed time (`group_interval`) or by an explicit `start_grouping` / `end_grouping` flag. `undo` and `redo` need `T: Clone`. The only in-tree user is the PR.
+- `input/base/undo_manager.rs::UndoManager` (`pub(crate)`) coalesces by **intent** (`EditIntent::{Typing, Backspace, DeleteForward, Atomic}`). It supports nested `begin_transaction` / `begin_transaction_with` / `commit_transaction` brackets for IME and batches. It breaks coalescing explicitly on caret movement, touch selection, and blur (`break_transaction_coalescing`). That is the behaviour this editor needs: a word is one undo step, and a caret move ends the step.
+
+`UndoManager` is tied to the input engine's rope `Change` type. Phase 2 therefore implements a `BlockUndoManager` over `Transaction` with the same coalescing rules. Merging the two into a generic manager is left as a follow-up rather than a prerequisite. A no-op is detected as an empty step list, not by comparing whole trees as the PR's `edit()` does.
+
+### 5.3 Commands on resolved, nested positions (R7)
+
+```rust
+pub type CommandResult = Result<Option<Transaction>, CommandError>; // Ok(None) = not applicable here
+
+pub(crate) struct ResolvedPosition<'a> {
+    pos: BlockPosition,
+    path: SmallVec<[BlockRef<'a>; 8]>,   // root → leaf, e.g. [Root, Blockquote, List, ListItem, Paragraph]
+}
+```
+
+Commands find their target by walking `path` (for example, "the nearest `ListItem`"). In the PR, `make_list` and `move_block` search `self.blocks` directly, so they only see the top level. Initial command set: `insert_text`, `delete_backward/forward` (grapheme / word / line, reusing `crate::text_boundary`), `split_block`, `join_backward/forward`, `toggle_mark`, `apply_mark`, `set_block_kind`, `toggle_list`, `toggle_task`, `set_task_checked`, `indent`, `outdent`, `wrap_in_blockquote`, `lift`, `move_blocks`, `delete_selection`, `insert_block`, `select_all`, `select_block`.
+
+The Markdown shortcuts (`# `, `- `, `1. `, `[ ] `) leave `insert()` and become an `InputRule` registry (`InputRule::markdown_defaults()`). Each rule runs as its own transaction after the typing transaction, so a single undo reverts the conversion and keeps the typed text.
+
+## 6. Public API and events (R6)
+
+These follow ARCHITECTURE.md's seam rules: private fields, builders, and readers on every type that crosses the seam.
+
+```rust
+impl BlockEditorState {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self;
+    pub fn with_extensions(self, extensions: MarkdownExtensions) -> Self;
+    pub fn with_input_rules(self, rules: Vec<InputRule>) -> Self;
+    pub fn set_source(&mut self, source: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<(), SharedString>; // markdown::parse's error type; no Changed event; clears history
+    pub fn source(&self) -> String;
+    pub fn revision(&self) -> u64;
+    pub fn set_editor_style(&mut self, style: BlockEditorStyle);   // mirrors InputBaseState::set_editor_style
+
+    pub fn document(&self) -> DocumentRef<'_>;                  // borrowed projection, like PaneRef
+    pub fn block(&self, id: BlockId) -> Option<BlockRef<'_>>;
+    pub fn selection(&self) -> &BlockSelection;
+    pub fn caret(&self) -> Option<BlockPosition>;
+    pub fn selected_text(&self) -> String;
+    pub fn selected_source(&self) -> String;
+    pub fn active_marks(&self) -> MarkSet;
+    pub fn mark_state(&self, kind: MarkKind) -> MarkState;
+    pub fn block_kind_at_caret(&self) -> Option<BlockKind>;
+    pub fn can_undo(&self) -> bool;
+    pub fn can_redo(&self) -> bool;
+    pub fn is_readonly(&self) -> bool;
+
+    pub fn set_selection(&mut self, selection: BlockSelection, cx: &mut Context<Self>) -> Result<(), SelectionError>;
+    pub fn run(&mut self, command: EditorCommand, window: &mut Window, cx: &mut Context<Self>) -> Result<bool, CommandError>;
+    pub fn transact(&mut self, origin: EditOrigin,
+                    build: impl FnOnce(&mut TransactionBuilder<'_>) -> Result<(), CommandError>,
+                    cx: &mut Context<Self>) -> Result<(), CommandError>;
+    pub fn undo(&mut self, cx: &mut Context<Self>);
+    pub fn redo(&mut self, cx: &mut Context<Self>);
+    pub fn set_readonly(&mut self, readonly: bool, cx: &mut Context<Self>);
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>);
+}
+
+#[non_exhaustive]
+pub enum EditorCommand { ToggleMark(MarkKind), ApplyMark(MarkChange), SetBlockKind(BlockKind), ToggleList { ordered: bool }, ToggleTask, Indent, Outdent, MoveBlocks { down: bool }, InsertBlock(BlockKind) }
+```
+
+Events extend the pattern of main's `InputEvent { Change, PressEnter { .. }, Focus, Blur }` by adding payloads:
+
+```rust
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum BlockEditorEvent {
+    Changed(ChangeSummary),            // once per committed transaction, incl. undo/redo
+    SelectionChanged(SelectionSummary),
+    Focus,
+    Blur,
+}
+pub struct ChangeSummary { revision: u64, origin: EditOrigin, changed_blocks: Vec<BlockId>, structural: bool }   // readers
+pub struct SelectionSummary { selection: BlockSelection, active_marks: MarkSet, block_kind: Option<BlockKind> } // readers
+```
+
+`set_source` never emits `Changed`. This matches the existing convention for setting a value programmatically.
+
+## 7. Rendering and layout contract (R5)
+
+### 7.1 Phases
+
+| Phase | May read | May write | Must not |
+|---|---|---|---|
+| Event / action handlers | model, last complete `FrameLayout` | model (through transactions), selection | — |
+| `render` | model, focus, `BlinkCursor::visible()` | projection cache; builds the immutable `Arc<EditorFrame>` | walk the full tree when the revision hasn't changed |
+| prepaint / paint | `Arc<EditorFrame>` | the frame-local `FrameLayoutBuilder` sink only | `owner.update(..)`, editor model, focus or blink state, `cx.notify()` |
+
+A frame-local sink behind a mutex is in line with existing practice. On main, `Inline::paint` already writes `InlineState.selection` under its mutex during paint. The rule is that paint never reaches back into the editor entity.
+
+**Precedent on main.** `NodeContext` already carries per-frame immutable snapshots that are resolved once and looked up per leaf: `range_highlights: Option<Arc<RangeHighlightFrame>>` and `stream_fade: Option<Arc<StreamFadeFrame>>`. `RangeHighlightFrame::backgrounds(TextLeafKey)` binary-searches a vector sorted by key, and `Inline` paints the result through `range_backgrounds`. The editor follows the same pattern:
+
+- **Selection backgrounds** are resolved in `render` into per-leaf ranges (O(1) per leaf via `OrderIndex`). They are painted through `Inline`'s existing `range_backgrounds` path, so selection drawing needs no new paint code.
+- **`InlineInteraction`** shrinks to caret, composition underline, and reporting layout into the sink.
+
+**Blink and focus** copy `InputBaseState::new_in_mode` on main exactly:
+- `cx.on_focus` → `blink_cursor.start` and emit `Focus`.
+- `cx.on_blur` → `blink_cursor.stop`, break undo coalescing, and emit `Blur`.
+- `cx.observe_window_activation` restarts the blink when the window is active and the editor is focused.
+- `cx.intercept_keystrokes` pauses the blink on every keystroke while focused.
+- `cx.observe(&blink_cursor, ..)` calls `notify`.
+
+None of this lives in paint. The PR does it all from `InlineEditing::paint`.
+
+`FrameLayout` (per-leaf `TextLayout` and bounds, plus block bounds) is double-buffered. It is swapped in at the start of the next `render`, so handlers always hit-test against a complete frame. Positions taken from an older frame go through `clamp`.
+
+### 7.2 Paragraph identity in the seam (D3)
+
+Main identifies text leaves by `TextLeafKey { block_start, ordinal }`, which is derived from the parse-time source `span` (`stream_fade.rs`). That works for read-only views. It isn't stable across edits, and the editor's projected nodes have no meaningful source spans. Phase 0a therefore re-implements the PR's seam on main's current `Inline` / `InlineFlow` / `Paragraph::render` (including the `render_cache` plain path) and adds a crate-internal key:
+
+```rust
+impl Paragraph { pub(crate) fn with_editor_key(self, key: u64) -> Self; pub(crate) fn editor_key(&self) -> Option<u64>; }
+// same on CodeBlock, Table cells, and the image/custom wrappers
+```
+
+`TextView` never sets the key, so read-only rendering is unchanged. Non-text blocks render through their existing renderers inside an editor-owned **block frame**. The frame records bounds, paints the block-selection treatment from `BlockEditorStyle`, and turns clicks into `BlockSelection::Blocks`.
+
+### 7.3 Projection cache
+
+`HashMap<BlockId, (block_revision, BlockNode)>` keeps each block's `BlockNode` (and so its `InlineState`, `render_cache`, and retained layout) alive across frames. Only `ChangeSummary.changed_blocks` get re-projected.
+
+## 8. Performance constraints (R4)
+
+| Operation | Bound |
+|---|---|
+| Steady-state frame (blink, hover) | O(visible blocks). No tree walk, no allocation proportional to N. |
+| Per-leaf selection lookup | O(1) via `OrderIndex` (or a binary search, as in `RangeHighlightFrame`) |
+| Keystroke in one paragraph | O(paragraph + log N) plus one re-projection. No `OrderIndex` rebuild. |
+| Structural edit | O(N) `OrderIndex` rebuild plus re-projection of the affected blocks |
+| Undo / redo | O(size of the transaction) |
+| Accessibility value | Built only when `window.is_a11y_active()` (or `test-support`), cached per revision (D8) |
+| `source()` | O(N), on request only |
+
+**Fixture.** I couldn't find a 1000-line Markdown fixture in either tree. The PR example loads `examples/fixtures/test.md` (320 lines). Phase 3 adds a generated fixture of 1000+ blocks for the counters and the manual timing. *(Unverified: which fixture R4 meant by "the 1000-line fixture".)* Virtualization (`VirtualList`) is Phase 5.
+
+## 9. Naming and layering (R8)
+
+**Naming (D10):** `BlockEditorState` / `BlockEditor` in `gpui_base::text::block_editor`. `EditorState` on main is `pub type EditorState = InputBaseState<EditorMode>`, one of the three source-text facades over the shared engine. This editor is a separate entity, not another `InputBaseState` mode.
+
+**Style seam.** `InputEditorStyle` on main has `pub` fields (`foreground`, `selection`, `caret`, …), `resolved(&self, tokens: &SemanticThemeTokens) -> Self` (fills in unset, i.e. transparent, colours), and is injected with `InputBaseState::set_editor_style`. `BlockEditorStyle` mirrors the injection and resolution, but its fields are **private**, with `with_*` setters and readers, per ARCHITECTURE.md invariant 12:
+
+```rust
+pub struct BlockEditorStyle { /* text: Option<TextViewStyle>, caret, caret_width, selection,
+                                 block_selection, composition_underline, placeholder, placeholder_color */ }
+impl BlockEditorStyle { pub fn resolved(&self, tokens: &SemanticThemeTokens) -> Self; }
+```
+
+- **Selection colour:** defaults to `TextViewStyle::selection()`, the same source `Inline::paint` uses.
+- **`TextViewDefaults` fields stay private.** On main they are private and only read inside `text_view.rs` (`cx.try_global::<TextViewDefaults>()`). The editor gets `pub(crate)` readers (`style()`, `code_block_highlighter()`) instead of the PR's `pub(super)` fields.
+- **The `\u{200b}` empty-paragraph measurement** stays internal to `Inline` and only activates when an interaction is installed. Placeholder text comes from the style.
+
+**Layering (D2):** the code lives in `gpui-base` behind an off-by-default `block-editor` feature, with no `gpui-component` re-export until Phase 3 is accepted.
+
+**Input engine (D7):** prose and code blocks use the block editor's own text path. #3113's inline tokens are the reference for atomic inline semantics (Phase 4d), not a shared implementation.
+
+## 10. Phased plan
+
+**Phase 0: small, independent PRs against current main**
+- **0a** Re-implement `InlineInteraction` + `paragraph_interaction` on main's `Inline` / `InlineFlow` / `Paragraph::render`, plus `editor_key` (D3). Tests: TextView output is unchanged with no interaction installed. With one installed, the callback gets the right source ranges, including for empty paragraphs.
+- **0b** List-item continuation-line indentation in `BlockNode::to_markdown`, plus a regression test.
+- **0c** Redo the `examples/fixtures/markdown_plugins.rs` extraction against main's 1866-line `examples/markdown`.
+- **0d** Route `Paragraph::to_markdown` through `MarkdownSource` so multi-mark and underline paragraphs serialize correctly, with regression tests for the cases in §4.6.
+
+**Phase 1: model, no UI.** `EditorDocument`, `BlockId`, `BlockPosition`, `BlockSelection`, `OrderIndex`, `InlineText` with N1–N3, import from `BlockNode`, and the `MarkdownSource`-based serializer (whitespace hoisting, escaping, `<mark>`). Round-trip property tests.
+
+**Phase 2: steps, transactions, `BlockUndoManager`, commands, input rules (headless).**
+
+**Phase 3: view.** Projection cache, `EditorFrame` / `FrameLayout`, selection through `range_backgrounds`, IME port, key bindings, focus/blink wiring as in §7.1, `BlockEditorStyle`, events, the component wrapper, the example, and the generated fixture.
+
+**Phase 4: non-text blocks.** 4a node selection, delete, move, and copy for atoms, code blocks, and tables. 4b code-block text editing. 4c table cells and `BlockSelection::Cells`. 4d inline atoms with #3113 semantics.
+
+**Phase 5: scale.** Virtualization and per-block accessibility.
+
+#3049 stays open as the tracking PR. Its description links to each phase, and it is closed when Phase 3 lands.
+
+## 11. Decisions for review
+
+Each item is a proposed decision you can accept or push back on.
+
+**D1. Block ids are process-unique, come from a global counter, and are never reused. `set_source` re-imports with fresh ids, and old positions fail with `PositionError::UnknownBlock`. Anything that has to persist goes through `source_offset` / `position_at_source_offset`.**
+*Rationale:* This matches `dock::NodeId` (`next_node_id`) and `TextSelectionScopeId::new()` on main. A stale id can never alias a live block, so no separate epoch counter is needed. Matching ids across a re-parse can be added later without breaking anything.
+*Alternative considered:* Document-scoped ids plus an epoch counter (the previous draft), or carrying ids across `set_source` by structural diff.
+
+**D2. The editor lands in `gpui-base` behind an off-by-default `block-editor` cargo feature and isn't re-exported from `gpui-component` until Phase 3 is accepted.**
+*Rationale:* The model needs `pub(crate)` text internals (`BlockNode`, `Paragraph`, `InlineNode`, `TextMark` storage, `MarkdownSource`). A separate crate would force those to be widened.
+*Alternative considered:* A separate `gpui-block-editor` crate over a widened text API.
+
+**D3. Phase 0a re-implements the seam on current main and adds a crate-internal `editor_key: Option<u64>` to `Paragraph`, `CodeBlock`, table cells, and the image/custom wrappers. `TextView` never sets it.**
+*Rationale:* The PR's patch doesn't apply to main. Main's own leaf identity (`TextLeafKey`) comes from parse-time spans and isn't stable under edits. The PR's `Arc::as_ptr` identity is what R1 rejected.
+*Alternative considered:* Reusing `TextLeafKey` with synthetic spans assigned by the projection, or a side table keyed by `InlineState` pointer.
+
+**D4. Storage is a private `HashMap<BlockId, BlockEntry>` with parent links plus an explicit `OrderIndex`. No slotmap dependency.**
+*Rationale:* `PaneTree` on main is an owned recursive tree (`PaneNode` holding `Vec<PaneNode>`) with DFS lookup (`find_node`). That suits a dock of tens of nodes, but not a document of thousands of blocks, where every command needs O(1) lookup by id and an O(1) parent walk. Ids are never reused (D1), so generational keys would protect nothing. The storage sits behind `DocumentRef` / `BlockRef` and can be swapped without any API change.
+*Alternative considered:* An owned recursive tree like `PaneTree`, or a slotmap/arena with generational keys.
+
+**D5. The editor serializer builds on `MarkdownSource` and emits highlight as `<mark>` (with a `color` attribute when it isn't the default `<mark>` colour) and underline as `<u>`. TextView's copy-as-source output stays as it is unless maintainers want `<mark>` there too.**
+*Rationale:* Probed on main: `<u>` and `<mark color=…>` both parse back into `TextMark`, while `==x==` stays literal text and loses the colour. Round-trip is a core guarantee. Changing the shared `wrap_with_mark` would change existing TextView behaviour and its tests (`marks_round_trip_through_reconstruction` and the `html.rs` tests expect `==`).
+*Alternative considered:* Teaching `markdown::parse` to read `==…==` (it would still lose the colour), or disabling highlight in the editor (the previous draft's fallback).
+
+**D6. Bold, italic, strikethrough, underline, and highlight extend when you type at their trailing boundary. Links and inline code don't, though typing inside them inherits the mark. Stored (toolbar) marks always win.**
+*Rationale:* This matches common rich-text editors and avoids the "can't escape the link or code span" problem that the PR's uniform `mark_at` inheritance creates.
+*Alternative considered:* Uniform inheritance for all marks (the PR's current behaviour).
+
+**D7. Code-block text editing (Phase 4b) uses the block editor's own text path with `BlockContent::Plain`. It doesn't embed `TextareaState` / `EditorState`.**
+*Rationale:* One model means one undo history and selections that can span a code block. An embedded `InputBaseState` would bring its own `UndoManager`, focus handle, and selection.
+*Alternative considered:* Embedding the input engine in the focused code block and syncing through `ReplaceText` steps.
+
+**D8. The editor root uses `Role::MultilineTextInput` with an `aria_value` that is built only when `window.is_a11y_active()` (or with `test-support`) and is cached per revision. Per-block roles are deferred to Phase 5.**
+*Rationale:* This is exactly what `gpui-component`'s `Input` does on main for multi-line inputs (`accessibility_role` → `MultilineTextInput`; `aria_value` gated on `is_a11y_active`). It removes the PR's per-frame full-document `aria_value` (R4). *(Unverified: how screen readers on each platform present a long rich document through a single text-input node. That needs runtime testing, not source reading.)*
+*Alternative considered:* A per-block accessibility tree from Phase 3.
+
+**D9. CI gets deterministic `cfg(test)` counters (zero full-tree walks per steady-state frame, one re-projection per keystroke) and no timing benchmark. Timing numbers on the generated fixture go in PR descriptions.**
+*Rationale:* Counters catch complexity regressions reliably, while wall-clock benchmarks are noisy on shared runners. `gpui-base` already has `criterion = "0.8"` as a dev-dependency, so a bench can be added later if wanted.
+*Alternative considered:* A criterion benchmark in CI.
+
+**D10. The names are `BlockEditorState` / `BlockEditor`, in `gpui_base::text::block_editor`, with `BlockPosition` / `BlockSelection` as the position types.**
+*Rationale:* This avoids confusion with `EditorState` (`InputBaseState<EditorMode>`) and glob-import collisions with `gpui_base::input::{Position, Selection}`.
+*Alternative considered:* `RichTextEditorState` with bare `Position` / `Selection`.
+
+**D11. History uses a new `BlockUndoManager` that copies `input::UndoManager`'s semantics: intent-based coalescing (Typing / Backspace / DeleteForward / Atomic), nested begin/commit brackets for IME and batches, and explicit breaks on caret movement and blur. It is not built on `UndoHistory`.**
+*Rationale:* `UndoHistory` on main only groups by time or by an explicit flag, so "one keystroke = one undo step" can only be avoided with a timer. `UndoManager` is the behaviour users already get in `Textarea` / `Editor`, but it is tied to the input engine's rope `Change` type.
+*Alternative considered:* `UndoHistory<Transaction>` with `group_interval` (the PR's approach and the previous draft's), or making `UndoManager` generic first.
+
+**D12. The public mark API uses `MarkKind`, `MarkSet` (read-only, private fields), and `MarkChange` (builder). `TextMark` stays crate-internal storage.**
+*Rationale:* `TextMark` / `LinkMark` aren't exported from `gpui_base` on main and have `pub` fields. Exporting them as they are would break ARCHITECTURE.md invariant 12 and freeze their shape. The API is still keyed on exactly `TextMark`'s attributes, as R6 asks.
+*Alternative considered:* Exporting `TextMark` as-is and returning it from `active_marks()` (the previous draft).
+
+---
+
+## Appendix A: Verification notes
+
+**Trees checked** (cloned locally, read-only; nothing pushed or posted):
+- `main` @ `369f7a8f5a6602da980f008cf726467588ad517f` (2026-10-12 21:27 AEDT, "button: Keep the hover style registered…").
+- PR head `refs/pull/3049/head` @ `47141037d3b680af6f940aef2e1d9359d00ab0a4`. Merge-base `3f1dda6ee9256ba317b19552999d130e3d078159`. Main is 278 commits ahead; the PR is 2 ahead.
+
+**Build:**
+- `cargo check -p gpui-base --lib` passes on both trees. This needed rustup stable, because the box's rustc 1.85.1 is too old for the dependencies, and Linux dev packages for fontconfig, freetype, xkbcommon, wayland, and xcb.
+- `cargo test -p gpui-base --lib text::editor` on the PR: 26 passed (24 existing tests plus 2 temporary probes).
+- On main I ran two temporary probe tests (parser round-trip, `MarkdownSource`) in a scratch worktree that has since been deleted. Nothing was committed.
+
+**Checked, and what changed in the design:**
+
+| Item | Finding | Design change |
+|---|---|---|
+| `PaneTree` storage | Owned recursive `PaneNode` tree; `NodeId(u64)` from a global `AtomicU64` (`next_node_id`); DFS `find_node` (`dock/layout/{tree,node}.rs`) | D4 rationale corrected; D1 switched to process-unique ids and dropped the epoch counter |
+| `<u>` / `==` / `<mark>` parsing | `<u>` and `<mark>` parse (`inline_html_mark` in `format/markdown.rs`); `==x==` stays literal | D5 flipped: highlight is serialized as `<mark>`, not `==`; no "disable if unsupported" fallback |
+| `Paragraph::to_markdown` on main | Plain path overwrites per mark: `***x***`→`*x*`, `**b*c*d**`→`**bcd**`, `<u>x</u>`→`x` | Phase 0d confirmed |
+| `MarkdownSource` | Already nests and merges correctly for non-overlapping runs and emits `<u>`; lacks whitespace hoisting and escaping; emits `==` | Serializer now builds on `MarkdownSource` instead of being new (§4.6) |
+| Blink and focus | `InputBaseState::new_in_mode`: `on_focus`/`on_blur` start/stop, `observe_window_activation`, `intercept_keystrokes` pause, `observe(blink)` | §7.1 copies it exactly; hedge removed |
+| Accessibility | `gpui-component` `Input`: `MultilineTextInput` for multi-line; `aria_value` only if `window.is_a11y_active()`; base `InputBase` defaults to `TextInput` | D8 made concrete |
+| `UndoHistory` | Time or explicit grouping only; `T: Clone`; no in-tree users besides the PR. The input engine uses `UndoManager` with `EditIntent` coalescing | New D11; §5.2 rewritten |
+| `InputEditorStyle` / `EditorState` | `pub` fields, `resolved(&SemanticThemeTokens)`, injected by `set_editor_style`; `EditorState = InputBaseState<EditorMode>` | Style sketch renamed to `resolved` / `set_editor_style`, keeping private fields; naming rationale updated |
+| Seam drift | PR seam patch conflicts in `inline.rs`, `inline_flow.rs`, `node.rs`, `text_view.rs`; `text/` changed by about 11.9k lines (46 commits). Main has `RangeHighlightFrame` / `StreamFadeFrame`, `Inline::range_backgrounds`, `TextLeafKey`, `Paragraph::render_cache` | Phase 0a is a re-implementation; selection painted through `range_backgrounds`; D3 rationale updated |
+| Name collisions | `gpui_base::input::{Position, Selection}` already exported; `TextMark` / `LinkMark` not exported and have `pub` fields; table alignment type is `ColumnumnAlign` | Renamed to `BlockPosition` / `BlockSelection` (D10); new D12; `BlockKind` made payload-light |
+| `BlockNode` variants | `Custom { .. }` struct variant; no HTML variant; `Break` and `Definition` exist | `BlockKind` / `BlockContent` aligned; HTML non-goal reworded |
+| `TextViewDefaults` | Fields private on main; read only in `text_view.rs`; public API has setters and two readers | `pub(crate)` readers retained as the plan |
+| `word_range_at` | Still in `crate::text::selection` on main; a second copy is in `crate::text_boundary` | §2 corrected (an earlier draft wrongly said it had moved) |
+| Examples | `examples/markdown/src/main.rs` is 1866 lines plus `mention.rs`; `fixtures/test.md` is 320 lines | 0c must be redone; generated fixture added |
+| R1 / R2 / R3 repro on the PR | `.unwrap()` at `model.rs:296`; 2 of 3 blocks addressable; `**ab****c****d**` with 3 nodes (the review said four), which main's parser reads back as bold `abcd` | §2, §4.3, §4.6 reworded to match |
+
+**Verified by the model spike** (branch `block-editor-model-spike` on `wabzqem/gpui-component`, based on `369f7a8f`):
+- `cargo test -p gpui-base --lib` passes with and without `--features block-editor` (1335 and 1387 tests); `cargo clippy -p gpui-base --lib --features block-editor -- -D warnings` and `cargo fmt --check` are clean; the build without the feature is unchanged.
+- The R1/R2/R3/R6/R7 repros and main's mark-loss cases pass as named tests; every `BlockNode` variant round-trips or is a documented atom (Appendix B).
+- One keystroke in a 1000-block document records exactly one `ReplaceText` step, and the `OrderIndex` is rebuilt only on structural steps (`cfg(test)` counter).
+- `examples/fixtures/test.md` reaches a fixpoint after one save.
+
+**Still unverified:**
+- How non-gpui-kit CommonMark parsers read `**ab****c****d**`. Only our parser was tested.
+- Which "1000-line fixture" R4 refers to. None was found in either tree.
+- Platform screen-reader behaviour for a single `MultilineTextInput` holding a long document. This needs runtime testing.
+- Runtime UI behaviour in general (IME, frame timing). Everything above comes from source reading and headless tests.
+
+
+---
+
+## Appendix B: What the model spike changed
+
+The spike (`crates/base/src/text/block_editor/`, feature `block-editor`, draft PR from `wabzqem:block-editor-model-spike`) implements §4–§5 headless. All the outline's named tests pass, plus seeded property tests (checked locally with 3000 seeds; 150 in CI). Differences from the text above:
+
+| Area | Design | Spike | Status |
+|---|---|---|---|
+| Steps (§5.1) | Eight step kinds with `invert(&before)` | Four primitives; others are composites; `apply` returns the inverse | Simplification, design text updated |
+| Structural normalize (§5.1) | Four rules | Plus "merge adjacent same-type lists" | Required by the parser |
+| Serializer (§4.6, D5) | Hoisting, escaping, `<mark>` | Plus flanking-safe HTML fallback and code-innermost | Required for round-trip; still only `MarkdownSource` options, defaults unchanged |
+| Reference links | Not covered | Resolved to inline links on import; unresolved references and footnote links lose their link mark | Canonicalization, documented |
+| Select-all + type (§4.4) | Removes everything covered | Whole-document selection becomes one empty paragraph | Matches the R2 expectation (`x`, one Paragraph) |
+| Code blocks / atoms (§4.3) | Offsets into code text | Spike uses 0 = before, 1 = after for code blocks too; typing there is `CommandError::NotEditable` | Phase 4b as planned |
+| `source_offset` / `position_at_source_offset` (D1) | Proposed | Not implemented | Deferred |
+| `BlockSelection::Cells`, `InputRule`s | Proposed / stretch | Not implemented | Deferred |
+| `BlockKind::Image` | Block kind | Images are inline atoms on main; the kind is reserved and unused | Keep or drop in review |
+| `ResolvedPosition` | `SmallVec<[BlockRef; 8]>` path | `Vec<BlockId>` path | Equivalent |
+
+**Documented lossiness found by the property tests** (canonical output, not data corruption): empty paragraphs have no Markdown form and disappear on save; an empty paragraph between two same-type lists therefore merges them on reload; edge whitespace of a paragraph and whitespace-only mark runs are normalized; list tightness can change once on the first save, after which output is a fixpoint; `Break` (non-HTML) and `Unknown` blocks serialize to nothing.
