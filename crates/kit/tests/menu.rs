@@ -5,12 +5,12 @@ use gpui_kit::component::{
     menu::{ContextMenuExt, DropdownMenu, PopupMenuItem},
     text::{TextView, TextViewState},
 };
-use gpui_kit::test::{TestAppContextExt, TestSupportExt, TestWindowExt};
+use gpui_kit::test::{ElementSnapshot, TestAppContextExt, TestSupportExt, TestWindowExt};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, FocusHandle, Focusable as _,
-    InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, LongPressEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, TestAppContext, TouchPhase, Window, WindowHandle,
-    actions, base::Root, div, point, prelude::*, px, size,
+    AnyWindowHandle, App, AppContext, ClipboardItem, Context, ElementId, Entity, FocusHandle,
+    Focusable as _, InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, LongPressEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, TestAppContext, TouchPhase,
+    Window, WindowHandle, actions, base::Root, div, point, prelude::*, px, size,
 };
 use std::time::Duration;
 
@@ -641,14 +641,12 @@ fn hovering_away_from_a_keyboard_entered_submenu_refocuses_its_parent(cx: &mut T
         );
 
         // The menu opens at the press, so its first item lies just below it.
-        let parent = window
-            .find_all("popup-menu")
+        let parent = find_all(window, "popup-menu")
             .into_iter()
             .map(|menu| menu.bounds())
             .find(|bounds| bounds.contains(&(press + point(px(8.), px(8.)))))
             .unwrap();
-        let first_item = window
-            .find_all(0usize)
+        let first_item = find_all(window, 0usize)
             .into_iter()
             .map(|item| item.bounds())
             .find(|bounds| parent.contains(&bounds.center()))
@@ -834,4 +832,12 @@ fn long_press_on_blank_space_in_a_text_trigger_opens_the_menu(cx: &mut TestAppCo
         assert!(window.try_find("popup-menu").is_some());
     })
     .unwrap();
+}
+
+fn find_all(window: &Window, id: impl Into<ElementId>) -> Vec<ElementSnapshot> {
+    let id = id.into();
+    gpui_kit::base::test_support::snapshots(window)
+        .into_iter()
+        .filter(|snapshot| snapshot.path().last() == Some(&id))
+        .collect()
 }

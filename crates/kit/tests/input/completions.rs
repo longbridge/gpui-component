@@ -10,8 +10,9 @@ use std::{
 };
 
 use gpui_kit::{
-    App, AppContext, Bounds, Context, Entity, Keystroke, MouseButton, Pixels, Result, SharedString,
-    Subscription, Task, TestAppContext, Window, WindowHandle,
+    App, AppContext, Bounds, Context, Entity, InputEvent as _, Keystroke, MouseButton,
+    MouseDownEvent, MouseUpEvent, Pixels, Result, SharedString, Subscription, Task, TestAppContext,
+    Window, WindowHandle,
     component::input::{
         CodeActionProvider, CompletionProvider, Editor, EditorState, Input, InputEvent, InputState,
         Rope, ShowCompletions,
@@ -19,7 +20,7 @@ use gpui_kit::{
     div, point,
     prelude::*,
     px, size,
-    test::{TestEventExt, TestWindowExt},
+    test::TestWindowExt,
 };
 use lsp_types::{
     CodeAction, CompletionContext, CompletionItem, CompletionResponse, CompletionTextEdit,
@@ -1266,8 +1267,29 @@ fn clicking_beside_code_action_menu_dismisses_it(cx: &mut TestAppContext) {
             "popup {popup:?}, viewport {:?}",
             window.viewport_size()
         );
-        window.pointer_down(outside, MouseButton::Left, cx);
-        window.pointer_up(outside, MouseButton::Left, cx);
+        window.dispatch_event(
+            MouseDownEvent {
+                button: MouseButton::Left,
+                position: outside,
+                modifiers: Default::default(),
+                click_count: 1,
+                first_mouse: false,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.render_frame(cx);
+        window.dispatch_event(
+            MouseUpEvent {
+                button: MouseButton::Left,
+                position: outside,
+                modifiers: Default::default(),
+                click_count: 1,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.render_frame(cx);
         assert!(window.try_find("code-action-menu").is_none());
     })
     .unwrap();
