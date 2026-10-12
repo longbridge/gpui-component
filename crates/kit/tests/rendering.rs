@@ -21,9 +21,9 @@ mod macos {
             list::{List, ListDelegate, ListItem, ListState},
             menu::{PopupMenu, PopupMenuItem},
             table::{Column, DataTable, TableDelegate, TableState},
-            text::TextView,
+            text::{TextView, TextViewState},
         },
-        div,
+        div, hsla,
         prelude::*,
         px, size,
         test::TestWindowExt,
@@ -247,6 +247,61 @@ mod macos {
                 "lines wrapped at {width}px painted {columns} device columns past the wrap width"
             );
         }
+    }
+
+    struct Selected {
+        state: Entity<TextViewState>,
+    }
+    impl Render for Selected {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
+                .p_2()
+                .child(TextView::new(&self.state).selectable(true))
+        }
+    }
+
+    /// The selection is a background under the glyphs: with an opaque
+    /// selection color the selected text must still be painted over it,
+    /// not hidden behind a solid block.
+    fn selected_text_stays_over_an_opaque_selection() {
+        let mut cx = context(Arc::new(Assets));
+        let selection = hsla(0.6, 0.9, 0.5, 1.);
+        let foreground = cx.update(|cx| {
+            Theme::global_mut(cx).selection = selection;
+            Theme::sync_base(cx);
+            Rgba::from(cx.theme().foreground)
+        });
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("Ocean ocean", cx)));
+        let handle = open_window(&mut cx, (240., 60.), {
+            let state = state.clone();
+            move |_, _| Selected { state }
+        });
+        cx.update_window(handle, |_, window, cx| {
+            state.update(cx, |state, cx| state.select_all(cx));
+            window.render_frame(cx);
+        })
+        .unwrap();
+        let capture = Capture::take(&mut cx, handle);
+        let selection = Rgba::from(selection);
+        let (mut selected, mut glyphs) = (0, 0);
+        for y in 0..capture.height as i32 {
+            for x in 0..capture.width as i32 {
+                let pixel = capture.get_pixel(x, y);
+                if is_ring(pixel, selection) {
+                    selected += 1;
+                } else if is_ring(pixel, foreground) {
+                    glyphs += 1;
+                }
+            }
+        }
+        assert!(selected > 0, "select all must paint the selection");
+        assert!(
+            glyphs > 0,
+            "the selection must not cover the selected glyphs"
+        );
     }
 
     /// Where each button is expected to draw its focus line.
@@ -847,6 +902,9 @@ mod macos {
         println!("running wrapped_cjk_with_inline_code_stays_within_the_wrap_width");
         wrapped_cjk_with_inline_code_stays_within_the_wrap_width();
         println!("passed wrapped_cjk_with_inline_code_stays_within_the_wrap_width");
+        println!("running selected_text_stays_over_an_opaque_selection");
+        selected_text_stays_over_an_opaque_selection();
+        println!("passed selected_text_stays_over_an_opaque_selection");
         for mode in [ThemeMode::Light, ThemeMode::Dark] {
             println!("running focus_lines_stay_off_content_and_contrast_with_fills ({mode:?})");
             focus_lines_stay_off_content_and_contrast_with_fills(mode);
@@ -866,6 +924,6 @@ mod macos {
             table_shows_keyboard_focus_only(focus_ring);
             println!("passed table_shows_keyboard_focus_only (focus_ring = {focus_ring})");
         }
-        println!("rendering: 10 passed (Metal)");
+        println!("rendering: 11 passed (Metal)");
     }
 }

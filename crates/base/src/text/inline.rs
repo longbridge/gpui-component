@@ -943,7 +943,7 @@ impl Element for Inline {
 
     fn paint(
         &mut self,
-        global_id: Option<&GlobalElementId>,
+        _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
@@ -964,14 +964,14 @@ impl Element for Inline {
         if !self.range_backgrounds.is_empty() {
             self.paint_range_highlights(&text_layout, window);
         }
-        self.styled_text
-            .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
+        _ = text_layout.paint_background(window, cx);
 
         // layout selections
         let (is_selectable, is_selection, selection) =
             self.layout_selections(&text_layout, &bounds, window, cx);
 
         let Ok(mut state) = self.state.lock() else {
+            _ = text_layout.paint_foreground(window, cx);
             return;
         };
 
@@ -1014,6 +1014,8 @@ impl Element for Inline {
                     .register_selection_edges(start, end);
             }
         }
+
+        _ = text_layout.paint_foreground(window, cx);
 
         if is_selectable {
             if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
