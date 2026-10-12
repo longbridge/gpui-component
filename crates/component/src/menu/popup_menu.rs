@@ -877,6 +877,7 @@ impl PopupMenu {
         let action = action.as_ref().map(|action| action.boxed_clone());
         let action_focus = self
             .resolved_action_context(cx)
+            .or_else(|| self.trigger_focus_handle.clone())
             .unwrap_or_else(|| self.focus_handle.clone());
 
         self.dismiss(&Cancel, window, cx);
@@ -884,8 +885,9 @@ impl PopupMenu {
         // focus before activation. Otherwise a dialog opened by the item would
         // remember this short-lived menu as its opener. Defer within the same
         // effect flush, without keeping the menu entity alive. Actions retain
-        // their original dispatch path even when dismissal restores focus to
-        // an unrelated control, as it does for context menus.
+        // the explicit action context or the persistent trigger's dispatch
+        // path: a submenu's own node can disappear during dismissal. Do not
+        // use the restored focus, which may belong to an unrelated control.
         window.defer(cx, move |window, cx| {
             if let Some(handler) = handler {
                 handler(&ClickEvent::default(), window, cx);
