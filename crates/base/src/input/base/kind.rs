@@ -29,6 +29,7 @@ use ropey::Rope;
 use super::decorations::DecorationCollections;
 use super::line_decorations::LineDecorationProviders;
 use super::lsp::{ContextMenuContent, HoverDefinition, InlineCompletion};
+use super::spacers::SpacerProvider;
 use crate::input::{
     HighlightStyleResolver, InputEdit, InputHighlighter, LineDecoration, RangeDecoration,
     SyntaxContext, TextDecoration,
@@ -101,6 +102,11 @@ pub trait InputExtras: Default + 'static {
     /// Whether any line decoration collection has a provider.
     fn has_line_decorations(&self) -> bool {
         false
+    }
+
+    /// The provider of the spacers, if one is set.
+    fn spacer_provider(&self) -> Option<Rc<dyn SpacerProvider>> {
+        None
     }
 
     /// Semantic-token styles for a visible range, when an LSP supplies them.
@@ -370,6 +376,7 @@ pub struct EditorExtras {
     pub(crate) decorations: DecorationCollections,
     pub(crate) range_decorations: DecorationCollections<RangeDecoration>,
     pub(crate) line_decorations: LineDecorationProviders,
+    pub(crate) spacer_provider: Option<Rc<dyn SpacerProvider>>,
     pub(crate) inline_completion: InlineCompletion,
     pub(crate) context_menu_content: ContextMenuContent,
     pub(crate) hover_popover: Option<HoverPopoverState>,
@@ -384,6 +391,7 @@ impl Default for EditorExtras {
             decorations: DecorationCollections::default(),
             range_decorations: DecorationCollections::default(),
             line_decorations: LineDecorationProviders::default(),
+            spacer_provider: None,
             inline_completion: InlineCompletion::default(),
             context_menu_content: ContextMenuContent::default(),
             hover_popover: None,

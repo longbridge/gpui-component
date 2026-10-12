@@ -419,6 +419,62 @@ line may have taken different rows: an edit, a rewrap at a new width, a fold ope
 closed. Something that reads the map, such as a second editor kept level with this one,
 compares it with the version it last read to know when to read again.
 
+### Spacers
+
+A `Spacer` is a run of blank rows above or below a buffer line. It holds no text: it has
+no line number, the caret steps over it, a click on it lands on the row of text beside
+it, and line decorations, selections, search matches and inline colors pass it by. Its
+rows are display rows like any other, so the scroll height, scrolling to a line and
+`row_bounds` count them. Two editors shown side by side pad their shorter lines with
+spacers, so that lines paired across them start level however each one wraps, as a
+side-by-side diff does.
+
+```rust
+use std::{ops::Range, rc::Rc};
+
+use gpui_kit::{App, WeakEntity};
+use gpui_kit::component::input::{EditorState, Spacer, SpacerProvider};
+
+/// Pads each line with the rows by which the same line of `other` wraps taller.
+struct Level {
+    this: WeakEntity<EditorState>,
+    other: WeakEntity<EditorState>,
+}
+
+impl SpacerProvider for Level {
+    fn spacers(&self, lines: Range<usize>, cx: &App) -> Vec<Spacer> {
+        let (Some(this), Some(other)) = (self.this.upgrade(), self.other.upgrade()) else {
+            return Vec::new();
+        };
+        let (this, other) = (this.read(cx), other.read(cx));
+        lines
+            .filter_map(|line| {
+                let own = this.buffer_line_to_display_rows(line).len();
+                let theirs = other.buffer_line_to_display_rows(line).len();
+                (theirs > own).then(|| Spacer::below(line, theirs - own))
+            })
+            .collect()
+    }
+}
+
+let level = Rc::new(Level {
+    this: left.downgrade(),
+    other: right.downgrade(),
+});
+left.update(cx, |state, cx| state.set_spacer_provider(Some(level), cx));
+```
+
+Unlike line decorations, spacers move every row below them, so the editor asks for those
+of every line at once and keeps the answer: when the provider is set, after an edit,
+after the text is wrapped again or a fold changes, and when `refresh_spacers` is called.
+It asks during layout, once the text is wrapped to the editor's width, and outside any
+update of the editor, so the provider may read this editor and others. When the answer
+depends on another editor's rows, call `refresh_spacers` when that editor's
+`display_rows_version()` changes. `Spacer::above(0, rows)` pads the top of the text, and
+`with_background` fills the rows, gutter included. A spacer on a line hidden by a fold,
+or past the last line, is not shown. `is_spacer_row(row)` tells a spacer row from a row
+of text. The **Editor Diff** story wraps both sides and pads them level.
+
 ## Value and events
 
 ```rust
