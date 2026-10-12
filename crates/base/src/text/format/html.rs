@@ -102,28 +102,34 @@ fn attr_value(attrs: &RefCell<Vec<html5ever::Attribute>>, name: LocalName) -> Op
     })
 }
 
+/// Default `<mark>` background when the tag has no usable color.
+pub(super) fn default_mark_color() -> Hsla {
+    gpui::rgb(0xfef08a).into()
+}
+
 /// Get the highlight background color for a `<mark>` element.
 ///
 /// Reads the `color` attribute first, then the `background-color` declaration
 /// from the `style` attribute. Base accepts CSS hex plus common named colors.
 fn mark_color(attrs: &RefCell<Vec<html5ever::Attribute>>) -> Option<Hsla> {
-    let color_attr = attrs.borrow().iter().find_map(|attr| {
-        if &*attr.name.local == "color" {
-            Some(attr.value.to_string())
-        } else {
-            None
-        }
-    });
+    mark_color_from_values(
+        attr_value(attrs, local_name!("color")).as_deref(),
+        attr_value(attrs, local_name!("style")).as_deref(),
+    )
+}
 
-    if let Some(value) = color_attr
+/// Resolve a `<mark>` color from raw `color` / `style` attribute values.
+///
+/// Same rules as the block HTML path: `color` wins, then
+/// `style="background-color: …"`.
+pub(super) fn mark_color_from_values(color: Option<&str>, style: Option<&str>) -> Option<Hsla> {
+    if let Some(value) = color
         && let Some(color) = parse_mark_color(value.trim())
     {
         return Some(color);
     }
 
-    style_attrs(attrs)
-        .get("background-color")
-        .and_then(|v| parse_mark_color(v.trim()))
+    style.and_then(|css_text| parse_mark_color(style_attrs(css_text).get("background-color")?))
 }
 
 fn parse_mark_color(value: &str) -> Option<Hsla> {
@@ -141,12 +147,8 @@ fn parse_mark_color(value: &str) -> Option<Hsla> {
 
 /// Get style properties to HashMap
 /// TODO: Use cssparser to parse style attribute.
-fn style_attrs(attrs: &RefCell<Vec<html5ever::Attribute>>) -> HashMap<String, String> {
+fn style_attrs(css_text: &str) -> HashMap<String, String> {
     let mut styles = HashMap::new();
-    let Some(css_text) = attr_value(attrs, local_name!("style")) else {
-        return styles;
-    };
-
     for decl in css_text.split(';') {
         let mut parts = decl.splitn(2, ':');
         if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
@@ -196,7 +198,9 @@ fn attr_width_height(
     }
 
     if width.is_none() || height.is_none() {
-        let styles = style_attrs(attrs);
+        let styles = attr_value(attrs, local_name!("style"))
+            .map(|css_text| style_attrs(&css_text))
+            .unwrap_or_default();
         if width.is_none() {
             width = styles.get("width").and_then(|v| value_to_length(&v));
         }
@@ -361,7 +365,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &Rc<Node>) {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().code()));
             }
             local_name!("mark") => {
-                let color = mark_color(&attrs).unwrap_or_else(|| gpui::rgb(0xfef08a).into());
+                let color = mark_color(&attrs).unwrap_or_else(default_mark_color);
                 merge_children_with_mark(
                     node,
                     paragraph,

@@ -415,7 +415,7 @@ pub struct Tab {
     /// restarts in sync with the indicator slide.
     pub(super) indicator_epoch: u64,
     pub(super) max_width: Option<Pixels>,
-    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+    pub(super) on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
 impl From<&'static str> for Tab {

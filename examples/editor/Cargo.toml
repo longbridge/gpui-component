@@ -1,6 +1,6 @@
 [package]
 name = "example-editor"
-version = "0.7.1"
+version = "0.7.2"
 publish = false
 edition.workspace = true
 
@@ -17,3 +17,6 @@ tree-sitter-navi = "0.2.3"
 
 [lints]
 workspace = true
+
+[features]
+gpui-fast = ["gpui-kit/gpui-fast"]

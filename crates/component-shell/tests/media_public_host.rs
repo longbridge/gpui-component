@@ -1,3 +1,6 @@
+#[cfg(feature = "gpui-fast")]
+extern crate gpui_fast as gpui;
+
 #[path = "../src/shell/support.rs"]
 mod support;
 
@@ -271,13 +274,13 @@ fn catalog_exposes_only_renderable_media_surfaces() {
             .descriptors()
             .map(|descriptor| descriptor.name())
             .collect::<Vec<_>>(),
-        ["Image", "Editor"]
+        ["Image", "Editor", "Diff"]
     );
     assert_eq!(
         frozen
             .states()
             .map(|state| state.export())
             .collect::<Vec<_>>(),
-        ["EditorState"]
+        ["EditorState", "DiffState"]
     );
 }

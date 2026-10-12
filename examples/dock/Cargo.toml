@@ -1,6 +1,6 @@
 [package]
 name = "example-dock"
-version = "0.7.1"
+version = "0.7.2"
 publish = false
 edition.workspace = true
 
@@ -14,3 +14,6 @@ serde_json.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+gpui-fast = ["gpui-kit/gpui-fast"]

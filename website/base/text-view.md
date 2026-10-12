@@ -287,3 +287,7 @@ The live preview and native command use the same Base-only source:
 ```bash
 cargo run -p gpui-base-examples -- text-view
 ```
+
+## Selection across presentation changes
+
+Completed selections retain their logical text range and Copy payload when styles, syntax highlighting, inherited fonts, or width change. Current presentation and wrapping still apply. Moving the mounted view does not reinterpret the old pointer rectangle. A new selection gesture or explicit clear updates the selection normally. Replacing the source or Markdown parser configuration clears the selection. The owning view must keep the state and selection participant mounted; this behavior does not pin rows in an outer virtual list.

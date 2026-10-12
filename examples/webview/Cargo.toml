@@ -1,11 +1,12 @@
 [package]
 name = "webview"
 description = "A minimal example of webview inside the GPUI application."
-version = "0.7.1"
+version = "0.7.2"
 publish = false
 edition.workspace = true
 
 [features]
+gpui-fast = ["gpui-kit/gpui-fast"]
 inspector = []
 
 [dependencies]

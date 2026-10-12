@@ -140,8 +140,8 @@ fn inline_groups(children: &[Node]) -> Vec<InlineGroup<'_>> {
     let mut groups = Vec::with_capacity(children.len());
     let mut ix = 0;
     while ix < children.len() {
-        if let Some((false, name)) = inline_html_tag(&children[ix])
-            && let Some(mark) = inline_html_mark(&name)
+        if let Some((false, name, attrs)) = inline_html_tag(&children[ix])
+            && let Some(mark) = inline_html_mark(&name, attrs)
             && let Some(close) = matching_close_tag(children, ix, &name)
         {
             groups.push(InlineGroup::Marked(mark, &children[ix + 1..close]));
@@ -154,7 +154,7 @@ fn inline_groups(children: &[Node]) -> Vec<InlineGroup<'_>> {
     groups
 }
 
-fn inline_html_tag(node: &Node) -> Option<(bool, String)> {
+fn inline_html_tag(node: &Node) -> Option<(bool, String, &str)> {
     let Node::Html(html) = node else {
         return None;
     };
@@ -166,20 +166,67 @@ fn inline_html_tag(node: &Node) -> Option<(bool, String)> {
         Some(rest) => (true, rest),
         None => (false, inner),
     };
-    let name = rest
-        .chars()
-        .take_while(char::is_ascii_alphanumeric)
-        .collect::<String>()
-        .to_ascii_lowercase();
-    (!name.is_empty()).then_some((closing, name))
+    let name_len = rest.chars().take_while(char::is_ascii_alphanumeric).count();
+    let name = rest[..name_len].to_ascii_lowercase();
+    let attrs = rest[name_len..].trim();
+    (!name.is_empty()).then_some((closing, name, attrs))
 }
 
-fn inline_html_mark(name: &str) -> Option<TextMark> {
+fn inline_html_attr<'a>(attrs: &'a str, name: &str) -> Option<&'a str> {
+    let mut rest = attrs;
+    while !rest.is_empty() {
+        rest = rest.trim_start();
+        let key_len = rest
+            .find(|c: char| c.is_whitespace() || matches!(c, '=' | '/' | '>'))
+            .unwrap_or(rest.len());
+        if key_len == 0 {
+            break;
+        }
+        let key = &rest[..key_len];
+        rest = rest[key_len..].trim_start();
+        let value = if let Some(after_eq) = rest.strip_prefix('=') {
+            rest = after_eq.trim_start();
+            if let Some(quote) = rest
+                .as_bytes()
+                .first()
+                .copied()
+                .filter(|b| *b == b'"' || *b == b'\'')
+            {
+                rest = &rest[1..];
+                let end = rest.find(quote as char)?;
+                let value = &rest[..end];
+                rest = &rest[end + 1..];
+                value
+            } else {
+                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                let value = &rest[..end];
+                rest = &rest[end..];
+                value
+            }
+        } else {
+            ""
+        };
+        if key.eq_ignore_ascii_case(name) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn inline_html_mark(name: &str, attrs: &str) -> Option<TextMark> {
     Some(match name {
         "strong" | "b" => TextMark::default().bold(),
         "em" | "i" => TextMark::default().italic(),
         "u" => TextMark::default().underline(),
         "s" | "del" | "strike" => TextMark::default().strikethrough(),
+        "mark" => {
+            let color = super::html::mark_color_from_values(
+                inline_html_attr(attrs, "color"),
+                inline_html_attr(attrs, "style"),
+            )
+            .unwrap_or_else(super::html::default_mark_color);
+            TextMark::default().highlight(color)
+        }
         _ => return None,
     })
 }
@@ -188,8 +235,8 @@ fn matching_close_tag(children: &[Node], open: usize, name: &str) -> Option<usiz
     let mut depth = 0usize;
     for (ix, child) in children.iter().enumerate().skip(open + 1) {
         match inline_html_tag(child) {
-            Some((false, tag)) if tag == name => depth += 1,
-            Some((true, tag)) if tag == name => {
+            Some((false, tag, _)) if tag == name => depth += 1,
+            Some((true, tag, _)) if tag == name => {
                 if depth == 0 {
                     return Some(ix);
                 }
@@ -2294,6 +2341,54 @@ mod tests {
         };
         assert_eq!(marked(|mark| mark.italic), ["c", "d", "g"]);
         assert_eq!(marked(|mark| mark.strikethrough), ["h"]);
+    }
+
+    fn highlight_runs(paragraph: &Paragraph) -> Vec<(String, gpui::Hsla)> {
+        paragraph
+            .children
+            .iter()
+            .flat_map(|node| {
+                node.marks
+                    .iter()
+                    .filter_map(|(range, mark)| {
+                        mark.highlight
+                            .map(|color| (node.text[range.clone()].to_string(), color))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// Inline `<mark>` is paired like `<strong>` and keeps the same color
+    /// rules as the block HTML path: default yellow, `color`, then
+    /// `style="background-color"`.
+    #[test]
+    fn inline_html_mark_applies_highlight_colors() {
+        let source = concat!(
+            r#"Plain <mark>highlighted</mark> text and "#,
+            r##"<mark data_id="1" color="#ff000059">red</mark> and "##,
+            r#"<mark style="background-color: #336699">hex</mark>."#
+        );
+        let mut cx = NodeContext::default();
+        let document = parse(source, &mut cx).unwrap();
+        assert_eq!(document.text(), "Plain highlighted text and red and hex.\n");
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!()
+        };
+        assert_eq!(
+            highlight_runs(paragraph),
+            [
+                ("highlighted".into(), gpui::rgb(0xfef08a).into()),
+                (
+                    "red".into(),
+                    gpui::Rgba::try_from("#ff000059").unwrap().into()
+                ),
+                (
+                    "hex".into(),
+                    gpui::Rgba::try_from("#336699").unwrap().into()
+                ),
+            ]
+        );
     }
 
     #[test]

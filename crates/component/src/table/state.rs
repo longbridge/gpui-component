@@ -19,6 +19,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
     prelude::FluentBuilder, px, uniform_list,
 };
+use rust_i18n::t;
 
 use super::*;
 
@@ -528,6 +529,11 @@ where
         self.right_clicked_row
     }
 
+    /// Returns the cell that has been right clicked, as `(row_ix, col_ix)`.
+    pub fn right_clicked_cell(&self) -> Option<(usize, usize)> {
+        self.right_clicked_cell
+    }
+
     /// Set or clear the right-clicked row state.
     ///
     /// Pass `None` to clear — useful when opening a header context menu
@@ -590,6 +596,7 @@ where
     pub fn set_selected_cell(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
         self.selection_mode = SelectionMode::Cell;
         self.selected_cell = Some((row_ix, col_ix));
+        self.right_clicked_cell = None;
 
         // Scroll to the cell
         self.vertical_scroll_handle
@@ -764,11 +771,24 @@ where
             .count()
     }
 
+    /// One header row. An unset header height matches the body rows.
+    fn header_row_height(&self) -> Pixels {
+        self.options
+            .header_row_height
+            .unwrap_or(self.options.size.table_row_height())
+    }
+
+    /// Every header row, including column-group rows. An empty layout still
+    /// reserves one row, matching the vertical scrollbar's top inset.
+    fn header_band_height(&self) -> Pixels {
+        self.header_row_height() * self.header_layout.len().max(1) as f32
+    }
+
     fn page_item_count(&self) -> usize {
         let row_height = self.options.size.table_row_height();
-        let height = self.bounds.size.height;
-        let count = (height / row_height).floor() as usize;
-        count.saturating_sub(1).max(1)
+        let body_height = (self.bounds.size.height - self.header_band_height()).max(px(0.));
+        let count = (body_height / row_height).floor() as usize;
+        count.max(1)
     }
 
     fn on_row_right_click(
@@ -1333,13 +1353,22 @@ where
     fn update_visible_range_if_need(
         &mut self,
         visible_range: Range<usize>,
+        items_count: usize,
         axis: Axis,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Skip when visible range is only 1 item.
+        // Skip when visible range is only 1 item, unless there is at most 1 item.
         // The visual_list will use first item to measure.
-        if visible_range.len() <= 1 {
+        if visible_range.len() <= 1 && items_count > 1 {
+            return;
+        }
+
+        // Stripe filler rows are rendered past the last row; never report them.
+        let end = visible_range.end.min(items_count);
+        let visible_range = visible_range.start.min(end)..end;
+        // A range wholly past the last item is stale; the list scrolls back next frame.
+        if visible_range.is_empty() && items_count > 0 {
             return;
         }
 
@@ -1612,6 +1641,9 @@ where
         Some(
             div()
                 .id(("icon-sort", col_ix))
+                .test_support()
+                .role(gpui::Role::Button)
+                .aria_label(t!("Table.SortBy", column = col_group.column.name).to_string())
                 .p(px(2.))
                 .rounded(cx.theme().radius / 2.)
                 .map(|this| match is_on {
@@ -1802,6 +1834,7 @@ where
             self.calculate_visible_leaf_col_range(left_columns_count);
 
         let layout_len = self.header_layout.len();
+        let header_row_height = self.header_row_height();
 
         // Reset fixed head columns bounds, if no fixed columns are present
         if left_columns_count == 0 {
@@ -1862,7 +1895,7 @@ where
                             layout.iter().enumerate().map(|(_row_ix, row_cells)| {
                                 h_flex()
                                     .min_w_full()
-                                    .h(self.options.size.table_row_height())
+                                    .h(header_row_height)
                                     .border_b_1()
                                     .border_color(cx.theme().border)
                                     .children(row_cells.iter().filter_map(|cell| {
@@ -1923,7 +1956,7 @@ where
                             let is_leaf_row = row_ix + 1 == layout_len;
                             h_flex()
                                 .min_w_full()
-                                .h(self.options.size.table_row_height())
+                                .h(header_row_height)
                                 .border_b_1()
                                 .border_color(cx.theme().border)
                                 .map(|this| {
@@ -2145,6 +2178,7 @@ where
                                     move |table, visible_range: Range<usize>, window, cx| {
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
+                                            columns_count.saturating_sub(left_columns_count),
                                             Axis::Horizontal,
                                             window,
                                             cx,
@@ -2375,7 +2409,7 @@ where
         Some(
             div()
                 .absolute()
-                .top(self.options.size.table_row_height() * self.header_layout.len().max(1) as f32)
+                .top(self.header_band_height())
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
@@ -2445,7 +2479,7 @@ where
         } else {
             rows_count
         };
-        let right_clicked_row = self.right_clicked_row;
+        let has_right_click = self.right_clicked_row.is_some() || self.right_clicked_cell.is_some();
         let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
         let loading_view = if loading {
@@ -2459,6 +2493,8 @@ where
         };
 
         let empty_view = if rows_count == 0 {
+            // The rows list is not rendered, so report the empty range here.
+            self.update_visible_range_if_need(0..0, 0, Axis::Vertical, window, cx);
             Some(
                 div()
                     .size_full()
@@ -2520,6 +2556,7 @@ where
                                         );
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
+                                            rows_count,
                                             Axis::Vertical,
                                             window,
                                             cx,
@@ -2587,7 +2624,7 @@ where
                             &self.vertical_scroll_handle.0.borrow().base_handle,
                         ))
                     })
-                    .when(right_clicked_row.is_some(), |this| {
+                    .when(has_right_click, |this| {
                         this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
                             this.on_row_right_click(e, None, window, cx);
                             cx.notify();

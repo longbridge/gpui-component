@@ -921,7 +921,7 @@ impl Element for Inline {
         // `max_lines` can snap its clip to a whole-line boundary. The state
         // stack only holds an entry during prepaint when that view set
         // `max_lines`, so this is a no-op otherwise.
-        if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
+        if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
             let state = text_view_state.read(cx);
             if state.max_lines.is_some()
                 && let Ok(mut line_spans) = state.line_spans.lock()
@@ -943,7 +943,7 @@ impl Element for Inline {
 
     fn paint(
         &mut self,
-        global_id: Option<&GlobalElementId>,
+        _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
@@ -964,14 +964,14 @@ impl Element for Inline {
         if !self.range_backgrounds.is_empty() {
             self.paint_range_highlights(&text_layout, window);
         }
-        self.styled_text
-            .paint(global_id, None, bounds, &mut (), &mut (), window, cx);
+        _ = text_layout.paint_background(window, cx);
 
         // layout selections
         let (is_selectable, is_selection, selection) =
             self.layout_selections(&text_layout, &bounds, window, cx);
 
         let Ok(mut state) = self.state.lock() else {
+            _ = text_layout.paint_foreground(window, cx);
             return;
         };
 
@@ -1006,31 +1006,31 @@ impl Element for Inline {
                 .unwrap_or_else(|| crate::Theme::global(cx).tokens.colors.selection);
             Self::paint_selection(selection, &text_layout, &bounds, window, color);
             if let Some((start, end)) = Self::selection_edges(selection, &text_layout)
-                && let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned()
+                && let Some(text_view_state) = GlobalState::global(cx).text_view_state()
             {
-                text_view_state.update(cx, |state, _| {
-                    state.selection_adapter.register_selection_edges(start, end);
-                });
+                text_view_state
+                    .read(cx)
+                    .selection_adapter
+                    .register_selection_edges(start, end);
             }
         }
 
+        _ = text_layout.paint_foreground(window, cx);
+
         if is_selectable {
-            if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
+            if let Some(text_view_state) = GlobalState::global(cx).text_view_state() {
                 let text_bounds = Self::text_line_bounds(
                     &text_layout,
                     text_layout.line_height(),
                     window.content_mask().bounds,
                 );
-                text_view_state.update(cx, |state, _| {
-                    state.selection_adapter.register_inline(text_bounds);
-                    state
-                        .selection_adapter
-                        .register_text_run(crate::TextSelectionRun::new(
-                            self.text.clone(),
-                            text_layout.clone(),
-                            hitbox.bounds,
-                        ));
-                });
+                let adapter = &text_view_state.read(cx).selection_adapter;
+                adapter.register_inline(text_bounds);
+                adapter.register_text_run(crate::TextSelectionRun::new(
+                    self.text.clone(),
+                    text_layout.clone(),
+                    hitbox.bounds,
+                ));
             }
 
             window.on_mouse_event({
@@ -1038,7 +1038,7 @@ impl Element for Inline {
                 let text_layout = text_layout.clone();
                 let inline_state = self.state.clone();
                 let text = self.text.clone();
-                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
+                let text_view_state = GlobalState::global(cx).text_view_state();
                 let line_bounds = self.selection_bounds;
                 move |event: &MouseDownEvent, phase, window, cx| {
                     if !phase.bubble()
@@ -1140,7 +1140,7 @@ impl Element for Inline {
                 let links = self.links.clone();
                 let text_layout = text_layout.clone();
                 let hitbox = hitbox.clone();
-                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
+                let text_view_state = GlobalState::global(cx).text_view_state();
                 let link_click_handler = self.link_click_handler.clone();
 
                 move |event: &MouseUpEvent, phase, window, cx| {

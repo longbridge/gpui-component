@@ -21,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    InputBaseState, RangeDecorationStyle, TextDecoration,
+    InputBaseState, PrepaintCaretGeometry, RangeDecorationStyle, TextDecoration,
     layout::{LastLayout, WhitespaceIndicators},
     mode::LayoutMode,
 };
@@ -939,7 +939,7 @@ impl<M: InputModeKind> TextElement<M> {
         cx: &mut App,
     ) -> Vec<Path<Pixels>> {
         let state = self.state.read(cx);
-        if !state.focus_handle.is_focused(window) {
+        if !state.has_selection_focus(window, cx) {
             return vec![];
         }
 
@@ -2862,6 +2862,34 @@ impl<M: InputModeKind> Element for TextElement<M> {
             .find(|info| info.is_active)
             .map(|info| info.bounds);
 
+        // Stash the fresh caret geometry for caret-anchored popups. Their
+        // deferred prepaint runs after this prepaint but before paint, so
+        // they anchor to the current frame's caret instead of the previous
+        // frame's. Only the positioning geometry is stashed here; the rest
+        // of the paint-time state updates stay where they are.
+        let caret_geometry = last_layout.cursor_bounds.map(|cursor_bounds| {
+            let mut scroll_offset = cursor_scroll_offset;
+            // Mirror update_scroll_offset's clamping with the fresh values,
+            // so the stash matches what paint will publish.
+            let state = self.state.read(cx);
+            let safe_y_range = (-scroll_size.height + input_bounds.size.height).min(px(0.))..px(0.);
+            scroll_offset.y = if state.is_single_line() {
+                px(0.)
+            } else {
+                scroll_offset.y.clamp(safe_y_range.start, safe_y_range.end)
+            };
+            scroll_offset.x = clamp_horizontal_scroll_offset(
+                scroll_offset.x,
+                scroll_size.width,
+                input_bounds.size.width,
+                last_layout.text_align,
+            );
+            PrepaintCaretGeometry::new(cursor_bounds, line_height, input_bounds, scroll_offset)
+        });
+        self.state.update(cx, |state, _| {
+            state.prepaint_caret_geometry = caret_geometry;
+        });
+
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
         let selection_paths = self.layout_selections(&last_layout, &mut bounds, window, cx);
         let hover_highlight_path = self.layout_hover_highlight(&last_layout, &mut bounds, cx);
@@ -3615,6 +3643,60 @@ mod tests {
             DecorationHarness(state)
         });
         (editor.unwrap(), window)
+    }
+
+    #[gpui::test]
+    fn selection_paths_follow_the_input_and_its_menu_focus(cx: &mut TestAppContext) {
+        let (editor, window) = decoration_editor(cx, "alpha beta", false);
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            let menu_focus = cx.focus_handle();
+            let other_focus = cx.focus_handle();
+            editor.update(cx, |state, cx| {
+                state.set_selected_range(0..5, cx);
+                state.focus(window, cx);
+            });
+
+            let selection_paths = |window: &mut Window, cx: &mut App| {
+                window.draw(cx).clear(cx);
+                let state = editor.read(cx);
+                let layout = state.last_layout.clone().unwrap();
+                let mut bounds = state.input_bounds;
+                TextElement::new(editor.clone()).layout_selections(&layout, &mut bounds, window, cx)
+            };
+            let focused_paths = selection_paths(window, cx).len();
+            assert!(focused_paths > 0);
+
+            editor.update(cx, |state, cx| {
+                state.set_selection_focus(Some(menu_focus.clone()), cx);
+            });
+            menu_focus.focus(window, cx);
+            assert!(!editor.read(cx).focus_handle.is_focused(window));
+            assert_eq!(selection_paths(window, cx).len(), focused_paths);
+            // The opening frame can still use the input's old focus. Check
+            // another frame with the menu already focused as well.
+            assert_eq!(selection_paths(window, cx).len(), focused_paths);
+
+            other_focus.focus(window, cx);
+            assert!(selection_paths(window, cx).is_empty());
+            assert_eq!(editor.read(cx).selected_range(), 0..5);
+
+            menu_focus.focus(window, cx);
+            editor.update(cx, |state, cx| state.set_selection_focus(None, cx));
+            assert!(selection_paths(window, cx).is_empty());
+            editor.update(cx, |state, cx| state.focus(window, cx));
+            assert_eq!(selection_paths(window, cx).len(), focused_paths);
+
+            // Retaining the input must not keep a removed menu alive.
+            let weak_menu = menu_focus.downgrade();
+            editor.update(cx, |state, cx| {
+                state.set_selection_focus(Some(menu_focus.clone()), cx);
+            });
+            menu_focus.focus(window, cx);
+            drop(menu_focus);
+            assert!(weak_menu.upgrade().is_none());
+            assert!(selection_paths(window, cx).is_empty());
+        });
     }
 
     #[gpui::test]

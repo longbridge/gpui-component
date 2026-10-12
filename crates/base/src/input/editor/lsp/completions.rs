@@ -9,7 +9,7 @@ use lsp_types::{
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
-use crate::input::InputBaseState;
+use crate::input::{InputBaseState, ShowCompletions};
 
 /// Default debounce duration for inline completions.
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
@@ -183,6 +183,93 @@ impl InputBaseState<EditorMode> {
             )
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
+        self.request_completions(
+            provider,
+            start_offset,
+            query.clone(),
+            CompletionContext {
+                trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
+                trigger_character: Some(query),
+            },
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn on_action_show_completions(
+        &mut self,
+        _: &ShowCompletions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_completions(window, cx);
+    }
+
+    /// Request completions at the caret and focus the editor, without editing text.
+    ///
+    /// The current identifier prefix is used to refine the menu. An empty
+    /// prefix still asks the provider for suggestions. There is no default
+    /// keybinding; applications can dispatch [`ShowCompletions`] in the
+    /// `Input && mode == editor` context or call this method from a command.
+    ///
+    /// Disabled/readonly editors, IME preedit, and an already-open completion
+    /// menu are left alone. A new request cancels the previous overlay request
+    /// and inline suggestion, and closes the code-action menu.
+    pub fn show_completions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.disabled
+            || self.readonly
+            || self.completion_inserting
+            || self.ime_marked_range.is_some()
+            || self.extras.context_menu_content.completion.open
+        {
+            return;
+        }
+        let Some(provider) = self.extras.lsp.completion_provider.clone() else {
+            return;
+        };
+
+        let offset = self.cursor();
+        let word_len: usize = self
+            .text
+            .chars_at(offset)
+            .reversed()
+            .take_while(|ch| ch.is_alphanumeric() || *ch == '_')
+            .map(char::len_utf8)
+            .sum();
+        let start_offset = offset - word_len;
+        let query = self.text.slice(start_offset..offset).to_string();
+
+        self.hide_context_menu(cx);
+        self.clear_inline_completion(cx);
+        self.focus(window, cx);
+
+        self.request_completions(
+            provider,
+            start_offset,
+            query,
+            CompletionContext {
+                trigger_kind: lsp_types::CompletionTriggerKind::INVOKED,
+                trigger_character: None,
+            },
+            window,
+            cx,
+        );
+    }
+
+    /// Record the word a menu is for and ask `provider` about the caret.
+    fn request_completions(
+        &mut self,
+        provider: Rc<dyn CompletionProvider>,
+        start_offset: usize,
+        query: String,
+        completion_context: CompletionContext,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let new_offset = self.cursor();
+        let revision = self.document_revision;
+        self.extras.context_menu_task = Task::ready(Ok(()));
+        self.extras.context_menu_content.code_action.open = false;
         self.extras
             .context_menu_content
             .completion
@@ -192,11 +279,6 @@ impl InputBaseState<EditorMode> {
             .completion
             .query
             .clone_from(&query);
-
-        let completion_context = CompletionContext {
-            trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
-            trigger_character: Some(query),
-        };
 
         let provider_responses =
             provider.completions(&self.text, new_offset, completion_context, window, cx);
@@ -209,31 +291,21 @@ impl InputBaseState<EditorMode> {
                 }
             }
 
-            if completions.is_empty() {
-                editor.update(cx, |editor, cx| {
-                    editor.extras.context_menu_content.completion.open = false;
-                    editor.extras.context_menu_content.completion.items.clear();
-                    editor.extras.context_menu_content.completion.bump();
-                    cx.notify();
-                })?;
-                return Ok(());
-            }
-
             editor
                 .update_in(cx, |editor, window, cx| {
-                    if !editor.focus_handle.is_focused(window) {
+                    if !editor.focus_handle.is_focused(window)
+                        || editor.document_revision != revision
+                        || editor.cursor() != new_offset
+                        || editor.ime_marked_range.is_some()
+                        || editor.disabled
+                        || editor.readonly
+                    {
                         return;
                     }
 
+                    editor.extras.context_menu_content.completion.open = !completions.is_empty();
                     editor.extras.context_menu_content.completion.items = completions;
-                    editor.extras.context_menu_content.completion.open = !editor
-                        .extras
-                        .context_menu_content
-                        .completion
-                        .items
-                        .is_empty();
                     editor.extras.context_menu_content.completion.bump();
-
                     cx.notify();
                 })
                 .ok();

@@ -120,7 +120,7 @@ pub struct TextViewState {
     pub(super) markdown_extensions: Arc<MarkdownExtensions>,
 
     pub(super) is_selecting: bool,
-    /// Logical ranges retained across an explicitly requested resource reflow.
+    /// Logical ranges retained across compatible resource or presentation reflow.
     pub(super) preserve_inline_selection: bool,
     multi_click_selection: Option<TextViewMultiClickSelection>,
     selected_text_override: Option<String>,
@@ -178,6 +178,18 @@ impl TextViewState {
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
                 while let Ok(parsed_update) = rx_result.recv().await {
+                    // A result that commits nothing — the background parser
+                    // acknowledging a synchronous parse — leaves the state
+                    // alone: updating it would tell GPUI Fast's retained
+                    // views that read it that it changed.
+                    let Ok(commits) =
+                        weak_self.read_with(cx, |state, _| state.commits(&parsed_update))
+                    else {
+                        break;
+                    };
+                    if !commits {
+                        continue;
+                    }
                     _ = weak_self.update(cx, |state, cx| {
                         state.commit_parsed_update(parsed_update, cx);
                     });
@@ -477,10 +489,14 @@ impl TextViewState {
     /// when the task can outlive this view. This does not reparse the document.
     /// Existing logical selection is retained until the next selection gesture.
     pub fn invalidate_inline_layout(&mut self, cx: &mut Context<Self>) {
+        self.preserve_selection_for_reflow();
+        cx.notify();
+    }
+
+    pub(super) fn preserve_selection_for_reflow(&mut self) {
         self.preserve_inline_selection = true;
         self.compatible_layout_update = true;
         self.invalidate_measured_heights();
-        cx.notify();
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
@@ -539,6 +555,19 @@ impl TextViewState {
         _ = self.tx.try_send(update_options);
     }
 
+    /// Whether [`Self::commit_parsed_update`] commits `parsed_update`: it is
+    /// not older than what is committed or than the last replacement, nor
+    /// the background parser acknowledging a synchronous parse.
+    fn commits(&self, parsed_update: &ParsedUpdate) -> bool {
+        if parsed_update.revision < self.full_update_revision
+            || parsed_update.revision <= self.committed_revision
+        {
+            return false;
+        }
+        debug_assert!(!parsed_update.baseline_ack || parsed_update.full_parse);
+        !parsed_update.baseline_ack
+    }
+
     /// Commit a result of the background parser.
     ///
     /// A stream that appends faster than a parse completes has always moved
@@ -548,13 +577,7 @@ impl TextViewState {
     /// the current text and is committed; one from before that replacement,
     /// or older than what is already committed, is discarded.
     fn commit_parsed_update(&mut self, parsed_update: ParsedUpdate, cx: &mut Context<Self>) {
-        if parsed_update.revision < self.full_update_revision
-            || parsed_update.revision <= self.committed_revision
-        {
-            return;
-        }
-        if parsed_update.baseline_ack {
-            debug_assert!(parsed_update.full_parse);
+        if !self.commits(&parsed_update) {
             return;
         }
 
@@ -1028,9 +1051,7 @@ impl Render for TextViewState {
             // ListState invalidates its cached rows for width changes, but does
             // not know that an inherited font or rem change affects offscreen
             // inline metrics. Retain logical selections just as for resources.
-            self.preserve_inline_selection = true;
-            self.compatible_layout_update = true;
-            self.invalidate_measured_heights();
+            self.preserve_selection_for_reflow();
         }
         self.layout_text_style = Some(typography);
         let state = cx.entity();
@@ -1092,14 +1113,24 @@ impl Render for TextViewState {
                     has_selection_snapshot,
                     is_selecting,
                     compatible_layout_update,
+                    preserve_width_selection,
                 ) = {
                     let state = state.read(cx);
+                    let has_selection_snapshot = state.selection_adapter.has_selection_snapshot(cx);
+                    let preserve_width_selection = !state.is_selecting
+                        && state.bounds().size.width != bounds.size.width
+                        && (has_selection_snapshot || state.has_view_selection());
                     (
                         state.bounds().size != bounds.size,
                         state.selection_adapter.is_part_of_window_selection(cx),
-                        state.selection_adapter.has_selection_snapshot(cx),
+                        has_selection_snapshot,
                         state.is_selecting,
-                        state.compatible_layout_update,
+                        // A measurement prepaint must not consume compatibility
+                        // before the same entity's visible column prepaints.
+                        state.compatible_layout_update
+                            || preserve_width_selection
+                            || state.preserve_inline_selection,
+                        preserve_width_selection,
                     )
                 };
                 let mut revision_changed = false;
@@ -1107,6 +1138,11 @@ impl Render for TextViewState {
                     revision_changed = state
                         .selection_adapter
                         .update_layout_revision(state.selection_revision, state.is_selecting);
+                    if preserve_width_selection {
+                        // ListState already remeasures width changes. Arm logical
+                        // retention before inline paint without invalidating rows again.
+                        state.preserve_inline_selection = true;
+                    }
                     state.update_bounds(bounds, cx);
                     state.compatible_layout_update = false;
                 });
@@ -1306,6 +1342,63 @@ mod tests {
         node::{BlockNode, Span},
     };
     use gpui::{Entity, TestAppContext};
+
+    /// A view reading a text view state, inside a view notified on every
+    /// frame, counting its renders.
+    #[cfg(feature = "gpui-fast")]
+    mod parse_ack {
+        use std::{cell::Cell, rc::Rc};
+
+        use gpui::{
+            AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render,
+            TestAppContext, Window, div,
+        };
+
+        use super::super::TextViewState;
+
+        struct Reader {
+            state: Entity<TextViewState>,
+            renders: Rc<Cell<usize>>,
+        }
+
+        impl Render for Reader {
+            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+                self.renders.set(self.renders.get() + 1);
+                div().child(self.state.read(cx).text.clone())
+            }
+        }
+
+        struct Holder {
+            reader: Entity<Reader>,
+        }
+
+        impl Render for Holder {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().child(self.reader.clone())
+            }
+        }
+
+        /// The background parser acknowledging a text parsed as it was set
+        /// commits nothing, and leaves the state alone: a view that read it,
+        /// in a view notified for something else, is not built again.
+        #[gpui::test]
+        fn acknowledging_a_parse_leaves_its_readers_retained(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let renders = Rc::new(Cell::new(0));
+            let (holder, cx) = cx.add_window_view(|_, cx| Holder {
+                reader: cx.new(|cx| Reader {
+                    state: cx.new(|cx| TextViewState::markdown("Some **text**.", cx)),
+                    renders: renders.clone(),
+                }),
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let before = renders.get();
+            cx.run_until_parked();
+            holder.update(cx, |_, cx| cx.notify());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(renders.get(), before, "the reader rendered again");
+        }
+    }
 
     mod stream_fade {
         use std::{cell::Cell, ops::Range, rc::Rc, time::Duration};

@@ -8,6 +8,8 @@
 //! caller keeps the `InputState` or `TextareaState`; the group owns only
 //! composition and the frame.
 
+use std::time::Duration;
+
 use gpui_base::TestSupportExt as _;
 
 use gpui::{
@@ -144,7 +146,7 @@ impl RenderOnce for InputGroup {
         let focused = !disabled
             && state
                 .as_ref()
-                .is_some_and(|state| state.presentation(cx).focus_handle().is_focused(window));
+                .is_some_and(|state| state.has_selection_focus(window, cx));
         let multiline = state
             .as_ref()
             .is_some_and(|state| state.presentation(cx).is_multi_line());
@@ -501,6 +503,11 @@ impl InputGroupButton {
 
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.button = self.button.tooltip(tooltip);
+        self
+    }
+
+    pub fn tooltip_show_delay(mut self, delay: Duration) -> Self {
+        self.button = self.button.tooltip_show_delay(delay);
         self
     }
 

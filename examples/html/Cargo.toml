@@ -1,6 +1,6 @@
 [package]
 name = "example-html"
-version = "0.7.1"
+version = "0.7.2"
 publish = false
 edition.workspace = true
 
@@ -10,3 +10,6 @@ gpui-component-story = { path = "../../crates/story" }
 
 [lints]
 workspace = true
+
+[features]
+gpui-fast = ["gpui-kit/gpui-fast"]
