@@ -8164,6 +8164,7 @@ impl ShellRuntime {
                     "role" => "role",
                     "aria_selected" => "aria_selected",
                     "aria_active_descendant" => "aria_active_descendant",
+                    "window_control_area" => "window_control_area",
                     "track_focus" => "track_focus",
                     "track_scroll" => "track_scroll",
                     "with_item_to_measure_index" => "with_item_to_measure_index",

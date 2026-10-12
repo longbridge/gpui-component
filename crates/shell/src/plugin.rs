@@ -1400,10 +1400,51 @@ impl ShellRuntime {
         let object = view.read(cx).object().clone();
         let policy = view.read(cx).policy();
         let snapshot = self.build_snapshot(&object, Some(view), policy, window, cx)?;
-        // Keep the application and its callback-owning snapshot alive until
-        // the native elements have been built and dropped.
-        crate::materialize::try_materialize(self, &snapshot, window, cx)?;
-        Ok(snapshot.debug_tree())
+        let tree = snapshot.debug_tree();
+
+        // Materialized during a real frame, as every frame is: native element
+        // state — a scroll position, retained component state — belongs to the
+        // view being drawn, and GPUI only has one while it draws. The probe
+        // becomes the hidden window's root for this one frame and holds the
+        // application's callback-owning snapshot until the native elements
+        // have been built and dropped.
+        let outcome = Rc::new(std::cell::RefCell::new(None));
+        let runtime = self.clone();
+        let sink = outcome.clone();
+        window.replace_root(cx, move |_, _| MaterializeProbe {
+            runtime,
+            snapshot,
+            outcome: sink,
+        });
+        window.draw(cx).clear(cx);
+
+        outcome
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("the application was never materialized")))?;
+        Ok(tree)
+    }
+}
+
+/// Materializes one snapshot from inside its own render, for [`ShellRuntime::check`].
+struct MaterializeProbe {
+    runtime: Rc<ShellRuntime>,
+    snapshot: crate::snapshot::RenderSnapshot,
+    outcome: Rc<std::cell::RefCell<Option<Result<()>>>>,
+}
+
+impl Render for MaterializeProbe {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A frame may render its root more than once; the check is one
+        // materialization, as it was before it ran inside a frame.
+        if self.outcome.borrow().is_some() {
+            return gpui::Empty;
+        }
+        let materialized =
+            crate::materialize::try_materialize(&self.runtime, &self.snapshot, window, cx)
+                .map(drop);
+        *self.outcome.borrow_mut() = Some(materialized);
+        gpui::Empty
     }
 }
 

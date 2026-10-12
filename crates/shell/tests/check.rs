@@ -100,6 +100,27 @@ fn check_materializes_valid_typed_children_and_preserves_print_spec() {
     assert!(stdout.contains("check passed:"), "{stdout}");
 }
 
+/// A scroll area keeps its position in window element state, which GPUI only
+/// hands out while a frame is drawn. `check` used to materialize outside a
+/// frame, so any application with a scrollbar aborted the process instead of
+/// being checked.
+#[test]
+fn check_materializes_a_scroll_area() {
+    let app = CheckApp::new(
+        r#"
+        import { View, div } from "gpui-kit";
+        export default class App extends View {
+            render() {
+                return div().id("list").size_full().overflow_y_scrollbar().child(div().child("Row"));
+            }
+        }
+        "#,
+    );
+    let (status, stdout, stderr) = app.run();
+    assert_eq!(status.code(), Some(0), "{stdout}\n{stderr}");
+    assert!(stdout.contains("check passed"), "{stdout}");
+}
+
 #[test]
 fn check_rejects_an_ordinary_child_in_a_typed_form() {
     let app = CheckApp::new(

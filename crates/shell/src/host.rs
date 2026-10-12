@@ -230,6 +230,11 @@ impl Application {
         }
     }
 
+    /// The directory the command runs in, absolute so a report names it.
+    fn current_directory() -> Self {
+        Self::Path(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+
     /// How the command line names it, for a message suggesting the command.
     fn describe(&self) -> String {
         match self {
@@ -459,26 +464,23 @@ fn parse(
             Some(Application::Path(path)) => Ok(Invocation::New(path)),
             _ => Err("`new` expects the directory to create".to_owned()),
         },
-        Some(Command::Types) => application
-            .map(Invocation::Types)
-            .ok_or_else(|| "expected an application directory".to_owned()),
-        Some(Command::Check) => application
-            .map(|application| {
-                Invocation::Check(CheckArguments {
-                    application,
-                    print_spec,
-                })
-            })
-            .ok_or_else(|| "expected an application directory".to_owned()),
-        // `run` with nothing named, and a bare `gpui-shell`, run the application
-        // packaged beside the executable: a bundle's executable is started with
-        // no arguments at all, so that is the one place a command cannot be
-        // required.
+        // With nothing named, `run`, `check` and `types` take the directory the
+        // command runs in, the way `cargo run` takes the package it is in.
+        Some(Command::Types) => Ok(Invocation::Types(
+            application.unwrap_or_else(Application::current_directory),
+        )),
+        Some(Command::Check) => Ok(Invocation::Check(CheckArguments {
+            application: application.unwrap_or_else(Application::current_directory),
+            print_spec,
+        })),
         Some(Command::Run) => Ok(Invocation::Run(Arguments {
-            application: application.unwrap_or(Application::Bundled),
+            application: application.unwrap_or_else(Application::current_directory),
             watch,
             development,
         })),
+        // A bare `gpui-shell` runs the application packaged beside the
+        // executable: a bundle's executable is started with no arguments at
+        // all, so that is the one place a command cannot be required.
         None => match application {
             None => Ok(Invocation::Bare(Arguments {
                 application: Application::Bundled,
@@ -508,11 +510,11 @@ fn help(brand: HostBrand) -> String {
         "\
 {version}
 
-Usage: {name} run <name> | --dir <directory> [--watch] [--dev]
+Usage: {name} run [<name> | --dir <directory>] [--watch] [--dev]
        {name} new <directory>
        {name} list
-       {name} check <name> | --dir <directory> [--print-spec]
-       {name} types <name> | --dir <directory>
+       {name} check [<name> | --dir <directory>] [--print-spec]
+       {name} types [<name> | --dir <directory>]
        {name} agents [<name> | --dir <directory>]
 
 Arguments:
@@ -520,9 +522,9 @@ Arguments:
                {installed}. An argument containing a path
                separator is a path instead, as if given with --dir.
 
-With no arguments, {name} runs the application packaged beside its
+`run`, `check` and `types` with no application use the current directory.
+With no arguments at all, {name} runs the application packaged beside its
 executable ({bundled}), and prints this help when there is none.
-`run` alone runs the packaged application or reports that there is none.
 
 Commands:
   run          Run one application in a window.
@@ -1217,8 +1219,9 @@ mod tests {
         // A directory literally named `check` would be ambiguous; the command
         // wins, which is why the error for a missing path has to be clear.
         assert_eq!(
-            parse_args(&["check"]).unwrap_err(),
-            "expected an application directory"
+            check_args(&["check"]).application,
+            Application::Path(std::env::current_dir().unwrap()),
+            "`check` alone checks the application in the current directory"
         );
     }
 
@@ -1301,7 +1304,11 @@ mod tests {
         assert!(error.contains("gpui-shell run clock"), "{error}");
         let error = parse_args(&["-d", "app"]).expect_err("a bare directory is not a command");
         assert!(error.contains("gpui-shell run -d app"), "{error}");
-        assert_eq!(run_args(&["run"]).application, Application::Bundled);
+        assert_eq!(
+            run_args(&["run"]).application,
+            Application::Path(std::env::current_dir().unwrap()),
+            "`run` alone runs the application in the current directory"
+        );
     }
 
     #[test]

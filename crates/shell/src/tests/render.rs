@@ -7314,25 +7314,10 @@ export default class Bar extends View {
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
     context.update(|window, cx| window.draw(cx).clear(cx));
 
+    // A press dragged across the bar would ask the platform to move the
+    // window, which the test platform does not implement; a plain click on a
+    // child is what this can drive.
     context.simulate_click(point(px(20.), px(17.)), Modifiers::default());
-    context.run_until_parked();
-    // A press dragged across the bar asks the platform to move the window; the
-    // test platform has nothing to move, so this only has to not fail.
-    context.simulate_mouse_down(
-        point(px(200.), px(17.)),
-        gpui::MouseButton::Left,
-        Modifiers::default(),
-    );
-    context.simulate_mouse_move(
-        point(px(210.), px(17.)),
-        Some(gpui::MouseButton::Left),
-        Modifiers::default(),
-    );
-    context.simulate_mouse_up(
-        point(px(210.), px(17.)),
-        gpui::MouseButton::Left,
-        Modifiers::default(),
-    );
     context.run_until_parked();
     context.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -7350,6 +7335,16 @@ export default class Bar extends View {
         tree.contains("clicks=1"),
         "a press on a child of the drag area still clicks it: {tree}"
     );
+    // The method has to arrive under its own name. An op the engine does not
+    // know by name is recorded as an accessibility label, which renders
+    // nothing wrong and moves no window.
+    for area in ["drag", "close", "max", "min"] {
+        assert!(
+            tree.contains(&format!(":window_control_area[Str(\"{area}\")]")),
+            "`{area}` must reach the element as a window control area: {tree}"
+        );
+    }
+    assert!(!tree.contains("accessibility_label"), "{tree}");
 }
 
 /// A script binds a chord to an action, and the action reaches its handler.

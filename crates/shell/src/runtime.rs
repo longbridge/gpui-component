@@ -152,7 +152,7 @@ fn missing_entry_message(root: &Path, entry: &str) -> String {
     let mut message = format!(
         "no `{entry}` in {}
 
-An application directory must contain {entry},          which default-exports a view class.",
+An application directory must contain {entry}, which default-exports a view class.",
         root.display()
     );
 
