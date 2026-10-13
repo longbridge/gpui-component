@@ -654,11 +654,45 @@ impl BlockEditorState {
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
         let hit = self.frame.borrow().hit_test(at);
+        // A click on an inline atom selects the whole atom (#3113).
+        if !extend && let Some(pos) = hit.and_then(|pos| self.atom_under(pos, at)) {
+            self.goal_x = None;
+            self.end_composition();
+            let _ = self.model.set_selection(BlockSelection::Text {
+                anchor: pos,
+                head: BlockPosition::new(
+                    pos.block,
+                    pos.offset + super::inline::ATOM_CHAR.len_utf8(),
+                ),
+            });
+            self.selection_changed(cx);
+            return;
+        }
         if let Some(pos) = hit {
             self.goal_x = None;
             let pos = self.model.doc.clamp(pos);
             self.move_to(pos, extend, cx);
         }
+    }
+
+    /// The start of the inline atom under the window point `at`, given the
+    /// caret position a hit test gave for it (the atom's either side).
+    fn atom_under(&self, pos: BlockPosition, at: Point<Pixels>) -> Option<BlockPosition> {
+        let inline = self.model.doc.inline(pos.block)?;
+        let frame = self.frame.borrow();
+        let leaf = frame.leaf(pos.block)?;
+        let width = super::inline::ATOM_CHAR.len_utf8();
+        let candidates = [Some(pos.offset), pos.offset.checked_sub(width)];
+        candidates.into_iter().flatten().find_map(|start| {
+            if !inline.text()[start..].starts_with(super::inline::ATOM_CHAR) {
+                return None;
+            }
+            let left = leaf.caret_point(start);
+            let right = leaf.caret_point(start + width);
+            let line = leaf.line_height();
+            (at.x >= left.x && at.x <= right.x && at.y >= left.y && at.y <= left.y + line)
+                .then_some(BlockPosition::new(pos.block, start))
+        })
     }
 
     fn toggle_mark(&mut self, kind: MarkKind, cx: &mut Context<Self>) {
@@ -680,6 +714,26 @@ impl BlockEditorState {
             .text_ranges(range)
             .into_iter()
             .filter_map(|(id, lo, hi)| {
+                // Inline atoms copy as their Markdown source (an image as
+                // `![alt](url)`), never as the U+FFFC placeholder (#3113:
+                // the clipboard holds the token's text).
+                if let Some(inline) = self.model.doc.inline(id) {
+                    let slice = inline.slice(lo..hi);
+                    return Some(
+                        slice
+                            .pieces()
+                            .map(|(range, _, atom)| match atom {
+                                Some(atom) => super::serialize::inline_markdown(
+                                    &super::inline::InlineText::atom(
+                                        atom.clone(),
+                                        Default::default(),
+                                    ),
+                                ),
+                                None => slice.text()[range].to_string(),
+                            })
+                            .collect(),
+                    );
+                }
                 let text = self.model.doc.leaf_text(id)?;
                 text.get(lo..hi).map(str::to_string)
             })

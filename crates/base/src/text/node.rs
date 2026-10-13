@@ -2837,6 +2837,19 @@ impl Paragraph {
     fn should_render_inline_flow(&self) -> bool {
         let has_image = self.children.iter().any(|child| child.image.is_some());
         let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        // Block editor leaves render inline code through the single-`Inline`
+        // path (code as a highlight, without the pill padding), so the
+        // leaf reports one `TextLayout` the editor can hit-test.
+        #[cfg(feature = "block-editor")]
+        if !has_image
+            && self.children.iter().all(|child| child.custom.is_none())
+            && self
+                .state
+                .lock()
+                .is_ok_and(|state| state.editor_key.is_some())
+        {
+            return false;
+        }
         self.children.iter().any(|child| child.custom.is_some())
             || (has_image && has_text)
             || self

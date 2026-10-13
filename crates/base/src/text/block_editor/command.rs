@@ -654,7 +654,9 @@ impl BlockEditorModel {
     /// single-line text or when the caret is not in an editable text block;
     /// the caller then inserts plain text).
     pub fn paste_blocks(&mut self, text: &str) -> Result<bool, CommandError> {
-        if !text.trim_end_matches('\n').contains('\n') {
+        // Single-line text is plain unless it holds an inline atom's
+        // Markdown (a copied image), which pastes back as the atom.
+        if !text.trim_end_matches('\n').contains('\n') && !text.contains("![") {
             return Ok(false);
         }
         let mut cx = crate::text::node::NodeContext {
@@ -672,7 +674,17 @@ impl BlockEditorModel {
         }
         // Nothing structural (one paragraph, soft line breaks only): plain
         // text, where each line becomes a block as typed.
-        if blocks.is_empty() || (blocks.len() == 1 && blocks[0].kind == BlockKindData::Paragraph) {
+        let has_atoms = |block: &DetachedBlock| {
+            matches!(
+                &block.content,
+                DetachedContent::Leaf(BlockContent::Inline(inline)) if inline.text().contains(super::inline::ATOM_CHAR)
+            )
+        };
+        if blocks.is_empty()
+            || (blocks.len() == 1
+                && blocks[0].kind == BlockKindData::Paragraph
+                && !has_atoms(&blocks[0]))
+        {
             return Ok(false);
         }
         if self.selected_blocks().is_some() {

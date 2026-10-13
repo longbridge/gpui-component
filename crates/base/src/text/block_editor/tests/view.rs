@@ -1043,3 +1043,64 @@ fn typing_over_selected_table_replaces_it(cx: &mut TestAppContext) {
     keys(cx, "M-shift-z");
     assert_eq!(source(&editor, cx), "a\n\nz\n\nb", "redo replays both");
 }
+
+/// Phase 4d (#3113 semantics): an inline atom is one editing unit.
+#[gpui::test]
+fn inline_atom_is_one_unit(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a![pic](x.png)b");
+    caret_at(&editor, cx, 0, 1);
+    // Shift+Right selects the whole atom; copy gives its Markdown.
+    keys(cx, "shift-right");
+    let (anchor, head) = editor.read_with(cx, |e, _| match e.model().selection() {
+        BlockSelection::Text { anchor, head } => (anchor.offset, head.offset),
+        _ => panic!("text selection"),
+    });
+    assert_eq!((anchor, head), (1, 4));
+    keys(cx, "M-c");
+    let copied = cx.read_from_clipboard().and_then(|c| c.text()).unwrap();
+    assert_eq!(copied, "![pic](x.png)");
+    // Right moves over it in one step; Backspace removes it whole; undo restores.
+    caret_at(&editor, cx, 0, 1);
+    keys(cx, "right");
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        4
+    );
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "ab");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "a![pic](x.png)b");
+    // Typing next to it never merges into it.
+    caret_at(&editor, cx, 0, 4);
+    type_text(cx, "c");
+    assert_eq!(source(&editor, cx), "a![pic](x.png)cb");
+    // Cut of a selection holding it, then paste, round-trips.
+    caret_at(&editor, cx, 0, 0);
+    keys(cx, "shift-right shift-right shift-right M-x");
+    assert_eq!(source(&editor, cx), "b");
+    keys(cx, "M-v");
+    assert_eq!(source(&editor, cx), "a![pic](x.png)cb");
+}
+
+/// Paragraphs with inline code render through the single-`Inline` path in
+/// the editor, so they report a layout (caret, clicks, up/down).
+#[gpui::test]
+fn inline_code_paragraph_is_laid_out(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a `b` c");
+    draw(cx);
+    let at = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f
+            .leaf(id)
+            .expect("inline-code paragraph reports its layout");
+        let p = leaf.caret_point(3);
+        gpui::point(p.x + px(0.5), p.y + leaf.line_height() / 2.)
+    });
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        3
+    );
+}
