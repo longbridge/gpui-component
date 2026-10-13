@@ -353,8 +353,8 @@ cx.subscribe(&editor, |this, state, event: &InputEvent, cx| {
 
 ## Sizing to content
 
-`wrap_row_count` is the number of rows the text takes once soft wrapped, so a
-read-only editor can be sized to its content. Layout counts them on the first
+`display_map().wrap_row_count()` is the number of rows the text takes once soft
+wrapped, so a read-only editor can be sized to its content. Layout counts them on the first
 frame. To know the count before that, call `prewrap` with the font, font size
 and text-area width after setting the value:
 
@@ -370,7 +370,7 @@ let editor = cx.new(|cx| {
     state.prewrap(font, cx.theme().mono_font_size, width, cx);
     state
 });
-let rows = editor.read(cx).wrap_row_count();
+let rows = editor.read(cx).display_map().wrap_row_count();
 ```
 
 `width` is the editor's width less its padding, and less the line-number gutter
