@@ -425,6 +425,74 @@ impl BlockEditorModel {
         Ok(true)
     }
 
+    /// Paste Markdown that holds a table (what Copy writes for a selected
+    /// table) as blocks, so a copied table comes back as a table. Other text
+    /// pastes as plain text (`insert_text`). Returns whether it applied.
+    pub fn paste_blocks(&mut self, text: &str) -> Result<bool, CommandError> {
+        let mut cx = crate::text::node::NodeContext {
+            markdown_extensions: self.doc.extensions.clone(),
+            ..Default::default()
+        };
+        let Ok(parsed) = crate::text::format::markdown::parse(text, &mut cx) else {
+            return Ok(false);
+        };
+        if !parsed
+            .blocks
+            .iter()
+            .any(|node| matches!(node, crate::text::node::BlockNode::Table(_)))
+        {
+            return Ok(false);
+        }
+        let mut defs = super::import::Defs::new();
+        super::import::collect_definitions(&parsed.blocks, &mut defs);
+        let mut blocks = Vec::new();
+        for node in parsed.blocks.iter() {
+            super::import::import_block(node, &defs, &mut blocks);
+        }
+        if self.selected_blocks().is_some() {
+            self.delete_blocks()?;
+        }
+        let range = self.resolved()?;
+        self.transact(EditOrigin::Paste, |tx| {
+            let mut pos = if range.is_collapsed() {
+                range.start
+            } else {
+                delete_range(tx, range)?
+            };
+            // Insert next to the caret's top-level block (tables live at the
+            // top level in the spike).
+            let doc = &*tx.doc;
+            let path = doc.path(pos.block);
+            let top = path.get(1).copied().unwrap_or(pos.block);
+            let len = doc.leaf_len(pos.block).unwrap_or(0);
+            let simple = top == pos.block && doc.inline(pos.block).is_some();
+            if simple && pos.offset > 0 && pos.offset < len {
+                pos = split_at(tx, pos)?;
+            }
+            let doc = &*tx.doc;
+            let top = doc.path(pos.block).get(1).copied().unwrap_or(pos.block);
+            let (root, index) = doc
+                .index_in_parent(top)
+                .ok_or(PositionError::UnknownBlock(top))?;
+            let before = simple
+                && tx
+                    .doc
+                    .leaf_len(pos.block)
+                    .is_some_and(|l| pos.offset == 0 && (l > 0 || index > 0));
+            let at = if before { index } else { index + 1 };
+            let last = blocks.last().map(|b| b.id);
+            let count = blocks.len();
+            tx.insert(root, at, blocks)?;
+            let after = tx.doc.children(root).get(at + count).copied();
+            Ok(match (after, last) {
+                (Some(next), _) => caret(tx.doc.first_leaf_in(next)),
+                (None, Some(last)) => caret(tx.doc.last_leaf_in(last)),
+                _ => None,
+            })
+        })?;
+        Ok(true)
+    }
+
     /// A `BlockSelection::Blocks` as its parent and child index range.
     pub(crate) fn selected_blocks(&self) -> Option<(BlockId, std::ops::Range<usize>)> {
         let BlockSelection::Blocks { anchor, head } = &self.selection else {

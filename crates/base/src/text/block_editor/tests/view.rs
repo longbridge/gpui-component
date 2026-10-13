@@ -755,3 +755,27 @@ fn caret_is_scrolled_into_view(cx: &mut TestAppContext) {
     );
     assert!(handle.offset().y < px(0.));
 }
+
+#[gpui::test]
+fn copied_table_pastes_back_as_a_table(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let original = source(&editor, cx);
+    let last = editor.read_with(cx, |e, _| e.model().document().leaves().count() - 1);
+    caret_at(&editor, cx, last, 0);
+    keys(cx, "backspace");
+    keys(cx, "M-x");
+    assert_eq!(source(&editor, cx), "a\n\nb");
+    keys(cx, "M-v");
+    assert_eq!(source(&editor, cx), original, "cut + paste round-trips");
+    // Pasting again at the end of "b" appends a second copy.
+    let last = editor.read_with(cx, |e, _| e.model().document().leaves().count() - 1);
+    caret_at(&editor, cx, last, 1);
+    keys(cx, "M-v");
+    assert!(
+        source(&editor, cx).ends_with("\n\nb\n\n| x | y |\n| :-- | :-- |\n| 1 | 2 |"),
+        "{}",
+        source(&editor, cx)
+    );
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), original, "paste is one undo step");
+}

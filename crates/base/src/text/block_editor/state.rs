@@ -732,7 +732,12 @@ impl BlockEditorState {
             self.end_composition();
             self.edit(
                 EditOrigin::Paste,
-                |m| m.insert_text(&text, EditOrigin::Paste),
+                |m| {
+                    if m.paste_blocks(&text)? {
+                        return Ok(());
+                    }
+                    m.insert_text(&text, EditOrigin::Paste)
+                },
                 cx,
             );
         }
