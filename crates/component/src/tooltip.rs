@@ -264,9 +264,27 @@ pub(crate) trait ManagedTooltipExt:
             let trigger_bounds_cell = trigger_bounds_cell.clone();
             let build_tooltip = build_tooltip.clone();
             move |hovered, window, cx| {
+                let bounds = trigger_bounds_cell.get();
+                // A press dismisses the tooltip until the pointer leaves the
+                // trigger, as native controls do. Hover is reported false
+                // while the button is held, so only a leave with the pointer
+                // outside the trigger ends that. The rule also covers a click
+                // that removes the trigger: a move dispatched to the frame
+                // before the removal still reports it hovered, and no
+                // hover-leave ever follows to hide what that would show.
+                let pressed = WindowState::try_update(window, cx, |state, window, _| {
+                    let pressed = state.tooltip_pressed_trigger == Some(bounds);
+                    if pressed && !*hovered && !bounds.contains(&window.mouse_position()) {
+                        state.tooltip_pressed_trigger = None;
+                    }
+                    pressed
+                })
+                .unwrap_or(false);
                 if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
                     if *hovered {
-                        let bounds = trigger_bounds_cell.get();
+                        if pressed {
+                            return;
+                        }
                         overlay.update(cx, |o: &mut BaseTooltipOverlay, cx| {
                             let build = build_tooltip.clone();
                             let request = BaseTooltipRequest::new(bounds, move |window, cx| {
@@ -291,6 +309,10 @@ pub(crate) trait ManagedTooltipExt:
             }
         })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            let bounds = trigger_bounds_cell.get();
+            WindowState::try_update(window, cx, |state, _, _| {
+                state.tooltip_pressed_trigger = Some(bounds);
+            });
             if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
                 overlay.update(cx, |overlay, cx| {
                     overlay.hide(cx);
@@ -301,3 +323,172 @@ pub(crate) trait ManagedTooltipExt:
 }
 
 impl<E: StatefulInteractiveElement + crate::ElementExt> ManagedTooltipExt for E {}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc, time::Duration};
+
+    use gpui::{
+        AppContext as _, Context, InputEvent as _, InteractiveElement as _, IntoElement,
+        MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement as _, Render,
+        StatefulInteractiveElement as _, Styled as _, TestAppContext, VisualTestContext, Window,
+        div, point, prelude::FluentBuilder as _, px,
+    };
+
+    use super::ManagedTooltipExt as _;
+    use crate::Root;
+
+    /// A trigger that removes itself when clicked, like a button that
+    /// replaces the view it sits in.
+    struct Probe {
+        shown: bool,
+        removes_on_click: bool,
+        builds: Rc<Cell<usize>>,
+    }
+
+    impl Render for Probe {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let builds = self.builds.clone();
+            div().size_full().when(self.shown, |this| {
+                this.child(
+                    div()
+                        .id("trigger")
+                        .absolute()
+                        .left(px(10.))
+                        .top(px(10.))
+                        .w(px(100.))
+                        .h(px(30.))
+                        .managed_tooltip(move |_, cx| {
+                            builds.set(builds.get() + 1);
+                            cx.new(|_| super::Tooltip::new("tip")).into()
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if this.removes_on_click {
+                                this.shown = false;
+                            }
+                            cx.notify();
+                        })),
+                )
+            })
+        }
+    }
+
+    fn open(
+        cx: &mut TestAppContext,
+        removes_on_click: bool,
+        builds: Rc<Cell<usize>>,
+    ) -> VisualTestContext {
+        cx.update(crate::init);
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                let probe = cx.new(|_| Probe {
+                    shown: true,
+                    removes_on_click,
+                    builds,
+                });
+                cx.new(|cx| Root::new(probe, window, cx))
+            })
+            .unwrap()
+        });
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        draw(&mut cx);
+        cx
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        })
+    }
+
+    /// Lets any show delay or grace period run out, then draws.
+    fn wait(cx: &mut VisualTestContext) {
+        cx.executor().advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+        draw(cx);
+    }
+
+    /// A press dismisses the tooltip, and it stays dismissed while the
+    /// pointer stays on the trigger; leaving and coming back shows it again.
+    #[gpui::test]
+    fn a_press_dismisses_the_tooltip_until_the_pointer_leaves(cx: &mut TestAppContext) {
+        let builds = Rc::new(Cell::new(0));
+        let mut cx = open(cx, false, builds.clone());
+        let at = point(px(50.), px(25.));
+        cx.simulate_mouse_move(at, None, Default::default());
+        wait(&mut cx);
+        assert!(builds.get() > 0, "the hovered trigger shows its tooltip");
+
+        cx.simulate_click(at, Default::default());
+        cx.simulate_mouse_move(point(px(52.), px(25.)), None, Default::default());
+        wait(&mut cx);
+        let before = builds.get();
+        draw(&mut cx);
+        assert_eq!(builds.get(), before, "no tooltip while the pointer stays");
+
+        cx.simulate_mouse_move(point(px(300.), px(300.)), None, Default::default());
+        wait(&mut cx);
+        cx.simulate_mouse_move(at, None, Default::default());
+        wait(&mut cx);
+        let before = builds.get();
+        draw(&mut cx);
+        assert!(builds.get() > before, "re-entering shows the tooltip again");
+    }
+
+    /// A pointer move that lands between the release and the next frame is
+    /// dispatched to the old frame, where the trigger is still hovered, so it
+    /// used to request the tooltip again. The trigger is gone from the next
+    /// frame, nothing ever sent the hover-leave, and the tooltip appeared
+    /// after the show delay and stayed.
+    #[gpui::test]
+    fn clicking_a_trigger_away_does_not_leave_its_tooltip(cx: &mut TestAppContext) {
+        let builds = Rc::new(Cell::new(0));
+        let mut cx = open(cx, true, builds.clone());
+
+        let at = point(px(50.), px(25.));
+        cx.simulate_mouse_move(at, None, Default::default());
+        draw(&mut cx);
+        wait(&mut cx);
+        draw(&mut cx);
+        assert!(builds.get() > 0, "the hovered trigger shows its tooltip");
+
+        // Press, drift a pixel while held, release, and drift again before
+        // the next frame is drawn.
+        cx.simulate_mouse_down(at, MouseButton::Left, Default::default());
+        let drift = point(px(51.), px(25.));
+        cx.simulate_mouse_move(drift, Some(MouseButton::Left), Default::default());
+        // One update, so no frame is drawn between the two: the test
+        // platform otherwise draws a dirty window after every event.
+        cx.update(|window, cx| {
+            window.dispatch_event(
+                MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: drift,
+                    modifiers: Default::default(),
+                    click_count: 1,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            window.dispatch_event(
+                MouseMoveEvent {
+                    position: point(px(52.), px(25.)),
+                    pressed_button: None,
+                    modifiers: Default::default(),
+                }
+                .to_platform_input(),
+                cx,
+            );
+        });
+        draw(&mut cx);
+        wait(&mut cx);
+
+        let before = builds.get();
+        draw(&mut cx);
+        assert_eq!(
+            builds.get(),
+            before,
+            "no tooltip may be shown for a trigger the click removed"
+        );
+    }
+}

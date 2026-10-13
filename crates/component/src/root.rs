@@ -10,9 +10,9 @@ use crate::{
     window_border,
 };
 use gpui::{
-    App, AppContext, Context, DefiniteLength, ElementId, Entity, FocusHandle, InteractiveElement,
-    IntoElement, ParentElement as _, Render, RenderOnce, Styled, WeakFocusHandle, Window, div,
-    prelude::FluentBuilder as _,
+    App, AppContext, Bounds, Context, DefiniteLength, ElementId, Entity, FocusHandle,
+    InteractiveElement, IntoElement, ParentElement as _, Pixels, Render, RenderOnce, Styled,
+    WeakFocusHandle, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::{TextSelection, TextSelectionScopeId};
 use std::{any::TypeId, rc::Rc};
@@ -28,6 +28,9 @@ pub(crate) struct WindowState {
     pub(super) focused_input: Option<AnyInputState>,
     pub notification: Entity<NotificationList>,
     pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
+    /// Bounds of the tooltip trigger last pressed, whose tooltip stays
+    /// dismissed until the pointer leaves it.
+    pub(crate) tooltip_pressed_trigger: Option<Bounds<Pixels>>,
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     touch_selection_overlay: Entity<WindowTouchSelectionOverlay>,
     sheet_size: Option<DefiniteLength>,
@@ -78,6 +81,7 @@ impl WindowState {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             tooltip_overlay: cx
                 .new(|_| gpui_base::TooltipOverlay::new().render_with(render_tooltip)),
+            tooltip_pressed_trigger: None,
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             touch_selection_overlay: cx.new(|cx| WindowTouchSelectionOverlay::new(window, cx)),
             sheet_size: None,
