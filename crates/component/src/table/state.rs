@@ -2665,7 +2665,7 @@ mod tests {
 
     impl TableDelegate for WidthsDelegate {
         fn columns_count(&self, _: &App) -> usize {
-            3
+            5
         }
 
         fn rows_count(&self, _: &App) -> usize {
@@ -2680,6 +2680,12 @@ mod tests {
                 1 => Column::new("wide", "Wide")
                     .max_width(px(120.))
                     .width(px(300.)),
+                // `width` alone below the default `min_width` of 20px.
+                2 => Column::new("tiny", "Tiny").width(px(10.)),
+                // A smaller `min_width` keeps that narrower width.
+                3 => Column::new("tiny_min", "Tiny Min")
+                    .min_width(px(5.))
+                    .width(px(10.)),
                 // `min_width` above `max_width` must not panic.
                 _ => Column::new("inverted", "Inverted")
                     .min_width(px(200.))
@@ -2713,6 +2719,6 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(widths, [px(80.), px(120.), px(100.)]);
+        assert_eq!(widths, [px(80.), px(120.), px(20.), px(10.), px(100.)]);
     }
 }
