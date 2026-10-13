@@ -129,6 +129,9 @@ impl Editor {
     }
 }
 
+/// Match the padding and density of Input and Textarea in the same form by
+/// applying the same size tier. The editor keeps its independently configured
+/// code font size and line height.
 impl Sizable for Editor {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();

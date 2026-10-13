@@ -374,6 +374,10 @@ methods every element has, so `font_weight` and `line_height` work the same way.
 
 ## Sizes
 
+When an Editor shares a form with Input and Textarea, apply the same `Sizable`
+size tier to coordinate their padding and density. This keeps their presentation
+consistent while the editor retains its independently configured code font.
+
 ```rust
 Editor::new(&editor).large()
 Editor::new(&editor) // medium (default)

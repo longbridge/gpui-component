@@ -311,6 +311,9 @@ Editor::new(&editor)
 
 ## 尺寸
 
+Editor 与 Input、Textarea 放在同一个表单中时，可以通过 `Sizable` 设置相同的尺寸档位，
+协调它们的内边距和密度，使样式表现保持一致。Editor 的代码字体仍由自身的字体样式独立配置。
+
 ```rust
 Editor::new(&editor).large()
 Editor::new(&editor) // medium（默认）
