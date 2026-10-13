@@ -10,9 +10,9 @@ use crate::{
     window_border,
 };
 use gpui::{
-    App, AppContext, Bounds, Context, DefiniteLength, ElementId, Entity, FocusHandle,
-    InteractiveElement, IntoElement, ParentElement as _, Pixels, Render, RenderOnce, Styled,
-    WeakFocusHandle, Window, div, prelude::FluentBuilder as _,
+    App, AppContext, Bounds, Context, DefiniteLength, DispatchPhase, ElementId, Entity,
+    FocusHandle, InteractiveElement, IntoElement, MouseMoveEvent, ParentElement as _, Pixels,
+    Render, RenderOnce, Styled, WeakFocusHandle, Window, canvas, div, prelude::FluentBuilder as _,
 };
 use gpui_base::{TextSelection, TextSelectionScopeId};
 use std::{any::TypeId, rc::Rc};
@@ -29,8 +29,8 @@ pub(crate) struct WindowState {
     pub notification: Entity<NotificationList>,
     pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
     /// Bounds of the tooltip trigger last pressed, whose tooltip stays
-    /// dismissed until the pointer leaves it.
-    pub(crate) tooltip_pressed_trigger: Option<Bounds<Pixels>>,
+    /// dismissed until the pointer moves outside them.
+    tooltip_pressed_trigger: Option<Bounds<Pixels>>,
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     touch_selection_overlay: Entity<WindowTouchSelectionOverlay>,
     sheet_size: Option<DefiniteLength>,
@@ -429,6 +429,24 @@ impl WindowState {
         Some(root.read(cx).tooltip_overlay.clone())
     }
 
+    /// Keeps the tooltip of the trigger at `bounds` dismissed until the
+    /// pointer moves outside them.
+    pub(crate) fn press_tooltip_trigger(bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        Self::try_update(window, cx, |state, _, cx| {
+            state.tooltip_pressed_trigger = Some(bounds);
+            cx.notify();
+        });
+    }
+
+    pub(crate) fn is_tooltip_trigger_pressed(
+        bounds: Bounds<Pixels>,
+        window: &Window,
+        cx: &App,
+    ) -> bool {
+        Self::try_read(window, cx)
+            .is_some_and(|state| state.tooltip_pressed_trigger == Some(bounds))
+    }
+
     /// Get the fallback native-menu overlay entity for this window.
     pub(crate) fn native_menu_overlay(
         window: &Window,
@@ -475,6 +493,27 @@ impl Render for WindowState {
             .child(self.touch_selection_overlay.clone())
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone())
+            .when_some(self.tooltip_pressed_trigger, |this, bounds| {
+                // Window-level, so the press ends even when the trigger was
+                // removed or moved and never reports a hover-leave.
+                let state = cx.entity().downgrade();
+                this.child(canvas(
+                    |_, _, _| {},
+                    move |_, _, window, _| {
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                            if phase != DispatchPhase::Capture || bounds.contains(&event.position) {
+                                return;
+                            }
+                            _ = state.update(cx, |state, cx| {
+                                if state.tooltip_pressed_trigger == Some(bounds) {
+                                    state.tooltip_pressed_trigger = None;
+                                    cx.notify();
+                                }
+                            });
+                        });
+                    },
+                ))
+            })
     }
 }
 

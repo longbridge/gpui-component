@@ -265,26 +265,14 @@ pub(crate) trait ManagedTooltipExt:
             let build_tooltip = build_tooltip.clone();
             move |hovered, window, cx| {
                 let bounds = trigger_bounds_cell.get();
-                // A press dismisses the tooltip until the pointer leaves the
-                // trigger, as native controls do. Hover is reported false
-                // while the button is held, so only a leave with the pointer
-                // outside the trigger ends that. The rule also covers a click
-                // that removes the trigger: a move dispatched to the frame
-                // before the removal still reports it hovered, and no
-                // hover-leave ever follows to hide what that would show.
-                let pressed = WindowState::try_update(window, cx, |state, window, _| {
-                    let pressed = state.tooltip_pressed_trigger == Some(bounds);
-                    if pressed && !*hovered && !bounds.contains(&window.mouse_position()) {
-                        state.tooltip_pressed_trigger = None;
-                    }
-                    pressed
-                })
-                .unwrap_or(false);
+                // A press keeps the tooltip dismissed until the pointer leaves
+                // the trigger. This also drops the hover-enter that a click
+                // removing the trigger dispatches to the stale frame.
+                if *hovered && WindowState::is_tooltip_trigger_pressed(bounds, window, cx) {
+                    return;
+                }
                 if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
                     if *hovered {
-                        if pressed {
-                            return;
-                        }
                         overlay.update(cx, |o: &mut BaseTooltipOverlay, cx| {
                             let build = build_tooltip.clone();
                             let request = BaseTooltipRequest::new(bounds, move |window, cx| {
@@ -309,10 +297,7 @@ pub(crate) trait ManagedTooltipExt:
             }
         })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            let bounds = trigger_bounds_cell.get();
-            WindowState::try_update(window, cx, |state, _, _| {
-                state.tooltip_pressed_trigger = Some(bounds);
-            });
+            WindowState::press_tooltip_trigger(trigger_bounds_cell.get(), window, cx);
             if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
                 overlay.update(cx, |overlay, cx| {
                     overlay.hide(cx);
@@ -329,7 +314,7 @@ mod tests {
     use std::{cell::Cell, rc::Rc, time::Duration};
 
     use gpui::{
-        AppContext as _, Context, InputEvent as _, InteractiveElement as _, IntoElement,
+        AppContext as _, Context, Entity, InputEvent as _, InteractiveElement as _, IntoElement,
         MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement as _, Render,
         StatefulInteractiveElement as _, Styled as _, TestAppContext, VisualTestContext, Window,
         div, point, prelude::FluentBuilder as _, px,
@@ -377,22 +362,30 @@ mod tests {
         cx: &mut TestAppContext,
         removes_on_click: bool,
         builds: Rc<Cell<usize>>,
-    ) -> VisualTestContext {
+    ) -> (VisualTestContext, Entity<Probe>) {
         cx.update(crate::init);
+        let probe = cx.new(|_| Probe {
+            shown: true,
+            removes_on_click,
+            builds,
+        });
         let window = cx.update(|cx| {
             cx.open_window(Default::default(), |window, cx| {
-                let probe = cx.new(|_| Probe {
-                    shown: true,
-                    removes_on_click,
-                    builds,
-                });
-                cx.new(|cx| Root::new(probe, window, cx))
+                cx.new(|cx| Root::new(probe.clone(), window, cx))
             })
             .unwrap()
         });
         let mut cx = VisualTestContext::from_window(window.into(), cx);
         draw(&mut cx);
-        cx
+        (cx, probe)
+    }
+
+    /// Presses at `at` and releases a pixel away, as most real clicks do.
+    fn click_with_drift(cx: &mut VisualTestContext, at: gpui::Point<gpui::Pixels>) {
+        let drift = point(at.x + px(1.), at.y);
+        cx.simulate_mouse_down(at, MouseButton::Left, Default::default());
+        cx.simulate_mouse_move(drift, Some(MouseButton::Left), Default::default());
+        cx.simulate_mouse_up(drift, MouseButton::Left, Default::default());
     }
 
     fn draw(cx: &mut VisualTestContext) {
@@ -413,13 +406,15 @@ mod tests {
     #[gpui::test]
     fn a_press_dismisses_the_tooltip_until_the_pointer_leaves(cx: &mut TestAppContext) {
         let builds = Rc::new(Cell::new(0));
-        let mut cx = open(cx, false, builds.clone());
+        let (mut cx, _) = open(cx, false, builds.clone());
         let at = point(px(50.), px(25.));
         cx.simulate_mouse_move(at, None, Default::default());
         wait(&mut cx);
         assert!(builds.get() > 0, "the hovered trigger shows its tooltip");
 
-        cx.simulate_click(at, Default::default());
+        // Hover reads false while the button is held, so the move after the
+        // release is a hover-enter that must not show the tooltip.
+        click_with_drift(&mut cx, at);
         cx.simulate_mouse_move(point(px(52.), px(25.)), None, Default::default());
         wait(&mut cx);
         let before = builds.get();
@@ -443,7 +438,7 @@ mod tests {
     #[gpui::test]
     fn clicking_a_trigger_away_does_not_leave_its_tooltip(cx: &mut TestAppContext) {
         let builds = Rc::new(Cell::new(0));
-        let mut cx = open(cx, true, builds.clone());
+        let (mut cx, _) = open(cx, true, builds.clone());
 
         let at = point(px(50.), px(25.));
         cx.simulate_mouse_move(at, None, Default::default());
@@ -489,6 +484,39 @@ mod tests {
             builds.get(),
             before,
             "no tooltip may be shown for a trigger the click removed"
+        );
+    }
+
+    /// A trigger that a click removed never reports a hover-leave, so the
+    /// press must end when the pointer moves away, or a trigger later shown
+    /// at the same bounds would lose its tooltip.
+    #[gpui::test]
+    fn a_press_on_a_removed_trigger_ends_when_the_pointer_moves_away(cx: &mut TestAppContext) {
+        let builds = Rc::new(Cell::new(0));
+        let (mut cx, probe) = open(cx, true, builds.clone());
+        let at = point(px(50.), px(25.));
+        cx.simulate_mouse_move(at, None, Default::default());
+        wait(&mut cx);
+
+        cx.simulate_click(at, Default::default());
+        wait(&mut cx);
+        cx.simulate_mouse_move(point(px(300.), px(300.)), None, Default::default());
+        wait(&mut cx);
+
+        cx.update(|_, cx| {
+            probe.update(cx, |probe, cx| {
+                probe.shown = true;
+                cx.notify();
+            })
+        });
+        wait(&mut cx);
+        let before = builds.get();
+        cx.simulate_mouse_move(at, None, Default::default());
+        wait(&mut cx);
+        draw(&mut cx);
+        assert!(
+            builds.get() > before,
+            "the trigger shown again has its tooltip"
         );
     }
 }
