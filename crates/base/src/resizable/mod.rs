@@ -583,6 +583,7 @@ mod tests {
             });
             cx.run_until_parked();
             cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(widths(cx)[0], px(240.), "{width:?}");
             if let Some(expected) = expected {
                 assert_eq!(widths(cx), expected, "{width:?}");
             }
@@ -595,6 +596,21 @@ mod tests {
             window.draw(cx).clear(cx);
         });
         assert_eq!(widths(cx), [px(240.), px(100.), px(260.)]);
+
+        // Its own handle still resizes the fixed sidebar, and it keeps the
+        // new width when the container resizes again.
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.resize_panel(0, px(300.), window, cx));
+            window.draw(cx).clear(cx);
+        });
+        assert_eq!(widths(cx), [px(300.), px(100.), px(200.)]);
+        view.update(cx, |view, cx| {
+            view.width = px(900.);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(widths(cx)[0], px(300.));
     }
 
     /// A panel made fixed after its first frame, while its bounds stay the
