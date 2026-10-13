@@ -10,7 +10,6 @@
 //! [`BlockEditorModel`] is a spike name.
 
 mod command;
-#[cfg_attr(not(test), allow(dead_code))]
 mod direct;
 mod document;
 mod editor;

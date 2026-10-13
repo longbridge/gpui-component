@@ -1,25 +1,21 @@
 //! Projection of the editing model into the shared renderer's `BlockNode`s
 //! (design §7.3, D3).
 //!
-//! Each top-level block is written to Markdown in render mode and parsed by
-//! gpui-kit's own parser, so the editor renders exactly like `TextView`.
-//! Every text leaf's `InlineState` is tagged with its `BlockId` as the
+//! Each top-level block is projected directly into `BlockNode`s
+//! (`direct.rs`), so the editor renders through the same renderer as
+//! `TextView`. Every text leaf's `InlineState` is tagged with its `BlockId` as the
 //! `editor_key`, which is how the renderer reports layouts back (the seam
 //! in `text::editor_seam`). A top-level block is re-projected only when its
 //! per-block revision changes, so one keystroke re-projects one block.
 
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 
 use super::{
     document::{BlockContent, EditorDocument},
     id::BlockId,
     kind::BlockKindData,
-    serialize::block_for_render,
 };
-use crate::text::{
-    format::markdown,
-    node::{BlockNode, NodeContext},
-};
+use crate::text::node::BlockNode;
 
 /// One projected top-level block.
 pub(crate) struct ProjectedBlock {
@@ -134,72 +130,7 @@ fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
     }
 }
 
-/// Model leaves under `id` that the renderer draws as one text leaf each.
-fn text_leaves(doc: &EditorDocument, id: BlockId, out: &mut Vec<BlockId>) {
-    match doc.get(id).map(|e| (&e.kind, &e.content)) {
-        Some((BlockKindData::TableCell, BlockContent::Inline(_))) => out.push(id),
-        Some((_, BlockContent::Children(children))) => {
-            for child in children {
-                text_leaves(doc, *child, out);
-            }
-        }
-        Some((_, BlockContent::Inline(_) | BlockContent::Plain(_))) => out.push(id),
-        _ => {}
-    }
-}
-
-/// Rendered text leaves in a parsed tree, in order.
-fn node_states(
-    node: &BlockNode,
-    out: &mut Vec<Arc<std::sync::Mutex<crate::text::inline::InlineState>>>,
-) {
-    match node {
-        BlockNode::Paragraph(paragraph) => out.push(paragraph.state.clone()),
-        BlockNode::Heading { children, .. } => out.push(children.state.clone()),
-        BlockNode::CodeBlock(code) => out.push(code.inline_state().clone()),
-        BlockNode::Table(table) => {
-            for row in &table.children {
-                for cell in &row.children {
-                    out.push(cell.children.state.clone());
-                }
-            }
-        }
-        BlockNode::Root { children, .. }
-        | BlockNode::Blockquote { children, .. }
-        | BlockNode::List { children, .. }
-        | BlockNode::ListItem { children, .. } => {
-            for child in children {
-                node_states(child, out);
-            }
-        }
-        _ => {}
-    }
-}
-
 fn project(doc: &EditorDocument, id: BlockId, revision: u64) -> ProjectedBlock {
-    let source = block_for_render(doc, id);
-    let mut node_cx = NodeContext {
-        markdown_extensions: doc.extensions.clone(),
-        ..Default::default()
-    };
-    let nodes = markdown::parse(&source, &mut node_cx)
-        .map(|parsed| parsed.blocks.as_ref().clone())
-        .unwrap_or_default();
-    let mut leaves = Vec::new();
-    text_leaves(doc, id, &mut leaves);
-    let mut states = Vec::new();
-    for node in &nodes {
-        node_states(node, &mut states);
-    }
-    // The parser reads back what the serializer wrote, so leaves pair up in
-    // order. If they ever don't, leave the block unkeyed (no caret geometry)
-    // rather than misplace carets.
-    if leaves.len() == states.len() {
-        for (leaf, state) in leaves.iter().zip(states) {
-            if let Ok(mut state) = state.lock() {
-                state.editor_key = Some(leaf.as_u64());
-            }
-        }
-    }
+    let nodes = super::direct::project_block(doc, id).into_iter().collect();
     ProjectedBlock { revision, nodes }
 }

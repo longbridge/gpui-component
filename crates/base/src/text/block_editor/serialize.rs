@@ -209,37 +209,8 @@ fn list_item(doc: &EditorDocument, item: BlockId, marker: &str) -> String {
 
 // Inline content goes through `MarkdownSource`, then line starts that
 // would read as block syntax are escaped.
-thread_local! {
-    // Set while serializing for the view (see [`block_for_render`]).
-    static FOR_RENDER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Markdown for one block, as the view renders it: empty text leaves get a
-/// zero-width placeholder (so they still parse to a leaf with a layout) and
-/// a paragraph's edge spaces are kept as `&#32;` (so the caret can sit after
-/// a typed trailing space). Not round-trip output; never saved.
-pub(crate) fn block_for_render(doc: &EditorDocument, id: BlockId) -> String {
-    FOR_RENDER.with(|flag| flag.set(true));
-    let out = block(doc, id);
-    FOR_RENDER.with(|flag| flag.set(false));
-    out
-}
 
 pub(crate) fn inline_markdown(inline: &InlineText) -> String {
-    let out = inline_markdown_canonical(inline);
-    if !FOR_RENDER.with(|flag| flag.get()) {
-        return out;
-    }
-    let text = inline.text();
-    if out.is_empty() {
-        return "\u{200b}".to_string();
-    }
-    let lead = text.len() - text.trim_start_matches(' ').len();
-    let trail = text.len() - text.trim_end_matches(' ').len();
-    format!("{}{out}{}", "&#32;".repeat(lead), "&#32;".repeat(trail))
-}
-
-fn inline_markdown_canonical(inline: &InlineText) -> String {
     let mut source = MarkdownSource::with_options(editor_source_options());
     for (range, marks, atom) in inline.pieces() {
         match atom {
