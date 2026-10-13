@@ -230,21 +230,21 @@ mod tests {
 
     struct SizedHarness {
         state: Entity<EditorState>,
-        size: Size,
+        /// A size set on the editor; `None` leaves the default.
+        size: Option<Size>,
     }
 
     impl Render for SizedHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div()
-                .debug_selector(|| "frame".into())
-                .size_full()
-                .child(Editor::new(&self.state).with_size(self.size))
+            div().debug_selector(|| "frame".into()).size_full().child(
+                Editor::new(&self.state).when_some(self.size, |this, size| this.with_size(size)),
+            )
         }
     }
 
     /// How far the text starts below the top of the editor's frame, and the
     /// row height it laid out with.
-    fn top_inset(cx: &mut TestAppContext, size: Size) -> (Pixels, Pixels) {
+    fn top_inset(cx: &mut TestAppContext, size: Option<Size>) -> (Pixels, Pixels) {
         cx.update(crate::init);
         let mut state = None;
         let (_, cx) = cx.add_window_view(|window, cx| {
@@ -269,9 +269,11 @@ mod tests {
 
     #[gpui::test]
     fn the_insets_follow_the_size(cx: &mut TestAppContext) {
-        let (medium, rows) = top_inset(cx, Size::Medium);
+        let (medium, rows) = top_inset(cx, Some(Size::Medium));
+        // With no size set, the editor keeps the medium insets it always had.
+        assert_eq!(top_inset(cx, None), (medium, rows));
         for size in [Size::XSmall, Size::Small, Size::Large] {
-            let (inset, line_height) = top_inset(cx, size);
+            let (inset, line_height) = top_inset(cx, Some(size));
             assert_eq!(
                 medium - inset,
                 Size::Medium.input_py() - size.input_py(),
