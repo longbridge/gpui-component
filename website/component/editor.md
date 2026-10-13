@@ -469,11 +469,16 @@ impl SpacerProvider for Level {
         let (Some(this), Some(other)) = (self.this.upgrade(), self.other.upgrade()) else {
             return Vec::new();
         };
+        let rows = |editor: &EditorState, line| {
+            editor
+                .display_map()
+                .buffer_line_to_display_row_range(line)
+                .map_or(0, |rows| rows.len())
+        };
         let (this, other) = (this.read(cx), other.read(cx));
         lines
             .filter_map(|line| {
-                let own = this.buffer_line_to_display_rows(line).len();
-                let theirs = other.buffer_line_to_display_rows(line).len();
+                let (own, theirs) = (rows(this, line), rows(other, line));
                 (theirs > own).then(|| Spacer::below(line, theirs - own))
             })
             .collect()
@@ -493,10 +498,17 @@ after the text is wrapped again or a fold changes, and when `refresh_spacers` is
 It asks during layout, once the text is wrapped to the editor's width, and outside any
 update of the editor, so the provider may read this editor and others. When the answer
 depends on another editor's rows, call `refresh_spacers` when that editor's
-`display_rows_version()` changes. `Spacer::above(0, rows)` pads the top of the text, and
+`display_map().version()` changes. `Spacer::above(0, rows)` pads the top of the text, and
 `with_background` fills the rows, gutter included. A spacer on a line hidden by a fold,
-or past the last line, is not shown. `is_spacer_row(row)` tells a spacer row from a row
-of text. The **Editor Diff** story wraps both sides and pads them level.
+or past the last line, is not shown. The **Editor Diff** story wraps both sides and pads
+them level.
+
+In the display map, spacer rows are display rows: `display_row_count()` counts them,
+`buffer_line_to_display_row_range(line)` holds only the rows of the line's text,
+`display_row_to_buffer_line(row)` reads a spacer row as the line it stands beside, and
+`is_spacer_row(row)` tells a spacer row from a row of text. Setting or refreshing spacers
+does not change `version()`, which is what a provider reads to know when to answer
+again; rows read after the spacers change include them.
 
 ## Value and events
 

@@ -59,11 +59,16 @@ impl SpacerProvider for Padding {
         let (Some(this), Some(other)) = (self.this.upgrade(), self.other.upgrade()) else {
             return Vec::new();
         };
+        let rows = |editor: &EditorState, line| {
+            editor
+                .display_map()
+                .buffer_line_to_display_row_range(line)
+                .map_or(0, |rows| rows.len())
+        };
         let (this, other) = (this.read(cx), other.read(cx));
         lines
             .filter_map(|line| {
-                let own = this.buffer_line_to_display_rows(line).len();
-                let theirs = other.buffer_line_to_display_rows(line).len();
+                let (own, theirs) = (rows(this, line), rows(other, line));
                 (theirs > own).then(|| {
                     Spacer::below(line, theirs - own).with_background(cx.theme().muted.opacity(0.5))
                 })
@@ -198,8 +203,8 @@ impl EditorDiffStory {
     /// is a change in both sides' spacers.
     fn keep_level(&mut self, cx: &mut Context<Self>) {
         let versions = [
-            self.original.read(cx).display_rows_version(),
-            self.modified.read(cx).display_rows_version(),
+            self.original.read(cx).display_map().version(),
+            self.modified.read(cx).display_map().version(),
         ];
         if versions != self.rows_versions {
             self.rows_versions = versions;
@@ -390,7 +395,13 @@ mod tests {
         let starts = |editor: &Entity<EditorState>, cx: &mut VisualTestContext| {
             editor.read_with(cx, |state, _| {
                 (0..lines)
-                    .map(|line| state.buffer_line_to_display_rows(line).start)
+                    .map(|line| {
+                        state
+                            .display_map()
+                            .buffer_line_to_display_row_range(line)
+                            .unwrap()
+                            .start
+                    })
                     .collect::<Vec<_>>()
             })
         };
@@ -405,7 +416,11 @@ mod tests {
             }
             let rows = |editor: &Entity<EditorState>, cx: &mut VisualTestContext| {
                 editor.read_with(cx, |state, _| {
-                    state.buffer_line_to_display_rows(changed).len()
+                    state
+                        .display_map()
+                        .buffer_line_to_display_row_range(changed)
+                        .unwrap()
+                        .len()
                 })
             };
             if wrap {
@@ -418,8 +433,9 @@ mod tests {
                 starts(&modified, &mut cx),
                 "every line starts level, wrap {wrap}"
             );
-            let counts = [&original, &modified]
-                .map(|editor| editor.read_with(&cx, |state, _| state.display_row_count()));
+            let counts = [&original, &modified].map(|editor| {
+                editor.read_with(&cx, |state, _| state.display_map().display_row_count())
+            });
             assert_eq!(counts[0], counts[1]);
             // The source ends with a newline, which the editor shows as a line.
             assert_eq!(counts[0] == lines + 1, !wrap, "padded only while wrapping");

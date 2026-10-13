@@ -83,8 +83,8 @@ impl InputBaseState<EditorMode> {
     ///
     /// The provider is asked during the next layout, after the text has been
     /// wrapped to the editor's width, so it can read how many rows each line
-    /// takes with [`InputBaseState::buffer_line_to_display_rows`] — of this
-    /// editor and of another one it pads against.
+    /// takes from [`InputBaseState::display_map`] — of this editor and of
+    /// another one it pads against.
     pub fn set_spacer_provider(
         &mut self,
         provider: Option<Rc<dyn SpacerProvider>>,

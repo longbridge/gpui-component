@@ -97,6 +97,10 @@ impl DisplayMap {
     /// Compare versions for equality on the same map to invalidate cached
     /// queries. The counter can wrap; it is not a document revision or a count
     /// of edits. Scrolling and inline completion ghost lines do not change it.
+    ///
+    /// Spacer rows do not change it either: they come from the editor's
+    /// [`crate::input::SpacerProvider`], which reads the version to know when
+    /// to answer again. Rows read after the spacers change include them.
     #[inline]
     pub fn version(&self) -> usize {
         self.wrap_map
@@ -201,8 +205,9 @@ impl DisplayMap {
         self.spacer_map.row_count()
     }
 
-    /// Whether a display row is a spacer row.
-    pub(crate) fn is_spacer_row(&self, display_row: usize) -> bool {
+    /// Whether a display row is a spacer row: a blank row that holds no text,
+    /// standing above or below a line. See [`Spacer`].
+    pub fn is_spacer_row(&self, display_row: usize) -> bool {
         matches!(
             self.spacer_map.display_row(display_row),
             DisplayRow::Spacer(_)
@@ -240,13 +245,6 @@ impl DisplayMap {
             before.saturating_sub(1)
         };
         self.spacer_map.fold_row_to_display_row(fold_row)
-    }
-
-    /// The display row a display row stands for: its own, or for a spacer row
-    /// the nearest row of the line it stands beside.
-    pub(crate) fn display_row_beside(&self, display_row: usize) -> usize {
-        self.spacer_map
-            .fold_row_to_display_row(self.text_fold_row(display_row))
     }
 
     /// The fold row a display row stands for: its own, or for a spacer row the

@@ -4809,9 +4809,17 @@ mod tests {
         ((y - state.last_bounds.unwrap().origin.y) / layout.line_height).floor() as usize
     }
 
+    /// The display rows of a visible line's text.
+    fn text_rows(state: &EditorState, line: usize) -> Range<usize> {
+        state
+            .display_map()
+            .buffer_line_to_display_row_range(line)
+            .unwrap()
+    }
+
     #[gpui::test]
     fn spacer_rows_are_display_rows_that_push_every_row_below_them(cx: &mut TestAppContext) {
-        use crate::input::Spacer;
+        use crate::input::{BufferPoint, DisplayPoint, Spacer};
         for wrap in [false, true] {
             let (editor, window, _) = spaced_editor(
                 cx,
@@ -4829,24 +4837,34 @@ mod tests {
                 let (line_height, wrapped, starts, scroll_height) = {
                     let state = editor.read(cx);
                     let line_height = state.line_height().unwrap();
-                    let wrapped = state.buffer_line_to_display_rows(1).len();
+                    let wrapped = text_rows(state, 1).len();
                     assert_eq!(wrapped > 1, wrap);
-                    assert_eq!(state.display_row_count(), 25 + wrapped + 10);
-                    let starts: Vec<usize> = (0..5)
-                        .map(|line| state.buffer_line_to_display_rows(line).start)
-                        .collect();
+                    assert_eq!(state.display_map().display_row_count(), 25 + wrapped + 10);
+                    let starts: Vec<usize> =
+                        (0..5).map(|line| text_rows(state, line).start).collect();
                     assert_eq!(starts, [1, 4, 7 + wrapped, 8 + wrapped, 9 + wrapped]);
-                    for row in 0..state.display_row_count() + 2 {
+                    for row in 0..state.display_map().display_row_count() + 2 {
                         let spacer = [0, 2, 3].contains(&row)
                             || (4 + wrapped..7 + wrapped).contains(&row)
                             || (31 + wrapped..35 + wrapped).contains(&row);
-                        assert_eq!(state.is_spacer_row(row), spacer, "row {row}, wrap {wrap}");
+                        assert_eq!(
+                            state.display_map().is_spacer_row(row),
+                            spacer,
+                            "row {row}, wrap {wrap}"
+                        );
                     }
-                    assert_eq!(state.display_row_to_buffer_line(0), (0, 0));
-                    assert_eq!(state.display_row_to_buffer_line(3), (0, 0));
+                    let map = state.display_map();
+                    assert_eq!(map.display_row_to_buffer_line(0), 0);
+                    assert_eq!(map.display_row_to_buffer_line(3), 0);
+                    assert_eq!(map.display_row_to_buffer_line(6 + wrapped), 1);
+                    let last_row = map.display_pos_to_buffer_pos(DisplayPoint::new(3 + wrapped, 0));
                     assert_eq!(
-                        state.display_row_to_buffer_line(6 + wrapped),
-                        (1, wrapped - 1)
+                        map.display_pos_to_buffer_pos(DisplayPoint::new(6 + wrapped, 0)),
+                        last_row
+                    );
+                    assert_eq!(
+                        map.display_pos_to_buffer_pos(DisplayPoint::new(0, 0)),
+                        BufferPoint::new(0, 0)
                     );
 
                     // Every laid-out row is drawn at its display row, its height its own.
@@ -4854,12 +4872,12 @@ mod tests {
                     let laid_out = &state.last_layout.as_ref().unwrap().visible_buffer_lines;
                     assert!(laid_out.contains(&1));
                     for &line in laid_out {
-                        let start = state.buffer_line_to_display_rows(line).start;
+                        let start = text_rows(state, line).start;
                         let bounds = state.row_bounds(line).unwrap();
                         assert_eq!(bounds.origin.y - top, line_height * start);
                         assert_eq!(
                             bounds.size.height,
-                            line_height * state.buffer_line_to_display_rows(line).len()
+                            line_height * text_rows(state, line).len()
                         );
                     }
                     (line_height, wrapped, starts, state.scroll_size.height)
@@ -4885,8 +4903,8 @@ mod tests {
                 editor.update(cx, |state, cx| state.set_spacer_provider(None, cx));
                 window.draw(cx).clear(cx);
                 let state = editor.read(cx);
-                assert_eq!(state.display_row_count(), 25 + wrapped);
-                assert_eq!(state.buffer_line_to_display_rows(1).start, starts[1] - 3);
+                assert_eq!(state.display_map().display_row_count(), 25 + wrapped);
+                assert_eq!(text_rows(state, 1).start, starts[1] - 3);
                 assert_eq!(scroll_height - state.scroll_size.height, line_height * 10);
             });
         }
@@ -4908,7 +4926,7 @@ mod tests {
             let mut cx = VisualTestContext::from_window(window.into(), cx);
             let (above_one, below_zero) = cx.update(|window, cx| {
                 window.draw(cx).clear(cx);
-                let wrapped = editor.read(cx).buffer_line_to_display_rows(1).len();
+                let wrapped = text_rows(editor.read(cx), 1).len();
                 let line = |editor: &Entity<EditorState>, cx: &App| {
                     editor.read(cx).cursor_position().line as usize
                 };
@@ -5015,7 +5033,7 @@ mod tests {
                 let layout = state.last_layout.as_ref().unwrap();
                 let line_height = layout.line_height;
                 let top = state.last_bounds.unwrap().origin.y;
-                let start = |line| state.buffer_line_to_display_rows(line).start;
+                let start = |line| text_rows(state, line).start;
 
                 // A band and a marker for every laid-out line, on its first text row.
                 let tops: Vec<usize> = markers
@@ -5035,10 +5053,7 @@ mod tests {
                 for (ix, (band_top, height)) in layout.row_extents().enumerate() {
                     let line = layout.visible_buffer_lines[ix];
                     assert_eq!(band_top, line_height * start(line));
-                    assert_eq!(
-                        height,
-                        line_height * state.buffer_line_to_display_rows(line).len()
-                    );
+                    assert_eq!(height, line_height * text_rows(state, line).len());
                 }
 
                 // The fold icon of line 2 is on its row, not on the spacer above it.
@@ -5082,10 +5097,13 @@ mod tests {
                     .collect();
                 let expected: Vec<usize> = [0, 1, 2]
                     .into_iter()
-                    .flat_map(|line| state.buffer_line_to_display_rows(line))
+                    .flat_map(|line| text_rows(state, line))
                     .collect();
                 assert_eq!(rows, expected, "wrap {wrap}");
-                assert!(rows.iter().all(|&row| !state.is_spacer_row(row)));
+                assert!(
+                    rows.iter()
+                        .all(|&row| !state.display_map().is_spacer_row(row))
+                );
                 assert_eq!(rows[0], 1);
             });
         }
@@ -5159,10 +5177,10 @@ mod tests {
             {
                 let state = editor.read(cx);
                 assert_eq!(
-                    state.buffer_line_to_display_rows(1).len(),
+                    text_rows(state, 1).len(),
                     state.display_map.visible_wrap_row_count_for_buffer_line(1)
                 );
-                assert!(state.buffer_line_to_display_rows(1).len() > 2);
+                assert!(text_rows(state, 1).len() > 2);
             }
             window.draw(cx).clear(cx);
             assert_eq!(held.asked.get(), 2);

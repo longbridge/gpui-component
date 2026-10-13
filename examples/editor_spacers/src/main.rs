@@ -79,7 +79,12 @@ impl SpacerProvider for Level {
             return Vec::new();
         };
         let (this, other) = (this.read(cx), other.read(cx));
-        let rows = |state: &EditorState, line| state.buffer_line_to_display_rows(line).len();
+        let rows = |state: &EditorState, line| {
+            state
+                .display_map()
+                .buffer_line_to_display_row_range(line)
+                .map_or(0, |rows| rows.len())
+        };
         let mut spacers = Vec::new();
         let (mut own_line, mut their_line) = (0, 0);
         let mut last: Option<usize> = None;
@@ -179,8 +184,8 @@ impl Example {
     /// rows — a resize, the wrap turned off — asks both again.
     fn keep_level(&mut self, cx: &mut Context<Self>) {
         let versions = [
-            self.original.read(cx).display_rows_version(),
-            self.rewritten.read(cx).display_rows_version(),
+            self.original.read(cx).display_map().version(),
+            self.rewritten.read(cx).display_map().version(),
         ];
         if versions != self.rows_versions {
             self.rows_versions = versions;

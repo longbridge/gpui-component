@@ -3714,9 +3714,10 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// updates; callers can use [`DisplayMap::version`] to invalidate cached
     /// mappings after edits, rewrapping, or folding changes.
     ///
-    /// Display coordinates describe text after wrapping and folding. They do
-    /// not include inline completion ghost lines; use [`Self::row_bounds`] for
-    /// the actual painted geometry of a visible buffer line.
+    /// Display coordinates describe text after wrapping and folding, with the
+    /// spacer rows between lines. They do not include inline completion ghost
+    /// lines; use [`Self::row_bounds`] for the actual painted geometry of a
+    /// visible buffer line.
     pub fn display_map(&self) -> &DisplayMap {
         &self.display_map
     }

@@ -396,11 +396,16 @@ impl SpacerProvider for Level {
         let (Some(this), Some(other)) = (self.this.upgrade(), self.other.upgrade()) else {
             return Vec::new();
         };
+        let rows = |editor: &EditorState, line| {
+            editor
+                .display_map()
+                .buffer_line_to_display_row_range(line)
+                .map_or(0, |rows| rows.len())
+        };
         let (this, other) = (this.read(cx), other.read(cx));
         lines
             .filter_map(|line| {
-                let own = this.buffer_line_to_display_rows(line).len();
-                let theirs = other.buffer_line_to_display_rows(line).len();
+                let (own, theirs) = (rows(this, line), rows(other, line));
                 (theirs > own).then(|| Spacer::below(line, theirs - own))
             })
             .collect()
@@ -417,9 +422,14 @@ left.update(cx, |state, cx| state.set_spacer_provider(Some(level), cx));
 与行装饰不同，填充行会推动其下方的所有行，因此编辑器一次性询问所有行的填充行并保留结果：设置 provider 时、
 编辑之后、文本重新换行或折叠变化之后，以及调用 `refresh_spacers` 时。询问发生在布局阶段，此时文本已按编辑器的
 宽度完成换行，并且不在编辑器的任何更新之内，因此 provider 可以读取本编辑器和其他编辑器。若结果依赖另一个
-编辑器的行，请在该编辑器的 `display_rows_version()` 变化时调用 `refresh_spacers`。`Spacer::above(0, rows)`
+编辑器的行，请在该编辑器的 `display_map().version()` 变化时调用 `refresh_spacers`。`Spacer::above(0, rows)`
 在文本顶部补行，`with_background` 为这些行（包括行号槽）填充颜色。位于折叠隐藏的行或最后一行之后的填充行不会显示。
-`is_spacer_row(row)` 用于区分填充行和文本行。**Editor Diff** 展示页对两侧都启用换行，并用填充行使它们对齐。
+**Editor Diff** 展示页对两侧都启用换行，并用填充行使它们对齐。
+
+在显示映射中，填充行也是显示行：`display_row_count()` 会计入它们，`buffer_line_to_display_row_range(line)`
+只包含该行文本所占的行，`display_row_to_buffer_line(row)` 把填充行视为它旁边的那一行，`is_spacer_row(row)`
+用于区分填充行和文本行。设置或刷新填充行不会改变 `version()`——provider 正是通过它判断何时需要重新回答；
+填充行变化之后读取的行已包含它们。
 
 ## 值与事件
 
