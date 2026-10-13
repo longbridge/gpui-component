@@ -490,7 +490,7 @@ Each item is a proposed decision you can accept or push back on.
 
 **D3. Phase 0a re-implements the seam on current main and adds a crate-internal `editor_key: Option<u64>` to `Paragraph`, `CodeBlock`, table cells, and the image/custom wrappers. `TextView` never sets it.**
 *Rationale:* The PR's patch doesn't apply to main. Main's own leaf identity (`TextLeafKey`) comes from parse-time spans and isn't stable under edits. The PR's `Arc::as_ptr` identity is what R1 rejected.
-*Status (UI spike):* implemented in a narrower form: `editor_key` lives on `InlineState`, and the seam is a crate-internal `EditorSink` that collects `TextLayout`s and supplies selection backgrounds (Appendix B).
+*Status (UI spike):* projection is now direct model→`BlockNode` (§7.3, `block_editor/direct.rs`), no Markdown round trip. Seam implemented in a narrower form: `editor_key` lives on `InlineState`, and the seam is a crate-internal `EditorSink` that collects `TextLayout`s and supplies selection backgrounds (Appendix B).
 *Alternative considered:* Reusing `TextLeafKey` with synthetic spans assigned by the projection, or a side table keyed by `InlineState` pointer.
 
 **D4. Storage is a private `HashMap<BlockId, BlockEntry>` with parent links plus an explicit `OrderIndex`. No slotmap dependency.**
@@ -617,4 +617,4 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 
 **Story.** Toolbar for Text / H1–H3 / Bullets / Numbered, a sample document and a 1200-block generator. The Markdown preview is cached and refreshed only on `Changed` or load (it was re-serialized every frame).
 
-**Perf note (UI spike).** Steady-state frames re-parse nothing (counter-checked by `ProjectionCache` rebuild counters in `tests/view.rs`); one keystroke re-parses only its top-level block. Every visible block still goes through layout each frame (GPUI's line-layout cache absorbs most of it). Frame timings were measured before the D3 rework (~34 ms debug / ~16 ms release for keystroke + redraw on 1200 blocks, headless) and have not been re-measured; real-platform timing is unmeasured.
+**Perf note (UI spike, direct projection + per-node cache).** Headless test platform, one keystroke plus a full redraw: 1200-block document ~190–245 ms debug (3 runs) / ~103 ms release; edit inside a 1000-item list ~180–220 ms debug / ~77 ms release. Projection work is minimal (counter-checked: 1 node rebuilt for a top-level edit, 3 for paragraph→item→list, 2 for table→row), so the cost is laying out and painting every block through the shared renderer each frame. That is a regression from the pre-D3 own-shaping spike (~34 ms debug / ~16 ms release) and makes virtualization (Phase 5) a prerequisite for large documents. Real-platform timing is unmeasured.
