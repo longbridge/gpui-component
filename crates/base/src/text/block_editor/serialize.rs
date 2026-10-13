@@ -23,7 +23,7 @@ pub(crate) fn serialize(doc: &EditorDocument) -> String {
     block(doc, doc.root)
 }
 
-fn join_blocks(doc: &EditorDocument, ids: &[BlockId]) -> String {
+pub(crate) fn join_blocks(doc: &EditorDocument, ids: &[BlockId]) -> String {
     render_children(doc, ids)
         .into_iter()
         .map(|(_, text)| text)

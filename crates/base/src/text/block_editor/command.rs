@@ -272,7 +272,13 @@ impl BlockEditorModel {
     }
 
     pub fn delete(&mut self, forward: bool) -> Result<(), CommandError> {
+        if self.selected_blocks().is_some() {
+            return self.delete_blocks().map(|_| ());
+        }
         let range = self.resolved()?;
+        if range.is_collapsed() && self.select_adjacent_table(range.start, forward)? {
+            return Ok(());
+        }
         let origin = if forward {
             EditOrigin::DeleteForward
         } else {
@@ -419,6 +425,91 @@ impl BlockEditorModel {
         Ok(true)
     }
 
+    /// A `BlockSelection::Blocks` as its parent and child index range.
+    pub(crate) fn selected_blocks(&self) -> Option<(BlockId, std::ops::Range<usize>)> {
+        let BlockSelection::Blocks { anchor, head } = &self.selection else {
+            return None;
+        };
+        let (parent, a) = self.doc.index_in_parent(*anchor)?;
+        let (_, b) = self.doc.index_in_parent(*head)?;
+        Some((parent, a.min(b)..a.max(b) + 1))
+    }
+
+    /// Remove the selected blocks; the caret goes to the block that took
+    /// their place (an empty paragraph when nothing is left).
+    fn delete_blocks(&mut self) -> Result<bool, CommandError> {
+        let Some((parent, range)) = self.selected_blocks() else {
+            return Ok(false);
+        };
+        self.transact(EditOrigin::Command("delete_blocks"), |tx| {
+            let start = range.start;
+            tx.remove(parent, range)?;
+            let children = tx.doc.children(parent).to_vec();
+            let pos = if let Some(next) = children.get(start) {
+                tx.doc.first_leaf_in(*next)
+            } else if let Some(prev) = start.checked_sub(1).and_then(|i| children.get(i)) {
+                tx.doc.last_leaf_in(*prev)
+            } else {
+                let paragraph = DetachedBlock::paragraph(InlineText::new());
+                let id = paragraph.id;
+                tx.insert(parent, start, vec![paragraph])?;
+                BlockPosition::new(id, 0)
+            };
+            Ok(caret(pos))
+        })
+    }
+
+    /// Backspace at the start of a block after a table (or Delete at the end
+    /// of one before it) selects the table as a node instead of editing its
+    /// cells (no in-place cell editing yet).
+    fn select_adjacent_table(
+        &mut self,
+        pos: BlockPosition,
+        forward: bool,
+    ) -> Result<bool, CommandError> {
+        let Some(len) = self.doc.leaf_len(pos.block) else {
+            return Ok(false);
+        };
+        if self.doc.kind(pos.block) == Some(&BlockKindData::TableCell)
+            || (forward && pos.offset < len)
+            || (!forward && pos.offset > 0)
+        {
+            return Ok(false);
+        }
+        let leaves = self.doc.walk_leaves();
+        let Some(ix) = leaves.iter().position(|id| *id == pos.block) else {
+            return Ok(false);
+        };
+        let neighbour = if forward {
+            leaves.get(ix + 1)
+        } else {
+            ix.checked_sub(1).and_then(|i| leaves.get(i))
+        };
+        let Some(&cell) = neighbour else {
+            return Ok(false);
+        };
+        let Some(table) = self.table_of(cell) else {
+            return Ok(false);
+        };
+        self.set_selection(BlockSelection::Blocks {
+            anchor: table,
+            head: table,
+        })?;
+        Ok(true)
+    }
+
+    /// The table containing a cell.
+    pub(crate) fn table_of(&self, cell: BlockId) -> Option<BlockId> {
+        if self.doc.kind(cell) != Some(&BlockKindData::TableCell) {
+            return None;
+        }
+        self.doc
+            .path(cell)
+            .into_iter()
+            .rev()
+            .find(|id| matches!(self.doc.kind(*id), Some(BlockKindData::Table { .. })))
+    }
+
     pub fn run(&mut self, command: EditorCommand) -> Result<bool, CommandError> {
         match command {
             EditorCommand::SelectAll => {
@@ -430,6 +521,9 @@ impl BlockEditorModel {
                 Ok(true)
             }
             EditorCommand::DeleteSelection => {
+                if self.selected_blocks().is_some() {
+                    return self.delete_blocks();
+                }
                 let range = self.resolved()?;
                 if range.is_collapsed() {
                     return Ok(false);
@@ -714,10 +808,16 @@ impl BlockEditorModel {
     }
 
     fn move_blocks(&mut self, down: bool) -> Result<bool, CommandError> {
-        let resolved = self.caret_resolved()?;
-        let target = resolved
-            .nearest(&self.doc, is_list_item)
-            .unwrap_or(resolved.pos.block);
+        let target = match self.selected_blocks() {
+            Some((parent, range)) if range.len() == 1 => self.doc.children(parent)[range.start],
+            Some(_) => return Err(CommandError::Unsupported("move several blocks")),
+            None => {
+                let resolved = self.caret_resolved()?;
+                resolved
+                    .nearest(&self.doc, is_list_item)
+                    .unwrap_or(resolved.pos.block)
+            }
+        };
         let Some((parent, index)) = self.doc.index_in_parent(target) else {
             return Ok(false);
         };

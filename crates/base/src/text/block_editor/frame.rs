@@ -28,9 +28,22 @@ impl FrameSink {
         }
     }
 
-    pub(crate) fn into_frame(self, leaves: Rc<Vec<LeafInfo>>) -> FrameLayout {
+    pub(crate) fn into_frame(
+        self,
+        leaves: Rc<Vec<LeafInfo>>,
+        tables: &[(BlockId, Vec<BlockId>)],
+    ) -> FrameLayout {
         let layouts = self.layouts.into_inner();
         let mut frame = FrameLayout::default();
+        for (table, cells) in tables {
+            let bounds = cells
+                .iter()
+                .filter_map(|cell| layouts.get(&cell.as_u64()).map(TextLayout::bounds))
+                .reduce(|a, b| a.union(&b));
+            if let Some(bounds) = bounds {
+                frame.tables.push((*table, bounds));
+            }
+        }
         for info in leaves.iter() {
             if let Some(layout) = layouts.get(&info.block.as_u64()) {
                 frame.index.insert(info.block, frame.leaves.len());
@@ -126,6 +139,8 @@ impl LeafGeom {
 pub(crate) struct FrameLayout {
     pub(crate) leaves: Vec<LeafGeom>,
     pub(crate) index: HashMap<BlockId, usize>,
+    /// Table bounds (union of its cells), for node selection by click.
+    pub(crate) tables: Vec<(BlockId, Bounds<Pixels>)>,
 }
 
 impl FrameLayout {
@@ -139,6 +154,14 @@ impl FrameLayout {
             leaf.caret_point(pos.offset),
             size(width, leaf.line_height()),
         ))
+    }
+
+    /// The table under a window point.
+    pub(crate) fn table_at(&self, at: Point<Pixels>) -> Option<BlockId> {
+        self.tables
+            .iter()
+            .find(|(_, bounds)| bounds.contains(&at))
+            .map(|(id, _)| *id)
     }
 
     /// Nearest caret position to a window point.

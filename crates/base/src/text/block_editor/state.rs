@@ -506,6 +506,16 @@ impl BlockEditorState {
 
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
+        let table = self.frame.borrow().table_at(at);
+        if let Some(table) = table {
+            self.end_composition();
+            let _ = self.model.set_selection(BlockSelection::Blocks {
+                anchor: table,
+                head: table,
+            });
+            self.selection_changed(cx);
+            return;
+        }
         let hit = self.frame.borrow().hit_test(at);
         if let Some(pos) = hit {
             self.goal_x = None;
@@ -519,6 +529,10 @@ impl BlockEditorState {
     }
 
     fn selected_text(&self) -> String {
+        if let Some((parent, range)) = self.model.selected_blocks() {
+            let ids = &self.model.doc.children(parent)[range];
+            return super::serialize::join_blocks(&self.model.doc, ids);
+        }
         let Ok(range) = self.model.doc.resolve_selection(self.model.selection()) else {
             return String::new();
         };

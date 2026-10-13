@@ -236,3 +236,22 @@ fn enter_in_empty_nested_item_outdents() {
     assert_eq!(source, "- a\n  - b\n- x");
     assert_invariants(&m);
 }
+
+#[test]
+fn table_node_selection_moves_and_deletes() {
+    let mut m = model("a\n\n| x | y |\n| --- | --- |\n| 1 | 2 |\n\nb");
+    let original = m.source();
+    let last = m.document().leaves().count() - 1;
+    caret_in(&mut m, last, 0);
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), original, "Backspace after a table selects it");
+    assert!(matches!(m.selection(), BlockSelection::Blocks { .. }));
+    assert!(m.run(EditorCommand::MoveBlocks { down: false }).unwrap());
+    assert!(m.source().starts_with("| x | y |"), "{}", m.source());
+    assert_invariants(&m);
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), "a\n\nb");
+    assert!(m.undo());
+    assert!(m.source().starts_with("| x | y |"));
+    assert_invariants(&m);
+}

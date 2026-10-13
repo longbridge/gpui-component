@@ -42,6 +42,8 @@ pub(crate) struct Snapshot {
     pub(crate) blocks: Vec<Rc<ProjectedBlock>>,
     /// Leaves that have a rendered text layout, in document order.
     pub(crate) leaves: Rc<Vec<LeafInfo>>,
+    /// Tables and their keyed cells, for node selection (no caret in cells).
+    pub(crate) tables: Rc<Vec<(BlockId, Vec<BlockId>)>>,
 }
 
 #[derive(Default)]
@@ -81,10 +83,29 @@ impl ProjectionCache {
             .iter()
             .filter_map(|id| leaf_info(doc, *id))
             .collect();
+        let mut tables: Vec<(BlockId, Vec<BlockId>)> = Vec::new();
+        for id in doc.leaves() {
+            if doc.kind(*id) != Some(&BlockKindData::TableCell) {
+                continue;
+            }
+            let Some(table) = doc
+                .path(*id)
+                .into_iter()
+                .rev()
+                .find(|b| matches!(doc.kind(*b), Some(BlockKindData::Table { .. })))
+            else {
+                continue;
+            };
+            match tables.last_mut() {
+                Some((last, cells)) if *last == table => cells.push(*id),
+                _ => tables.push((table, vec![*id])),
+            }
+        }
         self.by_id = by_id;
         self.snapshot = Rc::new(Snapshot {
             blocks,
             leaves: Rc::new(leaves),
+            tables: Rc::new(tables),
         });
         self.revision = Some(doc.revision);
         self.snapshot.clone()
@@ -116,8 +137,7 @@ fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
 /// Model leaves under `id` that the renderer draws as one text leaf each.
 fn text_leaves(doc: &EditorDocument, id: BlockId, out: &mut Vec<BlockId>) {
     match doc.get(id).map(|e| (&e.kind, &e.content)) {
-        Some((BlockKindData::Table { .. }, _)) => {}
-        Some((BlockKindData::TableCell, _)) => {}
+        Some((BlockKindData::TableCell, BlockContent::Inline(_))) => out.push(id),
         Some((_, BlockContent::Children(children))) => {
             for child in children {
                 text_leaves(doc, *child, out);
@@ -137,6 +157,13 @@ fn node_states(
         BlockNode::Paragraph(paragraph) => out.push(paragraph.state.clone()),
         BlockNode::Heading { children, .. } => out.push(children.state.clone()),
         BlockNode::CodeBlock(code) => out.push(code.inline_state().clone()),
+        BlockNode::Table(table) => {
+            for row in &table.children {
+                for cell in &row.children {
+                    out.push(cell.children.state.clone());
+                }
+            }
+        }
         BlockNode::Root { children, .. }
         | BlockNode::Blockquote { children, .. }
         | BlockNode::List { children, .. }

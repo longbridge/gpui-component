@@ -230,7 +230,7 @@ impl Element for EditorRoot {
             crate::text::editor_seam::with_sink(sink.clone(), || child.prepaint(window, cx));
             // Swap in the complete frame; handlers read it until the next one.
             if let Ok(sink) = Rc::try_unwrap(sink) {
-                let frame = sink.into_frame(self.snapshot.leaves.clone());
+                let frame = sink.into_frame(self.snapshot.leaves.clone(), &self.snapshot.tables);
                 *self.state.read(cx).frame.borrow_mut() = frame;
             }
         } else {

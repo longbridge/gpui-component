@@ -528,3 +528,51 @@ fn readonly_blocks_edits_but_not_navigation(cx: &mut TestAppContext) {
     });
     assert_eq!(ix, Some(1));
 }
+
+const TABLE_DOC: &str = "a\n\n| x | y |\n| --- | --- |\n| 1 | 2 |\n\nb";
+
+#[gpui::test]
+fn click_selects_table_as_node_then_delete_and_undo(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let original = source(&editor, cx);
+    let (center, cells) = editor.read_with(cx, |e, _| {
+        let f = e.frame.borrow();
+        let (_, bounds) = f.tables.first().copied().expect("table has bounds");
+        (bounds.center(), f.tables.len())
+    });
+    assert_eq!(cells, 1);
+    cx.simulate_mouse_down(center, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(center, MouseButton::Left, Modifiers::none());
+    draw(cx);
+    assert!(editor.read_with(cx, |e, _| matches!(
+        e.model().selection(),
+        BlockSelection::Blocks { .. }
+    )));
+    // The selected table's cells get selection backgrounds.
+    let painted = editor.update(cx, |e, _| e.selection_ranges().len());
+    assert_eq!(painted, 4);
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "a\n\nb");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), original);
+}
+
+#[gpui::test]
+fn backspace_after_table_selects_it_and_copy_round_trips(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let original = source(&editor, cx);
+    let last = editor.read_with(cx, |e, _| e.model().document().leaves().count() - 1);
+    caret_at(&editor, cx, last, 0);
+    keys(cx, "backspace");
+    assert_eq!(
+        source(&editor, cx),
+        original,
+        "first Backspace only selects"
+    );
+    keys(cx, "M-c");
+    let copied = cx.read_from_clipboard().and_then(|c| c.text()).unwrap();
+    assert!(copied.starts_with("| x | y |"), "{copied:?}");
+    assert!(original.contains(&copied));
+    keys(cx, "M-x");
+    assert_eq!(source(&editor, cx), "a\n\nb");
+}
