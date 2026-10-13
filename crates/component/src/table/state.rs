@@ -1013,6 +1013,14 @@ where
             return;
         }
 
+        // Row selection mode: Home goes to the first row, as in a list
+        if self.selection_mode.is_row() && self.row_selectable {
+            if self.delegate.rows_count(cx) > 0 {
+                self.set_selected_row(0, cx);
+            }
+            return;
+        }
+
         // Column selection mode
         self.set_selected_col(0, cx);
     }
@@ -1032,6 +1040,15 @@ where
             } else {
                 // No cell selected, select last cell of first row
                 self.set_selected_cell(0, columns_count.saturating_sub(1), cx);
+            }
+            return;
+        }
+
+        // Row selection mode: End goes to the last row, as in a list
+        if self.selection_mode.is_row() && self.row_selectable {
+            let rows_count = self.delegate.rows_count(cx);
+            if rows_count > 0 {
+                self.set_selected_row(rows_count - 1, cx);
             }
             return;
         }
