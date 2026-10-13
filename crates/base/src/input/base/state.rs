@@ -5853,6 +5853,42 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_set_line_number_notifies_only_on_change(cx: &mut TestAppContext) {
+        use std::{cell::Cell, rc::Rc};
+
+        cx.update(crate::init);
+        let mut input = None;
+        let window = cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            input = Some(cx.new(|cx| crate::input::EditorState::new(window, cx)));
+            gpui::EmptyView
+        });
+        let input = input.unwrap();
+        let shown = input.read_with(cx, |state, _| state.mode.line_number());
+        let notifications = Rc::new(Cell::new(0));
+        let count = notifications.clone();
+        let _subscription =
+            cx.update(|cx| cx.observe(&input, move |_, _| count.set(count.get() + 1)));
+
+        window
+            .update(cx, |_, window, cx| {
+                input.update(cx, |state, cx| state.set_line_number(shown, window, cx))
+            })
+            .unwrap();
+        assert_eq!(notifications.get(), 0);
+
+        window
+            .update(cx, |_, window, cx| {
+                input.update(cx, |state, cx| state.set_line_number(!shown, window, cx))
+            })
+            .unwrap();
+        assert_eq!(notifications.get(), 1);
+        assert_eq!(
+            input.read_with(cx, |state, _| state.mode.line_number()),
+            !shown
+        );
+    }
+
+    #[gpui::test]
     fn test_set_value_on_unfocused_input_stays_quiet(cx: &mut TestAppContext) {
         use std::{cell::Cell, rc::Rc};
 
@@ -11295,6 +11331,9 @@ impl InputBaseState<crate::input::EditorMode> {
     /// Set line number.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
         if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            if *l == line_number {
+                return;
+            }
             *l = line_number;
         }
         cx.notify();
