@@ -447,6 +447,30 @@ impl WindowState {
             .is_some_and(|state| state.tooltip_pressed_trigger == Some(bounds))
     }
 
+    /// Ends the press on the first pointer move outside the trigger. It is
+    /// window-level because a removed or moved trigger never reports a
+    /// hover-leave.
+    fn tooltip_press_listener(&self, cx: &Context<Self>) -> Option<impl IntoElement + use<>> {
+        let bounds = self.tooltip_pressed_trigger?;
+        let state = cx.entity().downgrade();
+        Some(canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+                window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                    if phase != DispatchPhase::Capture || bounds.contains(&event.position) {
+                        return;
+                    }
+                    _ = state.update(cx, |state, cx| {
+                        if state.tooltip_pressed_trigger == Some(bounds) {
+                            state.tooltip_pressed_trigger = None;
+                            cx.notify();
+                        }
+                    });
+                });
+            },
+        ))
+    }
+
     /// Get the fallback native-menu overlay entity for this window.
     pub(crate) fn native_menu_overlay(
         window: &Window,
@@ -492,28 +516,8 @@ impl Render for WindowState {
             .child(WindowStateLayers { root: cx.entity() })
             .child(self.touch_selection_overlay.clone())
             .child(self.tooltip_overlay.clone())
+            .children(self.tooltip_press_listener(cx))
             .child(self.native_menu_overlay.clone())
-            .when_some(self.tooltip_pressed_trigger, |this, bounds| {
-                // Window-level, so the press ends even when the trigger was
-                // removed or moved and never reports a hover-leave.
-                let state = cx.entity().downgrade();
-                this.child(canvas(
-                    |_, _, _| {},
-                    move |_, _, window, _| {
-                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
-                            if phase != DispatchPhase::Capture || bounds.contains(&event.position) {
-                                return;
-                            }
-                            _ = state.update(cx, |state, cx| {
-                                if state.tooltip_pressed_trigger == Some(bounds) {
-                                    state.tooltip_pressed_trigger = None;
-                                    cx.notify();
-                                }
-                            });
-                        });
-                    },
-                ))
-            })
     }
 }
 
