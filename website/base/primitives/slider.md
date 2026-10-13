@@ -46,7 +46,7 @@ The command above supplies application initialization, window creation, and shar
 
 ## Accessibility
 
-Use `.accessibility_label(...)` to name the existing Slider accessibility node. This does not add a visible label.
+Slider exposes its value, bounds, step and orientation, and handles accessible Increment and Decrement. Name it with `.accessibility_label(...)`; this does not add a visible label.
 
 ```rust
 Slider::new(&slider_state)
