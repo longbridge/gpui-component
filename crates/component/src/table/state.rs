@@ -1236,7 +1236,9 @@ where
         let mut changed = false;
         if let Some(col_group) = self.col_groups.get_mut(ix) {
             if col_group.is_resizable() {
-                let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
+                let new_width = size
+                    .max(col_group.column.min_width)
+                    .min(col_group.column.max_width);
                 if col_group.width != new_width {
                     col_group.width = new_width;
                     changed = true;
@@ -2668,5 +2670,102 @@ where
                         ),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{App, TestAppContext};
+
+    use super::*;
+
+    struct WidthsDelegate;
+
+    impl TableDelegate for WidthsDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            6
+        }
+
+        fn rows_count(&self, _: &App) -> usize {
+            0
+        }
+
+        fn column(&self, col_ix: usize, _: &App) -> Column {
+            match col_ix {
+                0 => Column::new("narrow", "Narrow")
+                    .min_width(px(80.))
+                    .width(px(40.)),
+                1 => Column::new("wide", "Wide")
+                    .max_width(px(120.))
+                    .width(px(300.)),
+                // `width` alone below the default `min_width` of 20px.
+                2 => Column::new("tiny", "Tiny").width(px(10.)),
+                // The default resize protection does not limit initial width.
+                3 => Column::new("wide_default", "Wide Default").width(px(2000.)),
+                // Applications can explicitly allow wider resize ranges.
+                4 => Column::new("wide_explicit", "Wide Explicit")
+                    .max_width(px(2400.))
+                    .width(px(2000.)),
+                // `min_width` above `max_width` must not panic.
+                _ => Column::new("inverted", "Inverted")
+                    .min_width(px(200.))
+                    .max_width(px(100.)),
+            }
+        }
+
+        fn render_td(
+            &mut self,
+            _: usize,
+            _: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div()
+        }
+    }
+
+    #[gpui::test]
+    fn column_resize_bounds_preserve_initial_widths(cx: &mut TestAppContext) {
+        cx.skip_drawing();
+        let window = cx.add_window(|window, cx| TableState::new(WidthsDelegate, window, cx));
+
+        window
+            .update(cx, |table, window, cx| {
+                let widths = |table: &TableState<WidthsDelegate>| {
+                    table
+                        .col_groups
+                        .iter()
+                        .map(|col_group| col_group.width)
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(
+                    widths(table),
+                    [px(40.), px(300.), px(10.), px(2000.), px(2000.), px(100.)]
+                );
+
+                for ix in 0..table.col_groups.len() {
+                    table.resize_cols(ix, px(10000.), window, cx);
+                }
+                assert_eq!(
+                    widths(table),
+                    [
+                        px(1200.),
+                        px(120.),
+                        px(1200.),
+                        px(1200.),
+                        px(2400.),
+                        px(100.)
+                    ]
+                );
+
+                for ix in 0..table.col_groups.len() {
+                    table.resize_cols(ix, px(-100.), window, cx);
+                }
+                assert_eq!(
+                    widths(table),
+                    [px(80.), px(20.), px(20.), px(20.), px(20.), px(100.)]
+                );
+            })
+            .unwrap();
     }
 }

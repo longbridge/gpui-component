@@ -700,7 +700,7 @@ impl TableDelegate for MyTableDelegate {
 - `selectable(bool)` - Enable/disable column/cell selection
 - `paddings(edges)` - Set custom padding
 - `min_width(pixels)` - Set minimum width
-- `max_width(pixels)` - Set maximum width
+- `max_width(pixels)` - Set the maximum resize width (1200px by default); set a larger value explicitly to allow wider columns
 
 ### Events
 
