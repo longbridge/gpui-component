@@ -4585,7 +4585,7 @@ mod tests {
         cx.update(|window, cx| {
             let unpainted = cx.new(|cx| EditorState::new(window, cx).default_value("a\nb"));
             assert_eq!(
-                unpainted.read(cx).display_row_count(),
+                unpainted.read(cx).display_map().display_row_count(),
                 0,
                 "nothing laid out"
             );
@@ -4600,14 +4600,16 @@ mod tests {
                 let state = editor.read(cx);
                 let line_height = state.line_height().unwrap();
                 let map: &crate::input::DisplayMap = state.display_map();
-                assert_eq!(map.display_row_count(), state.display_row_count());
                 assert!(map.buffer_line_to_display_row_range(3).is_none());
                 for line in [0, 1, 2, 4, last] {
                     let point = crate::input::BufferPoint::new(line, 0);
                     let display = map.buffer_pos_to_display_pos(point);
                     assert_eq!(map.display_pos_to_buffer_pos(display), point);
                 }
-                let wrapped = state.buffer_line_to_display_rows(0);
+                let wrapped = state
+                    .display_map()
+                    .buffer_line_to_display_row_range(0)
+                    .unwrap();
                 assert_eq!(wrapped.start, 0);
                 assert!(wrapped.len() > 1, "{wrapped:?}");
                 assert_eq!(
@@ -4615,29 +4617,39 @@ mod tests {
                     line_height * wrapped.len() as f32
                 );
                 assert_eq!(
-                    state.buffer_line_to_display_rows(1),
+                    state
+                        .display_map()
+                        .buffer_line_to_display_row_range(1)
+                        .unwrap(),
                     wrapped.end..wrapped.end + 1
                 );
-                let top = state.buffer_line_to_display_rows(2);
-                assert_eq!(state.buffer_line_to_display_rows(3), top.start..top.start);
-                assert_eq!(state.buffer_line_to_display_rows(4).start, top.end);
+                let top = state
+                    .display_map()
+                    .buffer_line_to_display_row_range(2)
+                    .unwrap();
+                assert_eq!(
+                    state
+                        .display_map()
+                        .buffer_line_to_display_row_range(4)
+                        .unwrap()
+                        .start,
+                    top.end
+                );
 
-                let below = state.buffer_line_to_display_rows(last);
+                let below = state
+                    .display_map()
+                    .buffer_line_to_display_row_range(last)
+                    .unwrap();
                 assert_eq!(below.len(), wrapped.len());
-                assert_eq!(below.end, state.display_row_count());
+                assert_eq!(below.end, map.display_row_count());
                 assert!(state.row_bounds(last).is_none(), "not laid out");
 
                 for line in [0, 1, 2, 4, 5, last] {
-                    for (within, row) in state.buffer_line_to_display_rows(line).enumerate() {
-                        assert_eq!(state.display_row_to_buffer_line(row), (line, within));
+                    for row in map.buffer_line_to_display_row_range(line).unwrap() {
+                        assert_eq!(map.display_row_to_buffer_line(row), line);
                     }
                 }
-                let count = state.display_row_count();
-                assert_eq!(state.buffer_line_to_display_rows(last + 1), count..count);
-                assert_eq!(
-                    state.display_row_to_buffer_line(count + 3),
-                    (last, wrapped.len() - 1)
-                );
+                assert!(map.buffer_line_to_display_row_range(last + 1).is_none());
             }
 
             // Laid out at last, the line takes the rows the map gave it. A
@@ -4651,9 +4663,11 @@ mod tests {
             {
                 let state = editor.read(cx);
                 assert_eq!(state.display_map().version(), version);
-                assert_eq!(state.display_rows_version(), version);
                 let line_height = state.line_height().unwrap();
-                let below = state.buffer_line_to_display_rows(last);
+                let below = state
+                    .display_map()
+                    .buffer_line_to_display_row_range(last)
+                    .unwrap();
                 let bounds = state.row_bounds(last).unwrap();
                 assert_eq!(bounds.size.height, line_height * below.len() as f32);
                 assert_eq!(
@@ -4668,8 +4682,14 @@ mod tests {
             {
                 let state = editor.read(cx);
                 assert_ne!(state.display_map().version(), version);
-                assert_eq!(state.buffer_line_to_display_rows(0), 0..1);
-                assert_eq!(state.display_row_to_buffer_line(5), (6, 0));
+                assert_eq!(
+                    state
+                        .display_map()
+                        .buffer_line_to_display_row_range(0)
+                        .unwrap(),
+                    0..1
+                );
+                assert_eq!(state.display_map().display_row_to_buffer_line(5), 6);
             }
 
             // So does opening a fold, and an edit.

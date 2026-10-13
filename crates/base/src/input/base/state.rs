@@ -3703,57 +3703,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         &self.display_map
     }
 
-    /// Return the number of display rows: the rows the text takes once it is
-    /// soft-wrapped, less those hidden by folds.
-    ///
-    /// Inline completion ghost lines are excluded. See [`Self::display_map`]
-    /// for layout timing and coordinate semantics.
-    pub fn display_row_count(&self) -> usize {
-        self.display_map.display_row_count()
-    }
-
-    /// Return the display rows a zero-based buffer line takes, one per soft-wrapped
-    /// row, whether or not they are laid out.
-    ///
-    /// A line hidden by a fold takes none: the range is empty, at the row the fold
-    /// is shown on. A line past the end is an empty range at the end.
-    pub fn buffer_line_to_display_rows(&self, line: usize) -> Range<usize> {
-        if line >= self.display_map.buffer_line_count() {
-            let count = self.display_map.display_row_count();
-            return count..count;
-        }
-        self.display_map
-            .buffer_line_to_display_row_range(line)
-            .unwrap_or_else(|| {
-                let row = self.display_map.buffer_line_to_display_row(line);
-                row..row
-            })
-    }
-
-    /// Return the zero-based buffer line a display row shows, and which of the
-    /// line's soft-wrapped rows it is.
-    ///
-    /// A row past the end is read as the last row.
-    pub fn display_row_to_buffer_line(&self, row: usize) -> (usize, usize) {
-        let row = row.min(self.display_map.display_row_count().saturating_sub(1));
-        let line = self.display_map.display_row_to_buffer_line(row);
-        let start = self
-            .display_map
-            .buffer_line_to_display_row_range(line)
-            .map_or(row, |rows| rows.start);
-        (line, row.saturating_sub(start))
-    }
-
-    /// Return a number that changes whenever a buffer line may have taken
-    /// different display rows: an edit, a rewrap, or a fold opened or closed.
-    ///
-    /// Something that reads the display rows, such as an editor kept level
-    /// with this one, can compare it with the number it last read to know
-    /// whether to read them again.
-    pub fn display_rows_version(&self) -> usize {
-        self.display_map.version()
-    }
-
     /// Replace text in range in silent.
     ///
     /// This will not trigger any UI interaction, such as auto-completion.

@@ -438,12 +438,9 @@ by the line height describe text projection positions, not necessarily painted
 positions: multi-line inline completion shifts later text down without changing
 the map or its version. Use `row_bounds` for actual geometry of visible lines.
 
-The convenience methods `display_row_count()`, `buffer_line_to_display_rows(line)`,
-`display_row_to_buffer_line(row)`, and `display_rows_version()` remain available
-on the state. The state-level line query returns an empty range for folded or
-out-of-range lines, while the map's range query returns `None` for hidden lines.
-The state-level display-row query clamps to the last row and returns both the
-buffer line and its wrapped-row offset.
+Buffer and display indices are zero-based. A buffer line hidden by a fold has
+no display-row range (`None`); use the coordinate conversion methods for
+buffer/display positions.
 
 ## Value and events
 
