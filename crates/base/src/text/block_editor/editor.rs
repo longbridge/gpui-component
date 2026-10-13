@@ -27,6 +27,7 @@ pub struct BlockEditorModel {
 }
 
 impl BlockEditorModel {
+    /// Parse Markdown into a model.
     pub fn from_markdown(
         source: &str,
         extensions: MarkdownExtensions,
@@ -53,22 +54,27 @@ impl BlockEditorModel {
         Ok(())
     }
 
+    /// The document as canonical Markdown.
     pub fn source(&self) -> String {
         serialize(&self.doc).trim_end_matches('\n').to_string()
     }
 
+    /// Document revision; bumped by every committed transaction.
     pub fn revision(&self) -> u64 {
         self.doc.revision
     }
 
+    /// Read-only view of the block tree.
     pub fn document(&self) -> DocumentRef<'_> {
         DocumentRef { doc: &self.doc }
     }
 
+    /// The current selection.
     pub fn selection(&self) -> &BlockSelection {
         &self.selection
     }
 
+    /// Set the selection after validating it against the document.
     pub fn set_selection(&mut self, selection: BlockSelection) -> Result<(), SelectionError> {
         self.doc.validate_selection(&selection)?;
         if selection != self.selection {
@@ -79,6 +85,7 @@ impl BlockEditorModel {
         Ok(())
     }
 
+    /// The caret (head of a text selection); `None` for a block selection.
     pub fn caret(&self) -> Option<BlockPosition> {
         match &self.selection {
             BlockSelection::Text { head, .. } => Some(*head),
@@ -86,6 +93,7 @@ impl BlockEditorModel {
         }
     }
 
+    /// Marks the next typed text gets (stored marks, else inherited at the caret).
     pub fn active_marks(&self) -> MarkSet {
         if let Some(stored) = &self.stored_marks {
             return MarkSet(stored.clone());
@@ -96,6 +104,7 @@ impl BlockEditorModel {
         MarkSet(self.inherited_marks(caret))
     }
 
+    /// Whether `kind` is on, off or mixed over the selection.
     pub fn mark_state(&self, kind: MarkKind) -> MarkState {
         let Ok(range) = self.doc.resolve_selection(&self.selection) else {
             return MarkState::Off;
@@ -128,23 +137,28 @@ impl BlockEditorModel {
         }
     }
 
+    /// Kind of the text block holding the caret, if any.
     pub fn block_kind_at_caret(&self) -> Option<BlockKind> {
         let caret = self.caret()?;
         self.doc.kind(caret.block).map(|kind| kind.public())
     }
 
+    /// End the current typing group, so the next edit is its own undo step.
     pub fn break_coalescing(&mut self) {
         self.history.break_coalescing();
     }
 
+    /// Whether there is something to undo.
     pub fn can_undo(&self) -> bool {
         self.history.can_undo()
     }
 
+    /// Whether there is something to redo.
     pub fn can_redo(&self) -> bool {
         self.history.can_redo()
     }
 
+    /// Undo one group; returns whether anything changed.
     pub fn undo(&mut self) -> bool {
         let Some(entry) = self.history.pop_undo() else {
             return false;
@@ -158,6 +172,7 @@ impl BlockEditorModel {
         true
     }
 
+    /// Redo one group; returns whether anything changed.
     pub fn redo(&mut self) -> bool {
         let Some(entry) = self.history.pop_redo() else {
             return false;

@@ -4,7 +4,7 @@ use crate::text::node::ColumnumnAlign;
 
 /// Public, payload-light projection of a block's kind, for matching in
 /// toolbar code. Payloads (code language, table alignments, definition
-/// targets) stay in the crate-internal [`BlockKindData`].
+/// targets) stay in the crate-internal `BlockKindData`.
 #[non_exhaustive]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BlockKind {

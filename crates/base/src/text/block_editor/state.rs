@@ -150,6 +150,7 @@ impl Focusable for BlockEditorState {
 }
 
 impl BlockEditorState {
+    /// Create an editor holding one empty paragraph.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
@@ -209,31 +210,38 @@ impl BlockEditorState {
         Ok(())
     }
 
+    /// The document as canonical Markdown.
     pub fn source(&self) -> String {
         self.model.source()
     }
 
+    /// The headless model (document, selection, history).
     pub fn model(&self) -> &BlockEditorModel {
         &self.model
     }
 
+    /// Document revision; bumped by every committed transaction.
     pub fn revision(&self) -> u64 {
         self.model.revision()
     }
 
+    /// The current selection.
     pub fn selection(&self) -> &BlockSelection {
         self.model.selection()
     }
 
+    /// Kind of the text block holding the caret, if any.
     pub fn block_kind_at_caret(&self) -> Option<BlockKind> {
         self.model.block_kind_at_caret()
     }
 
+    /// Override caret, selection and composition colours (`BlockEditorStyle`).
     pub fn set_editor_style(&mut self, style: BlockEditorStyle, cx: &mut Context<Self>) {
         self.style = style;
         cx.notify();
     }
 
+    /// The editor style overrides in effect.
     pub fn editor_style(&self) -> &BlockEditorStyle {
         &self.style
     }
@@ -245,19 +253,23 @@ impl BlockEditorState {
         self.scroll_handle = Some(handle);
     }
 
+    /// Whether edits are blocked (navigation and selection still work).
     pub fn is_readonly(&self) -> bool {
         self.readonly
     }
 
+    /// Block or allow edits.
     pub fn set_readonly(&mut self, readonly: bool, cx: &mut Context<Self>) {
         self.readonly = readonly;
         cx.notify();
     }
 
+    /// Focus the editor.
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
         window.focus(&self.focus_handle, cx);
     }
 
+    /// Set the selection; emits `SelectionChanged`.
     pub fn set_selection(
         &mut self,
         selection: BlockSelection,
@@ -290,12 +302,14 @@ impl BlockEditorState {
         Ok(changed)
     }
 
+    /// Undo the last transaction (or IME composition) group.
     pub fn undo(&mut self, cx: &mut Context<Self>) {
         if self.model.undo() {
             self.after_edit(EditOrigin::Undo, cx);
         }
     }
 
+    /// Redo the last undone group.
     pub fn redo(&mut self, cx: &mut Context<Self>) {
         if self.model.redo() {
             self.after_edit(EditOrigin::Redo, cx);

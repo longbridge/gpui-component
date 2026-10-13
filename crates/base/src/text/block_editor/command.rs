@@ -240,6 +240,7 @@ impl BlockEditorModel {
         Ok(self.doc.resolve_selection(&self.selection)?)
     }
 
+    /// Insert plain text at the selection (replacing it); `\n` splits blocks.
     pub fn insert_text(&mut self, text: &str, origin: EditOrigin) -> Result<(), CommandError> {
         let range = self.resolved()?;
         let stored = self.stored_marks.clone();
@@ -271,6 +272,7 @@ impl BlockEditorModel {
         Ok(())
     }
 
+    /// Backspace (`forward == false`) or Delete: a grapheme, the selection, a join with the neighbouring block, or (next to a table) select the table.
     pub fn delete(&mut self, forward: bool) -> Result<(), CommandError> {
         if self.selected_blocks().is_some() {
             return self.delete_blocks().map(|_| ());
@@ -348,6 +350,7 @@ impl BlockEditorModel {
         Ok(())
     }
 
+    /// Enter: split the text block (in a list, a new item; in an empty item, exit or outdent).
     pub fn split_block(&mut self) -> Result<(), CommandError> {
         let range = self.resolved()?;
         if range.is_collapsed() && self.exit_empty_item(range.start)? {
@@ -616,6 +619,7 @@ impl BlockEditorModel {
             .find(|id| matches!(self.doc.kind(*id), Some(BlockKindData::Table { .. })))
     }
 
+    /// Run an [`EditorCommand`]; returns whether the document or selection changed.
     pub fn run(&mut self, command: EditorCommand) -> Result<bool, CommandError> {
         match command {
             EditorCommand::SelectAll => {
