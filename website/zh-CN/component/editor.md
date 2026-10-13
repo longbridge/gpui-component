@@ -296,17 +296,22 @@ editor.update(cx, |state, cx| {
 `wrap_row_count` 返回文本软换行后占用的行数，只读编辑器可以据此按内容设定高度。布局会在第一帧计算它；如果需要在此之前得到行数，请在设置值之后，用字体、字号和文本区宽度调用 `prewrap`：
 
 ```rust
+use gpui_kit::component::ActiveTheme as _;
+
 let editor = cx.new(|cx| {
     let mut state = EditorState::new(window, cx)
         .line_number(false)
         .default_value(snippet);
-    state.prewrap(window.text_style().font(), px(13.), width, cx);
+    let mut font = window.text_style().font();
+    font.family = cx.theme().mono_font_family.clone();
+    state.prewrap(font, cx.theme().mono_font_size, width, cx);
     state
 });
 let rows = editor.read(cx).wrap_row_count();
 ```
 
 `width` 是编辑器宽度减去内边距；显示行号时还要减去行号栏宽度。折叠的行仍计入行数。
+字体和字号必须与编辑器实际使用的文本样式一致。此示例使用主题默认值；如果自定义了编辑器的字体或字号，请将相同的值传给 `prewrap`。
 
 ## 字体
 
