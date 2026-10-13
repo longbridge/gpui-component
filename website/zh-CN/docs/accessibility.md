@@ -167,7 +167,7 @@ fn main() {
 | Input | 根据内容类型选择的输入 role、名称、非敏感值；未禁用时提供 `SetValue` 操作。遮罩和密码值不会暴露。 |
 | Select | ComboBox role、名称、已提交的值、展开状态及无障碍激活路径。 |
 | Tab、tab list | Tab 与 TabList role；Tab 报告选中状态，也可报告它在集合中的位置。 |
-| Slider、Progress | 数值和范围；Slider 处理无障碍 Increment、Decrement 操作。不确定进度的 Progress 不报告数值。 |
+| Slider、Progress | 名称、数值和范围；Slider 处理无障碍 Increment、Decrement 操作。不确定进度的 Progress 不报告数值。 |
 | Table | Table、row、header、cell role、索引及可选的计数。应给 Table 根节点命名。 |
 
 带文字的按钮默认用可见文字作为无障碍名称。纯图标按钮应显式命名：
