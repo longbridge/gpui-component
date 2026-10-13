@@ -309,6 +309,19 @@ Editor::new(&editor)
 这些就是所有元素都有的 [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
 方法，`font_weight`、`line_height` 用法相同。
 
+## 尺寸
+
+Editor 与 Input、Textarea 放在同一个表单中时，可以通过 `Sizable` 设置相同的尺寸档位，
+协调它们的内边距和密度，使样式表现保持一致。Editor 的代码字体仍由自身的字体样式独立配置。
+
+```rust
+Editor::new(&editor).large()
+Editor::new(&editor) // medium（默认）
+Editor::new(&editor).xsmall()
+```
+
+与 `Textarea` 不同，尺寸只改变代码四周的内边距，不改变字号（见[字体](#字体)）。`xsmall` 去掉代码上下的内边距。
+
 ## 外观
 
 ```rust
