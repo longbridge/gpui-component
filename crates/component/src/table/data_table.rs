@@ -35,6 +35,8 @@ pub(super) struct TableOptions {
     pub(super) stripe: bool,
     /// Set to use border style of the table.
     pub(super) bordered: bool,
+    /// Draw the border on the right edge of the fixed columns.
+    pub(super) fixed_cols_border: bool,
     /// The cell size of the table.
     pub(super) size: Size,
     /// Height of each header row. `None` uses [`Size::table_row_height`].
@@ -47,6 +49,7 @@ impl Default for TableOptions {
             scrollbar_visible: Edges::all(true),
             stripe: false,
             bordered: true,
+            fixed_cols_border: true,
             size: Size::default(),
             header_row_height: None,
         }
@@ -128,6 +131,16 @@ where
     /// same height.
     pub fn header_row_height(mut self, height: impl Into<Pixels>) -> Self {
         self.options.header_row_height = Some(height.into());
+        self
+    }
+
+    /// Set whether to draw the border on the right edge of the fixed columns,
+    /// default to true.
+    ///
+    /// Turn it off when the fixed cells draw that edge themselves, so the
+    /// boundary is not drawn twice.
+    pub fn fixed_cols_border(mut self, fixed_cols_border: bool) -> Self {
+        self.options.fixed_cols_border = fixed_cols_border;
         self
     }
 

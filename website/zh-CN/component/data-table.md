@@ -361,6 +361,7 @@ DataTable::new(&state)
     .header_row_height(px(48.))
     .stripe(true)
     .bordered(true)
+    .fixed_cols_border(true)
     .scrollbar_visible(true, true)
 ```
 
