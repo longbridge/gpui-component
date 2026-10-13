@@ -131,6 +131,8 @@ Each GitHub release carries a prebuilt `gpui-shell` for macOS (Apple silicon and
 curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 ```
 
+Each release also carries the same script, so `https://github.com/longbridge/gpui-kit/releases/latest/download/install.sh` works too.
+
 The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps`. `GPUI_SHELL_VERSION=v0.7.1` pins a release. `GPUI_SHELL_HOME` moves the `~/.gpui-shell` directory — installed applications and the Git dependency cache; `gpui-shell` reads it as well, so keep it exported. Asset names carry no version (`gpui-shell-aarch64-apple-darwin.tar.gz`, with a `.sha256` beside it), so a Homebrew formula or a mise `ubi` backend can download `releases/latest/download/<asset>` too.
 
 ## Installed and packaged applications
