@@ -4,7 +4,9 @@
 //! `editor_key` reports its laid-out [`TextLayout`] to the editor sink that
 //! is installed for the duration of the editor's prepaint, and takes extra
 //! range backgrounds (the editor's selection) from it. `TextView` never sets
-//! a key or installs a sink, so read-only rendering is unchanged.
+//! a key or installs a sink, so read-only rendering is unchanged. The module
+//! (and `InlineState::editor_key`) only exists with the `block-editor`
+//! feature; without it there is no per-frame cost at all.
 //!
 //! The sink is frame-local: it is written during prepaint and read by the
 //! editor's own handlers; nothing here reaches back into an entity.
@@ -25,7 +27,6 @@ thread_local! {
 }
 
 /// Run `f` with `sink` installed; restores the previous sink afterwards.
-#[cfg_attr(not(feature = "block-editor"), allow(dead_code))]
 pub(crate) fn with_sink<R>(sink: Rc<dyn EditorSink>, f: impl FnOnce() -> R) -> R {
     let previous = SINK.with(|s| s.replace(Some(sink)));
     let result = f();

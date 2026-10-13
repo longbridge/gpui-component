@@ -240,7 +240,9 @@ pub(crate) struct InlineState {
     pub(super) text: SharedString,
     pub(super) selection: Option<Selection>,
     /// Set only by the block editor's projection (design D3): the leaf
-    /// reports its layout to the installed [`super::editor_seam`] sink.
+    /// reports its layout to the installed `editor_seam` sink. Only exists
+    /// with the `block-editor` feature, so plain `TextView`s pay nothing.
+    #[cfg(feature = "block-editor")]
     pub(crate) editor_key: Option<u64>,
 }
 
@@ -323,11 +325,14 @@ impl Inline {
     /// Editor seam (design D3): report this leaf's layout and take the
     /// editor's backgrounds. Inert unless the state carries an editor key
     /// and an editor sink is installed.
+    #[cfg(feature = "block-editor")]
     fn report_to_editor(&mut self) {
-        let Some(key) = self.state.lock().ok().and_then(|state| state.editor_key) else {
+        // The sink (a thread-local read) is checked first: outside an
+        // editor's prepaint no lock is taken.
+        let Some(sink) = super::editor_seam::current() else {
             return;
         };
-        let Some(sink) = super::editor_seam::current() else {
+        let Some(key) = self.state.lock().ok().and_then(|state| state.editor_key) else {
             return;
         };
         sink.report(key, self.styled_text.layout());
@@ -933,6 +938,7 @@ impl Element for Inline {
         let bounds = Bounds::new(self.paint_origin.unwrap_or(bounds.origin), bounds.size);
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+        #[cfg(feature = "block-editor")]
         self.report_to_editor();
 
         // Report this element's laid-out extent so an ancestor TextView with

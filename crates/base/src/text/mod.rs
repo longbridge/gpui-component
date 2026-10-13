@@ -1,6 +1,7 @@
 #[cfg(feature = "block-editor")]
 pub mod block_editor;
 mod document;
+#[cfg(feature = "block-editor")]
 mod editor_seam;
 mod format;
 mod inline;
