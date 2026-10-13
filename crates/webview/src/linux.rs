@@ -213,6 +213,20 @@ impl NativeWebViewSurface {
         Ok(())
     }
 
+    pub(crate) fn set_geometry(
+        &self,
+        webview: &wry::WebView,
+        document: Bounds<Pixels>,
+        visible: Bounds<Pixels>,
+    ) -> anyhow::Result<()> {
+        self.surface
+            .platform_surface()?
+            .set_bounds(visible.to_device_pixels(self.scale_factor.get()))?;
+        let child = Bounds::new(document.origin - visible.origin, document.size);
+        webview.set_bounds(device_bounds(child, self.scale_factor.get()))?;
+        Ok(())
+    }
+
     pub(crate) fn set_visible(&self, visible: bool) -> anyhow::Result<()> {
         self.surface.platform_surface()?.set_visible(visible)
     }

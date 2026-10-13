@@ -145,6 +145,54 @@ impl WebView {
         self.webview.set_bounds(bounds)
     }
 
+    /// Apply full document bounds and an inherited clip without changing the DOM viewport.
+    /// Empty clips hide the native surface while preserving the loaded document.
+    pub fn set_geometry(
+        &self,
+        document: Bounds<Pixels>,
+        clip: Bounds<Pixels>,
+    ) -> anyhow::Result<()> {
+        let visible = document.intersect(&clip);
+        if visible.is_empty() || !self.visible.get() {
+            self.webview.set_visible(false)?;
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            if let Some(surface) = &self.composition {
+                surface.set_visible(false)?;
+                // Hidden preparation still gives WebKit its real layout width.
+                if self.visible.get() && !document.is_empty() {
+                    surface.set_geometry(&self.webview, document, document)?;
+                }
+            }
+            return Ok(());
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if let Some(surface) = &self.composition {
+            surface.set_geometry(&self.webview, document, visible)?;
+            surface.set_visible(true)?;
+            self.webview.set_visible(true)?;
+            return Ok(());
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        anyhow::bail!("Inline WebView clipping requires native window composition");
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            self.set_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(
+                    f64::from(document.origin.x),
+                    f64::from(document.origin.y),
+                )
+                .into(),
+                size: wry::dpi::LogicalSize::new(
+                    f64::from(document.size.width),
+                    f64::from(document.size.height),
+                )
+                .into(),
+            })?;
+            self.webview.set_visible(true)?;
+            Ok(())
+        }
+    }
+
     /// Set visibility and report native errors without discarding the loaded page.
     pub fn set_visible(&self, visible: bool) -> wry::Result<()> {
         // A focus error must not leave a closing native view covering the window.
@@ -330,25 +378,19 @@ impl Element for WebViewElement {
         }
         #[cfg(target_os = "linux")]
         parent.origin.set(bounds.origin);
-        #[cfg(target_os = "linux")]
-        let rect = linux::device_bounds(bounds, window.scale_factor());
-        #[cfg(not(target_os = "linux"))]
-        let rect = Rect {
-            size: wry::dpi::LogicalSize::new(
-                f64::from(bounds.size.width),
-                f64::from(bounds.size.height),
-            )
-            .into(),
-            position: wry::dpi::LogicalPosition::new(
-                f64::from(bounds.origin.x),
-                f64::from(bounds.origin.y),
-            )
-            .into(),
-        };
-        let _ = parent.set_bounds(rect);
+        let clip = window.content_mask().bounds;
+        if let Err(error) = parent.set_geometry(bounds, clip) {
+            log::warn!("WebView geometry update failed: {error:#}");
+            let _ = parent.set_visible(false);
+            return None;
+        }
+        let visible = bounds.intersect(&clip);
+        if visible.is_empty() {
+            return None;
+        }
 
         // The native view covers this area, so GPUI content below it must not receive input.
-        Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::BlockMouse))
+        Some(window.insert_hitbox(visible, gpui::HitboxBehavior::BlockMouse))
     }
 
     fn paint(
