@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Static coverage audit for the JavaScript scaffold. It reads the canonical
-// component-shell inventory and the explicit catalog imports without loading
+// gpui-shell component inventory and the explicit catalog imports without loading
 // gpui, so it remains runnable while the adapter is still being built.
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -14,7 +14,7 @@ const fail = (message) => {
 };
 
 const inventory = JSON.parse(
-  read("crates/component-shell/component-inventory.json"),
+  read("crates/shell/component-inventory.json"),
 );
 const catalogSource = read("examples/js_story/catalog.js");
 const coverageSource = read("examples/js_story/stories/coverage.js");

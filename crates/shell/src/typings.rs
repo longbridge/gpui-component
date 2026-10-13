@@ -1666,6 +1666,19 @@ const ELEMENT_METHODS: &str = r#"    /**
      */
     aria_active_descendant<Self extends Element>(this: Self): Self;
     /**
+     * GPUI `InteractiveElement::window_control_area`: this element is the
+     * window's drag area, or its close, maximize or minimize button.
+     *
+     * The host draws no title bar of its own, so a script's title bar is the
+     * window's. `"drag"` makes it behave like one on every platform, as
+     * gpui-component's `TitleBar` does: pressing and dragging across it moves
+     * the window, and a double-click zooms it (or does what the user set
+     * double-clicking a title bar to do, on macOS).
+     *
+     * Plain elements only.
+     */
+    window_control_area<Self extends Element>(this: Self, area: "drag" | "close" | "max" | "min"): Self;
+    /**
      * Tracks a `FocusHandle` the script owns, so `handle.is_focused()` answers
      * for this element and `handle.focus()` moves the keyboard onto it.
      *
@@ -2328,6 +2341,15 @@ const WINDOW: &str = r#"
     minimize_window(): void;
     /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
     zoom_window(): void;
+    /**
+     * `Window::start_window_move`: hand the pointer to the platform, which
+     * moves the window until the button is released.
+     *
+     * The host opens its window with a title bar the application draws, so
+     * dragging that bar is the application's to do. Call it from the bar's
+     * `on_mouse_down`; anywhere but inside a press it does nothing.
+     */
+    start_window_move(): void;
     /** `Window::toggle_fullscreen`. */
     toggle_fullscreen(): void;
   }
@@ -3931,6 +3953,7 @@ mod tests {
         "role",
         "aria_selected",
         "aria_active_descendant",
+        "window_control_area",
         "track_focus",
         "track_scroll",
         "with_item_to_measure_index",
@@ -4553,6 +4576,7 @@ mod tests {
             "    role<Self extends Element>(this: Self, name: Role): Self;",
             "    aria_selected<Self extends Element>(this: Self, value: boolean): Self;",
             "    aria_active_descendant<Self extends Element>(this: Self): Self;",
+            "    window_control_area<Self extends Element>(this: Self, area: \"drag\" | \"close\" | \"max\" | \"min\"): Self;",
             "    track_focus<Self extends Element>(this: Self, handle: FocusHandle): Self;",
             "    tab_index<Self extends Element>(this: Self, index: number): Self;",
             "    tab_stop<Self extends Element>(this: Self, value: boolean): Self;",

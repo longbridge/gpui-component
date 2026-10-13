@@ -64,16 +64,17 @@ This is the same trade the Rust side makes when an application builds directly
 on `gpui-base` instead of `gpui-component`. Colors are named as semantic theme
 tokens, so a shared visual language stays available without the runtime making
 visual decisions on the application's behalf. Applications that want ready-made
-product visuals use the `gpui-component-shell` host and its `gpui-component`
-script module. Run `cargo run -p gpui-component-shell -- examples/js_story`
-for the styled gallery. Use this crate's bare host for Base-first applications.
+product visuals import the `gpui-component` script module, which this crate
+provides through its default `components` feature
+(`gpui_shell::components`). Run `cargo run -p gpui-shell -- run examples/js_story`
+for the styled gallery; build without the feature for a Base-only runtime.
 
 ## Quick Start
 
 Run the bundled example from the repository root:
 
 ```bash
-cargo run -p gpui-shell -- examples/js_todolist
+cargo run -p gpui-shell -- run examples/js_todolist
 ```
 
 The runtime loads `main.js` from the given directory, takes the view class it
@@ -119,6 +120,30 @@ feed, a virtualized watchlist, retained nested views, and its own Rust host —
 see [longbridge/longbridge-lite](https://github.com/longbridge/longbridge-lite),
 the largest application written against this runtime.
 
+### Installing the runtime and applications
+
+Releases ship a prebuilt `gpui-shell` (built with the `gpui-component`
+catalog) for macOS, Linux and Windows:
+
+```bash
+curl -fsSL https://gpui-kit.com/shell/install.sh | sh
+```
+
+It runs one application per process and has no interface of its own:
+
+```bash
+gpui-shell run clock          # ~/.gpui-shell/apps/clock
+gpui-shell run -d ~/dev/clock # a directory (also: any argument with a path separator)
+gpui-shell                    # the packaged application beside the executable, else this help
+gpui-shell list               # installed applications and what they ask for
+gpui-shell agents -d ./clock  # write AGENTS.md: instructions for coding agents
+```
+
+`GPUI_SHELL_HOME` replaces `~/.gpui-shell`. With no argument the executable
+runs `Contents/Resources/app` inside a macOS bundle, or `app` beside itself, so
+a desktop application is this binary plus a directory of scripts. See
+[Getting Started](https://gpui-kit.com/shell/getting-started) for details.
+
 ### Checking an application without running it
 
 JavaScript has no compiler, so the runtime provides what would otherwise be
@@ -142,8 +167,8 @@ can catch invalid calls before execution.
 ### Working on an application
 
 ```bash
-cargo run -p gpui-shell -- examples/js_todolist --watch
-cargo run -p gpui-shell -- examples/js_todolist --dev    # implies --watch
+cargo run -p gpui-shell -- run examples/js_todolist --watch
+cargo run -p gpui-shell -- run examples/js_todolist --dev    # implies --watch
 ```
 
 A reload re-reads every module, entry included. If the new code fails to load,
@@ -462,10 +487,11 @@ Deliberately absent:
 - Full Rust API parity: script support is explicitly tracked per surface, not
   inferred from the existence of a Rust component. The styled adapter already
   supplies collection, select, table, tree, chart, and editor bindings. Consult
-  [the component inventory](../component-shell/component-inventory.json) and
+  [the component inventory](component-inventory.json) and
   [the gallery](../../examples/js_story/README.md) for available and deferred
   surfaces; do not assume every delegate, LSP, or WebView facility is exposed.
-- Packaging and installing an application as a distributable archive.
+- Packaging tooling: a bundle is assembled by hand from the binary and an
+  `app` directory; nothing builds the `.app` or archive for you yet.
 
 The design, what is implemented, and what is not are in
 [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
@@ -479,7 +505,7 @@ each directory that imports a built-in module, from the runtime it is about to
 use:
 
 ```bash
-cargo run -p gpui-shell -- path/to/app           # runs it, and writes them
+cargo run -p gpui-shell -- run path/to/app           # runs it, and writes them
 cargo run -p gpui-shell -- check path/to/app     # checks it, and writes them
 cargo run -p gpui-shell -- types path/to/app     # writes them and nothing else
 ```

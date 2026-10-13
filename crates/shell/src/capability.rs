@@ -132,6 +132,57 @@ pub enum ExecuteGrant {
 }
 
 impl Capabilities {
+    /// One line per granted capability, for a host that shows what an
+    /// application asks for before running it. Empty when nothing is granted.
+    pub(crate) fn summary(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        let paths = |roots: &[PathBuf]| {
+            roots
+                .iter()
+                .map(|root| root.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        if !self.read_roots.is_empty() {
+            lines.push(format!("fs read: {}", paths(&self.read_roots)));
+        }
+        if !self.write_roots.is_empty() {
+            lines.push(format!("fs write: {}", paths(&self.write_roots)));
+        }
+        if !self.network_hosts.is_empty() {
+            lines.push(format!("network: {}", self.network_hosts.join(", ")));
+        }
+        for request in &self.http_requests {
+            lines.push(format!(
+                "http: {} {}://{}{}",
+                request.methods.join("|"),
+                request.scheme,
+                request.host,
+                request
+                    .port
+                    .map(|port| format!(":{port}"))
+                    .unwrap_or_default()
+            ));
+        }
+        match &self.execute {
+            ExecuteGrant::Denied => {}
+            ExecuteGrant::Allowed(commands) => {
+                lines.push(format!("process: {}", commands.join(", ")));
+            }
+            ExecuteGrant::Unrestricted => lines.push("process: any command".to_owned()),
+        }
+        if self.storage {
+            lines.push("storage".to_owned());
+        }
+        match (self.clipboard_read, self.clipboard_write) {
+            (true, true) => lines.push("clipboard: read, write".to_owned()),
+            (true, false) => lines.push("clipboard: read".to_owned()),
+            (false, true) => lines.push("clipboard: write".to_owned()),
+            (false, false) => {}
+        }
+        lines
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
