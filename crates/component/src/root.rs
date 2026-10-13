@@ -11,8 +11,9 @@ use crate::{
 };
 use gpui::{
     App, AppContext, Bounds, Context, DefiniteLength, DispatchPhase, ElementId, Entity,
-    FocusHandle, InteractiveElement, IntoElement, MouseMoveEvent, ParentElement as _, Pixels,
-    Render, RenderOnce, Styled, WeakFocusHandle, Window, canvas, div, prelude::FluentBuilder as _,
+    FocusHandle, GlobalElementId, InteractiveElement, IntoElement, MouseMoveEvent,
+    ParentElement as _, Pixels, Render, RenderOnce, Styled, WeakFocusHandle, Window, canvas, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_base::{TextSelection, TextSelectionScopeId};
 use std::{any::TypeId, rc::Rc};
@@ -28,6 +29,7 @@ pub(crate) struct WindowState {
     pub(super) focused_input: Option<AnyInputState>,
     pub notification: Entity<NotificationList>,
     pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
+    tooltip_hovered_trigger: Option<GlobalElementId>,
     /// Bounds of the tooltip trigger last pressed, whose tooltip stays
     /// dismissed until the pointer moves outside them.
     tooltip_pressed_trigger: Option<Bounds<Pixels>>,
@@ -81,6 +83,7 @@ impl WindowState {
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             tooltip_overlay: cx
                 .new(|_| gpui_base::TooltipOverlay::new().render_with(render_tooltip)),
+            tooltip_hovered_trigger: None,
             tooltip_pressed_trigger: None,
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             touch_selection_overlay: cx.new(|cx| WindowTouchSelectionOverlay::new(window, cx)),
@@ -427,6 +430,26 @@ impl WindowState {
     ) -> Option<Entity<gpui_base::TooltipOverlay>> {
         let root = Self::entity(window, cx)?;
         Some(root.read(cx).tooltip_overlay.clone())
+    }
+
+    /// Only the current trigger may request a hide. Hover listeners run in
+    /// reverse paint order, so a new trigger can enter before the old one leaves.
+    pub(crate) fn tooltip_overlay_for_trigger(
+        trigger: &GlobalElementId,
+        hovered: bool,
+        window: &Window,
+        cx: &mut App,
+    ) -> Option<Entity<gpui_base::TooltipOverlay>> {
+        Self::entity(window, cx)?.update(cx, |state, _| {
+            if hovered {
+                state.tooltip_hovered_trigger = Some(trigger.clone());
+            } else if state.tooltip_hovered_trigger.as_ref() == Some(trigger) {
+                state.tooltip_hovered_trigger = None;
+            } else {
+                return None;
+            }
+            Some(state.tooltip_overlay.clone())
+        })
     }
 
     /// Keeps the tooltip of the trigger at `bounds` dismissed until the
