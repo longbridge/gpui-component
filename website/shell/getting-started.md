@@ -249,7 +249,7 @@ gpui-shell list
 gpui-shell check <name> | -d <directory> [--print-spec]
 gpui-shell types <name> | -d <directory>
 gpui-shell agents [<name> | -d <directory>]
-gpui-shell bundle [<name> | -d <directory>] [--target <platform>] [--icon <png>]
+gpui-shell bundle [<name> | -d <directory>] [--platform <platform>] [--icon <png>]
                   [--out <directory>] [--download-url <url>]
 gpui-shell --help | --version
 ```

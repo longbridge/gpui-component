@@ -50,7 +50,7 @@ macOS 和 Linux 的包里没有 `gpui-shell` 二进制，所以在任何平台�
 | 选项                    | 含义                                                                  |
 | ----------------------- | --------------------------------------------------------------------- |
 | `<name>`、`-d <dir>`    | 要打包的应用，写法同 `run`；省略时为当前目录                          |
-| `--target <platform>`   | `macos`、`linux` 或 `windows`；省略时为命令所在的平台                 |
+| `--platform <platform>` | `macos`、`linux` 或 `windows`；省略时为命令所在的平台                 |
 | `--icon <png>`          | 正方形 PNG，最好是 1024×1024                                          |
 | `--out <dir>`           | 输出目录；省略时为当前目录下的 `dist`                                  |
 | `--download-url <url>`  | 仅用于 Linux：压缩包将发布到的地址，让单独运行的 `install.sh` 能下载它 |

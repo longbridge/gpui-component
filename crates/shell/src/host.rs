@@ -490,12 +490,15 @@ fn parse(
             "bundle" if application.is_none() && command.is_none() => {
                 command = Some(Command::Bundle);
             }
-            "--target" => {
-                let value = flag_value(&mut arguments, "--target", "macos, linux or windows")?;
-                bundle_options.target = Some(bundle::Platform::parse(&value).ok_or_else(|| {
-                    format!("unknown target `{value}`; `--target` is macos, linux or windows")
-                })?);
-                bundle_flag.get_or_insert("--target");
+            "--platform" => {
+                let value = flag_value(&mut arguments, "--platform", "macos, linux or windows")?;
+                bundle_options.platform =
+                    Some(bundle::Platform::parse(&value).ok_or_else(|| {
+                        format!(
+                            "unknown platform `{value}`; `--platform` is macos, linux or windows"
+                        )
+                    })?);
+                bundle_flag.get_or_insert("--platform");
             }
             "--icon" => {
                 let value = flag_value(&mut arguments, "--icon", "a PNG image")?;
@@ -656,7 +659,7 @@ Usage: {name} dev [<name> | --dir <directory>] [--dev]
        {name} check [<name> | --dir <directory>] [--print-spec]
        {name} types [<name> | --dir <directory>]
        {name} agents [<name> | --dir <directory>]
-       {name} bundle [<name> | --dir <directory>] [--target <platform>]
+       {name} bundle [<name> | --dir <directory>] [--platform <platform>]
               [--icon <png>] [--out <directory>] [--download-url <url>]
 
 Arguments:
@@ -706,7 +709,7 @@ Options:
   --dev        With run or dev, development mode: relax the sandbox, opening
                eval and the built-in prototypes. Capabilities are unchanged.
   --print-spec With check, also print the element description that was built.
-  --target <platform>
+  --platform <platform>
                With bundle, the platform: macos, linux or windows. Defaults to
                the one this runs on.
   --icon <png> With bundle, a square PNG icon, ideally 1024×1024.
@@ -1425,7 +1428,7 @@ mod tests {
             "bundle",
             "-d",
             "clock",
-            "--target",
+            "--platform",
             "linux",
             "--icon",
             "icon.png",
@@ -1438,7 +1441,7 @@ mod tests {
         assert_eq!(
             arguments.options,
             bundle::BundleOptions {
-                target: Some(bundle::Platform::Linux),
+                platform: Some(bundle::Platform::Linux),
                 icon: Some("icon.png".into()),
                 out: Some("out".into()),
                 download_url: Some("https://example.com/clock".into()),
@@ -1486,11 +1489,11 @@ mod tests {
 
     #[test]
     fn bundle_flags_are_checked() {
-        let error = parse_args(&["run", "./app", "--target", "linux"])
-            .expect_err("only `bundle` has a target");
+        let error = parse_args(&["run", "./app", "--platform", "linux"])
+            .expect_err("only `bundle` has a platform");
         assert!(error.contains("only for `bundle`"), "{error}");
 
-        let error = parse_args(&["bundle", "--target", "beos"]).expect_err("an unknown platform");
+        let error = parse_args(&["bundle", "--platform", "beos"]).expect_err("an unknown platform");
         assert!(error.contains("macos, linux or windows"), "{error}");
 
         let error =

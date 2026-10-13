@@ -50,7 +50,7 @@ The names come from the manifest: `name` names the `.app`, the Windows executabl
 | Option                  | Meaning                                                                                   |
 | ----------------------- | ----------------------------------------------------------------------------------------- |
 | `<name>`, `-d <dir>`    | The application, as for `run`; the current directory when omitted                        |
-| `--target <platform>`   | `macos`, `linux` or `windows`; the platform the command runs on when omitted             |
+| `--platform <platform>` | `macos`, `linux` or `windows`; the platform the command runs on when omitted             |
 | `--icon <png>`          | A square PNG, ideally 1024×1024                                                           |
 | `--out <dir>`           | Where the bundle is written; `dist` in the current directory when omitted                 |
 | `--download-url <url>`  | Linux only: where the archive will be published, so `install.sh` alone can download it    |

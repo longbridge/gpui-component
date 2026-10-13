@@ -4,7 +4,7 @@
 //! scripts that start it, not `gpui-shell`: the first launch — or, on Linux,
 //! the installer — uses a `gpui-shell` already on the computer, or downloads
 //! the release this command belongs to. Any platform's bundle is made on any
-//! platform. One target per invocation:
+//! platform. One platform per invocation:
 //!
 //! - **macOS**: `Name.app`, unsigned, whose executable is a launcher script.
 //!   Signing and notarization need the author's identity, so they stay the
@@ -54,7 +54,7 @@ pub(super) enum Platform {
 }
 
 impl Platform {
-    /// The platform this command runs on, the default target.
+    /// The platform this command runs on, the default.
     fn host() -> Self {
         if cfg!(target_os = "macos") {
             Self::MacOS
@@ -74,7 +74,7 @@ impl Platform {
         }
     }
 
-    /// The `--target` spelling, also used in archive names.
+    /// The `--platform` spelling, also used in archive names.
     fn as_str(self) -> &'static str {
         match self {
             Self::MacOS => "macos",
@@ -87,7 +87,7 @@ impl Platform {
 /// What `bundle` was asked for, beyond the application.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct BundleOptions {
-    pub(super) target: Option<Platform>,
+    pub(super) platform: Option<Platform>,
     pub(super) icon: Option<PathBuf>,
     pub(super) out: Option<PathBuf>,
     /// Where the Linux archive will be published, so `install.sh` can be run
@@ -120,8 +120,8 @@ pub(super) fn create(
     }
     let manifest = PluginManifest::read(&root)?;
 
-    let target = options.target.unwrap_or_else(Platform::host);
-    if options.download_url.is_some() && target != Platform::Linux {
+    let platform = options.platform.unwrap_or_else(Platform::host);
+    if options.download_url.is_some() && platform != Platform::Linux {
         bail!("`--download-url` is for the Linux bundle, whose install.sh downloads the archive");
     }
     let icon = options.icon.as_deref().map(read_icon).transpose()?;
@@ -134,7 +134,7 @@ pub(super) fn create(
     // `main.js`), and a bundle must not contain the previous bundle.
     let exclude = out.canonicalize()?;
 
-    let names = Names::new(&manifest, target);
+    let names = Names::new(&manifest, platform);
     let mut values = ScriptValues {
         id: manifest.id(),
         name: manifest.name(),
@@ -157,7 +157,7 @@ pub(super) fn create(
         brand.version()
     );
     let mut tree = Tree::default();
-    let report = match target {
+    let report = match platform {
         Platform::MacOS => {
             let contents = format!("{}/Contents", names.app_bundle);
             tree.bytes(
@@ -287,12 +287,12 @@ struct Names {
 }
 
 impl Names {
-    fn new(manifest: &PluginManifest, target: Platform) -> Self {
+    fn new(manifest: &PluginManifest, platform: Platform) -> Self {
         let command = command_name(manifest);
         let display = file_name(manifest.name()).unwrap_or_else(|| command.clone());
         Self {
             app_bundle: format!("{display}.app"),
-            archive_stem: format!("{command}-{}-{}", manifest.version(), target.as_str()),
+            archive_stem: format!("{command}-{}-{}", manifest.version(), platform.as_str()),
             display,
             command,
         }
