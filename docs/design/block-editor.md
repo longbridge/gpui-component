@@ -594,3 +594,22 @@ The spike (`crates/base/src/text/block_editor/`, feature `block-editor`, draft P
 | `ResolvedPosition` | `SmallVec<[BlockRef; 8]>` path | `Vec<BlockId>` path | Equivalent |
 
 **Documented lossiness found by the property tests** (canonical output, not data corruption): empty paragraphs have no Markdown form and disappear on save; an empty paragraph between two same-type lists therefore merges them on reload; edge whitespace of a paragraph and whitespace-only mark runs are normalized; list tightness can change once on the first save, after which output is a fixpoint; `Break` (non-HTML) and `Unknown` blocks serialize to nothing.
+
+### What the UI spike broke
+
+The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top of the model spike; `BlockEditorState`, `BlockEditor`, story `BlockEditor` behind the `block-editor` feature) implements a minimal Phase 3: paragraphs, headings, bullet and ordered lists, bold/italic/code shortcuts, caret navigation across blocks, cross-block selection, IME, and undo/redo through the model. Where it departed from §6–§8:
+
+| Area | Design | UI spike | Status |
+|---|---|---|---|
+| Rendering path (§7.2, D3) | Project into `BlockNode` and render through `Inline` / `InlineFlow` with an `InlineInteraction` seam and `editor_key` | The editor shapes each caret leaf itself (`shape_text`) in its own element; `TextView`'s render path is untouched. The "caret seam" is `block_editor/frame.rs`: a per-frame `FrameLayout` (leaf origins + `WrappedLine`s) with `hit_test`, `caret_bounds` and `vertical` | **Breaks D3 for the spike.** Re-implementing `InlineInteraction` on main's `Inline` (retained layout, `range_backgrounds`, `render_cache`) was too large for a slice. Consequence: no `MarkdownExtensions` rendering, links are underlined text, code blocks / atoms are drawn as plain placeholders. Decision for review: keep editor-owned shaping, or do Phase 0a first and port |
+| Selection painting (§7.1) | Through `Inline::range_backgrounds` | Editor paints quads from `FrameLayout` before the glyphs | Follows from the row above |
+| Projection cache (§7.3) | `HashMap<BlockId, (block_revision, BlockNode)>`, re-project `changed_blocks` | `ProjectionCache` keyed by document revision; on a revision change it walks every leaf and reuses unchanged `LeafProjection`s by equality, so one keystroke *builds* one projection but compares N | Model has no per-block revision or `ChangeSummary.changed_blocks`; adding them makes this O(changed) |
+| Frame sink (§7.1) | Frame-local builder, swapped at the next `render` | `Rc<RefCell<FrameLayout>>` replaced whole in prepaint | Equivalent; paint never updates the entity |
+| Events (§6) | `Changed(ChangeSummary)`, `SelectionChanged(SelectionSummary)` | `Changed { revision, origin }`, payload-free `SelectionChanged` | Summaries deferred |
+| Home / End | Visual line start/end | Leaf start/end | Soft-wrap aware Home/End deferred; `Affinity` still unused |
+| IME (§2) | Port #3049's handler over `BlockPosition` | The IME document is the caret leaf only; a cross-block selection is reported clipped to that leaf | Fine for composition; accessibility text ranges need the full document (D8) |
+| Feature plumbing (D2) | No `gpui-component` re-export until Phase 3 | `gpui-kit` gained a `block-editor` feature forwarding to `gpui-base/block-editor` so the story can reach it; still nothing in `gpui-component` | Decision for review |
+| `InlineText::runs` | `cfg(test)` only | Made crate-visible for projection | Trivial |
+| Virtualization | Phase 5 | None: every leaf is shaped each layout (GPUI's line-layout cache absorbs most of it) | See perf note |
+
+**Perf note (UI spike).** 1200-block generated document (`long_document` in the story; same generator in `tests/view.rs`): steady-state frames build zero projections (counter-checked); one keystroke builds exactly one leaf projection; keystroke + full redraw measured at ~34 ms in a debug test build and ~16 ms in release on the headless test platform. The remaining cost is O(N) per frame: shaping/measuring every leaf (cache hits after the first frame) and the equality walk on revision change. Virtualization (Phase 5) and per-block revisions remove both. Real-platform frame timing is still unmeasured.
