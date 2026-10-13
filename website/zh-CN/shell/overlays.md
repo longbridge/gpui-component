@@ -134,7 +134,7 @@ Toast 是唯一**是数据而不是 View**的浮层——没有类、没有实�
 
 省略 `timeout` 使用默认值，显式写 `null` 让 toast 常驻，所以这两者不能合并成一个选项。
 
-`id` 是把“反复失败”变成“一条长期存在的信息”而不是一堆通知的关键。`--watch` 的循环用的正是这个：一次失败的重载会用固定 id 发一条常驻的错误 toast，于是把一份坏文件存五次是替换而不是叠出五条；下一次成功重载再用 `remove_toast` 撤回它。
+`id` 是把“反复失败”变成“一条长期存在的信息”而不是一堆通知的关键。`gpui-shell dev` 的重载循环用的正是这个：一次失败的重载会用固定 id 发一条常驻的错误 toast，于是把一份坏文件存五次是替换而不是叠出五条；下一次成功重载再用 `remove_toast` 撤回它。
 
 ```text
 unknown toast level `fatal`; expected info, success, warning or error

@@ -137,12 +137,17 @@ gpui-shell run -d ~/dev/clock # a directory (also: any argument with a path sepa
 gpui-shell                    # the packaged application beside the executable, else this help
 gpui-shell list               # installed applications and what they ask for
 gpui-shell agents -d ./clock  # write AGENTS.md: instructions for coding agents
+gpui-shell bundle -d ./clock  # dist/: a .app, a Linux .tar.gz + install.sh, or a portable Windows .zip
 ```
 
 `GPUI_SHELL_HOME` replaces `~/.gpui-shell`. With no argument the executable
 runs `Contents/Resources/app` inside a macOS bundle, or `app` beside itself, so
-a desktop application is this binary plus a directory of scripts. See
-[Getting Started](https://gpui-kit.com/shell/getting-started) for details.
+a standalone desktop application is this binary plus a directory of scripts.
+`bundle` makes one: on macOS and Linux it packages the scripts alone, and its
+launcher uses an installed `gpui-shell`, or downloads the release that made it,
+and runs the application with `run --packaged`; on Windows it is a portable
+folder whose executable is `gpui-shell.exe` itself. See [Getting Started](https://gpui-kit.com/shell/getting-started)
+and [Packaging](https://gpui-kit.com/shell/packaging) for details.
 
 ### Checking an application without running it
 
@@ -167,8 +172,8 @@ can catch invalid calls before execution.
 ### Working on an application
 
 ```bash
-cargo run -p gpui-shell -- run examples/js_todolist --watch
-cargo run -p gpui-shell -- run examples/js_todolist --dev    # implies --watch
+cargo run -p gpui-shell -- dev examples/js_todolist            # reload, with the debug log
+cargo run -p gpui-shell -- run examples/js_todolist --watch    # reload only
 ```
 
 A reload re-reads every module, entry included. If the new code fails to load,
@@ -490,8 +495,9 @@ Deliberately absent:
   [the component inventory](component-inventory.json) and
   [the gallery](../../examples/js_story/README.md) for available and deferred
   surfaces; do not assume every delegate, LSP, or WebView facility is exposed.
-- Packaging tooling: a bundle is assembled by hand from the binary and an
-  `app` directory; nothing builds the `.app` or archive for you yet.
+- Packaging tooling: `bundle` makes macOS and Linux packages that download the
+  runtime, and portable Windows folders; a standalone macOS or Linux package
+  carrying the binary is still assembled by hand.
 
 The design, what is implemented, and what is not are in
 [`docs/gpui-shell.md`](../../docs/gpui-shell.md).

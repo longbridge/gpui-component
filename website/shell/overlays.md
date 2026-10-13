@@ -134,7 +134,7 @@ A toast is the one overlay that is **data rather than a View** — no function, 
 
 An omitted `timeout` keeps the default and an explicit `null` makes the toast sticky, so the two cannot be collapsed into one option.
 
-The `id` is what turns a repeated failure into one standing message instead of a pile. The `--watch` loop uses exactly this: a failed reload posts a sticky error toast with a fixed id, so saving a broken file five times replaces the message rather than stacking five of them, and the next successful reload retracts it with `remove_toast`.
+The `id` is what turns a repeated failure into one standing message instead of a pile. The reload loop of `gpui-shell dev` uses exactly this: a failed reload posts a sticky error toast with a fixed id, so saving a broken file five times replaces the message rather than stacking five of them, and the next successful reload retracts it with `remove_toast`.
 
 ```text
 unknown toast level `fatal`; expected info, success, warning or error

@@ -146,7 +146,7 @@ curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 
 安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。已安装的应用按 manifest 的 `id` 保存数据，移动或重装都不会丢；用 `--dir` 运行的目录则按路径区分，这正适合正在编辑的源码。
 
-不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。找不到时就显示 help，所以刚安装好的 `gpui-shell` 在终端里直接运行会先介绍自己的用法。于是一个桌面应用就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
+不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。找不到时就显示 help，所以刚安装好的 `gpui-shell` 在终端里直接运行会先介绍自己的用法。于是一个独立的桌面应用可以就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
 
 ```text
 Clock.app/Contents/
@@ -157,16 +157,16 @@ Clock.app/Contents/
     └── main.js
 ```
 
-[Packaging](./packaging.md) 完整介绍了 `.app`、Linux 压缩包与 desktop entry、Windows 文件夹的做法，包括签名与公证。
+`gpui-shell bundle -d clock` 会替你生成桌面应用。在 macOS 和 Linux 上不带二进制，生成 `.app`，或者 `.tar.gz` 及与之并列的 `install.sh`：在用户的机器上，它们使用已安装的、不低于打包时版本的 `gpui-shell`，没有就下载那个 release，再用 `run --packaged` 运行应用，像已安装的应用一样按 `id` 保存数据。在 Windows 上生成便携 `.zip`，其中的可执行文件就是 `gpui-shell.exe` 本身，旁边是 `app\`。[Packaging](./packaging.md) 介绍了这两种方式、各个选项，以及签名与公证。
 
 ## 新建应用
 
 ```bash
 gpui-shell new clock
-gpui-shell run -d clock --watch
+gpui-shell dev -d clock
 ```
 
-`new` 和 `cargo new` 一样，在命令运行的位置创建目录——这里的 `clock` 指 `./clock`，不是已安装的应用。它会写入 `gpui-shell.json`（`id` 由目录名推出）、一个带标题栏和按钮的 `main.js`、`.gitignore`、`jsconfig.json`、`gpui-kit.d.ts` 和 `AGENTS.md`；目标目录里已有文件时会拒绝创建。
+`new` 和 `cargo new` 一样，在命令运行的位置创建目录——这里的 `clock` 指 `./clock`，不是已安装的应用。它会写入 `gpui-shell.json`（`id` 由目录名推出）、一个带标题栏和按钮的 `main.js`、`.gitignore`（其中也忽略了 `bundle` 的输出目录 `dist/`）、`jsconfig.json`、`gpui-kit.d.ts` 和 `AGENTS.md`；目标目录里已有文件时会拒绝创建。
 
 ## 给 coding agent 的开发说明
 
@@ -227,26 +227,29 @@ cargo run -p gpui-shell -- types ./hello
 ## Hot-reload
 
 ```bash
-cargo run -p gpui-shell -- run ./hello --watch
-cargo run -p gpui-shell -- run ./hello --dev      # 隐含 --watch
+cargo run -p gpui-shell -- dev ./hello           # 重载，并输出 debug 日志
+cargo run -p gpui-shell -- run ./hello --watch    # 只重载
 ```
 
-`--watch` 每秒轮询应用目录四次，对一串连续写入去抖 200 ms，然后重载。一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。
+开发应用时用 `dev`：它像 `run --watch` 一样在源码变化时重载，日志级别为 `DEBUG`。监听时每秒轮询应用目录四次，对一串连续写入去抖 200 ms，然后重载。一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。
 
 重载会在碰到实时 View 之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的 View 继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
 
-`--dev` 隐含 `--watch`，并在构造运行时之前开启 development mode。它恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。见 [Capabilities](./capabilities.md#沙箱)。
+两者都不放宽沙箱。`--dev` 可配合 `run` 或 `dev`，在构造运行时之前开启 development mode：恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。它不会重载，也不改变日志级别。见 [Capabilities](./capabilities.md#沙箱)。
 
 ## 命令一览
 
 ```text
-gpui-shell run [<name> | -d <directory>] [--watch] [--dev]
+gpui-shell run [<name> | -d <directory>] [--watch] [--dev] [--packaged]
+gpui-shell dev [<name> | -d <directory>] [--dev]
 gpui-shell
 gpui-shell new <directory>
 gpui-shell list
 gpui-shell check <name> | -d <directory> [--print-spec]
 gpui-shell types <name> | -d <directory>
 gpui-shell agents [<name> | -d <directory>]
+gpui-shell bundle [<name> | -d <directory>] [--platform <platform>] [--icon <png>]
+                  [--out <directory>] [--download-url <url>]
 gpui-shell --help | --version
 ```
 
@@ -256,11 +259,14 @@ gpui-shell --help | --version
 | `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                     |
 | _（无）_             | 与可执行文件一起打包的应用，没有则显示 help        |
 | `run`                | 在窗口中运行一个应用                               |
+| `dev`                | 开发时运行：源码变化时重载，日志级别 `DEBUG`       |
 | `new`                | 在新目录中创建一个空白应用                         |
 | `list`               | 列出已安装的应用及其申请的 capabilities            |
 | `check`              | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
 | `types`              | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
 | `agents`             | 打印给 coding agent 的开发说明，或写成 `AGENTS.md` |
-| `--watch`            | 源码变化时重载                                     |
-| `--dev`              | 开发模式，隐含 `--watch`                           |
+| `bundle`             | 在 `dist/` 中生成桌面应用，见 [Packaging](./packaging.md) |
+| `--packaged`         | 配合 `run`，像包的启动脚本那样运行目录：数据按 `id` 保存，不写编辑器文件 |
+| `--watch`            | 配合 `run`，源码变化时重载；`dev` 总会重载         |
+| `--dev`              | 配合 `run` 或 `dev`，开启开发模式：放宽沙箱        |
 | `--print-spec`       | 配合 `check`，额外打印构建出的元素描述             |

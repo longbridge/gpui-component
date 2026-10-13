@@ -1,7 +1,7 @@
 //! `gpui-shell` — runs a script application directory.
 //!
 //! ```text
-//! gpui-shell <directory> [--watch] [--dev] [--help] [--version]
+//! gpui-shell run|dev [<name> | --dir <directory>] [--help] [--version]
 //! ```
 //!
 //! The binary is the thin host the library documents: it parses a command line,
@@ -39,6 +39,7 @@ const ENTRY: &str = "main.js";
 const EXIT_USAGE: i32 = 2;
 
 mod agents;
+mod bundle;
 mod installed;
 mod scaffold;
 
@@ -110,11 +111,11 @@ pub fn main_with_brand_and_components(
                 println!("created {}", created.display());
                 println!();
                 println!(
-                    "  {} run -d {shown} --watch   # run it, reloading on save",
+                    "  {} dev -d {shown}     # run it, reloading on save",
                     brand.name()
                 );
                 println!(
-                    "  {} check -d {shown}         # check it after every change",
+                    "  {} check -d {shown}   # check it after every change",
                     brand.name()
                 );
                 println!();
@@ -136,6 +137,17 @@ pub fn main_with_brand_and_components(
             install_log_sink(Level::WARN);
             check(directory, arguments, components);
         }
+        Invocation::Bundle(arguments) => {
+            let directory = resolve_or_exit(&arguments.application, brand);
+            match bundle::create(&directory, &arguments.options, brand) {
+                Ok(report) => println!("{report}"),
+                Err(error) => {
+                    eprintln!("{}: {error:#}", brand.name());
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         Invocation::Print(text) => {
             println!("{text}");
             return;
@@ -143,11 +155,25 @@ pub fn main_with_brand_and_components(
     };
 
     let directory = resolve_or_exit(&arguments.application, brand);
+    if arguments.is_packaged() {
+        let root = crate::resolve_app_root(&directory, ENTRY).unwrap_or_else(|_| directory.clone());
+        // Without a manifest there is no `id` to keep the data under, and the
+        // data would follow the path instead — lost when the bundle moves.
+        if !root.join(crate::plugin::MANIFEST_FILE).is_file() {
+            eprintln!(
+                "{}: {} has no {}; a packaged application needs one for its `id`",
+                brand.name(),
+                root.display(),
+                crate::plugin::MANIFEST_FILE
+            );
+            std::process::exit(1);
+        }
+    }
 
     // Installed before anything else: the runtime reports script errors,
     // unhandled promise rejections and illegal-phase calls through `tracing`,
     // and until a subscriber exists every one of them is discarded silently.
-    install_log_sink(if arguments.is_development() {
+    install_log_sink(if arguments.is_verbose() {
         Level::DEBUG
     } else {
         Level::INFO
@@ -198,6 +224,8 @@ enum Invocation {
     Agents(Option<Application>),
     /// Create a blank application in a new directory.
     New(PathBuf),
+    /// Package an application with the runtime as a desktop application.
+    Bundle(BundleArguments),
     /// Text for stdout, followed by a successful exit.
     Print(String),
 }
@@ -309,6 +337,8 @@ pub enum InvocationKind {
     Agents,
     /// Creates a blank application.
     New,
+    /// Packages an application with the runtime as a desktop application.
+    Bundle,
     Print,
 }
 
@@ -327,6 +357,7 @@ pub fn parse_invocation(
         Invocation::Types(_) => InvocationKind::Types,
         Invocation::Agents(_) => InvocationKind::Agents,
         Invocation::New(_) => InvocationKind::New,
+        Invocation::Bundle(_) => InvocationKind::Bundle,
         Invocation::Print(_) => InvocationKind::Print,
     })
 }
@@ -340,19 +371,33 @@ pub fn parse_invocation(
 struct Arguments {
     application: Application,
     watch: bool,
+    verbose: bool,
     development: bool,
+    packaged: bool,
 }
 
 impl Arguments {
-    /// Whether sources are polled for changes. Always true in development mode:
-    /// a REPL that cannot reload is half a workflow.
+    /// Whether sources are polled for changes: `run --watch`, or `dev`.
     fn is_watching(&self) -> bool {
-        self.watch || self.development
+        self.watch
     }
 
-    /// Whether the sandbox relaxations are on.
+    /// Whether the log goes down to debug level: under `dev` only.
+    fn is_verbose(&self) -> bool {
+        self.verbose
+    }
+
+    /// Whether the sandbox relaxations are on: `--dev`, and nothing else.
     fn is_development(&self) -> bool {
         self.development
+    }
+
+    /// Whether the application is a packaged one rather than a directory
+    /// being edited: the one beside the executable, or one a bundle's
+    /// launcher runs with `--packaged`. It keeps its data under its `id`, is
+    /// titled by its `name`, and has no editor files written into it.
+    fn is_packaged(&self) -> bool {
+        self.packaged || self.application == Application::Bundled
     }
 }
 
@@ -360,11 +405,14 @@ impl Arguments {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
     Run,
+    /// `run` for an application being edited: reload on change, sandbox relaxed.
+    Dev,
     New,
     Check,
     Types,
     List,
     Agents,
+    Bundle,
 }
 
 /// Parses the arguments after the program name.
@@ -393,6 +441,10 @@ fn parse(
     let mut watch = false;
     let mut development = false;
     let mut print_spec = false;
+    let mut packaged = false;
+    let mut bundle_options = bundle::BundleOptions::default();
+    // The first `bundle`-only flag, reported if the command is not `bundle`.
+    let mut bundle_flag: Option<&'static str> = None;
 
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
@@ -420,6 +472,9 @@ fn parse(
             "run" if application.is_none() && command.is_none() => {
                 command = Some(Command::Run);
             }
+            "dev" if application.is_none() && command.is_none() => {
+                command = Some(Command::Dev);
+            }
             "check" if application.is_none() && command.is_none() => {
                 command = Some(Command::Check);
             }
@@ -432,6 +487,39 @@ fn parse(
             "agents" if application.is_none() && command.is_none() => {
                 command = Some(Command::Agents);
             }
+            "bundle" if application.is_none() && command.is_none() => {
+                command = Some(Command::Bundle);
+            }
+            "--platform" => {
+                let value = flag_value(&mut arguments, "--platform", "macos, linux or windows")?;
+                bundle_options.platform =
+                    Some(bundle::Platform::parse(&value).ok_or_else(|| {
+                        format!(
+                            "unknown platform `{value}`; `--platform` is macos, linux or windows"
+                        )
+                    })?);
+                bundle_flag.get_or_insert("--platform");
+            }
+            "--icon" => {
+                let value = flag_value(&mut arguments, "--icon", "a PNG image")?;
+                bundle_options.icon = Some(value.into());
+                bundle_flag.get_or_insert("--icon");
+            }
+            "--download-url" => {
+                let value = flag_value(&mut arguments, "--download-url", "a URL")?;
+                if !value.starts_with("https://") && !value.starts_with("http://") {
+                    return Err(format!(
+                        "`--download-url` expects an http(s) URL, not `{value}`"
+                    ));
+                }
+                bundle_options.download_url = Some(value);
+                bundle_flag.get_or_insert("--download-url");
+            }
+            "--out" => {
+                let value = flag_value(&mut arguments, "--out", "a directory")?;
+                bundle_options.out = Some(value.into());
+                bundle_flag.get_or_insert("--out");
+            }
             "--dir" | "-d" => match arguments.next() {
                 Some(path) if !path.starts_with('-') => {
                     application = named(&application, Application::Path(path.into()))?;
@@ -439,6 +527,7 @@ fn parse(
                 _ => return Err("`--dir` expects an application directory".to_owned()),
             },
             "--watch" => watch = true,
+            "--packaged" => packaged = true,
             "--dev" => development = true,
             "--print-spec" => print_spec = true,
             // A path is never mistaken for a flag, and an unknown flag is never
@@ -451,7 +540,26 @@ fn parse(
         }
     }
 
+    if let Some(flag) = bundle_flag
+        && command != Some(Command::Bundle)
+    {
+        return Err(format!("`{flag}` is only for `bundle`"));
+    }
+    if (watch || development) && !matches!(command, Some(Command::Run | Command::Dev) | None) {
+        return Err(format!(
+            "`{}` is only for `run` and `dev`",
+            if watch { "--watch" } else { "--dev" }
+        ));
+    }
+    if packaged && command != Some(Command::Run) {
+        return Err("`--packaged` is only for `run`".to_owned());
+    }
+
     match command {
+        Some(Command::Bundle) => Ok(Invocation::Bundle(BundleArguments {
+            application: application.unwrap_or_else(Application::current_directory),
+            options: bundle_options,
+        })),
         Some(Command::List) => match application {
             None => Ok(Invocation::List),
             Some(_) => Err("`list` takes no application".to_owned()),
@@ -464,7 +572,7 @@ fn parse(
             Some(Application::Path(path)) => Ok(Invocation::New(path)),
             _ => Err("`new` expects the directory to create".to_owned()),
         },
-        // With nothing named, `run`, `check` and `types` take the directory the
+        // With nothing named, `run`, `dev`, `check` and `types` take the directory the
         // command runs in, the way `cargo run` takes the package it is in.
         Some(Command::Types) => Ok(Invocation::Types(
             application.unwrap_or_else(Application::current_directory),
@@ -476,7 +584,18 @@ fn parse(
         Some(Command::Run) => Ok(Invocation::Run(Arguments {
             application: application.unwrap_or_else(Application::current_directory),
             watch,
+            verbose: false,
             development,
+            packaged,
+        })),
+        // How an application being edited is run: reloading, with the debug
+        // log. The sandbox stays as shipped unless `--dev` asks otherwise.
+        Some(Command::Dev) => Ok(Invocation::Run(Arguments {
+            application: application.unwrap_or_else(Application::current_directory),
+            watch: true,
+            verbose: true,
+            development,
+            packaged: false,
         })),
         // A bare `gpui-shell` runs the application packaged beside the
         // executable: a bundle's executable is started with no arguments at
@@ -485,7 +604,9 @@ fn parse(
             None => Ok(Invocation::Bare(Arguments {
                 application: Application::Bundled,
                 watch,
+                verbose: false,
                 development,
+                packaged,
             })),
             Some(application) => Err(format!(
                 "an application runs with `{name} run {}`",
@@ -496,11 +617,32 @@ fn parse(
     }
 }
 
+/// The value after a flag that takes one. A following flag is never taken
+/// as the value: `--out --icon x` is a missing directory, not one named
+/// `--icon`.
+fn flag_value(
+    arguments: &mut impl Iterator<Item = String>,
+    flag: &str,
+    expected: &str,
+) -> Result<String, String> {
+    match arguments.next() {
+        Some(value) if !value.starts_with('-') => Ok(value),
+        _ => Err(format!("`{flag}` expects {expected}")),
+    }
+}
+
 /// What `check` was asked to do.
 #[derive(Debug, PartialEq, Eq)]
 struct CheckArguments {
     application: Application,
     print_spec: bool,
+}
+
+/// What `bundle` was asked to do.
+#[derive(Debug, PartialEq, Eq)]
+struct BundleArguments {
+    application: Application,
+    options: bundle::BundleOptions,
 }
 
 /// One line per flag, no decoration — the tone the repository's documentation
@@ -510,23 +652,28 @@ fn help(brand: HostBrand) -> String {
         "\
 {version}
 
-Usage: {name} run [<name> | --dir <directory>] [--watch] [--dev]
+Usage: {name} dev [<name> | --dir <directory>] [--dev]
+       {name} run [<name> | --dir <directory>] [--watch] [--dev] [--packaged]
        {name} new <directory>
        {name} list
        {name} check [<name> | --dir <directory>] [--print-spec]
        {name} types [<name> | --dir <directory>]
        {name} agents [<name> | --dir <directory>]
+       {name} bundle [<name> | --dir <directory>] [--platform <platform>]
+              [--icon <png>] [--out <directory>] [--download-url <url>]
 
 Arguments:
   <name>       An installed application: the directory of that name in
                {installed}. An argument containing a path
                separator is a path instead, as if given with --dir.
 
-`run`, `check` and `types` with no application use the current directory.
-With no arguments at all, {name} runs the application packaged beside its
+`run`, `dev`, `check`, `types` and `bundle` with no application use the
+current directory. With no arguments at all, {name} runs the application packaged beside its
 executable ({bundled}), and prints this help when there is none.
 
 Commands:
+  dev          Run an application while you edit it: reload it when its
+               sources change, and log at debug level.
   run          Run one application in a window.
   new          Create a blank application in a new directory, relative to
                where the command runs: manifest, entry module, editor types
@@ -544,18 +691,40 @@ Commands:
                1 on load, render, or registered-component materialization errors.
                Does not check layout, paint, deferred slots, nested view renders,
                or later interaction and asynchronous states.
+  bundle       Package the application as a desktop application. Needs
+               {MANIFEST}. macOS: an unsigned .app. Linux: a .tar.gz, and an
+               install.sh beside it that installs it. Both hold no runtime:
+               they use an installed {name} {version_number} or later, or
+               download that release. Windows: a portable .zip whose .exe is
+               {name} {version_number} itself.
 
 Options:
   -d, --dir <directory>
                The application root, or the {ENTRY} inside it.
-  --watch      Reload the application when its sources change.
-  --dev        Development mode: implies --watch, and relaxes the sandbox.
+  --packaged   With run, run the directory as a packaged application, the way a
+               bundle's launcher does: its data stays under the manifest's id
+               wherever it is, and no editor files are written into it.
+  --watch      With run, reload the application when its sources change.
+               `dev` always does.
+  --dev        With run or dev, development mode: relax the sandbox, opening
+               eval and the built-in prototypes. Capabilities are unchanged.
   --print-spec With check, also print the element description that was built.
+  --platform <platform>
+               With bundle, the platform: macos, linux or windows. Defaults to
+               the one this runs on.
+  --icon <png> With bundle, a square PNG icon, ideally 1024×1024.
+  --out <directory>
+               With bundle, where the bundle is written. Defaults to ./dist.
+  --download-url <url>
+               With bundle for Linux, where the archive will be published, so
+               install.sh run on its own downloads it from there.
   --help       Print this message and exit.
   --version    Print the version and exit.",
         installed = installed::applications_directory(brand).display(),
         bundled = installed::BUNDLED_LOCATIONS,
         AGENTS = agents::AGENTS_FILE,
+        MANIFEST = crate::plugin::MANIFEST_FILE,
+        version_number = brand.version(),
         name = brand.name(),
         version = version(brand)
     )
@@ -633,7 +802,7 @@ fn run(
                 grant_local_access(
                     &root,
                     manifest.as_ref(),
-                    arguments.application.is_installed(),
+                    arguments.application.is_installed() || arguments.is_packaged(),
                 );
             }
 
@@ -651,6 +820,15 @@ fn run(
                 .ok()
                 .and_then(|manifest| manifest.as_ref())
                 .and_then(|manifest| manifest.window());
+            let identity = manifest
+                .as_ref()
+                .ok()
+                .and_then(|manifest| manifest.as_ref())
+                .map(|manifest| (manifest.id().to_owned(), manifest.name().to_owned()));
+            let packaged = arguments.is_packaged();
+            // A packaged application is not a directory anybody edits, and its
+            // bundle may be signed or installed read-only.
+            runtime.set_editor_files(!packaged);
             let manifest_error = manifest.err();
             let built: Rc<RefCell<Option<Entity<ShellRoot>>>> = Rc::new(RefCell::new(None));
             let sink = built.clone();
@@ -679,7 +857,7 @@ fn run(
             // the window itself; see `ComponentWindowOpener`. Everything after
             // this point only wants a `&mut Window`, so the handle is untyped
             // either way.
-            let options = window_options(&root, brand, window_size, cx);
+            let options = window_options(&root, brand, window_size, identity, packaged, cx);
             let window = match window_opener {
                 Some(open) => {
                     let mut build = |window: &mut Window, cx: &mut App| build(window, cx).into();
@@ -1019,16 +1197,27 @@ fn local_capabilities(
 
 /// The window an application opens in. `window_size` is the manifest's
 /// `window`; without one the host's default applies.
+///
+/// `identity` is the manifest's `id` and `name`. The `id` is the window's
+/// application id, which is how a Linux desktop matches the window to the
+/// `<id>.desktop` entry `bundle` installs. A packaged application is titled
+/// by its `name`: its directory is always `app`, which names nothing.
 fn window_options(
     root: &Path,
     brand: HostBrand,
     window_size: Option<crate::plugin::WindowSize>,
+    identity: Option<(String, String)>,
+    packaged: bool,
     cx: &App,
 ) -> WindowOptions {
-    let title = root
-        .file_name()
-        .map(|name| format!("{} — {}", name.to_string_lossy(), brand.name()))
-        .unwrap_or_else(|| brand.name().to_owned());
+    let (app_id, name) = identity.unzip();
+    let title = match name {
+        Some(name) if packaged => name,
+        _ => root
+            .file_name()
+            .map(|name| format!("{} — {}", name.to_string_lossy(), brand.name()))
+            .unwrap_or_else(|| brand.name().to_owned()),
+    };
 
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -1044,6 +1233,7 @@ fn window_options(
             title: Some(title.into()),
             ..Default::default()
         }),
+        app_id,
         ..Default::default()
     }
 }
@@ -1225,6 +1415,92 @@ mod tests {
         );
     }
 
+    fn bundle_args(arguments: &[&str]) -> BundleArguments {
+        match parse_args(arguments).expect("the arguments should parse") {
+            Invocation::Bundle(arguments) => arguments,
+            other => panic!("expected a bundle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bundle_takes_a_directory_and_its_own_flags() {
+        let arguments = bundle_args(&[
+            "bundle",
+            "-d",
+            "clock",
+            "--platform",
+            "linux",
+            "--icon",
+            "icon.png",
+            "--out",
+            "out",
+            "--download-url",
+            "https://example.com/clock",
+        ]);
+        assert_eq!(arguments.application, Application::Path("clock".into()));
+        assert_eq!(
+            arguments.options,
+            bundle::BundleOptions {
+                platform: Some(bundle::Platform::Linux),
+                icon: Some("icon.png".into()),
+                out: Some("out".into()),
+                download_url: Some("https://example.com/clock".into()),
+            }
+        );
+        assert!(parse_args(&["bundle", "--download-url", "example.com"]).is_err());
+        assert!(parse_args(&["run", "--download-url", "https://example.com"]).is_err());
+
+        let arguments = bundle_args(&["bundle"]);
+        assert_eq!(
+            arguments.application,
+            Application::Path(std::env::current_dir().unwrap()),
+            "`bundle` alone bundles the application in the current directory"
+        );
+        assert_eq!(arguments.options, bundle::BundleOptions::default());
+    }
+
+    #[test]
+    fn dev_is_run_with_development_mode() {
+        let arguments = run_args(&["dev", "-d", "app"]);
+        assert_eq!(arguments.application, Application::Path("app".into()));
+        assert!(arguments.is_watching() && arguments.is_verbose());
+        assert!(!arguments.is_development(), "the sandbox stays as shipped");
+        assert!(run_args(&["dev", "app", "--dev"]).is_development());
+        assert!(!arguments.is_packaged());
+        assert_eq!(
+            run_args(&["dev"]).application,
+            Application::Path(std::env::current_dir().unwrap()),
+            "`dev` alone runs the application in the current directory"
+        );
+        let error = parse_args(&["check", "app", "--watch"]).expect_err("only `run` watches");
+        assert!(error.contains("only for `run` and `dev`"), "{error}");
+        assert!(parse_args(&["dev", "app", "--packaged"]).is_err());
+    }
+
+    #[test]
+    fn packaged_is_a_run_flag() {
+        let arguments = run_args(&["run", "-d", "app", "--packaged"]);
+        assert!(arguments.is_packaged());
+        assert!(!run_args(&["run", "-d", "app"]).is_packaged());
+
+        let error = parse_args(&["check", "app", "--packaged"]).expect_err("only `run` packages");
+        assert!(error.contains("only for `run`"), "{error}");
+    }
+
+    #[test]
+    fn bundle_flags_are_checked() {
+        let error = parse_args(&["run", "./app", "--platform", "linux"])
+            .expect_err("only `bundle` has a platform");
+        assert!(error.contains("only for `bundle`"), "{error}");
+
+        let error = parse_args(&["bundle", "--platform", "beos"]).expect_err("an unknown platform");
+        assert!(error.contains("macos, linux or windows"), "{error}");
+
+        let error =
+            parse_args(&["bundle", "--out", "--icon", "x.png"]).expect_err("a missing value");
+        assert!(error.contains("`--out` expects"), "{error}");
+    }
+
     #[test]
     fn a_bare_directory_runs_without_watching() {
         let arguments = run_args(&["run", "examples/js_todolist"]);
@@ -1244,14 +1520,15 @@ mod tests {
     }
 
     #[test]
-    fn dev_implies_watch() {
+    fn the_dev_flag_only_relaxes_the_sandbox() {
         let arguments = run_args(&["run", "./app", "--dev"]);
 
         assert!(arguments.is_development());
         assert!(
-            arguments.is_watching(),
-            "development mode without reloading is half a workflow"
+            !arguments.is_watching(),
+            "`dev` is the command that reloads"
         );
+        assert!(!arguments.is_verbose());
     }
 
     #[test]
