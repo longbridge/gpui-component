@@ -3688,12 +3688,26 @@ impl<M: InputModeKind> InputBaseState<M> {
         ))
     }
 
+    /// Return the editor-owned display map for read-only coordinate queries.
+    ///
+    /// The map covers the whole buffer, including lines outside the viewport.
+    /// Wrapping uses the most recently prepared layout parameters. Before the
+    /// text has been prepared, the map has no display rows. The state owns all
+    /// updates; callers can use [`DisplayMap::version`] to invalidate cached
+    /// mappings after edits, rewrapping, or folding changes.
+    ///
+    /// Display coordinates describe text after wrapping and folding. They do
+    /// not include inline completion ghost lines; use [`Self::row_bounds`] for
+    /// the actual painted geometry of a visible buffer line.
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
+    }
+
     /// Return the number of display rows: the rows the text takes once it is
     /// soft-wrapped, less those hidden by folds.
     ///
-    /// Every display row is one line height tall. Soft wrapping follows the
-    /// width of the last layout, so an editor that has not been laid out has no
-    /// display rows.
+    /// Inline completion ghost lines are excluded. See [`Self::display_map`]
+    /// for layout timing and coordinate semantics.
     pub fn display_row_count(&self) -> usize {
         self.display_map.display_row_count()
     }

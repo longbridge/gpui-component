@@ -4316,6 +4316,7 @@ mod tests {
             let before: Vec<_> = (0..4)
                 .map(|row| editor.read(cx).row_bounds(row).unwrap())
                 .collect();
+            let version = editor.read(cx).display_map().version();
 
             // Two ghost lines follow the cursor row.
             editor.update(cx, |state, cx| {
@@ -4332,6 +4333,10 @@ mod tests {
 
             let (layout, bounds, input_bounds) = {
                 let state = editor.read(cx);
+                let map = state.display_map();
+                assert_eq!(map.version(), version);
+                assert_eq!(map.display_row_count(), 4);
+                assert_eq!(map.buffer_line_to_display_row_range(2), Some(2..3));
                 (
                     state.last_layout.clone().unwrap(),
                     state.last_bounds.unwrap(),
@@ -4594,6 +4599,14 @@ mod tests {
             {
                 let state = editor.read(cx);
                 let line_height = state.line_height().unwrap();
+                let map: &crate::input::DisplayMap = state.display_map();
+                assert_eq!(map.display_row_count(), state.display_row_count());
+                assert!(map.buffer_line_to_display_row_range(3).is_none());
+                for line in [0, 1, 2, 4, last] {
+                    let point = crate::input::BufferPoint::new(line, 0);
+                    let display = map.buffer_pos_to_display_pos(point);
+                    assert_eq!(map.display_pos_to_buffer_pos(display), point);
+                }
                 let wrapped = state.buffer_line_to_display_rows(0);
                 assert_eq!(wrapped.start, 0);
                 assert!(wrapped.len() > 1, "{wrapped:?}");
@@ -4629,7 +4642,7 @@ mod tests {
 
             // Laid out at last, the line takes the rows the map gave it. A
             // scroll moves no row, so the version stays.
-            let version = editor.read(cx).display_rows_version();
+            let version = editor.read(cx).display_map().version();
             editor.update(cx, |state, cx| {
                 state.set_scroll_offset(point(px(0.), px(-10_000.)), cx);
             });
@@ -4637,6 +4650,7 @@ mod tests {
             window.draw(cx).clear(cx);
             {
                 let state = editor.read(cx);
+                assert_eq!(state.display_map().version(), version);
                 assert_eq!(state.display_rows_version(), version);
                 let line_height = state.line_height().unwrap();
                 let below = state.buffer_line_to_display_rows(last);
@@ -4653,21 +4667,21 @@ mod tests {
             window.draw(cx).clear(cx);
             {
                 let state = editor.read(cx);
-                assert_ne!(state.display_rows_version(), version);
+                assert_ne!(state.display_map().version(), version);
                 assert_eq!(state.buffer_line_to_display_rows(0), 0..1);
                 assert_eq!(state.display_row_to_buffer_line(5), (6, 0));
             }
 
             // So does opening a fold, and an edit.
-            let version = editor.read(cx).display_rows_version();
+            let version = editor.read(cx).display_map().version();
             editor.update(cx, |state, cx| {
                 state.display_map.set_folded(2, false);
                 cx.notify();
             });
-            assert_ne!(editor.read(cx).display_rows_version(), version);
-            let version = editor.read(cx).display_rows_version();
+            assert_ne!(editor.read(cx).display_map().version(), version);
+            let version = editor.read(cx).display_map().version();
             editor.update(cx, |state, cx| state.insert("x", window, cx));
-            assert_ne!(editor.read(cx).display_rows_version(), version);
+            assert_ne!(editor.read(cx).display_map().version(), version);
         });
     }
 

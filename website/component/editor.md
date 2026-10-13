@@ -409,15 +409,41 @@ where it is painted: below a multi-line inline completion, rows move down with t
 text. It returns `None` while the row is not laid out. The **Decorations** tab of the Editor showcase
 marks its last three rows with a provider.
 
-`EditorState::display_row_count()`, `buffer_line_to_display_rows(line)` and
-`display_row_to_buffer_line(row)` read the display-row map: how many rows the text
-takes once it is soft-wrapped, less those hidden by folds, and which rows a buffer line
-takes. The map covers the whole text, so lines that are not laid out can be asked
-about too. Every display row is one line height tall, so a row's top in the scrollable
-content is its index times the line height. `display_rows_version()` changes whenever a
-line may have taken different rows: an edit, a rewrap at a new width, a fold opened or
-closed. Something that reads the map, such as a second editor kept level with this one,
-compares it with the version it last read to know when to read again.
+`EditorState::display_map()` returns `&DisplayMap`, a read-only reference to the
+editor-owned text projection. `DisplayMap`, `BufferPoint`, and `DisplayPoint` are
+available from both `gpui_kit::base::input` and `gpui_kit::component::input`.
+The editor state owns updates; applications can query the map to build custom
+minimaps, synchronized views, or buffer/display coordinate conversions.
+
+```rust
+use gpui_kit::base::input::BufferPoint;
+
+let state = editor.read(cx);
+let map = state.display_map();
+let count = map.display_row_count();
+let rows = map.buffer_line_to_display_row_range(0); // None for a folded line
+let display = map.buffer_pos_to_display_pos(BufferPoint::new(0, 0));
+let buffer = map.display_pos_to_buffer_pos(display);
+let version = map.version();
+```
+
+The map covers the whole prepared text, including lines outside the viewport.
+Wrapping follows the latest prepared layout parameters; before text preparation,
+the map has no display rows. `map.version()` changes on edits, rewrapping, and
+fold changes. Compare versions on the same map to invalidate cached queries;
+scrolling does not change the version.
+
+The map excludes inline completion ghost lines. Display row indices multiplied
+by the line height describe text projection positions, not necessarily painted
+positions: multi-line inline completion shifts later text down without changing
+the map or its version. Use `row_bounds` for actual geometry of visible lines.
+
+The convenience methods `display_row_count()`, `buffer_line_to_display_rows(line)`,
+`display_row_to_buffer_line(row)`, and `display_rows_version()` remain available
+on the state. The state-level line query returns an empty range for folded or
+out-of-range lines, while the map's range query returns `None` for hidden lines.
+The state-level display-row query clamps to the last row and returns both the
+buffer line and its wrapped-row offset.
 
 ## Value and events
 
