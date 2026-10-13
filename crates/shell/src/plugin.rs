@@ -1415,6 +1415,7 @@ impl ShellRuntime {
             runtime,
             snapshot,
             outcome: sink,
+            materialized: false,
         });
         window.draw(cx).clear(cx);
 
@@ -1431,15 +1432,18 @@ struct MaterializeProbe {
     runtime: Rc<ShellRuntime>,
     snapshot: crate::snapshot::RenderSnapshot,
     outcome: Rc<std::cell::RefCell<Option<Result<()>>>>,
+    materialized: bool,
 }
 
 impl Render for MaterializeProbe {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // A frame may render its root more than once; the check is one
-        // materialization, as it was before it ran inside a frame.
-        if self.outcome.borrow().is_some() {
+        // The window may draw again after the check has read its outcome;
+        // the check is one materialization, as it was before it ran inside a
+        // frame.
+        if self.materialized {
             return gpui::Empty;
         }
+        self.materialized = true;
         let materialized =
             crate::materialize::try_materialize(&self.runtime, &self.snapshot, window, cx)
                 .map(drop);
