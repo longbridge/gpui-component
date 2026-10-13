@@ -8414,6 +8414,71 @@ mod tests {
         }
     }
 
+    /// Prewrap counts with the state's wrapping indent, as the first layout
+    /// does: continuation rows indented as deep as their line take more rows.
+    #[gpui::test]
+    fn test_prewrap_wraps_with_the_wrapping_indent(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let text = "            select id, name, email, phone from users where active";
+        let mut rows = Vec::new();
+        for indent in [WrappingIndent::Same, WrappingIndent::None] {
+            let mut input = None;
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                input = Some(cx.new(|cx| {
+                    let mut state = crate::input::EditorState::new(window, cx)
+                        .wrapping_indent(indent)
+                        .default_value(text);
+                    state.prewrap(font, px(14.), px(200.), cx);
+                    state
+                }));
+                gpui::EmptyView
+            });
+            rows.push(
+                input
+                    .unwrap()
+                    .read_with(cx, |state, _| state.wrap_row_count()),
+            );
+        }
+        assert!(rows[0] > rows[1], "rows with Same, None: {rows:?}");
+    }
+
+    /// Once the editor is laid out, layout owns the wrap and prewrap leaves it.
+    #[gpui::test]
+    fn test_prewrap_does_nothing_once_laid_out(cx: &mut TestAppContext) {
+        struct Frame(Entity<crate::input::EditorState>);
+        impl Render for Frame {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                crate::input::InputBase::new("frame")
+                    .h(px(100.))
+                    .child(crate::input::Editor::new(&self.0))
+            }
+        }
+
+        cx.update(crate::init);
+        let text = "select id, name, email, phone from users where active\nlimit 10";
+        let mut input = None;
+        let window = cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::EditorState::new(window, cx).default_value(text));
+            input = Some(state.clone());
+            Frame(state)
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let laid_out = input.read_with(&cx, |state, _| state.wrap_row_count());
+        assert!(laid_out >= 2, "laid out to {laid_out} rows");
+        let font = cx.update(|window, _| window.text_style().font());
+        input.update(&mut cx, |state, cx| {
+            state.prewrap(font, px(14.), px(60.), cx)
+        });
+        assert_eq!(
+            input.read_with(&cx, |state, _| state.wrap_row_count()),
+            laid_out
+        );
+    }
+
     /// Soft wrap is on by default, for every mode that can wrap.
     ///
     /// The default lives in the shared constructor, where a mode-specific
@@ -11327,6 +11392,7 @@ impl InputBaseState<crate::input::EditorMode> {
     /// The buffer's line count undercounts it whenever a line wraps, so a host
     /// that sizes an editor to its content, such as a read-only one, uses this.
     /// It is 0 until the editor is laid out or [`Self::prewrap`] is called.
+    /// Folded rows are still counted.
     pub fn wrap_row_count(&self) -> usize {
         self.display_map.wrap_row_count()
     }
@@ -11334,10 +11400,12 @@ impl InputBaseState<crate::input::EditorMode> {
     /// Wrap the text for `font`, `font_size` and `width` before the first
     /// layout, so that [`Self::wrap_row_count`] is known on the first frame.
     ///
-    /// Call it after setting the value. `width` is the width the text wraps
-    /// at: the editor's text width, without its line-number gutter and
-    /// padding. Once the editor has been laid out this does nothing, and
-    /// layout keeps the wrap up to date.
+    /// Call it after setting the value and the wrapping indent. `width` is the
+    /// width of the editor's text area: its width less its padding, and less
+    /// the line-number gutter when line numbers are shown. It wraps as layout
+    /// does, a little short of that width and with the state's wrapping
+    /// indent. Once the editor has been laid out this does nothing, and layout
+    /// keeps the wrap up to date.
     pub fn prewrap(
         &mut self,
         font: gpui::Font,
@@ -11348,9 +11416,12 @@ impl InputBaseState<crate::input::EditorMode> {
         if self.last_layout.is_some() {
             return;
         }
+        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
         self.display_map.set_font(font, font_size, cx);
         self.display_map
-            .on_layout_changed(self.soft_wrap.then_some(width), cx);
+            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
+        self.display_map
+            .set_wrapping_indent(self.wrapping_indent, cx);
         self.display_map.ensure_text_prepared(&self.text, cx);
     }
 
