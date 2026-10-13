@@ -635,8 +635,8 @@ impl TableDelegate for MyTableDelegate {
 
 - `↑/↓` - Navigate rows
 - `←/→` - Navigate columns
-- `Home` - Jump to first row/column
-- `End` - Jump to last row/column
+- `Home` - Jump to the first row
+- `End` - Jump to the last row
 - `PageUp/PageDown` - Navigate by page
 - `Escape` - Clear selection
 
