@@ -609,14 +609,28 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 | Events (§6) | `Changed(ChangeSummary)`, `SelectionChanged(SelectionSummary)` | `Changed { revision, origin }`, payload-free `SelectionChanged`; no-op commands emit nothing | Summaries deferred |
 | Home / End | Visual line start/end | Visual line start/end via `FrameLayout::line_edge` | End at a soft wrap may land on the next line; `Affinity` still unused |
 | IME (§2) | Port #3049's handler over `BlockPosition` | The IME document is the caret leaf. An undo group opens only when marked text is actually inserted (fixes the leaked group from empty or cancelled marks); a cancel removes the marked text; composing over a cross-block selection deletes the selection first; Cut ends a composition first | Accessibility text ranges need the full document (D8) |
-| Tables | Block frame, node selection; cell editing Phase 4 | Rendered by the existing table renderer; cells are keyed, so a click anywhere in a table selects it as `BlockSelection::Blocks` (cells paint the selection), and Backspace/Delete next to a table selects it first. With the table selected: Backspace/Delete/Cut remove it (one undo step), `MoveBlocks` moves it, Copy writes its Markdown. No in-place cell editing, no `BlockSelection::Cells`, no table creation UI | Done (node level) |
+| Tables | Block frame, node selection; cell editing Phase 4 | Rendered by the existing table renderer; cells are keyed, so a click anywhere in a table selects it as `BlockSelection::Blocks` (cells paint the selection), and Backspace/Delete next to a table selects it first. With the table selected: Backspace/Delete/Cut remove it (one undo step), `MoveBlocks` moves it, Copy writes its Markdown, and pasting Markdown that holds a table inserts it as blocks (cut + paste round-trips; one undo step). No in-place cell editing, no `BlockSelection::Cells`, no table creation UI | Done (node level) |
 | Atoms / custom nodes | Block frame with own renderer | Images and custom inline nodes render, but get no caret geometry | Deferred |
 | Lists | — | Enter in an empty list item exits the list: a top-level item becomes a paragraph after the list (splitting it when mid-list, `exit_list`), a nested item outdents one level. One transaction, one undo step (`tests/commands.rs`) | Done |
 | Feature plumbing (D2) | No `gpui-component` re-export until Phase 3 | `gpui-kit` gained a `block-editor` feature forwarding to `gpui-base/block-editor` so the story can reach it | Decision for review |
-| Virtualization | Phase 5 | None | See perf note |
+| Virtualization | Phase 5 | Light culling of top-level blocks and 32-item chunks of long top-level lists, measured spacers, model fallback for up/down, caret scroll-into-view via an owner `ScrollHandle` | Full virtualization (no per-frame walk of all units, nested chunking) remains Phase 5 |
 
 **Story.** Toolbar for Text / H1–H3 / Bullets / Numbered, a sample document and a 1200-block generator. The Markdown preview is cached and refreshed only on `Changed` or load (it was re-serialized every frame).
 
-**Perf note (UI spike, direct projection + per-node cache).** Headless test platform, one keystroke plus a full redraw: 1200-block document ~190–245 ms debug (3 runs) / ~70–120 ms release; edit inside a 1000-item list ~180–220 ms debug / ~77 ms release. Pre-D3 own-shaping spike: ~34 ms debug / ~16 ms release.
+**Perf note (UI spike).** Headless test platform. "Frame" is one forced full redraw. "Keystroke" is one typed character plus redraws; the harness draws three frames per keystroke.
 
-*Profile (release, 1200 blocks, per frame):* `render_block` for every block 4–10 ms, `request_layout` 4–6 ms, prepaint 4–6 ms, paint 3–4 ms, so 16–25 ms per frame including the window's own layout. The model edit is 0.8 ms and the snapshot 0.4 ms. The test harness draws three frames per keystroke (two inside `simulate_input`, one explicit), so a keystroke costs ~3× a frame. Shaping is already reused (GPUI's line-layout cache), and projection is O(changed path). The remaining cost is per-element work, linear in the number of blocks, for blocks that are off screen. The fix is to cull off-screen top-level blocks: render them as fixed-height spacers using the previous frame's heights, which is light virtualization. It is not done yet, because caret geometry for culled leaves (vertical motion, `hit_test`) has to fall back to the model.
+| | Pre-D3 own shaping | D3 + direct projection, no culling | With culling |
+|---|---|---|---|
+| 1200 blocks, frame, release | — | 16–25 ms | ~1–1.8 ms |
+| 1200 blocks, keystroke, release | ~16 ms | 70–120 ms | ~4 ms |
+| 1200 blocks, keystroke, debug | ~34 ms | 190–245 ms | ~13–18 ms |
+| 1000-item list, frame, debug | — | 45–59 ms | ~4–5 ms |
+| 1000-item list, keystroke, release | — | ~77 ms | ~9–11 ms |
+| 1000-item list, keystroke, debug | — | 180–220 ms | ~22–31 ms |
+
+*Profile before culling (release, 1200 blocks, per frame):* element creation 4–10 ms, `request_layout` 4–6 ms, prepaint 4–6 ms, paint 3–4 ms; the model edit took 0.8 ms and the snapshot 0.4 ms. Shaping was already reused (GPUI's line-layout cache) and projection is O(changed path), so the cost was per-element work for off-screen blocks.
+
+*Culling (`block_editor/cull.rs`).* This is light virtualization, not Phase 5. The cull units are the top-level blocks, and long top-level lists are split into 32-item chunks. Each chunk renders as its own list that continues the numbering, with no gap between chunks. Units outside one viewport of the visible area (the content mask at prepaint) are replaced by spacers. The spacers are sized from measured top-to-next-top distances, or a 28 px estimate before a unit has been measured. Units holding the selection ends or the IME composition are always laid out. When the visible area leaves the laid-out span, another frame is requested.
+- Up/down into a culled leaf falls back to the model: the adjacent caret leaf at offset 0 or at its end.
+- With `BlockEditorState::set_scroll_handle`, the caret is scrolled into view once its block is laid out.
+- Limits: the culling is spacer-accurate only to about one block margin per culled run. A fling scroll can show blank spacers for one frame. Without a scroll handle, the owner has to scroll for the caret. Nested long lists are not chunked.
