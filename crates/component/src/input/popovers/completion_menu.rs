@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
@@ -7,10 +7,30 @@ use gpui::{
     prelude::FluentBuilder, px, relative,
 };
 use gpui_base::TestSupportExt as _;
+use gpui_base::input::CompletionHighlighter;
 use lsp_types::CompletionItem;
 
 const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
+
+/// Drop ranges a custom highlighter cannot safely paint.
+///
+/// A range past the label, or one that begins or ends inside a character,
+/// would split a glyph. Empty ranges paint nothing, so they go too.
+fn retained_highlight_ranges(
+    label: &str,
+    ranges: impl IntoIterator<Item = Range<usize>>,
+) -> Vec<Range<usize>> {
+    ranges
+        .into_iter()
+        .filter(|range| {
+            range.start < range.end
+                && range.end <= label.len()
+                && label.is_char_boundary(range.start)
+                && label.is_char_boundary(range.end)
+        })
+        .collect()
+}
 
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
@@ -27,6 +47,7 @@ struct ContextMenuDelegate {
     menu: Entity<CompletionMenu>,
     items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
+    highlight: Rc<CompletionHighlighter>,
 }
 
 impl ContextMenuDelegate {
@@ -46,23 +67,25 @@ struct CompletionMenuItem {
     item: Rc<CompletionItem>,
     children: Vec<AnyElement>,
     selected: bool,
-    highlight_prefix: SharedString,
+    query: SharedString,
+    highlight: Rc<CompletionHighlighter>,
 }
 
 impl CompletionMenuItem {
-    fn new(ix: usize, item: Rc<CompletionItem>) -> Self {
+    fn new(
+        ix: usize,
+        item: Rc<CompletionItem>,
+        query: SharedString,
+        highlight: Rc<CompletionHighlighter>,
+    ) -> Self {
         Self {
             ix,
             item,
             children: vec![],
             selected: false,
-            highlight_prefix: "".into(),
+            query,
+            highlight,
         }
-    }
-
-    fn highlight_prefix(mut self, s: impl Into<SharedString>) -> Self {
-        self.highlight_prefix = s.into();
-        self
     }
 }
 impl Selectable for CompletionMenuItem {
@@ -86,20 +109,21 @@ impl RenderOnce for CompletionMenuItem {
         let item = self.item;
 
         let deprecated = item.deprecated.unwrap_or(false);
-        let matched_len = item
-            .filter_text
-            .as_ref()
-            .map(|s| s.len())
-            .unwrap_or(self.highlight_prefix.len())
-            .min(item.label.len());
-
-        let highlights = vec![(
-            0..matched_len,
-            HighlightStyle {
-                color: Some(cx.theme().blue),
-                ..Default::default()
-            },
-        )];
+        let highlights = retained_highlight_ranges(
+            &item.label,
+            (self.highlight)(self.query.as_ref(), item.as_ref()),
+        )
+        .into_iter()
+        .map(|range| {
+            (
+                range,
+                HighlightStyle {
+                    color: Some(cx.theme().blue),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect::<Vec<_>>();
 
         h_flex()
             .id(self.ix)
@@ -143,7 +167,12 @@ impl ListDelegate for ContextMenuDelegate {
         _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let item = self.items.get(ix.row)?;
-        Some(CompletionMenuItem::new(ix.row, item.clone()).highlight_prefix(self.query.clone()))
+        Some(CompletionMenuItem::new(
+            ix.row,
+            item.clone(),
+            self.query.clone(),
+            self.highlight.clone(),
+        ))
     }
 
     fn set_selected_index(
@@ -196,6 +225,7 @@ impl CompletionMenu {
                 menu: view,
                 items: vec![],
                 selected_ix: 0,
+                highlight: Rc::new(gpui_base::input::highlight_prefix),
             };
 
             let list = cx.new(|cx| ListState::new(menu, window, cx));
@@ -342,6 +372,21 @@ impl CompletionMenu {
         });
 
         cx.notify();
+    }
+
+    /// Replace the label highlighter and repaint an open menu.
+    pub(crate) fn set_highlight(
+        &mut self,
+        highlight: Rc<CompletionHighlighter>,
+        cx: &mut Context<Self>,
+    ) {
+        self.list.update(cx, |list, cx| {
+            if Rc::ptr_eq(&list.delegate().highlight, &highlight) {
+                return;
+            }
+            list.delegate_mut().highlight = highlight;
+            cx.notify();
+        });
     }
 }
 
