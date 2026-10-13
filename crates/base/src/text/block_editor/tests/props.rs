@@ -4,7 +4,7 @@
 use super::*;
 
 /// xorshift64*: small, deterministic, dependency-free.
-struct Rng(u64);
+pub(super) struct Rng(pub(super) u64);
 
 impl Rng {
     fn next(&mut self) -> u64 {
@@ -65,7 +65,7 @@ fn list(rng: &mut Rng, depth: usize, indent: &str) -> String {
     out.join("\n")
 }
 
-fn document(rng: &mut Rng) -> String {
+pub(super) fn document(rng: &mut Rng) -> String {
     let count = 1 + rng.below(6);
     (0..count)
         .map(|_| match rng.below(6) {

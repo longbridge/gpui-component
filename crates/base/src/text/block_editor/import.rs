@@ -65,7 +65,7 @@ fn import_children(nodes: &[BlockNode], defs: &Defs) -> Vec<DetachedBlock> {
     out
 }
 
-fn import_block(node: &BlockNode, defs: &Defs, out: &mut Vec<DetachedBlock>) {
+pub(crate) fn import_block(node: &BlockNode, defs: &Defs, out: &mut Vec<DetachedBlock>) {
     let block = match node {
         // An HTML container: splice its children in place.
         BlockNode::Root { children, .. } => {
@@ -212,7 +212,7 @@ pub(crate) fn import_inline(paragraph: &Paragraph, defs: &Defs) -> InlineText {
 
 pub(crate) type Defs = HashMap<SharedString, (SharedString, Option<SharedString>)>;
 
-fn collect_definitions(nodes: &[BlockNode], defs: &mut Defs) {
+pub(crate) fn collect_definitions(nodes: &[BlockNode], defs: &mut Defs) {
     for node in nodes {
         match node {
             BlockNode::Definition {
