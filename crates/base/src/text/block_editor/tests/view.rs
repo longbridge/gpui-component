@@ -1026,3 +1026,20 @@ fn code_fence_with_space_converts(cx: &mut TestAppContext) {
         "undo restores the typed fence"
     );
 }
+
+/// Review fix: typing over a node-selected table replaces it with a
+/// paragraph holding the text, as one undo step.
+#[gpui::test]
+fn typing_over_selected_table_replaces_it(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let original = source(&editor, cx);
+    let last = editor.read_with(cx, |e, _| e.model().document().leaves().count() - 1);
+    caret_at(&editor, cx, last, 0);
+    keys(cx, "backspace");
+    type_text(cx, "z");
+    assert_eq!(source(&editor, cx), "a\n\nz\n\nb");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), original, "one undo step");
+    keys(cx, "M-shift-z");
+    assert_eq!(source(&editor, cx), "a\n\nz\n\nb", "redo replays both");
+}

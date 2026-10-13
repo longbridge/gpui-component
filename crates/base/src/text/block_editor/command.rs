@@ -270,9 +270,45 @@ impl BlockEditorModel {
 
     /// Insert plain text at the selection (replacing it); `\n` splits blocks.
     pub fn insert_text(&mut self, text: &str, origin: EditOrigin) -> Result<(), CommandError> {
-        if self.selected_cells().is_some() {
-            self.clear_cells(origin)?;
+        // Typing over a node or cell selection first replaces it; the
+        // replacement and the typing are one undo step.
+        if self.selected_cells().is_some() || self.selected_blocks().is_some() {
+            self.history.begin_transaction();
+            let result = (|| {
+                if self.selected_cells().is_some() {
+                    self.clear_cells(origin)?;
+                } else {
+                    self.replace_blocks_with_paragraph(origin)?;
+                }
+                self.insert_text_at_selection(text, origin)
+            })();
+            self.history.commit_transaction();
+            return result;
         }
+        self.insert_text_at_selection(text, origin)
+    }
+
+    /// Replace a `BlockSelection::Blocks` by one empty paragraph holding
+    /// the caret (like Select All + typing).
+    fn replace_blocks_with_paragraph(&mut self, origin: EditOrigin) -> Result<bool, CommandError> {
+        let Some((parent, range)) = self.selected_blocks() else {
+            return Ok(false);
+        };
+        self.transact(origin, |tx| {
+            let start = range.start;
+            tx.remove(parent, range)?;
+            let paragraph = DetachedBlock::paragraph(InlineText::new());
+            let id = paragraph.id;
+            tx.insert(parent, start, vec![paragraph])?;
+            Ok(caret(BlockPosition::new(id, 0)))
+        })
+    }
+
+    fn insert_text_at_selection(
+        &mut self,
+        text: &str,
+        origin: EditOrigin,
+    ) -> Result<(), CommandError> {
         let range = self.resolved()?;
         let stored = self.stored_marks.clone();
         let marks = match &stored {

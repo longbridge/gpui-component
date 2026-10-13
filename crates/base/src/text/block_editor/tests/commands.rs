@@ -493,3 +493,27 @@ fn insert_table_and_row_column_commands() {
     assert_eq!(m.source(), "| 1 | 2 |\n| :-: | --: |");
     assert_invariants(&m);
 }
+
+#[test]
+fn typing_over_node_selected_blocks_replaces_them() {
+    for (source, expected) in [
+        ("a\n\n```rs\ncode\n```\n\nb", "a\n\nz\n\nb"),
+        ("a\n\n---\n\nb", "a\n\nz\n\nb"),
+        ("a\n\n![img](x.png)\n\nb", "a\n\nz\n\nb"),
+        ("a\n\n| x |\n| --- |\n| 1 |\n\nb", "a\n\nz\n\nb"),
+    ] {
+        let mut m = model(source);
+        let original = m.source();
+        let target = m.document().root().children().nth(1).unwrap().id();
+        m.set_selection(BlockSelection::Blocks {
+            anchor: target,
+            head: target,
+        })
+        .unwrap();
+        m.insert_text("z", EditOrigin::Typing).unwrap();
+        assert_eq!(m.source(), expected, "{source:?}");
+        assert_invariants(&m);
+        assert!(m.undo());
+        assert_eq!(m.source(), original, "one undo step for {source:?}");
+    }
+}
