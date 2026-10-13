@@ -361,6 +361,7 @@ DataTable::new(&state)
     .header_row_height(px(48.))
     .stripe(true)
     .bordered(true)
+    .fixed_cols_border(true)
     .scrollbar_visible(true, true)
 ```
 
@@ -424,6 +425,7 @@ DataTable::new(&state)
 - `resizable(bool)`
 - `movable(bool)`
 - `selectable(bool)`
+- `max_width(pixels)` - 设置拖拽调整列宽时的最大宽度，默认为 1200px；需要更宽的列时可以显式设置更大的值
 
 [DataTable]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.DataTable.html
 [TableState]: https://docs.rs/gpui-component/latest/gpui_component/table/struct.TableState.html

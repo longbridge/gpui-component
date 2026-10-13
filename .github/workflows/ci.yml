@@ -6,6 +6,9 @@ on:
       - main
     tags:
       - "*"
+      # `shell-<tag>` only records which commit a release's gpui-shell
+      # binaries were built from; that commit has been tested already.
+      - "!shell-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.ref_name == 'main' && github.sha || 'anysha' }}
@@ -219,9 +222,13 @@ jobs:
           cargo test -p gpui-shell --release --doc
       - name: Lint GPUI Shell
         run: cargo clippy -p gpui-shell --all-targets -- -D warnings
+      # The `components` feature is the only edge to `gpui-component`; the
+      # runtime must still build without it.
+      - name: Check GPUI Shell without the component catalog
+        run: cargo check -p gpui-shell --no-default-features --features quickjs
 
-  gpui-component-shell:
-    name: GPUI Component Shell
+  gpui-shell-components:
+    name: GPUI Shell Components
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -236,14 +243,14 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install system dependencies
         run: script/bootstrap
+      # The catalog's unit tests run with the library in `gpui-shell-core`;
+      # these are its host integration tests and the command-line tests.
       - name: Test component bindings
-        run: cargo test -p gpui-component-shell --all-targets
+        run: cargo test -p gpui-shell --tests
       - name: Verify generated TypeScript contracts
         run: |
-          npm --prefix crates/component-shell/tests/types ci
-          npm --prefix crates/component-shell/tests/types test
-      - name: Lint component bindings
-        run: cargo clippy -p gpui-component-shell --all-targets -- -D warnings
+          npm --prefix crates/shell/tests/types ci
+          npm --prefix crates/shell/tests/types test
       # The inventory test proves every public component is registered or
       # explicitly deferred; this proves the JavaScript gallery covers what the
       # inventory claims. Without it the two drift silently.

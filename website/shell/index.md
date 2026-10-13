@@ -94,7 +94,7 @@ The engine is a parameter of the design rather than a part of it. QuickJS is the
 
 A script gets what a Rust application built on `gpui-base` gets: elements and layout, links and controls, a fluent style surface over semantic theme tokens, View state through `init` / `render` / `cx.notify()`, retained host state such as a text input's rope and selection, dialogs, a sheet and toasts, asynchronous tasks, native transitions and springs, and gated filesystem, storage, clipboard, process, HTTP, TCP and WebSocket surfaces.
 
-Around that: `--watch` hot-reloads on save, `gpui-shell.json` declares identity and least-privilege capabilities before code runs, a generated `gpui-kit.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
+Around that: `gpui-shell dev` hot-reloads on save, `gpui-shell.json` declares identity and least-privilege capabilities before code runs, a generated `gpui-kit.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
 
 ::: tip
 `gpui-kit.d.ts` can go in `.gitignore` — it is generated.

@@ -468,9 +468,9 @@ repository root, run both editing and focus targets, or select one workflow:
 
 ```sh
 script/test-input # Complete Input gate: Base, Component and Kit workflows (Bash).
-cargo test -p gpui-kit --features test-support --test input --test input_focus --locked
-cargo test -p gpui-kit --features test-support --test input --locked -- history::paste_is_atomic_and_separate_from_surrounding_typing --exact
-cargo test -p gpui-kit --features test-support --test input_focus --locked -- reverse_tab_cycles_three_inputs_with_passive_addons --exact
+cargo test -p gpui-kit --features test-support --test integration --locked -- input:: input_focus::
+cargo test -p gpui-kit --features test-support --test integration --locked -- input::history::paste_is_atomic_and_separate_from_surrounding_typing --exact
+cargo test -p gpui-kit --features test-support --test integration --locked -- input_focus::reverse_tab_cycles_three_inputs_with_passive_addons --exact
 ```
 
 Append `-- --list` to the combined command to list cases without executing them.

@@ -454,6 +454,7 @@ DataTable::new(&state)
     .header_row_height(px(48.))     // Taller header rows
     .stripe(true)                   // Alternating row colors
     .bordered(true)                 // Border around table
+    .fixed_cols_border(true)        // Border after the fixed columns
     .scrollbar_visible(true, true)  // Vertical, horizontal scrollbars
 ```
 
@@ -700,7 +701,7 @@ impl TableDelegate for MyTableDelegate {
 - `selectable(bool)` - Enable/disable column/cell selection
 - `paddings(edges)` - Set custom padding
 - `min_width(pixels)` - Set minimum width
-- `max_width(pixels)` - Set maximum width
+- `max_width(pixels)` - Set the maximum resize width (1200px by default); set a larger value explicitly to allow wider columns
 
 ### Events
 

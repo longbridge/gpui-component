@@ -1262,7 +1262,9 @@ macro_rules! builtin_modules {
         /// is told which it is talking to rather than only that the import
         /// failed.
         fn builtin_specifiers() -> String {
-            [$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
+            // The component module is only built in when a catalog provides
+            // it, and a catalog that does resolves it before this is reached.
+            [$($module::SPECIFIER),+]
                 .map(|specifier| format!("`{specifier}`"))
                 .join(", ")
         }
@@ -1439,6 +1441,9 @@ pub struct ShellRuntime {
     /// than serving the first version from QuickJS's module cache.
     app_modules: AppModules,
     dependency_store: GitDependencyStore,
+    /// Whether a load writes `gpui-kit.d.ts`, `jsconfig.json` and dependency
+    /// links into the application. See [`Self::set_editor_files`].
+    editor_files: Cell<bool>,
     next_application_generation: Cell<u64>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
@@ -1725,6 +1730,7 @@ impl ShellRuntime {
             context,
             app_modules,
             dependency_store,
+            editor_files: Cell::new(true),
             next_application_generation: Cell::new(1),
             js_runtime,
         });
@@ -1983,6 +1989,16 @@ impl ShellRuntime {
         crate::typings::write_application_with_components(root, &self.components)
     }
 
+    /// Whether loading an application writes the files an editor reads into
+    /// it: `gpui-kit.d.ts`, `jsconfig.json` and the dependency links. On by
+    /// default, because a directory being run is usually a directory being
+    /// edited. A host running a packaged application turns it off: the
+    /// application is not source anybody edits there, a write would break a
+    /// signed bundle's seal, and an installed location may be read-only.
+    pub fn set_editor_files(&self, enabled: bool) {
+        self.editor_files.set(enabled);
+    }
+
     pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {
         cx.set_global(RuntimeGlobal(Rc::downgrade(self)));
     }
@@ -2159,7 +2175,8 @@ impl ShellRuntime {
     /// the first half of the sandbox's module policy (design doc §19.1).
     pub(crate) fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
-        if let Err(error) = self.write_type_declarations(&root) {
+        let editor_files = self.editor_files.get();
+        if editor_files && let Err(error) = self.write_type_declarations(&root) {
             tracing::debug!(
                 "could not update declarations in {}: {error}",
                 root.display()
@@ -2175,7 +2192,9 @@ impl ShellRuntime {
             // this load is not going to use. Best-effort, like the
             // declarations — a read-only directory is not a reason to refuse to
             // run.
-            if let Err(error) = self.dependency_store.link_for_editor(&root, &dependencies) {
+            if editor_files
+                && let Err(error) = self.dependency_store.link_for_editor(&root, &dependencies)
+            {
                 tracing::debug!(
                     "could not link dependencies for an editor in {}: {error:#}",
                     root.display()
@@ -5374,6 +5393,17 @@ impl Resolver for AppModules {
             // runtime does have is the difference between "you typed it wrong"
             // and "this binary is older than the script it is loading" — and
             // the second is what a moved module looks like from here.
+            if name == crate::DEFAULT_COMPONENT_MODULE {
+                return Err(Exception::throw_message(
+                    ctx,
+                    &format!(
+                        "cannot resolve module `{name}`: this runtime has no component \
+                         catalog. `gpui-shell` provides it with its default `components` \
+                         feature; a build without that feature, or an embedding host that \
+                         registers no catalog, does not."
+                    ),
+                ));
+            }
             if !name.starts_with('.') && !name.contains('/') {
                 return Err(Exception::throw_message(
                     ctx,
@@ -6486,11 +6516,13 @@ globalThis.__gpui = (() => {
     get length() {
       return __storage_length(session);
     },
+    // The host answers a missing entry with `undefined`; the Web Storage API
+    // answers `null`, and `if (saved === null)` is how scripts test for it.
     key: (index) => {
       const at = Number(index);
-      return Number.isInteger(at) && at >= 0 ? __storage_key(session, at) : null;
+      return Number.isInteger(at) && at >= 0 ? (__storage_key(session, at) ?? null) : null;
     },
-    getItem: (key) => __storage_get(session, String(key)),
+    getItem: (key) => __storage_get(session, String(key)) ?? null,
     setItem: (key, value) => __storage_set(session, String(key), String(value)),
     removeItem: (key) => __storage_remove(session, String(key)),
     clear: () => __storage_clear(session),
@@ -6564,6 +6596,7 @@ globalThis.__gpui = (() => {
     activate_window: () => __window_activate(),
     minimize_window: () => __window_minimize(),
     zoom_window: () => __window_zoom(),
+    start_window_move: () => __window_start_move(),
     toggle_fullscreen: () => __window_toggle_fullscreen(),
   };
 
@@ -7063,6 +7096,7 @@ impl ShellRuntime {
                 "role",
                 "aria_selected",
                 "aria_active_descendant",
+                "window_control_area",
                 "tab_index",
                 "tab_stop",
                 "href",
@@ -8093,6 +8127,7 @@ impl ShellRuntime {
             | "role"
             | "aria_selected"
             | "aria_active_descendant"
+            | "window_control_area"
             | "track_focus"
             | "track_scroll"
             | "with_item_to_measure_index"
@@ -8146,6 +8181,7 @@ impl ShellRuntime {
                     "role" => "role",
                     "aria_selected" => "aria_selected",
                     "aria_active_descendant" => "aria_active_descendant",
+                    "window_control_area" => "window_control_area",
                     "track_focus" => "track_focus",
                     "track_scroll" => "track_scroll",
                     "with_item_to_measure_index" => "with_item_to_measure_index",

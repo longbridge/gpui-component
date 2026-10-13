@@ -95,7 +95,7 @@ export default class Hello extends View {
 ```
 
 ```bash
-cargo run -p gpui-shell -- hello
+cargo run -p gpui-shell -- run ./hello
 ```
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
@@ -113,19 +113,76 @@ cargo run -p gpui-shell -- hello
 一个脚本目录也可以直接跑起来，不必先写 Host 。自带的示例就是这么运行的；一段脚本在被它将来所属的那个应用加载之前，通常也是这样开发的。`gpui-shell` 没有发布到 crates.io，所以先克隆仓库，再在仓库根目录运行：
 
 ```bash
-cargo run -p gpui-shell -- examples/js_todolist
+cargo run -p gpui-shell -- run examples/js_todolist
 ```
 
 窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
 
 参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根 View。如果目录中存在 `gpui-shell.json`，二进制会先验证它，并采用其中声明的 `entry` 与 capabilities。
 
+包含路径分隔符的参数——`./hello`、`examples/js_todolist`——是一个目录；不含分隔符的裸名字则表示一个**已安装**的应用，见下文。`-d` / `--dir <directory>` 永远表示目录。
+
+## 安装运行时
+
+每个 GitHub Release 都附带预编译的 `gpui-shell`，覆盖 macOS（Apple 芯片与 Intel）、Linux x86-64 和 Windows x86-64。它内置了 [`gpui-component`](./examples.md) 组件目录，所以应用除了 `"gpui-base"`，也可以从 `"gpui-component"` 导入带样式的组件。
+
+```bash
+curl -fsSL https://gpui-kit.com/shell/install.sh | sh
+```
+
+每个 release 也附带同一个脚本，所以 `https://github.com/longbridge/gpui-kit/releases/latest/download/install.sh` 同样可用。
+
+脚本会把二进制装到 `~/.local/bin`，并创建 `~/.gpui-shell/apps`。`GPUI_SHELL_VERSION=v0.7.1` 可以固定某个版本。`GPUI_SHELL_HOME` 会替换 `~/.gpui-shell` 目录——已安装的应用和 Git 依赖缓存都随之移动；`gpui-shell` 运行时也读取这个变量，所以要保持导出。产物名不带版本号（`gpui-shell-aarch64-apple-darwin.tar.gz`，旁边附 `.sha256`），所以 Homebrew formula 或 mise 的 `ubi` backend 也可以直接下载 `releases/latest/download/<asset>`。
+
+## 已安装与随包的应用
+
+`gpui-shell` 一个进程只运行一个应用，自身不带任何界面。运行哪个应用由命令行决定：
+
+| 命令                         | 运行的应用                                         |
+| ---------------------------- | -------------------------------------------------- |
+| `gpui-shell run clock`       | 已安装的应用 `~/.gpui-shell/apps/clock/`         |
+| `gpui-shell run -d ~/dev/clock` | 指定的那个目录                                     |
+| `gpui-shell`                 | 与可执行文件一起打包的应用；没有则显示 help        |
+
+安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。已安装的应用按 manifest 的 `id` 保存数据，移动或重装都不会丢；用 `--dir` 运行的目录则按路径区分，这正适合正在编辑的源码。
+
+不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。找不到时就显示 help，所以刚安装好的 `gpui-shell` 在终端里直接运行会先介绍自己的用法。于是一个独立的桌面应用可以就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
+
+```text
+Clock.app/Contents/
+├── Info.plist          # CFBundleExecutable = gpui-shell
+├── MacOS/gpui-shell
+└── Resources/app/
+    ├── gpui-shell.json
+    └── main.js
+```
+
+`gpui-shell bundle -d clock` 会替你生成桌面应用。在 macOS 和 Linux 上不带二进制，生成 `.app`，或者 `.tar.gz` 及与之并列的 `install.sh`：在用户的机器上，它们使用已安装的、不低于打包时版本的 `gpui-shell`，没有就下载那个 release，再用 `run --packaged` 运行应用，像已安装的应用一样按 `id` 保存数据。在 Windows 上生成便携 `.zip`，其中的可执行文件就是 `gpui-shell.exe` 本身，旁边是 `app\`。[Packaging](./packaging.md) 介绍了这两种方式、各个选项，以及签名与公证。
+
+## 新建应用
+
+```bash
+gpui-shell new clock
+gpui-shell dev -d clock
+```
+
+`new` 和 `cargo new` 一样，在命令运行的位置创建目录——这里的 `clock` 指 `./clock`，不是已安装的应用。它会写入 `gpui-shell.json`（`id` 由目录名推出）、一个带标题栏和按钮的 `main.js`、`.gitignore`（其中也忽略了 `bundle` 的输出目录 `dist/`）、`jsconfig.json`、`gpui-kit.d.ts` 和 `AGENTS.md`；目标目录里已有文件时会拒绝创建。
+
+## 给 coding agent 的开发说明
+
+```bash
+gpui-shell agents                 # 打印出来
+gpui-shell agents -d ./hello      # 写入 ./hello/AGENTS.md
+```
+
+`agents` 会打印 coding agent 为这个运行时编写应用所需的规则，以及用来验证结果的 `check` 流程：没有 DOM、状态在 `init` 中赋值、改完状态调用 `cx.notify()`、元素只能用一次、capabilities 默认拒绝。其中的模块列表和组件目录都来自打印它的这个二进制。指定应用时，它会在那里写入 `AGENTS.md`，并且只替换自己生成过的文件（首行有标记），手写的说明不会被覆盖。
+
 ## 不运行也能检查脚本
 
 JavaScript 没有编译器，这个运行时也不打算造一个。它补上的是编译器本该替你做的那件事：
 
 ```bash
-cargo run -p gpui-shell -- check hello
+cargo run -p gpui-shell -- check ./hello
 ```
 
 `check` 会加载应用，并向一个永远不显示的窗口渲染一帧，成功退出 `0`，失败退出 `1`。因为脚本接口是动态的——未知的样式方法、类型不对的参数、被重复使用的元素，都是运行期事实——所以“构建并渲染一次”是唯一诚实的检查方式。它能报出：
@@ -142,7 +199,7 @@ cargo run -p gpui-shell -- check hello
 加上 `--print-spec` 可以顺带打印构建出的元素描述：
 
 ```bash
-cargo run -p gpui-shell -- check hello --print-spec
+cargo run -p gpui-shell -- check ./hello --print-spec
 ```
 
 这份输出是 arena 自己的调试输出——在它变成真实元素之前，由组件与记录操作构成的那棵树。当问题是“我这条链到底记录了什么”时，它很有用。
@@ -150,7 +207,7 @@ cargo run -p gpui-shell -- check hello --print-spec
 ## 生成 TypeScript 声明
 
 ```bash
-cargo run -p gpui-shell -- types hello
+cargo run -p gpui-shell -- types ./hello
 ```
 
 它会在应用旁边写出 `gpui-kit.d.ts`。在脚本顶部加上 `// @ts-check`，编辑器就会补全整套 API，并在运行之前、在调用点上直接拒绝拼错的样式方法、不存在的颜色 token，或者 `.p("auto")`。
@@ -170,30 +227,46 @@ cargo run -p gpui-shell -- types hello
 ## Hot-reload
 
 ```bash
-cargo run -p gpui-shell -- hello --watch
-cargo run -p gpui-shell -- hello --dev      # 隐含 --watch
+cargo run -p gpui-shell -- dev ./hello           # 重载，并输出 debug 日志
+cargo run -p gpui-shell -- run ./hello --watch    # 只重载
 ```
 
-`--watch` 每秒轮询应用目录四次，对一串连续写入去抖 200 ms，然后重载。一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。
+开发应用时用 `dev`：它像 `run --watch` 一样在源码变化时重载，日志级别为 `DEBUG`。监听时每秒轮询应用目录四次，对一串连续写入去抖 200 ms，然后重载。一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。
 
 重载会在碰到实时 View 之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的 View 继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
 
-`--dev` 隐含 `--watch`，并在构造运行时之前开启 development mode。它恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。见 [Capabilities](./capabilities.md#沙箱)。
+两者都不放宽沙箱。`--dev` 可配合 `run` 或 `dev`，在构造运行时之前开启 development mode：恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。它不会重载，也不改变日志级别。见 [Capabilities](./capabilities.md#沙箱)。
 
 ## 命令一览
 
 ```text
-gpui-shell <directory> [--watch] [--dev]
-gpui-shell check <directory> [--print-spec]
-gpui-shell types <directory>
+gpui-shell run [<name> | -d <directory>] [--watch] [--dev] [--packaged]
+gpui-shell dev [<name> | -d <directory>] [--dev]
+gpui-shell
+gpui-shell new <directory>
+gpui-shell list
+gpui-shell check <name> | -d <directory> [--print-spec]
+gpui-shell types <name> | -d <directory>
+gpui-shell agents [<name> | -d <directory>]
+gpui-shell bundle [<name> | -d <directory>] [--platform <platform>] [--icon <png>]
+                  [--out <directory>] [--download-url <url>]
 gpui-shell --help | --version
 ```
 
-| 参数           | 含义                                               |
-| -------------- | -------------------------------------------------- |
-| `<directory>`  | 应用根目录，或其中的 `main.js`                     |
-| `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
-| `types`        | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
-| `--watch`      | 源码变化时重载                                     |
-| `--dev`        | 开发模式，隐含 `--watch`                           |
-| `--print-spec` | 配合 `check`，额外打印构建出的元素描述             |
+| 参数                 | 含义                                               |
+| -------------------- | -------------------------------------------------- |
+| `<name>`             | 已安装的应用，`~/.gpui-shell/apps/<name>`        |
+| `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                     |
+| _（无）_             | 与可执行文件一起打包的应用，没有则显示 help        |
+| `run`                | 在窗口中运行一个应用                               |
+| `dev`                | 开发时运行：源码变化时重载，日志级别 `DEBUG`       |
+| `new`                | 在新目录中创建一个空白应用                         |
+| `list`               | 列出已安装的应用及其申请的 capabilities            |
+| `check`              | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
+| `types`              | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
+| `agents`             | 打印给 coding agent 的开发说明，或写成 `AGENTS.md` |
+| `bundle`             | 在 `dist/` 中生成桌面应用，见 [Packaging](./packaging.md) |
+| `--packaged`         | 配合 `run`，像包的启动脚本那样运行目录：数据按 `id` 保存，不写编辑器文件 |
+| `--watch`            | 配合 `run`，源码变化时重载；`dev` 总会重载         |
+| `--dev`              | 配合 `run` 或 `dev`，开启开发模式：放宽沙箱        |
+| `--print-spec`       | 配合 `check`，额外打印构建出的元素描述             |

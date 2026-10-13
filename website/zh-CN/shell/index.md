@@ -94,7 +94,7 @@ export default class Counter extends View {
 
 脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、链接与控件、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的 View 状态、由 Host 留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务、原生 transition 与 spring，以及需要授权才能用的文件、存储、剪贴板、进程、HTTP、TCP 与 WebSocket 接口。
 
-围绕它的还有：`--watch` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui-kit.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
+围绕它的还有：`gpui-shell dev` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui-kit.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
 
 ::: tip
 `gpui-kit.d.ts` 可以加进 `.gitignore`，它是自动生成的。

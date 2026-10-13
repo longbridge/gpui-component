@@ -289,7 +289,7 @@ console.warn("could not save");
 
 多余的参数会以空格分隔追加在后面，与 `console.log` 的行为一致。结构化的值以 JSON 打印，因为那是读日志的人想看到的形式。
 
-输出通过 `tracing` 走，target 是 `gpui_kit::shell::script`，所以在日志过滤里脚本输出与 Host 输出是可分开的。**没有安装 `tracing` subscriber 的 Host 会把这些全部丢弃**——连同运行时自己报告的抛异常的处理函数、未处理的 rejection 与 phase 非法的调用。`gpui-shell` 二进制安装的是一个 `INFO` 级别的 stderr sink，`--dev` 下是 `DEBUG`。
+输出通过 `tracing` 走，target 是 `gpui_kit::shell::script`，所以在日志过滤里脚本输出与 Host 输出是可分开的。**没有安装 `tracing` subscriber 的 Host 会把这些全部丢弃**——连同运行时自己报告的抛异常的处理函数、未处理的 rejection 与 phase 非法的调用。`gpui-shell` 二进制安装的是一个 `INFO` 级别的 stderr sink，`dev` 命令下是 `DEBUG`。
 
 ## `process`
 
@@ -343,7 +343,7 @@ process.exit(0);
 这里没有 quickjs-libc 的 `std`：quickjs-libc 从一开始就没有被编进这个构建。运行时仍提供下文列出的、经过审计的小型 `os` 模块。
 
 ::: tip 开发模式
-`--dev` 会启用源码监听，并在构造运行时之前调用 `gpui_kit::shell::set_development_mode(true)`。它会恢复动态代码构造器并让内建原型保持可写。
+`--dev`（配合 `run` 或 `dev`）会在构造运行时之前调用 `gpui_kit::shell::set_development_mode(true)`。它会恢复动态代码构造器并让内建原型保持可写。
 
 开发模式从不放宽能力约束。它让语言更好摆弄，但不会发出任何人没有声明过的访问权限——因为一项作者从没写下来的授权，就是一项在生产环境里会缺失的授权。
 :::
