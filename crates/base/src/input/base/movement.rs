@@ -350,6 +350,26 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.move_vertical(-1, true, window, cx);
     }
 
+    /// `up` for a single-line field: only an open menu consumes it; otherwise it
+    /// bubbles to the host as it did before the field had a menu.
+    pub(super) fn menu_up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
+        if !M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
+            cx.propagate();
+        }
+    }
+
+    /// `down` for a single-line field. See [`Self::menu_up`].
+    pub(super) fn menu_down(
+        &mut self,
+        action: &MoveDown,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
+            cx.propagate();
+        }
+    }
+
     pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
         if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
             return;

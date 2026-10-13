@@ -4649,6 +4649,10 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
             .on_action(window.listener_for(&entity, InputBaseState::right))
             .on_action(window.listener_for(&entity, InputBaseState::select_left))
             .on_action(window.listener_for(&entity, InputBaseState::select_right))
+            .when(!self.is_multi_line(), |this| {
+                this.on_action(window.listener_for(&entity, InputBaseState::menu_up))
+                    .on_action(window.listener_for(&entity, InputBaseState::menu_down))
+            })
             .when(self.is_multi_line(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::up))
                     .on_action(window.listener_for(&entity, InputBaseState::down))

@@ -1,5 +1,5 @@
 use super::*;
-use crate::input::EditorMode;
+use crate::input::{EditorMode, InputModeKind};
 use std::ops::Range;
 
 use lsp_types::{CompletionItem, Hover};
@@ -22,7 +22,7 @@ impl CompletionMenuState {
         self.revision
     }
 
-    pub(super) fn bump(&mut self) {
+    pub(crate) fn bump(&mut self) {
         self.revision = self.revision.wrapping_add(1);
     }
 }
@@ -61,6 +61,41 @@ pub(crate) struct ContextMenuContent {
 pub enum InputOverlayKind {
     Completion,
     CodeAction,
+}
+
+impl<M: InputModeKind> InputBaseState<M> {
+    pub(crate) fn apply_completion_item(
+        &mut self,
+        item: &CompletionItem,
+        fallback_range: Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut range = fallback_range;
+        let mut new_text = item.label.clone();
+        if let Some(edit) = item.text_edit.as_ref() {
+            match edit {
+                lsp_types::CompletionTextEdit::Edit(edit) => {
+                    new_text.clone_from(&edit.new_text);
+                    range = self.text.position_to_offset(&edit.range.start)
+                        ..self.text.position_to_offset(&edit.range.end);
+                }
+                lsp_types::CompletionTextEdit::InsertAndReplace(edit) => {
+                    new_text.clone_from(&edit.new_text);
+                    range = self.text.position_to_offset(&edit.replace.start)
+                        ..self.text.position_to_offset(&edit.replace.end);
+                }
+            }
+        } else if let Some(insert_text) = item.insert_text.as_ref() {
+            new_text.clone_from(insert_text);
+            range = range.end..range.end;
+        }
+        self.completion_inserting = true;
+        let range = self.range_to_utf16(&range);
+        self.replace_text_in_range_silent(Some(range), &new_text, window, cx);
+        self.completion_inserting = false;
+        self.focus(window, cx);
+    }
 }
 
 impl InputBaseState<EditorMode> {
@@ -170,30 +205,7 @@ impl InputBaseState<EditorMode> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut range = fallback_range;
-        let mut new_text = item.label.clone();
-        if let Some(edit) = item.text_edit.as_ref() {
-            match edit {
-                lsp_types::CompletionTextEdit::Edit(edit) => {
-                    new_text.clone_from(&edit.new_text);
-                    range = self.text.position_to_offset(&edit.range.start)
-                        ..self.text.position_to_offset(&edit.range.end);
-                }
-                lsp_types::CompletionTextEdit::InsertAndReplace(edit) => {
-                    new_text.clone_from(&edit.new_text);
-                    range = self.text.position_to_offset(&edit.replace.start)
-                        ..self.text.position_to_offset(&edit.replace.end);
-                }
-            }
-        } else if let Some(insert_text) = item.insert_text.as_ref() {
-            new_text.clone_from(insert_text);
-            range = range.end..range.end;
-        }
-        self.completion_inserting = true;
-        let range = self.range_to_utf16(&range);
-        self.replace_text_in_range_silent(Some(range), &new_text, window, cx);
-        self.completion_inserting = false;
-        self.focus(window, cx);
+        self.apply_completion_item(item, fallback_range, window, cx);
     }
 
     #[doc(hidden)]

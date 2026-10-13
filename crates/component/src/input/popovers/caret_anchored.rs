@@ -11,7 +11,7 @@ use gpui::{
     InspectorElementId, IntoElement, LayoutId, Pixels, Point, Size, Style, WeakEntity, Window, px,
 };
 
-use crate::input::{EditorState, PrepaintCaretGeometry};
+use crate::input::{InputBaseState, InputModeKind, PrepaintCaretGeometry};
 
 /// Computes the caret-anchored popup origin from fresh prepaint geometry.
 ///
@@ -34,15 +34,15 @@ pub(crate) fn caret_popup_anchor(geometry: PrepaintCaretGeometry) -> Point<Pixel
 /// so position, hitboxes, accessibility bounds, and width/layout decisions
 /// are all consistent with the current frame's caret. Always use inside
 /// `deferred()` so the prepaint runs after the input's prepaint.
-pub(crate) struct CaretAnchoredPopup {
-    editor: WeakEntity<EditorState>,
+pub(crate) struct CaretAnchoredPopup<M: InputModeKind> {
+    editor: WeakEntity<InputBaseState<M>>,
     build: Box<dyn Fn(Point<Pixels>, &mut Window, &mut App) -> AnyElement>,
     content: Option<AnyElement>,
 }
 
-impl CaretAnchoredPopup {
+impl<M: InputModeKind> CaretAnchoredPopup<M> {
     pub(crate) fn new(
-        editor: WeakEntity<EditorState>,
+        editor: WeakEntity<InputBaseState<M>>,
         build: impl Fn(Point<Pixels>, &mut Window, &mut App) -> AnyElement + 'static,
     ) -> Self {
         Self {
@@ -53,7 +53,7 @@ impl CaretAnchoredPopup {
     }
 }
 
-impl Element for CaretAnchoredPopup {
+impl<M: InputModeKind> Element for CaretAnchoredPopup<M> {
     type RequestLayoutState = ();
     type PrepaintState = ();
 
@@ -123,7 +123,7 @@ impl Element for CaretAnchoredPopup {
     }
 }
 
-impl IntoElement for CaretAnchoredPopup {
+impl<M: InputModeKind> IntoElement for CaretAnchoredPopup<M> {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {

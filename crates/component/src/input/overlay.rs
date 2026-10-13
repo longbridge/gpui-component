@@ -5,7 +5,7 @@ use ropey::Rope;
 
 use super::{
     InputBaseState, InputModeKind,
-    popovers::{CodeActionMenu, CompletionMenu, DiagnosticPopover, HoverPopover},
+    popovers::{CodeActionMenu, CompletionMenu, CompletionMode, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
 
@@ -26,8 +26,9 @@ impl<M: OverlayMode> Global for InputOverlayRegistry<M> {}
 struct InputOverlayHost<M: OverlayMode> {
     search: Entity<SearchPanel<M>>,
     search_signature: SearchSignature,
-    /// The language-feature popovers. Only a code editor has them.
-    lsp: Option<LspOverlays>,
+    /// The popovers this mode shows beyond search. A code editor has its
+    /// language-feature set, a single-line field only a completion menu.
+    lsp: Option<M::Lsp>,
 }
 
 /// Identifies one version of the search session, as the search panel shows it.
@@ -105,6 +106,9 @@ impl LspSnapshot {
 ///
 /// Entirely internal: nothing public is generic over the mode any more.
 pub(crate) trait OverlayMode: InputModeKind + Sized {
+    /// The popovers beyond search that this mode builds, if any.
+    type Lsp;
+
     /// Reads the language-feature state this mode shows, if any.
     fn lsp_snapshot(_state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
         None
@@ -117,24 +121,114 @@ pub(crate) trait OverlayMode: InputModeKind + Sized {
         _state: &Entity<InputBaseState<Self>>,
         _window: &mut Window,
         _cx: &mut App,
-    ) -> Option<LspOverlays> {
+    ) -> Option<Self::Lsp> {
         None
     }
 
     fn sync_lsp(
-        _lsp: &mut LspOverlays,
+        _lsp: &mut Self::Lsp,
         _state: &Entity<InputBaseState<Self>>,
         _snapshot: &LspSnapshot,
         _window: &mut Window,
         _cx: &mut App,
     ) {
     }
+
+    /// Adds the open popovers to `floating`, in paint order.
+    fn collect_floating(
+        _lsp: &Self::Lsp,
+        _snapshot: &LspSnapshot,
+        _floating: &mut Vec<AnyElement>,
+    ) {
+    }
 }
 
-impl OverlayMode for crate::input::InputMode {}
-impl OverlayMode for crate::input::TextareaMode {}
+impl OverlayMode for crate::input::TextareaMode {
+    type Lsp = ();
+}
+
+/// The popovers of a single-line field: only the completion menu.
+pub(crate) struct FieldOverlays {
+    completion: Entity<CompletionMenu<crate::input::InputMode>>,
+    completion_signature: OverlaySignature,
+}
+
+impl OverlayMode for crate::input::InputMode {
+    type Lsp = FieldOverlays;
+
+    fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
+        // Every plain input renders through here each frame; install once.
+        if state.read(cx).has_overlay_action_handler() {
+            return;
+        }
+        let id = state.entity_id();
+        state.update(cx, move |state, _| {
+            state.set_overlay_action_handler(move |_, action, window, cx| {
+                let menu = cx
+                    .try_global::<InputOverlayRegistry<Self>>()
+                    .and_then(|registry| registry.hosts.get(&id))
+                    .and_then(|(_, host)| host.lsp.as_ref())
+                    .map(|lsp| lsp.completion.clone());
+                menu.is_some_and(|menu| {
+                    menu.update(cx, |menu, cx| menu.handle_action(action, window, cx))
+                })
+            });
+        });
+    }
+
+    fn lsp_snapshot(state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
+        let completion = state.completion_menu_state();
+        Some(LspSnapshot {
+            completion: OverlaySignature {
+                open: completion.open,
+                revision: completion.revision(),
+            },
+            completion_start: completion.trigger_start_offset,
+            code_action: OverlaySignature::default(),
+            hover: None,
+            diagnostic: None,
+            cursor: state.cursor(),
+        })
+    }
+
+    fn build_lsp(
+        state: &Entity<InputBaseState<Self>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<FieldOverlays> {
+        Some(FieldOverlays {
+            completion: CompletionMenu::new(state.clone(), window, cx),
+            completion_signature: OverlaySignature::default(),
+        })
+    }
+
+    fn sync_lsp(
+        lsp: &mut FieldOverlays,
+        state: &Entity<InputBaseState<Self>>,
+        snapshot: &LspSnapshot,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        sync_completion(
+            &lsp.completion,
+            &mut lsp.completion_signature,
+            state,
+            snapshot,
+            window,
+            cx,
+        );
+    }
+
+    fn collect_floating(lsp: &FieldOverlays, snapshot: &LspSnapshot, floating: &mut Vec<AnyElement>) {
+        if snapshot.completion.open {
+            floating.push(lsp.completion.clone().into_any_element());
+        }
+    }
+}
 
 impl OverlayMode for crate::input::EditorMode {
+    type Lsp = LspOverlays;
+
     fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
         let id = state.entity_id();
         state.update(cx, move |state, _| {
@@ -206,27 +300,14 @@ impl OverlayMode for crate::input::EditorMode {
     ) {
         let cursor = snapshot.cursor;
 
-        if snapshot.completion != lsp.completion_signature {
-            lsp.completion_signature = OverlaySignature {
-                open: snapshot.completion.open,
-                revision: snapshot.completion.revision,
-            };
-            let open = snapshot.completion.open;
-            let start = snapshot.completion_start;
-            // Read the items only now, on a frame where they changed.
-            let (query, items) = {
-                let menu = state.read(cx).completion_menu_state();
-                (menu.query.clone(), menu.items.clone())
-            };
-            lsp.completion.update(cx, |menu, cx| {
-                if open {
-                    menu.update_query(start.unwrap_or(cursor), query);
-                    menu.show(cursor, items, window, cx);
-                } else {
-                    menu.hide(cx);
-                }
-            });
-        }
+        sync_completion(
+            &lsp.completion,
+            &mut lsp.completion_signature,
+            state,
+            snapshot,
+            window,
+            cx,
+        );
 
         if snapshot.code_action != lsp.code_action_signature {
             lsp.code_action_signature = OverlaySignature {
@@ -272,7 +353,57 @@ impl OverlayMode for crate::input::EditorMode {
                 .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
         }
     }
+
+    fn collect_floating(lsp: &LspOverlays, snapshot: &LspSnapshot, floating: &mut Vec<AnyElement>) {
+        if snapshot.completion.open {
+            floating.push(lsp.completion.clone().into_any_element());
+        }
+        if snapshot.code_action.open {
+            floating.push(lsp.code_actions.clone().into_any_element());
+        }
+        if let Some(hover) = lsp.hover.as_ref() {
+            floating.push(hover.clone().into_any_element());
+        }
+        if let Some(diagnostic) = lsp.diagnostic.as_ref() {
+            floating.push(diagnostic.clone().into_any_element());
+        }
+    }
 }
+
+/// Mirrors the engine's completion state into `menu` when it changed.
+fn sync_completion<M: CompletionMode>(
+    menu: &Entity<CompletionMenu<M>>,
+    signature: &mut OverlaySignature,
+    state: &Entity<InputBaseState<M>>,
+    snapshot: &LspSnapshot,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if snapshot.completion == *signature {
+        return;
+    }
+    *signature = OverlaySignature {
+        open: snapshot.completion.open,
+        revision: snapshot.completion.revision,
+    };
+    let open = snapshot.completion.open;
+    let start = snapshot.completion_start;
+    let cursor = snapshot.cursor;
+    // Read the items only now, on a frame where they changed.
+    let (query, items) = {
+        let content = M::completion_menu_state(state.read(cx));
+        (content.query.clone(), content.items.clone())
+    };
+    menu.update(cx, |menu, cx| {
+        if open {
+            menu.update_query(start.unwrap_or(cursor), query);
+            menu.show(cursor, items, window, cx);
+        } else {
+            menu.hide(cx);
+        }
+    });
+}
+
 
 #[derive(Default)]
 pub(super) struct InputOverlays {
@@ -371,18 +502,7 @@ impl<M: OverlayMode> InputOverlayHost<M> {
         let search = search_open.then(|| self.search.clone().into_any_element());
         let mut floating = Vec::with_capacity(4);
         if let (Some(lsp), Some(snapshot)) = (self.lsp.as_ref(), snapshot.as_ref()) {
-            if snapshot.completion.open {
-                floating.push(lsp.completion.clone().into_any_element());
-            }
-            if snapshot.code_action.open {
-                floating.push(lsp.code_actions.clone().into_any_element());
-            }
-            if let Some(hover) = lsp.hover.as_ref() {
-                floating.push(hover.clone().into_any_element());
-            }
-            if let Some(diagnostic) = lsp.diagnostic.as_ref() {
-                floating.push(diagnostic.clone().into_any_element());
-            }
+            M::collect_floating(lsp, snapshot, &mut floating);
         }
         InputOverlays { search, floating }
     }
@@ -705,5 +825,70 @@ mod tests {
         });
         cx.run_until_parked();
         assert!(dropped_owner.upgrade().is_none());
+    }
+
+    #[gpui::test]
+    fn single_line_input_hosts_a_completion_menu(cx: &mut gpui::TestAppContext) {
+        use lsp_types::{CompletionTextEdit, Position, Range, TextEdit};
+
+        struct InputProbe {
+            state: Entity<crate::input::InputState>,
+        }
+        impl Render for InputProbe {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                div()
+            }
+        }
+
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|window, cx| InputProbe {
+            state: cx.new(|cx| crate::input::InputState::new(window, cx)),
+        });
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+        cx.update(|window, cx| {
+            assert!(render_overlays(&state, window, cx).is_empty());
+            assert!(state.read(cx).has_overlay_action_handler());
+
+            state.update(cx, |state, cx| {
+                state.set_value("{{ho", window, cx);
+                state.present_completion_items(
+                    0,
+                    "ho",
+                    vec![CompletionItem {
+                        label: "host".into(),
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: Range::new(Position::new(0, 0), Position::new(0, 4)),
+                            new_text: "{{host}}".into(),
+                        })),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+            assert_eq!(render_overlays(&state, window, cx).floating.len(), 1);
+
+            // Escape closes the menu without touching the text.
+            state.update(cx, |state, cx| {
+                assert!(state.route_overlay_action(Box::new(super::super::Escape), window, cx));
+                assert!(!state.completion_menu_state().open);
+            });
+            assert!(render_overlays(&state, window, cx).is_empty());
+
+            // Without an open menu, actions fall through to the input.
+            state.update(cx, |state, cx| {
+                assert!(!state.route_overlay_action(Box::new(super::super::Escape), window, cx));
+                state.insert_completion(
+                    &CompletionItem {
+                        label: "host".into(),
+                        insert_text: Some("st}}".into()),
+                        ..Default::default()
+                    },
+                    2..4,
+                    window,
+                    cx,
+                );
+                assert_eq!(state.value(), "{{host}}");
+            });
+        });
     }
 }

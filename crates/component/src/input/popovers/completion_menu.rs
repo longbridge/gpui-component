@@ -15,21 +15,99 @@ const POPOVER_GAP: Pixels = px(4.);
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
     input::{
-        self, EditorState,
+        self, EditorMode, InputBaseState, InputMode,
         popovers::{CaretAnchoredPopup, editor_popover, render_markdown},
     },
     label::Label,
     list::{List, ListDelegate, ListEvent, ListState},
 };
 
-struct ContextMenuDelegate {
+
+/// A kind of input that can host a [`CompletionMenu`].
+///
+/// The menu is generic over the input it serves, so the pieces that differ
+/// between an editor and a single-line field are reached through this seam.
+pub(crate) trait CompletionMode: input::InputModeKind + Sized {
+    fn insert_completion(
+        state: &mut InputBaseState<Self>,
+        item: &CompletionItem,
+        range: std::ops::Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<InputBaseState<Self>>,
+    );
+
+    fn dismiss_completion_overlay(
+        state: &mut InputBaseState<Self>,
+        cx: &mut Context<InputBaseState<Self>>,
+    );
+
+    fn completion_max_width(state: &InputBaseState<Self>) -> Pixels;
+
+    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState;
+}
+
+impl CompletionMode for EditorMode {
+    fn insert_completion(
+        state: &mut InputBaseState<Self>,
+        item: &CompletionItem,
+        range: std::ops::Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<InputBaseState<Self>>,
+    ) {
+        state.insert_completion(item, range, window, cx);
+    }
+
+    fn dismiss_completion_overlay(
+        state: &mut InputBaseState<Self>,
+        cx: &mut Context<InputBaseState<Self>>,
+    ) {
+        state.dismiss_completion_overlay(cx);
+    }
+
+    fn completion_max_width(state: &InputBaseState<Self>) -> Pixels {
+        state.lsp().completion_menu.max_width
+    }
+
+    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState {
+        state.completion_menu_state()
+    }
+}
+
+impl CompletionMode for InputMode {
+    fn insert_completion(
+        state: &mut InputBaseState<Self>,
+        item: &CompletionItem,
+        range: std::ops::Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<InputBaseState<Self>>,
+    ) {
+        state.insert_completion(item, range, window, cx);
+    }
+
+    fn dismiss_completion_overlay(
+        state: &mut InputBaseState<Self>,
+        cx: &mut Context<InputBaseState<Self>>,
+    ) {
+        state.dismiss_completion_overlay(cx);
+    }
+
+    fn completion_max_width(_: &InputBaseState<Self>) -> Pixels {
+        gpui_base::input::CompletionMenuOptions::default().max_width
+    }
+
+    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState {
+        state.completion_menu_state()
+    }
+}
+
+struct ContextMenuDelegate<M: CompletionMode> {
     query: SharedString,
-    menu: Entity<CompletionMenu>,
+    menu: Entity<CompletionMenu<M>>,
     items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
 }
 
-impl ContextMenuDelegate {
+impl<M: CompletionMode> ContextMenuDelegate<M> {
     fn set_items(&mut self, items: Vec<CompletionItem>) {
         self.items = items.into_iter().map(Rc::new).collect();
         self.selected_ix = 0;
@@ -127,9 +205,9 @@ impl RenderOnce for CompletionMenuItem {
     }
 }
 
-impl EventEmitter<DismissEvent> for ContextMenuDelegate {}
+impl<M: CompletionMode> EventEmitter<DismissEvent> for ContextMenuDelegate<M> {}
 
-impl ListDelegate for ContextMenuDelegate {
+impl<M: CompletionMode> ListDelegate for ContextMenuDelegate<M> {
     type Item = CompletionMenuItem;
 
     fn items_count(&self, _: usize, _: &gpui::App) -> usize {
@@ -168,10 +246,10 @@ impl ListDelegate for ContextMenuDelegate {
 }
 
 /// A context menu for code completions and code actions.
-pub struct CompletionMenu {
+pub struct CompletionMenu<M: CompletionMode = EditorMode> {
     offset: usize,
-    editor: WeakEntity<EditorState>,
-    list: Entity<ListState<ContextMenuDelegate>>,
+    editor: WeakEntity<InputBaseState<M>>,
+    list: Entity<ListState<ContextMenuDelegate<M>>>,
     open: bool,
 
     /// The offset of the first character that triggered the completion.
@@ -180,12 +258,12 @@ pub struct CompletionMenu {
     _subscriptions: Vec<Subscription>,
 }
 
-impl CompletionMenu {
+impl<M: CompletionMode> CompletionMenu<M> {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
     /// NOTE: This element should not call from EditorState::new, unless that will stack overflow.
     pub(crate) fn new(
-        editor: Entity<EditorState>,
+        editor: Entity<InputBaseState<M>>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -233,7 +311,7 @@ impl CompletionMenu {
 
         cx.spawn_in(window, async move |_, cx| {
             editor.update_in(cx, |editor, window, cx| {
-                editor.insert_completion(&item, range, window, cx);
+                M::insert_completion(editor, &item, range, window, cx);
             })
         })
         .detach();
@@ -302,7 +380,7 @@ impl CompletionMenu {
         self.hide(cx);
         let editor = self.editor.clone();
         cx.spawn(async move |_, cx| {
-            let _ = editor.update(cx, |editor, cx| editor.dismiss_completion_overlay(cx));
+            let _ = editor.update(cx, |editor, cx| M::dismiss_completion_overlay(editor, cx));
         })
         .detach();
     }
@@ -345,7 +423,7 @@ impl CompletionMenu {
     }
 }
 
-impl Render for CompletionMenu {
+impl<M: CompletionMode> Render for CompletionMenu<M> {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.open {
             return Empty.into_any_element();
@@ -361,7 +439,7 @@ impl Render for CompletionMenu {
         };
         // The anchor is resolved in the popup's deferred prepaint from the
         // input's current-frame geometry; the content below is built there.
-        let configured_max = editor.read(cx).lsp().completion_menu.max_width;
+        let configured_max = M::completion_max_width(editor.read(cx));
         let list = self.list.clone();
         let menu = cx.weak_entity();
 
@@ -437,7 +515,7 @@ mod tests {
         cx.update(crate::init);
         let window = cx.add_empty_window();
         let (editor, menu) = window.update(|window, cx| {
-            let editor = cx.new(|cx| EditorState::new(window, cx).default_value("co"));
+            let editor = cx.new(|cx| crate::input::EditorState::new(window, cx).default_value("co"));
             let menu = CompletionMenu::new(editor.clone(), window, cx);
             let old_items = vec![CompletionItem {
                 label: "const".into(),

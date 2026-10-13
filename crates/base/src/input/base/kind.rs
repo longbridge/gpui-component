@@ -334,11 +334,32 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
 impl InputModeKind for InputMode {
     const MULTI_LINE: bool = false;
 
-    /// A single-line field needs nothing beyond the shared engine. Masking,
-    /// validation and number stepping live there: together they are ~120 bytes
-    /// and their access sites sit inside the shared edit path, so separating
-    /// them would cost more in dispatch than it saves.
-    type Extras = ();
+    /// A single-line field needs almost nothing beyond the shared engine.
+    /// Masking, validation and number stepping live there: together they are
+    /// ~120 bytes and their access sites sit inside the shared edit path, so
+    /// separating them would cost more in dispatch than it saves. The one
+    /// addition is the host-driven completion menu.
+    type Extras = FieldExtras;
+
+    fn hide_context_menu(
+        state: &mut InputBaseState<Self>,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.hide_context_menu(cx);
+    }
+
+    fn is_context_menu_open(state: &InputBaseState<Self>, _cx: &gpui::App) -> bool {
+        state.is_context_menu_open()
+    }
+
+    fn handle_context_menu_action(
+        state: &mut InputBaseState<Self>,
+        action: Box<dyn gpui::Action>,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) -> bool {
+        state.handle_action_for_context_menu(action, window, cx)
+    }
 }
 impl InputModeKind for TextareaMode {
     const MULTI_LINE: bool = true;
@@ -348,6 +369,16 @@ impl InputModeKind for TextareaMode {
 }
 // `EditorMode`'s implementation lives with the editor code, next to the
 // language features it dispatches to.
+
+/// What a single-line field adds on top of the shared engine: a completion
+/// menu whose items the host supplies with
+/// [`InputBaseState::present_completion_items`].
+#[derive(Default)]
+pub struct FieldExtras {
+    pub(crate) completion: crate::input::CompletionMenuState,
+}
+
+impl InputExtras for FieldExtras {}
 
 /// What a code editor adds on top of multi-line text: language features.
 pub struct EditorExtras {
