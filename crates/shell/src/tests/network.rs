@@ -765,7 +765,6 @@ fn websocket_reads_and_writes_text_and_binary_messages(cx: &mut TestAppContext) 
 fn websocket_pending_read_does_not_block_write_or_close(cx: &mut TestAppContext) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("WebSocket listener");
     let address = listener.local_addr().expect("listener address");
-    let (text_received, text_receiver) = mpsc::channel();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("WebSocket connection");
         stream
@@ -782,10 +781,7 @@ fn websocket_pending_read_does_not_block_write_or_close(cx: &mut TestAppContext)
         for _ in 0..3 {
             match socket.read() {
                 Ok(Message::Pong(bytes)) if bytes.as_ref() == [7] => saw_pong = true,
-                Ok(Message::Text(text)) if text == "while read is pending" => {
-                    saw_text = true;
-                    let _ = text_received.send(());
-                }
+                Ok(Message::Text(text)) if text == "while read is pending" => saw_text = true,
                 Ok(message) if message.is_close() => saw_close = true,
                 Ok(_) => {}
                 Err(_) => break,
@@ -797,17 +793,25 @@ fn websocket_pending_read_does_not_block_write_or_close(cx: &mut TestAppContext)
     let source =
         WEBSOCKET_PENDING_READ_PROBE.replace("__URL__", &format!("ws://{address}/pending"));
     let (_runtime, view, mut context) = probe(cx, &source);
-    context.run_until_parked();
-    text_receiver
-        .recv_timeout(Duration::from_millis(500))
-        .expect("client write while read is pending");
-    context.executor().advance_clock(Duration::from_millis(10));
-    context.run_until_parked();
+    // The script only reaches `close()` after its write resolves on this
+    // thread, so keep pumping until the server finishes instead of blocking
+    // on `join` and starving the close past the server's read timeout.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let rendered = loop {
+        draw(&mut context, &view);
+        let rendered = snapshot(&mut context, &view);
+        if server.is_finished() && rendered.contains("write-and-close-finished") {
+            break rendered;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for write and close: {rendered}"
+        );
+        thread::sleep(Duration::from_millis(10));
+        context.executor().advance_clock(Duration::from_millis(10));
+        context.run_until_parked();
+    };
     let server_events = server.join().expect("WebSocket server");
-    context.executor().advance_clock(Duration::from_millis(10));
-    context.run_until_parked();
-    draw(&mut context, &view);
-    let rendered = snapshot(&mut context, &view);
     assert_eq!(server_events, (true, true, true));
     assert!(rendered.contains("write-and-close-finished"), "{rendered}");
 }
