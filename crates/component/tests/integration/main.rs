@@ -9,4 +9,5 @@ mod legacy_button_compat;
 mod legacy_controls_compat;
 mod legacy_language_config_compat;
 mod table_dump_range;
+mod table_fit_column;
 mod theme_compat;
