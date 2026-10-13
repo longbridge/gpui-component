@@ -31,6 +31,8 @@ pub use text_view::*;
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);
+    #[cfg(feature = "block-editor")]
+    block_editor::init(cx);
 }
 
 /// Create a new markdown text view with code location as id.

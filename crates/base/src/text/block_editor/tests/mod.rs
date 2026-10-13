@@ -3,6 +3,7 @@ mod props;
 mod repro;
 mod round_trip;
 mod undo;
+mod view;
 
 use super::*;
 use crate::text::MarkdownExtensions;
