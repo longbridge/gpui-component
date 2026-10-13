@@ -485,8 +485,15 @@ impl TableDelegate for StockTableDelegate {
         window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Option<Pixels> {
-        // The table draws every size at its own `text_sm`.
-        let font_size = rems(0.875).to_pixels(window.rem_size());
+        // Use the same size refinement as the cells and header. Custom pixel
+        // sizes keep the story's inherited `text_sm`.
+        let font_size = div()
+            .table_cell_size(self.size)
+            .style()
+            .text
+            .font_size
+            .unwrap_or(rems(0.875).into())
+            .to_pixels(window.rem_size());
         let mut font = window.text_style().font();
         font.family = cx.theme().font_family.clone();
 
@@ -517,7 +524,11 @@ impl TableDelegate for StockTableDelegate {
         } else {
             px(0.)
         };
-        let heading = measure(col.name.to_string(), FontWeight::NORMAL, window) + sort_icon;
+        let header_padding = col.paddings.map_or(px(0.), |padding| {
+            (self.size.table_cell_padding().right - padding.right).max(px(0.))
+        });
+        let heading =
+            measure(col.name.to_string(), FontWeight::NORMAL, window) + sort_icon + header_padding;
         let widest = self
             .stocks
             .iter()
@@ -1128,6 +1139,10 @@ impl DataTableStory {
 
     fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().size = a.0;
+            cx.notify();
+        });
         cx.notify();
     }
 
