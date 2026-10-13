@@ -304,6 +304,9 @@ Uses `rust-i18n` crate.
 
 - Localization files are located in `crates/component/locales/`.
 - Only add `en`, `zh-CN`, `zh-HK` by default.
+- Accessibility (A11y) names and labels may remain in English; localization is
+  not required for these strings. Keep the item's own label when naming a
+  control that acts on it. This exception does not apply to visible UI copy.
 
 ## Documentation
 
