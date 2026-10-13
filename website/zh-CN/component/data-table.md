@@ -328,6 +328,27 @@ cx.subscribe_in(&state, window, |view, table, event, _, cx| {
 }).detach();
 ```
 
+### 按内容自动调整列宽
+
+当 delegate 实现了 `TableDelegate::fit_column` 时，双击列宽调整手柄会把该列调整为其最宽内容的宽度。`fit_column` 返回内容本身的宽度，表格会加上单元格内边距，按列的 `min_width` 和 `max_width` 限制，并发出 `TableEvent::ColumnWidthsChanged`。默认返回 `None`，此时列宽保持不变。可排序列的表头还包含表格绘制的排序图标（0.75rem 图标，两侧各 2 px 内边距），测量表头时需要计入。
+
+```rust
+impl TableDelegate for MyTableDelegate {
+    fn fit_column(
+        &mut self,
+        col_ix: usize,
+        window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Option<Pixels> {
+        // 用 `window.text_system().shape_line(..)` 测量 `col_ix` 的表头和每一行的文本，
+        // 返回其中最宽的宽度。
+        Some(self.widest_text(col_ix, window, cx))
+    }
+}
+```
+
+也可以在代码中调用 `TableState::fit_col(col_ix, window, cx)`，并用 `TableState::col_width(col_ix)` 读取列当前的绘制宽度。
+
 ## 无限加载
 
 如果你的数据来自分页接口或流式加载，可以在 delegate 中实现按需加载：
@@ -371,7 +392,7 @@ DataTable::new(&state)
 
 - `↑/↓` 在行之间移动
 - `←/→` 在列之间移动
-- `Home` / `End` 跳到首尾
+- `Home` / `End` 跳到第一行或最后一行
 - `PageUp/PageDown` 按页移动
 - `Escape` 清除选中
 
@@ -411,6 +432,8 @@ DataTable::new(&state)
 - `clear_selection(cx)`
 - `scroll_to_row(row_ix, cx)`
 - `scroll_to_col(col_ix, cx)`
+- `col_width(col_ix)` - 返回列当前的绘制宽度
+- `fit_col(col_ix, window, cx)` - 把列调整为其内容的宽度，等同于双击列宽调整手柄
 
 #### Column
 

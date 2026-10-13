@@ -3,7 +3,7 @@ use gpui_kit::{
     App, AppContext, ClipboardItem, Context, ElementId, Entity, InputEvent as _, Modifiers,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta,
     Subscription, TestAppContext, Window, WindowHandle,
-    component::input::{InputEvent, Textarea, TextareaState},
+    component::input::{Input, InputEvent, InputState, Textarea, TextareaState},
     div, point,
     prelude::*,
     px, size,
@@ -1130,6 +1130,178 @@ fn rows_set_the_minimum_height_of_a_plain_textarea(cx: &mut TestAppContext) {
         let line = height("rows-two") - height("rows-one");
         assert!(line > px(0.), "a second row adds height");
         assert_eq!(height("rows-five") - height("rows-one"), line * 4.);
+    })
+    .unwrap();
+}
+
+/// A textarea partway down a page that scrolls.
+struct ScrollingPage {
+    text: Entity<TextareaState>,
+    page: gpui_kit::ScrollHandle,
+}
+
+impl Render for ScrollingPage {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("page")
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(&self.page)
+            .child(div().h(px(120.)))
+            .child(Textarea::new(&self.text).h(px(160.)))
+            .child(div().h(px(1200.)))
+    }
+}
+
+fn scrolling_page(
+    cx: &mut TestAppContext,
+    value: String,
+) -> (
+    WindowHandle<gpui_kit::base::Root>,
+    Entity<TextareaState>,
+    gpui_kit::ScrollHandle,
+) {
+    cx.update(gpui_kit::init);
+    let page = gpui_kit::ScrollHandle::new();
+    let (handle, view) = common::open_window(cx, Some(size(px(480.), px(480.))), {
+        let page = page.clone();
+        move |window, cx| {
+            let text = cx.new(|cx| TextareaState::new(window, cx).default_value(value));
+            cx.new(|_| ScrollingPage { text, page })
+        }
+    });
+    let text = cx.update(|cx| view.read(cx).text.clone());
+    (handle, text, page)
+}
+
+/// Sends one scroll packet over the textarea.
+fn scroll_over(
+    window: &mut Window,
+    text: &Entity<TextareaState>,
+    dy: f32,
+    phase: gpui_kit::TouchPhase,
+    cx: &mut App,
+) {
+    let position = window.find(target(text)).bounds().center();
+    window.dispatch_event(
+        MouseMoveEvent {
+            position,
+            ..Default::default()
+        }
+        .to_platform_input(),
+        cx,
+    );
+    window.dispatch_event(
+        gpui_kit::ScrollWheelEvent {
+            position,
+            delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
+            touch_phase: phase,
+            ..Default::default()
+        }
+        .to_platform_input(),
+        cx,
+    );
+    window.render_frame(cx);
+}
+
+#[gpui_kit::test]
+fn scrolling_past_the_end_of_a_textarea_does_not_scroll_the_page(cx: &mut TestAppContext) {
+    use gpui_kit::TouchPhase::{Ended, Moved, Started};
+
+    let value = (0..40).map(|n| format!("line {n}\n")).collect::<String>();
+    let (handle, text, page) = scrolling_page(cx, value);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        // A swipe that runs far past the end of the text, then its momentum.
+        scroll_over(window, &text, -40., Started, cx);
+        scroll_over(window, &text, -2000., Moved, cx);
+        let end = text.read(cx).scroll_offset().y;
+        assert!(end < px(0.), "the text scrolls");
+        scroll_over(window, &text, 0., Ended, cx);
+        scroll_over(window, &text, -300., Moved, cx);
+        // A wheel flick, or a new swipe, that starts at the end.
+        scroll_over(window, &text, -40., Moved, cx);
+        scroll_over(window, &text, -40., Started, cx);
+        assert_eq!(
+            text.read(cx).scroll_offset().y,
+            end,
+            "the text stays at its end"
+        );
+        assert_eq!(page.offset().y, px(0.), "the page stays where it was");
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn scrolling_over_a_textarea_whose_text_fits_scrolls_the_page(cx: &mut TestAppContext) {
+    let (handle, text, page) = scrolling_page(cx, "one line".into());
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        scroll_over(window, &text, -40., gpui_kit::TouchPhase::Moved, cx);
+        assert!(page.offset().y < px(0.), "the page scrolls");
+    })
+    .unwrap();
+}
+
+struct SingleLinePage {
+    input: Entity<InputState>,
+    page: gpui_kit::ScrollHandle,
+}
+
+impl Render for SingleLinePage {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("page")
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(&self.page)
+            .child(div().h(px(120.)))
+            .child(Input::new(&self.input).w(px(160.)))
+            .child(div().h(px(1200.)))
+    }
+}
+
+#[gpui_kit::test]
+fn scrolling_vertically_over_a_single_line_input_scrolls_the_page(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let page = gpui_kit::ScrollHandle::new();
+    let (handle, view) = common::open_window(cx, Some(size(px(480.), px(480.))), {
+        let page = page.clone();
+        move |window, cx| {
+            let value = "a value much wider than the input it sits in";
+            let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
+            cx.new(|_| SingleLinePage { input, page })
+        }
+    });
+    let input = cx.update(|cx| view.read(cx).input.clone());
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        let position = window
+            .find(ElementId::from(("input", input.entity_id())))
+            .bounds()
+            .center();
+        window.dispatch_event(
+            MouseMoveEvent {
+                position,
+                ..Default::default()
+            }
+            .to_platform_input(),
+            cx,
+        );
+        // A trackpad swipe that is mostly vertical still drifts sideways,
+        // here toward the start the text already sits at.
+        window.dispatch_event(
+            gpui_kit::ScrollWheelEvent {
+                position,
+                delta: ScrollDelta::Pixels(point(px(2.), px(-40.))),
+                touch_phase: gpui_kit::TouchPhase::Moved,
+                ..Default::default()
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.render_frame(cx);
+        assert!(page.offset().y < px(0.), "the page scrolls");
     })
     .unwrap();
 }
