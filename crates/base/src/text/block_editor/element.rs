@@ -329,6 +329,41 @@ pub(crate) struct Prepaint {
     hitbox: Hitbox,
 }
 
+impl EditorRoot {
+    /// Scroll the caret into view in the owner's scroll container, once its
+    /// block has been laid out (a culled block is pinned, so it is laid out
+    /// in the frame after the caret moved there).
+    fn reveal_caret(&self, window: &mut Window, cx: &mut App) {
+        let state = self.state.read(cx);
+        if !state.reveal.get() {
+            return;
+        }
+        let (Some(handle), Some(pos)) = (state.scroll_handle.clone(), state.model.caret()) else {
+            state.reveal.set(false);
+            return;
+        };
+        let Some(caret) = state
+            .frame
+            .borrow()
+            .caret_bounds(pos, self.style.caret_width())
+        else {
+            return;
+        };
+        state.reveal.set(false);
+        let view = handle.bounds();
+        let mut offset = handle.offset();
+        if caret.top() < view.top() {
+            offset.y += view.top() - caret.top();
+        } else if caret.bottom() > view.bottom() {
+            offset.y -= caret.bottom() - view.bottom();
+        } else {
+            return;
+        }
+        handle.set_offset(offset);
+        window.refresh();
+    }
+}
+
 impl Element for EditorRoot {
     type RequestLayoutState = AnyElement;
     type PrepaintState = Prepaint;
@@ -372,6 +407,7 @@ impl Element for EditorRoot {
                 let frame = sink.into_frame(self.snapshot.leaves.clone(), &self.snapshot.tables);
                 *self.state.read(cx).frame.borrow_mut() = frame;
             }
+            self.reveal_caret(window, cx);
             let mask = window.content_mask().bounds;
             let cull = self.state.read(cx).cull.clone();
             if cull.borrow_mut().finish_frame(bounds, mask) {

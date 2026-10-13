@@ -125,6 +125,10 @@ pub struct BlockEditorState {
     /// Last complete frame, written by the element after prepaint.
     pub(crate) frame: Rc<RefCell<FrameLayout>>,
     pub(crate) cull: Rc<RefCell<super::cull::CullState>>,
+    /// Scroll container to keep the caret in view (see `set_scroll_handle`).
+    pub(crate) scroll_handle: Option<gpui::ScrollHandle>,
+    /// The caret moved and should be scrolled into view after layout.
+    pub(crate) reveal: std::cell::Cell<bool>,
     marked: Option<Marked>,
     /// An IME composition opened an undo group that is not committed yet.
     composition_open: bool,
@@ -176,6 +180,8 @@ impl BlockEditorState {
             projection: ProjectionCache::default(),
             frame: Rc::default(),
             cull: Rc::default(),
+            scroll_handle: None,
+            reveal: Default::default(),
             marked: None,
             composition_open: false,
             goal_x: None,
@@ -228,6 +234,13 @@ impl BlockEditorState {
 
     pub fn editor_style(&self) -> &BlockEditorStyle {
         &self.style
+    }
+
+    /// The scroll container the editor sits in (its `track_scroll` handle).
+    /// With one set, the caret is scrolled into view after it moves; blocks
+    /// outside the container's visible area are culled either way.
+    pub fn set_scroll_handle(&mut self, handle: gpui::ScrollHandle) {
+        self.scroll_handle = Some(handle);
     }
 
     pub fn is_readonly(&self) -> bool {
@@ -334,6 +347,7 @@ impl BlockEditorState {
 
     fn after_edit(&mut self, origin: EditOrigin, cx: &mut Context<Self>) {
         self.goal_x = None;
+        self.reveal.set(true);
         self.pause_blink(cx);
         cx.emit(BlockEditorEvent::Changed {
             revision: self.model.revision(),
@@ -344,6 +358,7 @@ impl BlockEditorState {
     }
 
     fn selection_changed(&mut self, cx: &mut Context<Self>) {
+        self.reveal.set(true);
         self.pause_blink(cx);
         cx.emit(BlockEditorEvent::SelectionChanged);
         cx.notify();

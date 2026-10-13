@@ -2,8 +2,9 @@
 //! counters, driven through a real window in `TestAppContext`.
 
 use gpui::{
-    AppContext as _, Context, Entity, EntityInputHandler, IntoElement, Modifiers, MouseButton,
-    ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext, Window, div, px,
+    AppContext as _, Context, Entity, EntityInputHandler, InteractiveElement as _, IntoElement,
+    Modifiers, MouseButton, ParentElement as _, Render, StatefulInteractiveElement as _,
+    Styled as _, TestAppContext, VisualTestContext, Window, div, px,
 };
 
 use crate::text::block_editor::{
@@ -694,4 +695,63 @@ fn long_list_is_culled_in_chunks_and_navigable(cx: &mut TestAppContext) {
     assert_eq!(caret_leaf(&editor, cx), Some(300));
     type_text(cx, "x");
     assert!(source(&editor, cx).contains("301. xitem 300\n"));
+}
+
+struct Scrolled(Entity<BlockEditorState>, gpui::ScrollHandle);
+
+impl Render for Scrolled {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("scroll")
+            .w(px(600.))
+            .h(px(300.))
+            .overflow_y_scroll()
+            .track_scroll(&self.1)
+            .child(BlockEditor::new(&self.0))
+    }
+}
+
+/// With a scroll handle, moving the caret into a culled block scrolls it
+/// into view once the block is laid out.
+#[gpui::test]
+fn caret_is_scrolled_into_view(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let doc: String = (0..400).map(|i| format!("paragraph {i}\n\n")).collect();
+    let handle = gpui::ScrollHandle::new();
+    let scroll = handle.clone();
+    let (root, cx) = cx.add_window_view(move |window, cx| {
+        let editor = cx.new(|cx| {
+            let mut state = BlockEditorState::new(window, cx).with_source(&doc);
+            state.set_scroll_handle(scroll.clone());
+            state
+        });
+        Scrolled(editor, scroll)
+    });
+    let editor = root.read_with(cx, |root, _| root.0.clone());
+    cx.update(|window, cx| {
+        let focus = editor.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+    });
+    draw(cx);
+    draw(cx);
+    let rendered = editor.read_with(cx, |e, _| e.cull.borrow().rendered);
+    assert!(rendered < 100, "laid out {rendered} of 400");
+    caret_at(&editor, cx, 0, 0);
+    for _ in 0..200 {
+        keys(cx, "down");
+    }
+    for _ in 0..4 {
+        draw(cx);
+    }
+    assert_eq!(caret_leaf(&editor, cx), Some(200));
+    let (caret, view) = editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        (e.frame.borrow().caret_bounds(c, px(1.)), handle.bounds())
+    });
+    let caret = caret.expect("caret block laid out");
+    assert!(
+        caret.top() >= view.top() - px(1.) && caret.bottom() <= view.bottom() + px(1.),
+        "caret {caret:?} outside view {view:?}"
+    );
+    assert!(handle.offset().y < px(0.));
 }

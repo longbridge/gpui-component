@@ -6,13 +6,14 @@ use gpui_kit::base::text::block_editor::{
 };
 use gpui_kit::component::{button::Button, h_flex, v_flex};
 use gpui_kit::{
-    App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
-    Styled, Subscription, Window, div,
+    App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, rems,
 };
 
 use crate::section;
 
-const SAMPLE: &str = "# Block editor\n\nType here. **Bold** with Ctrl/Cmd-B, *italic* with Ctrl/Cmd-I, `code` with Ctrl/Cmd-E.\n\n## Lists\n\n- Bullet one\n- Bullet two\n  - Nested (Tab / Shift-Tab)\n\n1. First\n2. Second\n\nUndo with Ctrl/Cmd-Z, redo with Ctrl/Cmd-Shift-Z. Drag or Shift-arrows to select across blocks.";
+const SAMPLE: &str = "# Block editor\n\nType here. **Bold** with Ctrl/Cmd-B, *italic* with Ctrl/Cmd-I, `code` with Ctrl/Cmd-E.\n\n## Lists\n\n- Bullet one\n- Bullet two\n  - Nested (Tab / Shift-Tab)\n\n1. First\n2. Second\n\nUndo with Ctrl/Cmd-Z, redo with Ctrl/Cmd-Shift-Z. Drag or Shift-arrows to select across blocks.\n\n| Feature | Status |\n| --- | --- |\n| Tables | click to select, Backspace to delete |\n| Lists | Enter on an empty item exits |";
 
 /// A generated document of 1000+ blocks for the perf note.
 pub fn long_document(blocks: usize) -> String {
@@ -32,6 +33,8 @@ pub fn long_document(blocks: usize) -> String {
 
 pub struct BlockEditorStory {
     editor: Entity<BlockEditorState>,
+    /// The editor's scroll container; the editor keeps the caret in view.
+    scroll: ScrollHandle,
     status: SharedString,
     /// Markdown preview, refreshed on `Changed` only (never per frame).
     markdown: SharedString,
@@ -54,7 +57,12 @@ impl super::Story for BlockEditorStory {
 
 impl BlockEditorStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let editor = cx.new(|cx| BlockEditorState::new(window, cx).with_source(SAMPLE));
+        let scroll = ScrollHandle::new();
+        let editor = cx.new(|cx| {
+            let mut state = BlockEditorState::new(window, cx).with_source(SAMPLE);
+            state.set_scroll_handle(scroll.clone());
+            state
+        });
         let subscription = cx.subscribe(&editor, |this, editor, event: &BlockEditorEvent, cx| {
             if let BlockEditorEvent::Changed { revision, .. } = event {
                 let kind = editor.read(cx).block_kind_at_caret();
@@ -65,6 +73,7 @@ impl BlockEditorStory {
         });
         let mut this = Self {
             editor,
+            scroll,
             status: "".into(),
             markdown: "".into(),
             _subscriptions: vec![subscription],
@@ -162,8 +171,12 @@ impl Render for BlockEditorStory {
             .child(
                 section("Editor").child(
                     div()
+                        .id("block-editor-scroll")
                         .flex_1()
                         .w_full()
+                        .max_h(rems(28.))
+                        .overflow_y_scroll()
+                        .track_scroll(&self.scroll)
                         .child(BlockEditor::new(&self.editor)),
                 ),
             )
