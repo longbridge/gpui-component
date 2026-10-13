@@ -2606,13 +2606,17 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.edit_menu_on_scroll(event.touch_phase, cx);
     }
 
-    /// Whether the text has room to scroll along an axis `delta` moves on.
+    /// Whether the text has room to scroll along the axis `delta` mostly
+    /// moves on. A trackpad swipe drifts a little off its axis, so the drift
+    /// alone does not claim the scroll.
     fn overflows_along(&self, delta: Point<Pixels>) -> bool {
-        let vertical = self.is_multi_line()
-            && delta.y != px(0.)
-            && self.scroll_size.height > self.input_bounds.size.height;
-        let horizontal = delta.x != px(0.) && self.scroll_size.width > self.input_bounds.size.width;
-        vertical || horizontal
+        if delta.y.abs() >= delta.x.abs() {
+            self.is_multi_line()
+                && delta.y != px(0.)
+                && self.scroll_size.height > self.input_bounds.size.height
+        } else {
+            self.scroll_size.width > self.input_bounds.size.width
+        }
     }
 
     pub(super) fn update_scroll_offset(

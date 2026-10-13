@@ -41,6 +41,12 @@ Textarea::new(&message)
 
 The control grows until `max_rows`; overflowing content then scrolls.
 
+## Scrolling
+
+A scroll over a textarea whose text can scroll stays in the textarea, even at
+the end of the text: it does not scroll the page around it. A textarea whose
+text fits leaves the scroll to the page.
+
 ## Value and events
 
 ```rust
