@@ -11,6 +11,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use super::{
+    direct::NodeCache,
     document::{BlockContent, EditorDocument},
     id::BlockId,
     kind::BlockKindData,
@@ -47,9 +48,8 @@ pub(crate) struct ProjectionCache {
     revision: Option<u64>,
     snapshot: Rc<Snapshot>,
     by_id: HashMap<BlockId, Rc<ProjectedBlock>>,
-    /// `cfg(test)`-checked perf counters (D9): top-level blocks parsed, and
-    /// snapshot rebuilds.
-    pub(crate) built: usize,
+    nodes: NodeCache,
+    /// `cfg(test)`-checked perf counter (D9): snapshot rebuilds.
     pub(crate) rebuilds: usize,
 }
 
@@ -66,14 +66,15 @@ impl ProjectionCache {
             let revision = doc.block_revision(*id);
             let block = match self.by_id.get(id) {
                 Some(prev) if prev.revision == revision => prev.clone(),
-                _ => {
-                    self.built += 1;
-                    Rc::new(project(doc, *id, revision))
-                }
+                _ => Rc::new(ProjectedBlock {
+                    revision,
+                    nodes: self.nodes.node(doc, *id).into_iter().collect(),
+                }),
             };
             by_id.insert(*id, block.clone());
             blocks.push(block);
         }
+        self.nodes.collect_garbage(doc);
         let leaves = doc
             .leaves()
             .iter()
@@ -110,6 +111,13 @@ impl ProjectionCache {
     pub(crate) fn invalidate(&mut self) {
         self.revision = None;
         self.by_id.clear();
+        self.nodes.clear();
+    }
+
+    /// Nodes and table rows built rather than reused (D9).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn built(&self) -> usize {
+        self.nodes.built
     }
 }
 
@@ -128,9 +136,4 @@ fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
         }),
         _ => None,
     }
-}
-
-fn project(doc: &EditorDocument, id: BlockId, revision: u64) -> ProjectedBlock {
-    let nodes = super::direct::project_block(doc, id).into_iter().collect();
-    ProjectedBlock { revision, nodes }
 }

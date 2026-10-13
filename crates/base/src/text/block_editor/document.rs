@@ -102,6 +102,11 @@ impl EditorDocument {
         self.block_revisions.get(&id).copied().unwrap_or(0)
     }
 
+    /// Number of blocks, including the root.
+    pub(crate) fn len(&self) -> usize {
+        self.blocks.len()
+    }
+
     pub(crate) fn get(&self, id: BlockId) -> Option<&BlockEntry> {
         self.blocks.get(&id)
     }

@@ -268,17 +268,17 @@ fn long_document_reprojects_one_leaf_per_keystroke(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, &doc);
     let leaves = editor.read_with(cx, |e, _| e.model().document().leaves().count());
     assert!(leaves >= 1000, "{leaves}");
-    let before = editor.read_with(cx, |e, _| (e.projection.built, e.projection.rebuilds));
+    let before = editor.read_with(cx, |e, _| (e.projection.built(), e.projection.rebuilds));
     draw(cx);
     draw(cx);
-    let steady = editor.read_with(cx, |e, _| (e.projection.built, e.projection.rebuilds));
+    let steady = editor.read_with(cx, |e, _| (e.projection.built(), e.projection.rebuilds));
     assert_eq!(before, steady, "steady frames do not re-project");
     caret_at(&editor, cx, 500, 0);
     let t = std::time::Instant::now();
     type_text(cx, "x");
     let elapsed = t.elapsed();
-    let after = editor.read_with(cx, |e, _| (e.projection.built, e.projection.rebuilds));
-    assert_eq!(after.0 - steady.0, 1, "one leaf re-projected");
+    let after = editor.read_with(cx, |e, _| (e.projection.built(), e.projection.rebuilds));
+    assert_eq!(after.0 - steady.0, 1, "one node re-projected");
     assert_eq!(after.1 - steady.1, 1);
     eprintln!(
         "perf: {leaves} leaves, keystroke+frame {elapsed:?} ({} build, test platform)",
@@ -575,4 +575,50 @@ fn backspace_after_table_selects_it_and_copy_round_trips(cx: &mut TestAppContext
     assert!(original.contains(&copied));
     keys(cx, "M-x");
     assert_eq!(source(&editor, cx), "a\n\nb");
+}
+
+/// Per-node cache (§7.3): an edit inside a 1000-item list rebuilds only the
+/// path from the edited paragraph to the list (paragraph, item, list).
+#[gpui::test]
+fn edit_inside_big_list_rebuilds_only_the_item_path(cx: &mut TestAppContext) {
+    let doc: String = (0..1000).map(|i| format!("- item {i}\n")).collect();
+    let (editor, cx) = open(cx, &doc);
+    draw(cx);
+    let steady = editor.read_with(cx, |e, _| e.projection.built());
+    caret_at(&editor, cx, 500, 0);
+    let t = std::time::Instant::now();
+    type_text(cx, "x");
+    let elapsed = t.elapsed();
+    let after = editor.read_with(cx, |e, _| e.projection.built());
+    assert_eq!(after - steady, 3, "paragraph + item + list");
+    assert!(source(&editor, cx).contains("- xitem 500\n"));
+    eprintln!(
+        "perf: 1000-item list, keystroke+frame {elapsed:?} ({} build, test platform)",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
+    );
+}
+
+#[gpui::test]
+fn table_rows_are_cached_per_row(cx: &mut TestAppContext) {
+    let (editor, cx) = open(
+        cx,
+        "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n\nafter",
+    );
+    draw(cx);
+    let steady = editor.read_with(cx, |e, _| e.projection.built());
+    // Leaves: a, b, 1, 2, 3, 4, after. Typing into cell "3" (model-level;
+    // there is no cell editing UI) rebuilds the table and that one row.
+    caret_at(&editor, cx, 4, 0);
+    type_text(cx, "x");
+    assert!(
+        source(&editor, cx).contains("| x3 | 4 |"),
+        "{}",
+        source(&editor, cx)
+    );
+    let after = editor.read_with(cx, |e, _| e.projection.built());
+    assert_eq!(after - steady, 2, "table + one row; other rows reused");
 }
