@@ -905,3 +905,57 @@ fn reveal_without_scroll_handle_is_a_noop(cx: &mut TestAppContext) {
     draw(cx);
     assert!(editor.read_with(cx, |e, _| e.scroll_handle.is_none() && !e.reveal.get()));
 }
+
+#[gpui::test]
+fn code_fence_input_rule_and_code_editing(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "");
+    type_text(cx, "```rust");
+    keys(cx, "enter");
+    assert_eq!(source(&editor, cx), "```rust\n\n```");
+    type_text(cx, "fn a() {");
+    keys(cx, "enter tab");
+    type_text(cx, "x");
+    keys(cx, "enter");
+    type_text(cx, "}");
+    assert_eq!(source(&editor, cx), "```rust\nfn a() {\n    x\n}\n```");
+    // The renderer draws the code (highlighted) and reports its layout.
+    draw(cx);
+    assert!(editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        e.frame.borrow().caret_bounds(c, px(1.)).is_some()
+    }));
+    // IME inside code.
+    cx.update(|window, cx| {
+        editor.update(cx, |e, cx| {
+            e.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+            e.replace_and_mark_text_in_range(None, "你", None, window, cx);
+            e.replace_text_in_range(None, "你", window, cx);
+        })
+    });
+    assert_eq!(source(&editor, cx), "```rust\nfn a() {\n    x\n}你\n```");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "```rust\nfn a() {\n    x\n}\n```");
+    // Arrow down past the end leaves the block.
+    keys(cx, "down");
+    type_text(cx, "after");
+    assert_eq!(
+        source(&editor, cx),
+        "```rust\nfn a() {\n    x\n}\n```\n\nafter"
+    );
+}
+
+#[gpui::test]
+fn code_fence_with_space_converts(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "");
+    type_text(cx, "``` ");
+    type_text(cx, "code");
+    assert_eq!(source(&editor, cx), "```\ncode\n```");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "```\n\n```");
+    keys(cx, "M-z");
+    assert_eq!(
+        source(&editor, cx),
+        "\\`\\`\\`",
+        "undo restores the typed fence"
+    );
+}

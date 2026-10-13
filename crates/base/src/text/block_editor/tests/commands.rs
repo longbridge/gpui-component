@@ -155,14 +155,83 @@ fn link_does_not_extend_at_trailing_edge() {
 }
 
 #[test]
-fn typing_into_code_block_is_not_editable_yet() {
-    let mut m = model("```\ncode\n```");
-    caret_in(&mut m, 0, 0);
-    assert!(matches!(
-        m.insert_text("x", EditOrigin::Typing),
-        Err(CommandError::NotEditable(_))
-    ));
-    assert_eq!(m.source(), "```\ncode\n```");
+fn code_block_text_editing() {
+    let mut m = model("```rust\nfn main() {}\n```");
+    caret_in(&mut m, 0, 11);
+    m.insert_text("\n    x", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "```rust\nfn main() {\n    x}\n```");
+    // Marks never apply inside code.
+    m.run(EditorCommand::ToggleMark(MarkKind::Bold)).unwrap();
+    m.insert_text("y", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "```rust\nfn main() {\n    xy}\n```");
+    m.delete(false).unwrap();
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), "```rust\nfn main() {\n    }\n```");
+    // Tab / Shift+Tab indent the caret's line.
+    m.run(EditorCommand::Outdent).unwrap();
+    assert_eq!(m.source(), "```rust\nfn main() {\n}\n```");
+    m.run(EditorCommand::Indent).unwrap();
+    assert_eq!(m.source(), "```rust\nfn main() {\n    }\n```");
+    assert!(m.undo());
+    assert_eq!(m.source(), "```rust\nfn main() {\n}\n```");
+    assert_invariants(&m);
+}
+
+#[test]
+fn code_block_enter_and_exit() {
+    let mut m = model("```\na\n```");
+    caret_in(&mut m, 0, 1);
+    m.split_block().unwrap();
+    assert_eq!(m.document().leaves().count(), 1, "Enter is a newline");
+    // Enter on the trailing empty line leaves the block.
+    m.split_block().unwrap();
+    m.insert_text("after", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "```\na\n```\n\nafter");
+    assert_invariants(&m);
+}
+
+#[test]
+fn backspace_in_empty_code_block_makes_a_paragraph() {
+    let mut m = model("x\n\n```\n\n```");
+    let last = m.document().leaves().count() - 1;
+    caret_in(&mut m, last, 0);
+    m.delete(false).unwrap();
+    m.insert_text("p", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "x\n\np");
+    // Backspace at the start of the paragraph after a code block steps into
+    // the code instead of deleting it.
+    let mut m = model("```\ncode\n```\n\nafter");
+    caret_in(&mut m, 1, 0);
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), "```\ncode\n```\n\nafter");
+    assert_eq!(m.caret().unwrap().offset, 4);
+}
+
+#[test]
+fn set_code_block_converts_paragraph() {
+    let mut m = model("let x = 1;");
+    caret_in(&mut m, 0, 3);
+    m.run(EditorCommand::SetCodeBlock {
+        lang: Some("rust".into()),
+    })
+    .unwrap();
+    assert_eq!(m.source(), "```rust\nlet x = 1;\n```");
+    assert_eq!(m.caret().unwrap().offset, 3);
+    assert!(m.undo());
+    assert_eq!(m.source(), "let x = 1;");
+}
+
+#[test]
+fn code_blocks_round_trip() {
+    for source in [
+        "```rust\nfn main() {\n    println!(\"hi\");\n}\n```",
+        "```\nplain\n\nwith blank line\n```",
+        "````md\n```\nnested fence\n```\n````",
+        "```\n**not bold** <u>x</u>\n```",
+    ] {
+        let m = model(source);
+        assert_eq!(m.source(), source);
+    }
 }
 
 #[test]

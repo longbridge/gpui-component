@@ -18,7 +18,8 @@ pub enum Affinity {
 pub struct BlockPosition {
     pub block: BlockId,
     /// UTF-8 byte offset into the block's flat text, on a grapheme boundary.
-    /// For atomic blocks and (in the spike) code blocks: 0 = before, 1 = after.
+    /// Byte offset in the leaf's text (inline text or code). For atomic
+    /// blocks: 0 = before, 1 = after.
     pub offset: usize,
     pub affinity: Affinity,
 }
@@ -62,7 +63,16 @@ impl EditorDocument {
                     Ok(p)
                 }
             }
-            BlockContent::Plain(_) | BlockContent::Atom(_) => {
+            BlockContent::Plain(code) => {
+                if p.offset > code.len() {
+                    Err(PositionError::OffsetOutOfBounds { len: code.len() })
+                } else if !code.is_char_boundary(p.offset) {
+                    Err(PositionError::NotOnGraphemeBoundary)
+                } else {
+                    Ok(p)
+                }
+            }
+            BlockContent::Atom(_) => {
                 if p.offset > 1 {
                     Err(PositionError::OffsetOutOfBounds { len: 1 })
                 } else {
@@ -78,10 +88,16 @@ impl EditorDocument {
             Ok(p) => p,
             Err(PositionError::OffsetOutOfBounds { len }) => BlockPosition { offset: len, ..p },
             Err(PositionError::NotOnGraphemeBoundary) => {
-                let offset = self
-                    .inline(p.block)
-                    .and_then(|inline| inline.prev_grapheme(p.offset))
-                    .unwrap_or(0);
+                let offset = match self.plain(p.block) {
+                    Some(code) => (0..=p.offset.min(code.len()))
+                        .rev()
+                        .find(|i| code.is_char_boundary(*i))
+                        .unwrap_or(0),
+                    None => self
+                        .inline(p.block)
+                        .and_then(|inline| inline.prev_grapheme(p.offset))
+                        .unwrap_or(0),
+                };
                 BlockPosition { offset, ..p }
             }
             Err(_) => self.first_caret(),

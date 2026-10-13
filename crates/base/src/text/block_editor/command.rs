@@ -10,6 +10,8 @@ use super::{
     step::{DetachedBlock, DetachedContent, StepError},
     transaction::{EditOrigin, TransactionBuilder},
 };
+use gpui::SharedString;
+
 use crate::text::node::TextMark;
 
 #[non_exhaustive]
@@ -18,12 +20,21 @@ pub enum EditorCommand {
     ToggleMark(MarkKind),
     ApplyMark(MarkChange),
     SetBlockKind(BlockKind),
-    ToggleList { ordered: bool },
+    ToggleList {
+        ordered: bool,
+    },
     ToggleTask,
     Indent,
     Outdent,
-    MoveBlocks { down: bool },
+    MoveBlocks {
+        down: bool,
+    },
     InsertBlock(BlockKind),
+    /// Make the caret's paragraph a code block (its text becomes the code),
+    /// or set the language of the code block holding the caret.
+    SetCodeBlock {
+        lang: Option<String>,
+    },
     SelectAll,
     DeleteSelection,
 }
@@ -108,6 +119,8 @@ fn delete_range(
     if start.block == end.block {
         if doc.inline(start.block).is_some() {
             tx.replace_text(start.block, start.offset..end.offset, InlineText::new())?;
+        } else if doc.plain(start.block).is_some() {
+            tx.replace_plain(start.block, start.offset..end.offset, "")?;
         } else if start.offset == 0 && end.offset == 1 {
             tx.remove_block(start.block)?;
         }
@@ -140,9 +153,14 @@ fn delete_range(
         |doc: &EditorDocument, id: BlockId| doc.kind(id) == Some(&BlockKindData::TableCell);
 
     // Start leaf.
+    let start_code = doc.plain(start.block).map(str::len);
     let start_kept = if let Some(inline) = doc.inline(start.block) {
         let len = inline.len();
         tx.replace_text(start.block, start.offset..len, InlineText::new())?;
+        true
+    } else if let Some(len) = start_code {
+        // Code keeps its head; it never joins with text.
+        tx.replace_plain(start.block, start.offset..len, "")?;
         true
     } else if start.offset == 0 {
         tx.remove_block(start.block)?;
@@ -150,7 +168,7 @@ fn delete_range(
     } else {
         false
     };
-    let start_inline = start_kept;
+    let start_inline = start_kept && start_code.is_none();
     // Leaves in between.
     for id in &leaves[si + 1..ei] {
         if is_cell(tx.doc, *id) {
@@ -173,6 +191,8 @@ fn delete_range(
                 return Ok(BlockPosition::new(end.block, 0));
             }
         }
+    } else if tx.doc.plain(end.block).is_some() {
+        tx.replace_plain(end.block, 0..end.offset, "")?;
     } else if end.offset == 1 {
         tx.remove_block(end.block)?;
     }
@@ -254,6 +274,13 @@ impl BlockEditorModel {
             } else {
                 delete_range(tx, range)?
             };
+            if tx.doc.plain(pos.block).is_some() {
+                // Code: raw text, newlines included; marks do not apply.
+                let text = text.replace('\r', "");
+                tx.replace_plain(pos.block, pos.offset..pos.offset, &text)?;
+                pos.offset += text.len();
+                return Ok(caret(pos));
+            }
             for (ix, line) in text.split('\n').enumerate() {
                 if ix > 0 {
                     pos = split_at(tx, pos)?;
@@ -292,6 +319,33 @@ impl BlockEditorModel {
             }
             let pos = range.start;
             let doc = &*tx.doc;
+            if let Some(code) = doc.plain(pos.block) {
+                let prev = code[..pos.offset].chars().next_back().map(char::len_utf8);
+                let next = code[pos.offset..].chars().next().map(char::len_utf8);
+                match (forward, prev, next) {
+                    (false, Some(n), _) => {
+                        tx.replace_plain(pos.block, pos.offset - n..pos.offset, "")?;
+                        return Ok(caret(BlockPosition::new(pos.block, pos.offset - n)));
+                    }
+                    (true, _, Some(n)) => {
+                        tx.replace_plain(pos.block, pos.offset..pos.offset + n, "")?;
+                        return Ok(caret(pos));
+                    }
+                    // Backspace at the start of an empty code block: back to
+                    // a paragraph.
+                    (false, None, None) => {
+                        let (parent, index) = doc
+                            .index_in_parent(pos.block)
+                            .ok_or(PositionError::UnknownBlock(pos.block))?;
+                        tx.remove_block(pos.block)?;
+                        let paragraph = DetachedBlock::paragraph(InlineText::new());
+                        let id = paragraph.id;
+                        tx.insert(parent, index, vec![paragraph])?;
+                        return Ok(caret(BlockPosition::new(id, 0)));
+                    }
+                    _ => return Ok(None),
+                }
+            }
             let Some(inline) = doc.inline(pos.block) else {
                 // Caret on an atom or code block: delete the block.
                 tx.remove_block(pos.block)?;
@@ -339,7 +393,15 @@ impl BlockEditorModel {
                     tx.replace_text(first, at..at, moved)?;
                     Ok(caret(BlockPosition::new(first, at)))
                 }
-                // The neighbour is an atom or code block: remove it.
+                // A code block next door: step into it, never delete it.
+                (None, Some(_)) if doc.plain(first).is_some() => {
+                    let len = doc.leaf_len(first).unwrap_or(0);
+                    Ok(caret(BlockPosition::new(first, len)))
+                }
+                (Some(_), None) if doc.plain(second).is_some() => {
+                    Ok(caret(BlockPosition::new(second, 0)))
+                }
+                // The neighbour is an atom: remove it.
                 _ => {
                     let other = if forward { second } else { first };
                     tx.remove_block(other)?;
@@ -356,6 +418,9 @@ impl BlockEditorModel {
         if range.is_collapsed() && self.exit_empty_item(range.start)? {
             return Ok(());
         }
+        if self.doc.plain(range.start.block).is_some() {
+            return self.code_enter(range).map(|_| ());
+        }
         self.transact(EditOrigin::Command("split_block"), |tx| {
             let pos = if range.is_collapsed() {
                 range.start
@@ -365,6 +430,106 @@ impl BlockEditorModel {
             Ok(caret(split_at(tx, pos)?))
         })?;
         Ok(())
+    }
+
+    /// Enter in a code block inserts a newline; Enter on a trailing empty
+    /// line (caret at the end, text ending in a newline) leaves the block:
+    /// the newline goes and an empty paragraph follows.
+    fn code_enter(&mut self, range: ResolvedSelection) -> Result<bool, CommandError> {
+        self.transact(EditOrigin::Command("code_enter"), |tx| {
+            let pos = if range.is_collapsed() {
+                range.start
+            } else {
+                delete_range(tx, range)?
+            };
+            let Some(code) = tx.doc.plain(pos.block) else {
+                return Err(CommandError::NotEditable(pos.block));
+            };
+            if pos.offset == code.len() && code.ends_with('\n') {
+                tx.replace_plain(pos.block, pos.offset - 1..pos.offset, "")?;
+                return Ok(caret(exit_below(tx, pos.block)?));
+            }
+            tx.replace_plain(pos.block, pos.offset..pos.offset, "\n")?;
+            Ok(caret(BlockPosition::new(pos.block, pos.offset + 1)))
+        })
+    }
+
+    /// Arrow down past the end of a code block that ends the document (or
+    /// its container): add an empty paragraph after it and move there.
+    pub(crate) fn exit_code_block(&mut self) -> Result<bool, CommandError> {
+        let Some(pos) = self.caret() else {
+            return Ok(false);
+        };
+        if self.doc.plain(pos.block).is_none() {
+            return Ok(false);
+        }
+        self.transact(EditOrigin::Command("exit_code_block"), |tx| {
+            Ok(caret(exit_below(tx, pos.block)?))
+        })
+    }
+
+    /// Turn the caret's paragraph into a code block holding its text (or
+    /// insert an empty code block when the caret is elsewhere).
+    fn set_code_block(&mut self, lang: Option<String>) -> Result<bool, CommandError> {
+        let pos = self
+            .caret()
+            .ok_or(CommandError::Unsupported("block selection"))?;
+        let lang = lang.filter(|l| !l.is_empty()).map(SharedString::from);
+        self.transact(EditOrigin::Command("code_block"), |tx| {
+            let doc = &*tx.doc;
+            let (parent, index) = doc
+                .index_in_parent(pos.block)
+                .ok_or(PositionError::UnknownBlock(pos.block))?;
+            let (text, at) = match doc.kind(pos.block) {
+                Some(BlockKindData::Paragraph | BlockKindData::Heading { .. }) => {
+                    let text = doc
+                        .inline(pos.block)
+                        .map(|i| i.text().replace(super::inline::ATOM_CHAR, ""))
+                        .unwrap_or_default();
+                    tx.remove_block(pos.block)?;
+                    (text, index)
+                }
+                Some(BlockKindData::CodeBlock { .. }) => {
+                    tx.set_kind(pos.block, BlockKindData::CodeBlock { lang })?;
+                    return Ok(caret(pos));
+                }
+                _ => (String::new(), index + 1),
+            };
+            let offset = pos.offset.min(text.len());
+            let code =
+                DetachedBlock::leaf(BlockKindData::CodeBlock { lang }, BlockContent::Plain(text));
+            let id = code.id;
+            tx.insert(parent, at, vec![code])?;
+            Ok(caret(BlockPosition::new(id, offset)))
+        })
+    }
+
+    /// Tab / Shift+Tab in a code block: indent or outdent the caret's line by
+    /// four spaces.
+    fn code_indent(&mut self, pos: BlockPosition, outdent: bool) -> Result<bool, CommandError> {
+        let Some(code) = self.doc.plain(pos.block) else {
+            return Ok(false);
+        };
+        let line_start = code[..pos.offset].rfind('\n').map_or(0, |i| i + 1);
+        if !outdent {
+            return self.transact(EditOrigin::Command("indent"), |tx| {
+                tx.replace_plain(pos.block, pos.offset..pos.offset, "    ")?;
+                Ok(caret(BlockPosition::new(pos.block, pos.offset + 4)))
+            });
+        }
+        let spaces = code[line_start..]
+            .bytes()
+            .take(4)
+            .take_while(|b| *b == b' ')
+            .count();
+        if spaces == 0 {
+            return Ok(false);
+        }
+        self.transact(EditOrigin::Command("outdent"), |tx| {
+            tx.replace_plain(pos.block, line_start..line_start + spaces, "")?;
+            let offset = pos.offset.saturating_sub(spaces).max(line_start);
+            Ok(caret(BlockPosition::new(pos.block, offset)))
+        })
     }
 
     /// Enter in an empty list item whose only child is the caret's empty
@@ -665,8 +830,17 @@ impl BlockEditorModel {
                 }
                 Ok(())
             }),
+            EditorCommand::Indent | EditorCommand::Outdent
+                if self
+                    .caret()
+                    .is_some_and(|c| self.doc.plain(c.block).is_some()) =>
+            {
+                let pos = self.caret().unwrap_or_else(|| self.doc.first_caret());
+                self.code_indent(pos, command == EditorCommand::Outdent)
+            }
             EditorCommand::Indent => self.indent(),
             EditorCommand::Outdent => self.outdent(),
+            EditorCommand::SetCodeBlock { lang } => self.set_code_block(lang),
             EditorCommand::MoveBlocks { down } => self.move_blocks(down),
             EditorCommand::InsertBlock(BlockKind::HorizontalRule) => {
                 let pos = self
@@ -997,5 +1171,20 @@ fn split_at(
         }
         _ => tx.insert(parent, index + 1, vec![block])?,
     }
+    Ok(BlockPosition::new(id, 0))
+}
+
+/// Insert an empty paragraph right after `block` and return its caret.
+fn exit_below(
+    tx: &mut TransactionBuilder<'_>,
+    block: BlockId,
+) -> Result<BlockPosition, CommandError> {
+    let (parent, index) = tx
+        .doc
+        .index_in_parent(block)
+        .ok_or(PositionError::UnknownBlock(block))?;
+    let paragraph = DetachedBlock::paragraph(InlineText::new());
+    let id = paragraph.id;
+    tx.insert(parent, index + 1, vec![paragraph])?;
     Ok(BlockPosition::new(id, 0))
 }

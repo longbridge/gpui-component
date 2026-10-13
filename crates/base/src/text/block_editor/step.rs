@@ -80,6 +80,12 @@ pub(crate) enum Step {
         block: BlockId,
         kind: BlockKindData,
     },
+    /// Edit a code block's text (Phase 4b).
+    ReplacePlain {
+        block: BlockId,
+        range: Range<usize>,
+        insert: String,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -132,7 +138,9 @@ impl Step {
     pub(crate) fn apply(&self, doc: &mut EditorDocument) -> Result<(Step, StepMap), StepError> {
         let result = self.apply_inner(doc)?;
         let touched = match self {
-            Self::ReplaceText { block, .. } | Self::SetKind { block, .. } => *block,
+            Self::ReplaceText { block, .. }
+            | Self::SetKind { block, .. }
+            | Self::ReplacePlain { block, .. } => *block,
             Self::InsertBlocks { parent, .. } | Self::RemoveBlocks { parent, .. } => *parent,
         };
         doc.touch(touched);
@@ -216,6 +224,37 @@ impl Step {
                     blocks: removed,
                 };
                 Ok((inverse, StepMap::Removed(ids)))
+            }
+            Self::ReplacePlain {
+                block,
+                range,
+                insert,
+            } => {
+                let entry = doc.get_mut(*block).ok_or(StepError::UnknownBlock(*block))?;
+                let BlockContent::Plain(code) = &mut entry.content else {
+                    return Err(StepError::NotText(*block));
+                };
+                if range.start > range.end
+                    || range.end > code.len()
+                    || !code.is_char_boundary(range.start)
+                    || !code.is_char_boundary(range.end)
+                {
+                    return Err(StepError::OutOfRange);
+                }
+                let removed = code[range.clone()].to_string();
+                code.replace_range(range.clone(), insert);
+                Ok((
+                    Step::ReplacePlain {
+                        block: *block,
+                        range: range.start..range.start + insert.len(),
+                        insert: removed,
+                    },
+                    StepMap::Text {
+                        block: *block,
+                        range: range.clone(),
+                        insert_len: insert.len(),
+                    },
+                ))
             }
             Self::SetKind { block, kind } => {
                 let entry = doc.get_mut(*block).ok_or(StepError::UnknownBlock(*block))?;

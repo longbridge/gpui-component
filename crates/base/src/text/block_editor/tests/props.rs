@@ -121,6 +121,13 @@ fn walk(b: BlockRef<'_>, m: &BlockEditorModel, depth: usize) -> String {
             }
             content = start < end || b.kind() == BlockKind::TableCell;
         } else if let Some(text) = b.text() {
+            // Trailing empty lines of a code block have no Markdown form
+            // (documented lossiness).
+            let text = if b.kind() == BlockKind::CodeBlock {
+                text.trim_end_matches('\n')
+            } else {
+                text
+            };
             line.push_str(&format!(" {text:?}"));
             content = true;
         } else if b.children().next().is_none() && b.kind() != BlockKind::Root {

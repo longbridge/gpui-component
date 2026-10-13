@@ -452,7 +452,22 @@ impl BlockEditorState {
     pub(crate) fn step_horizontal(&self, pos: BlockPosition, forward: bool) -> BlockPosition {
         let doc = &self.model.doc;
         let len = doc.leaf_len(pos.block).unwrap_or(0);
-        if let Some(inline) = doc.inline(pos.block) {
+        if let Some(code) = doc.plain(pos.block) {
+            let next = if forward {
+                code[pos.offset..]
+                    .chars()
+                    .next()
+                    .map(|c| pos.offset + c.len_utf8())
+            } else {
+                code[..pos.offset]
+                    .chars()
+                    .next_back()
+                    .map(|c| pos.offset - c.len_utf8())
+            };
+            if let Some(offset) = next {
+                return BlockPosition::new(pos.block, offset);
+            }
+        } else if let Some(inline) = doc.inline(pos.block) {
             let next = if forward {
                 inline.next_grapheme(pos.offset)
             } else {
@@ -534,6 +549,15 @@ impl BlockEditorState {
             (_, Some(next)) => {
                 let offset = if down { 0 } else { next.len };
                 BlockPosition::new(next.block, offset)
+            }
+            (_, None) if down && self.model.doc.plain(head.block).is_some() && !extend => {
+                drop(frame);
+                self.edit(
+                    EditOrigin::Command("exit_code_block"),
+                    |m| m.exit_code_block().map(|_| ()),
+                    cx,
+                );
+                return;
             }
             (_, None) => {
                 let doc = &self.model.doc;
@@ -628,7 +652,7 @@ impl BlockEditorState {
             .text_ranges(range)
             .into_iter()
             .filter_map(|(id, lo, hi)| {
-                let text = self.model.doc.inline(id)?.text();
+                let text = self.model.doc.leaf_text(id)?;
                 text.get(lo..hi).map(str::to_string)
             })
             .collect::<Vec<_>>()
@@ -647,6 +671,20 @@ impl BlockEditorState {
     }
     pub(crate) fn on_enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
         self.end_composition();
+        // "```lang" then Enter: a code block.
+        if !self.readonly
+            && let Some(caret) = self.model.caret()
+            && self.model.doc.kind(caret.block) == Some(&super::kind::BlockKindData::Paragraph)
+            && caret.offset == self.model.doc.leaf_len(caret.block).unwrap_or(0)
+            && let Some(lang) = self
+                .model
+                .doc
+                .inline(caret.block)
+                .and_then(|i| code_fence(i.text()))
+        {
+            self.fence_to_code_block(caret.block, lang, cx);
+            return;
+        }
         self.edit(EditOrigin::Command("split_block"), |m| m.split_block(), cx);
     }
     pub(crate) fn on_move_left(&mut self, _: &MoveLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -809,6 +847,15 @@ impl BlockEditorState {
         if doc.kind(caret.block) != Some(&BlockKindData::Paragraph) {
             return;
         }
+        // "```lang " typed into an otherwise empty paragraph.
+        if let Some(lang) = doc
+            .inline(caret.block)
+            .and_then(|i| code_fence(i.text().strip_suffix(' ')?))
+            .filter(|_| caret.offset == doc.leaf_len(caret.block).unwrap_or(0))
+        {
+            self.fence_to_code_block(caret.block, lang, cx);
+            return;
+        }
         let in_list = doc
             .parent(caret.block)
             .and_then(|parent| doc.kind(parent))
@@ -855,6 +902,25 @@ impl BlockEditorState {
         self.after_edit(EditOrigin::InputRule(rule), cx);
     }
 
+    /// Replace a typed code fence with an empty code block, caret inside,
+    /// as its own undo group (one undo restores the typed fence).
+    fn fence_to_code_block(&mut self, block: BlockId, lang: String, cx: &mut Context<Self>) {
+        let len = self.model.doc.leaf_len(block).unwrap_or(0);
+        self.model.break_coalescing();
+        self.model.history.begin_transaction();
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: BlockPosition::new(block, 0),
+            head: BlockPosition::new(block, len),
+        });
+        let _ = self.model.delete(false);
+        let _ = self
+            .model
+            .run(EditorCommand::SetCodeBlock { lang: Some(lang) });
+        self.model.history.commit_transaction();
+        self.model.break_coalescing();
+        self.after_edit(EditOrigin::InputRule("code_block"), cx);
+    }
+
     // ---- IME ---------------------------------------------------------------
 
     /// The IME sees the caret leaf as its document.
@@ -868,8 +934,7 @@ impl BlockEditorState {
 
     fn ime_text(&self) -> &str {
         self.ime_block()
-            .and_then(|id| self.model.doc.inline(id))
-            .map(|i| i.text())
+            .and_then(|id| self.model.doc.leaf_text(id))
             .unwrap_or("")
     }
 
@@ -910,6 +975,7 @@ fn command_name(command: &EditorCommand) -> &'static str {
         EditorCommand::InsertBlock(_) => "insert_block",
         EditorCommand::SelectAll => "select_all",
         EditorCommand::DeleteSelection => "delete_selection",
+        EditorCommand::SetCodeBlock { .. } => "code_block",
     }
 }
 
@@ -971,7 +1037,7 @@ impl EntityInputHandler for BlockEditorState {
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
         let m = self.marked.as_ref()?;
-        let text = self.model.doc.inline(m.block)?.text();
+        let text = self.model.doc.leaf_text(m.block)?;
         Some(byte_to_utf16(text, m.range.start)..byte_to_utf16(text, m.range.end))
     }
 
@@ -1105,4 +1171,12 @@ impl EntityInputHandler for BlockEditorState {
         }
         Some(byte_to_utf16(self.ime_text(), pos.offset))
     }
+}
+
+/// The language of a typed code fence (```` ``` ```` plus an optional word).
+fn code_fence(text: &str) -> Option<String> {
+    let lang = text.strip_prefix("```")?;
+    lang.chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '+' | '-' | '_' | '#' | '.'))
+        .then(|| lang.to_string())
 }

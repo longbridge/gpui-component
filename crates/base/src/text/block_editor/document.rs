@@ -155,8 +155,26 @@ impl EditorDocument {
     pub(crate) fn leaf_len(&self, id: BlockId) -> Option<usize> {
         match &self.blocks.get(&id)?.content {
             BlockContent::Inline(inline) => Some(inline.len()),
-            BlockContent::Plain(_) | BlockContent::Atom(_) => Some(1),
+            BlockContent::Plain(code) => Some(code.len()),
+            BlockContent::Atom(_) => Some(1),
             BlockContent::Children(_) => None,
+        }
+    }
+
+    /// A code block's text.
+    pub(crate) fn plain(&self, id: BlockId) -> Option<&str> {
+        match &self.blocks.get(&id)?.content {
+            BlockContent::Plain(code) => Some(code),
+            _ => None,
+        }
+    }
+
+    /// Caret-leaf text: inline text (atoms as U+FFFC) or code.
+    pub(crate) fn leaf_text(&self, id: BlockId) -> Option<&str> {
+        match &self.blocks.get(&id)?.content {
+            BlockContent::Inline(inline) => Some(inline.text()),
+            BlockContent::Plain(code) => Some(code),
+            _ => None,
         }
     }
 

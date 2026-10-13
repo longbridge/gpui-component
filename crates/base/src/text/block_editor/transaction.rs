@@ -116,6 +116,23 @@ impl<'a> TransactionBuilder<'a> {
         .map(|_| ())
     }
 
+    pub(crate) fn replace_plain(
+        &mut self,
+        block: BlockId,
+        range: Range<usize>,
+        insert: &str,
+    ) -> Result<(), StepError> {
+        if range.is_empty() && insert.is_empty() {
+            return Ok(());
+        }
+        self.step(Step::ReplacePlain {
+            block,
+            range,
+            insert: insert.to_string(),
+        })
+        .map(|_| ())
+    }
+
     pub(crate) fn insert(
         &mut self,
         parent: BlockId,

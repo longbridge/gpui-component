@@ -133,8 +133,8 @@ fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
         }),
         BlockContent::Plain(code) => Some(LeafInfo {
             block: id,
-            atomic: true,
-            len: code.trim_end_matches('\n').len(),
+            atomic: false,
+            len: code.len(),
         }),
         _ => None,
     }

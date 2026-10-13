@@ -470,7 +470,7 @@ impl BlockEditorStyle { pub fn resolved(&self, tokens: &SemanticThemeTokens) -> 
 
 **Phase 3: view.** Projection cache, `EditorFrame` / `FrameLayout`, selection through `range_backgrounds`, IME port, key bindings, focus/blink wiring as in §7.1, `BlockEditorStyle`, events, the component wrapper, the example, and the generated fixture.
 
-**Phase 4: non-text blocks.** 4a node selection, delete, move, and copy for atoms, code blocks, and tables. 4b code-block text editing. 4c table cells and `BlockSelection::Cells`. 4d inline atoms with #3113 semantics.
+**Phase 4: non-text blocks.** 4a node selection, delete, move, and copy for atoms, code blocks, and tables. 4b code-block text editing (*landed on the UI spike*). 4c table cells and `BlockSelection::Cells`. 4d inline atoms with #3113 semantics.
 
 **Phase 5: scale.** Virtualization and per-block accessibility.
 
@@ -588,7 +588,7 @@ The spike (`crates/base/src/text/block_editor/`, feature `block-editor`, draft P
 | Serializer (§4.6, D5) | Hoisting, escaping, `<mark>` | Plus flanking-safe HTML fallback and code-innermost | Required for round-trip; still only `MarkdownSource` options, defaults unchanged |
 | Reference links | Not covered | Resolved to inline links on import; unresolved references and footnote links lose their link mark | Canonicalization, documented |
 | Select-all + type (§4.4) | Removes everything covered | Whole-document selection becomes one empty paragraph | Matches the R2 expectation (`x`, one Paragraph) |
-| Code blocks / atoms (§4.3) | Offsets into code text | Spike uses 0 = before, 1 = after for code blocks too; typing there is `CommandError::NotEditable` | Phase 4b as planned |
+| Code blocks / atoms (§4.3) | Offsets into code text | Phase 4b landed: offsets are UTF-8 byte offsets into `BlockContent::Plain` (char boundaries), edited via `Step::ReplacePlain`. Fence input rule (```` ```lang ```` + Enter/space), Enter = newline, Tab/Shift+Tab = 4-space indent, exit by Enter on trailing empty line or Down past the end, Backspace in empty block → paragraph, marks no-op. Trailing empty lines of code have no Markdown form and are dropped on save (documented lossiness) | Done |
 | `source_offset` / `position_at_source_offset` (D1) | Proposed | Not implemented | Deferred |
 | `BlockSelection::Cells`, `InputRule`s | Proposed / stretch | Not implemented | Deferred |
 | `BlockKind::Image` | Block kind | Images are inline atoms on main; the kind is reserved and unused | Keep or drop in review |
