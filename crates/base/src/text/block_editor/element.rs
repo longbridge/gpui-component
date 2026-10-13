@@ -14,11 +14,13 @@ use gpui::{
     AnyElement, App, Bounds, CursorStyle, DispatchPhase, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, InteractiveElement,
     IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, RenderOnce, Styled, Window, div, fill, point, size,
+    ParentElement, Pixels, RenderOnce, Styled, Window, div, fill, point, px, size,
 };
 
 use super::{
+    cull::Measured,
     frame::FrameSink,
+    id::BlockId,
     projection::{LeafInfo, Snapshot},
     state::*,
     style::BlockEditorStyle,
@@ -72,7 +74,7 @@ impl RenderOnce for BlockEditor {
         if style.selection_is_default() {
             style = style.with_selection(text_style.selection());
         }
-        let (focus, snapshot, backgrounds, extensions) = self.state.update(cx, |state, _| {
+        let (focus, snapshot, backgrounds, extensions, keep) = self.state.update(cx, |state, _| {
             let snapshot = state.snapshot();
             let mut backgrounds: HashMap<u64, Vec<(Range<usize>, Hsla)>> = HashMap::new();
             for (block, range) in state.selection_ranges() {
@@ -92,6 +94,7 @@ impl RenderOnce for BlockEditor {
                 snapshot,
                 backgrounds,
                 state.model.doc.extensions.clone(),
+                state.pinned_blocks(),
             )
         });
 
@@ -107,13 +110,43 @@ impl RenderOnce for BlockEditor {
             .iter()
             .flat_map(|b| b.nodes.iter())
             .collect();
-        let count = nodes.len();
-        let children: Vec<AnyElement> = nodes
+        let owners: Vec<BlockId> = snapshot
+            .blocks
             .iter()
-            .enumerate()
-            .map(|(ix, node)| {
+            .flat_map(|b| b.nodes.iter().map(|_| b.id))
+            .collect();
+        let count = nodes.len();
+        let cull = self.state.read(cx).cull.clone();
+        let mut children: Vec<AnyElement> = Vec::with_capacity(count.min(256));
+        {
+            let mut cull_state = cull.borrow_mut();
+            cull_state.measured.clear();
+            let window_span = cull_state.visible.map(|(top, bottom)| {
+                let margin = (bottom - top).max(px(200.));
+                (top - margin, bottom + margin)
+            });
+            let mut y = px(0.);
+            let mut spacer = px(0.);
+            let mut rendered = 0;
+            for (ix, node) in nodes.iter().enumerate() {
+                let id = owners[ix];
+                let height = cull_state.height(id);
+                let visible = match window_span {
+                    None => true,
+                    Some((top, bottom)) => y + height >= top && y <= bottom,
+                };
+                y += height;
+                if !visible && !keep.contains(&id) {
+                    spacer += height;
+                    continue;
+                }
+                if spacer > px(0.) {
+                    children.push(div().h(spacer).into_any_element());
+                    spacer = px(0.);
+                }
+                rendered += 1;
                 let (is_first, prev) = prev_block(&nodes, ix);
-                node.render_block(
+                let element = node.render_block(
                     NodeRenderOptions {
                         ix,
                         is_first,
@@ -124,9 +157,22 @@ impl RenderOnce for BlockEditor {
                     &node_cx,
                     window,
                     cx,
-                )
-            })
-            .collect();
+                );
+                children.push(
+                    Measured {
+                        id,
+                        index: ix,
+                        state: cull.clone(),
+                        child: Some(element),
+                    }
+                    .into_any_element(),
+                );
+            }
+            if spacer > px(0.) {
+                children.push(div().h(spacer).into_any_element());
+            }
+            cull_state.rendered = rendered;
+        }
 
         let s = &self.state;
         div()
@@ -232,6 +278,13 @@ impl Element for EditorRoot {
             if let Ok(sink) = Rc::try_unwrap(sink) {
                 let frame = sink.into_frame(self.snapshot.leaves.clone(), &self.snapshot.tables);
                 *self.state.read(cx).frame.borrow_mut() = frame;
+            }
+            let mask = window.content_mask().bounds;
+            let cull = self.state.read(cx).cull.clone();
+            if cull.borrow_mut().finish_frame(bounds, mask) {
+                // Scrolled past what was laid out: lay out the new span.
+                let state = self.state.clone();
+                window.on_next_frame(move |_, cx| state.update(cx, |_, cx| cx.notify()));
             }
         } else {
             child.prepaint(window, cx);

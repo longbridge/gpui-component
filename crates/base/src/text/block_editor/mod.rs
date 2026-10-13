@@ -10,6 +10,7 @@
 //! [`BlockEditorModel`] is a spike name.
 
 mod command;
+mod cull;
 mod direct;
 mod document;
 mod editor;

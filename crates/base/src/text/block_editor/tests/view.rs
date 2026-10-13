@@ -622,3 +622,44 @@ fn table_rows_are_cached_per_row(cx: &mut TestAppContext) {
     let after = editor.read_with(cx, |e, _| e.projection.built());
     assert_eq!(after - steady, 2, "table + one row; other rows reused");
 }
+
+fn caret_leaf(editor: &Entity<BlockEditorState>, cx: &VisualTestContext) -> Option<usize> {
+    editor.read_with(cx, |e, _| {
+        let c = e.model().caret()?;
+        e.model()
+            .document()
+            .leaves()
+            .position(|l| l.id() == c.block)
+    })
+}
+
+/// Culling (light virtualization): only blocks near the viewport are laid
+/// out, and up/down still walks every block, including culled ones.
+#[gpui::test]
+fn culled_blocks_are_navigable(cx: &mut TestAppContext) {
+    let doc: String = (0..600).map(|i| format!("paragraph {i}\n\n")).collect();
+    let (editor, cx) = open(cx, &doc);
+    draw(cx);
+    draw(cx);
+    let rendered = editor.read_with(cx, |e, _| e.cull.borrow().rendered);
+    assert!(rendered < 200, "laid out {rendered} of 600");
+    caret_at(&editor, cx, 0, 0);
+    for _ in 0..450 {
+        keys(cx, "down");
+    }
+    assert_eq!(caret_leaf(&editor, cx), Some(450));
+    draw(cx);
+    // The caret's block is laid out and has geometry.
+    assert!(editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        e.frame.borrow().leaf(c.block).is_some()
+    }));
+    for _ in 0..450 {
+        keys(cx, "up");
+    }
+    assert_eq!(caret_leaf(&editor, cx), Some(0));
+    // Typing far down edits the right block.
+    caret_at(&editor, cx, 599, 0);
+    type_text(cx, "x");
+    assert!(source(&editor, cx).ends_with("xparagraph 599"));
+}

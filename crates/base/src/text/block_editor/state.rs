@@ -124,6 +124,7 @@ pub struct BlockEditorState {
     pub(crate) projection: ProjectionCache,
     /// Last complete frame, written by the element after prepaint.
     pub(crate) frame: Rc<RefCell<FrameLayout>>,
+    pub(crate) cull: Rc<RefCell<super::cull::CullState>>,
     marked: Option<Marked>,
     /// An IME composition opened an undo group that is not committed yet.
     composition_open: bool,
@@ -174,6 +175,7 @@ impl BlockEditorState {
             style: BlockEditorStyle::default(),
             projection: ProjectionCache::default(),
             frame: Rc::default(),
+            cull: Rc::default(),
             marked: None,
             composition_open: false,
             goal_x: None,
@@ -287,6 +289,22 @@ impl BlockEditorState {
 
     pub(crate) fn snapshot(&mut self) -> Rc<Snapshot> {
         self.projection.snapshot(&self.model.doc)
+    }
+
+    /// Top-level blocks that are always laid out: the ones holding the
+    /// selection ends and the IME composition.
+    pub(crate) fn pinned_blocks(&self) -> Vec<BlockId> {
+        let doc = &self.model.doc;
+        let mut ids = match self.model.selection() {
+            BlockSelection::Text { anchor, head } => vec![anchor.block, head.block],
+            BlockSelection::Blocks { anchor, head } => vec![*anchor, *head],
+        };
+        if let Some((block, _)) = self.marked_range() {
+            ids.push(block);
+        }
+        ids.into_iter()
+            .filter_map(|id| doc.path(id).get(1).copied())
+            .collect()
     }
 
     /// Per-leaf selected byte ranges, for painting.
@@ -462,20 +480,39 @@ impl BlockEditorState {
         let Some((_, head)) = self.head_anchor() else {
             return;
         };
-        let frame = self.frame.clone();
-        let frame = frame.borrow();
-        let Some(caret) = frame.caret_bounds(head, self.style.caret_width()) else {
+        let leaves = self.snapshot().leaves.clone();
+        let Some(ix) = leaves.iter().position(|l| l.block == head.block) else {
             return;
         };
-        let x = *self.goal_x.get_or_insert(caret.origin.x);
-        let target = frame.vertical(head, x, down).unwrap_or_else(|| {
-            let doc = &self.model.doc;
-            if down {
-                doc.last_caret()
-            } else {
-                doc.first_caret()
+        // The model-adjacent caret leaf, which may be culled (no geometry).
+        let adjacent = if down {
+            leaves.get(ix + 1)
+        } else {
+            ix.checked_sub(1).and_then(|i| leaves.get(i))
+        };
+        let frame = self.frame.clone();
+        let frame = frame.borrow();
+        let laid_out = frame.caret_bounds(head, self.style.caret_width());
+        let x = laid_out.map(|caret| *self.goal_x.get_or_insert(caret.origin.x));
+        let visual = x.and_then(|x| frame.vertical(head, x, down));
+        let target = match (visual, adjacent) {
+            // Within the block, or into the laid-out adjacent leaf.
+            (Some(t), _) if t.block == head.block => t,
+            (Some(t), Some(next)) if t.block == next.block => t,
+            // Into a culled (or not yet laid-out) leaf: model fallback.
+            (_, Some(next)) => {
+                let offset = if down { 0 } else { next.len };
+                BlockPosition::new(next.block, offset)
             }
-        });
+            (_, None) => {
+                let doc = &self.model.doc;
+                if down {
+                    doc.last_caret()
+                } else {
+                    doc.first_caret()
+                }
+            }
+        };
         drop(frame);
         let goal = self.goal_x;
         self.move_to(self.model.doc.clamp(target), extend, cx);

@@ -20,6 +20,7 @@ use crate::text::node::BlockNode;
 
 /// One projected top-level block.
 pub(crate) struct ProjectedBlock {
+    pub(crate) id: BlockId,
     revision: u64,
     pub(crate) nodes: Vec<BlockNode>,
 }
@@ -67,6 +68,7 @@ impl ProjectionCache {
             let block = match self.by_id.get(id) {
                 Some(prev) if prev.revision == revision => prev.clone(),
                 _ => Rc::new(ProjectedBlock {
+                    id: *id,
                     revision,
                     nodes: self.nodes.node(doc, *id).into_iter().collect(),
                 }),
