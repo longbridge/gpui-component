@@ -700,7 +700,7 @@ where
             .map(|col_ix| {
                 let column = self.delegate().column(col_ix, cx);
                 ColGroup {
-                    width: column.width.max(column.min_width).min(column.max_width),
+                    width: column.width,
                     bounds: Bounds::default(),
                     column,
                 }
@@ -2665,7 +2665,7 @@ mod tests {
 
     impl TableDelegate for WidthsDelegate {
         fn columns_count(&self, _: &App) -> usize {
-            5
+            6
         }
 
         fn rows_count(&self, _: &App) -> usize {
@@ -2682,10 +2682,12 @@ mod tests {
                     .width(px(300.)),
                 // `width` alone below the default `min_width` of 20px.
                 2 => Column::new("tiny", "Tiny").width(px(10.)),
-                // A smaller `min_width` keeps that narrower width.
-                3 => Column::new("tiny_min", "Tiny Min")
-                    .min_width(px(5.))
-                    .width(px(10.)),
+                // The default resize protection does not limit initial width.
+                3 => Column::new("wide_default", "Wide Default").width(px(2000.)),
+                // Applications can explicitly allow wider resize ranges.
+                4 => Column::new("wide_explicit", "Wide Explicit")
+                    .max_width(px(2400.))
+                    .width(px(2000.)),
                 // `min_width` above `max_width` must not panic.
                 _ => Column::new("inverted", "Inverted")
                     .min_width(px(200.))
@@ -2705,20 +2707,47 @@ mod tests {
     }
 
     #[gpui::test]
-    fn initial_column_width_is_clamped(cx: &mut TestAppContext) {
+    fn column_resize_bounds_preserve_initial_widths(cx: &mut TestAppContext) {
         cx.skip_drawing();
         let window = cx.add_window(|window, cx| TableState::new(WidthsDelegate, window, cx));
 
-        let widths = window
-            .update(cx, |table, _, _| {
-                table
-                    .col_groups
-                    .iter()
-                    .map(|col_group| col_group.width)
-                    .collect::<Vec<_>>()
+        window
+            .update(cx, |table, window, cx| {
+                let widths = |table: &TableState<WidthsDelegate>| {
+                    table
+                        .col_groups
+                        .iter()
+                        .map(|col_group| col_group.width)
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(
+                    widths(table),
+                    [px(40.), px(300.), px(10.), px(2000.), px(2000.), px(100.)]
+                );
+
+                for ix in 0..table.col_groups.len() {
+                    table.resize_cols(ix, px(10000.), window, cx);
+                }
+                assert_eq!(
+                    widths(table),
+                    [
+                        px(1200.),
+                        px(120.),
+                        px(1200.),
+                        px(1200.),
+                        px(2400.),
+                        px(100.)
+                    ]
+                );
+
+                for ix in 0..table.col_groups.len() {
+                    table.resize_cols(ix, px(-100.), window, cx);
+                }
+                assert_eq!(
+                    widths(table),
+                    [px(80.), px(20.), px(20.), px(20.), px(20.), px(100.)]
+                );
             })
             .unwrap();
-
-        assert_eq!(widths, [px(80.), px(120.), px(20.), px(10.), px(100.)]);
     }
 }

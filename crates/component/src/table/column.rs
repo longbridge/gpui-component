@@ -78,7 +78,7 @@ impl Default for Column {
             movable: true,
             selectable: true,
             min_width: px(20.0),
-            max_width: px(f32::MAX),
+            max_width: px(1200.),
         }
     }
 }
@@ -211,7 +211,11 @@ impl Column {
         self
     }
 
-    /// Set the maximum width of the column, default is unbounded
+    /// Set the maximum width when resizing the column, default is 1200px.
+    ///
+    /// The default protects against oversized columns during resizing. Set a
+    /// larger maximum explicitly when wider columns are needed. It does not
+    /// limit an initial width set afterwards with [`Self::width`].
     pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
         let max_width = max_width.into();
         self.max_width = max_width;
