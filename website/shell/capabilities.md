@@ -291,7 +291,7 @@ console.warn("could not save");
 
 Extra arguments are appended space-separated, the way `console.log` behaves. Structured values print as JSON, because that is what an author reading a log wants to see.
 
-Output goes through `tracing` with the target `gpui_kit::shell::script`, so script output is separable from host output in a log filter. **A host with no `tracing` subscriber installed discards all of it** — along with the runtime's own reports of throwing handlers, unhandled rejections and illegal-phase calls. The `gpui-shell` binary installs a stderr sink at `INFO`, or `DEBUG` under `--dev`.
+Output goes through `tracing` with the target `gpui_kit::shell::script`, so script output is separable from host output in a log filter. **A host with no `tracing` subscriber installed discards all of it** — along with the runtime's own reports of throwing handlers, unhandled rejections and illegal-phase calls. The `gpui-shell` binary installs a stderr sink at `INFO`, or `DEBUG` under the `dev` command.
 
 ## `process`
 
@@ -345,7 +345,7 @@ The clock restarts on every host call, which is what lets the render path have a
 There is no quickjs-libc `std`: quickjs-libc is not compiled into the build. The runtime does provide the small audited `os` module listed below.
 
 ::: tip Development mode
-`--dev` enables source watching and calls `gpui_kit::shell::set_development_mode(true)` before constructing the runtime. That restores dynamic-code constructors and leaves built-in prototypes writable.
+`--dev`, with `run` or `dev`, calls `gpui_kit::shell::set_development_mode(true)` before constructing the runtime. That restores dynamic-code constructors and leaves built-in prototypes writable.
 
 Development mode never relaxes capability gating. It makes the language easier to poke at; it does not hand out access nobody declared, because a grant the author never wrote down is a grant that will be missing in production.
 :::

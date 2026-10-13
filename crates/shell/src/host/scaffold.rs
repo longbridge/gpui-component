@@ -45,7 +45,11 @@ pub(super) fn create(
     };
     write(MANIFEST_FILE, manifest(&folder, brand))?;
     write("main.js", entry(&display_name(&folder), styled))?;
-    write(".gitignore", "gpui-kit.d.ts\nnode_modules/\n".to_owned())?;
+    // `dist/` is where `bundle` writes by default.
+    write(
+        ".gitignore",
+        "gpui-kit.d.ts\nnode_modules/\ndist/\n".to_owned(),
+    )?;
 
     // The declarations and `jsconfig.json` come from the runtime that will run
     // the application, and the agent instructions name its modules.

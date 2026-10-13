@@ -160,7 +160,7 @@ source of truth over this guide.
 ```bash
 {name} types -d my-app          # write gpui-kit.d.ts — do this first
 {name} check -d my-app          # load, render and materialize once; exit 1 on error
-{name} run -d my-app --watch    # run it, reloading on save
+{name} dev -d my-app             # run it, reloading on save
 {name} list                      # what is installed under {home}
 {name} run my-app               # run the installed copy
 ```
@@ -168,7 +168,7 @@ source of truth over this guide.
 After every change, run `{name} check -d <directory>` and fix what it
 reports before declaring the work done. `check` does not exercise layout,
 paint, later interactions or asynchronous states, so also run the application
-with `--watch` when behaviour matters.
+with `{name} dev` when behaviour matters.
 
 To install an application, copy or link its directory into `{home}`; the
 directory name is the name `{name}` runs it by. An installed application keeps

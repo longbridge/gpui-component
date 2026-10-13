@@ -147,7 +147,7 @@ The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps
 
 To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An installed application keeps its data under its manifest `id`, so moving or reinstalling it does not lose it; a directory run with `--dir` is keyed by its path, which is right while it is being edited.
 
-With no argument, the executable looks for an application next to itself, and prints its help when it finds none — so a freshly installed `gpui-shell` typed at a prompt explains itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A desktop application is therefore the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
+With no argument, the executable looks for an application next to itself, and prints its help when it finds none — so a freshly installed `gpui-shell` typed at a prompt explains itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A standalone desktop application can therefore be the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
 
 ```text
 Clock.app/Contents/
@@ -158,16 +158,16 @@ Clock.app/Contents/
     └── main.js
 ```
 
-[Packaging](./packaging.md) walks through the `.app`, a Linux archive and desktop entry, and a Windows folder, including signing and notarization.
+`gpui-shell bundle -d clock` makes the desktop application for you. On macOS and Linux it leaves the binary out — a `.app`, or a `.tar.gz` with an `install.sh` beside it: on the user's machine they use an installed `gpui-shell` at least as new as the one that made them, or download that release, and run the application with `run --packaged`, which keeps its data under its `id` like an installed one. On Windows it is a portable `.zip` whose executable is `gpui-shell.exe` itself, with `app\` beside it. [Packaging](./packaging.md) covers both ways, the options, and signing and notarization.
 
 ## Starting a new application
 
 ```bash
 gpui-shell new clock
-gpui-shell run -d clock --watch
+gpui-shell dev -d clock
 ```
 
-`new` creates the directory where the command runs, the way `cargo new` does — `clock` here is `./clock`, not an installed application. It writes a `gpui-shell.json` whose `id` comes from the directory name, a `main.js` with a title bar and a button, a `.gitignore`, `jsconfig.json`, `gpui-kit.d.ts` and `AGENTS.md`, and refuses a directory that already has files in it.
+`new` creates the directory where the command runs, the way `cargo new` does — `clock` here is `./clock`, not an installed application. It writes a `gpui-shell.json` whose `id` comes from the directory name, a `main.js` with a title bar and a button, a `.gitignore` (which also ignores `dist/`, where `bundle` writes), `jsconfig.json`, `gpui-kit.d.ts` and `AGENTS.md`, and refuses a directory that already has files in it.
 
 ## Instructions for coding agents
 
@@ -228,26 +228,29 @@ Regenerate the file after upgrading the runtime; the output is deterministic, so
 ## Hot-reload
 
 ```bash
-cargo run -p gpui-shell -- run ./hello --watch
-cargo run -p gpui-shell -- run ./hello --dev      # implies --watch
+cargo run -p gpui-shell -- dev ./hello           # reload, with the debug log
+cargo run -p gpui-shell -- run ./hello --watch    # reload only
 ```
 
-`--watch` polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.
+`dev` is the way to work on an application: it reloads on change, as `run --watch` does, and logs at `DEBUG`. Watching polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.
 
 A reload does all of its fallible work before it touches the live View. If the new code fails to load, the previous View keeps running, the error goes to stderr, and a toast with a stable id reports it in the window; the next successful reload retracts that toast. A broken save never costs you the window.
 
-`--dev` implies `--watch` and enables development mode before the runtime is constructed. It restores dynamic-code constructors and leaves built-in prototypes writable, while capability checks remain unchanged. See [Capabilities](./capabilities.md#the-sandbox).
+Neither relaxes the sandbox. `--dev`, with `run` or `dev`, enables development mode before the runtime is constructed: it restores dynamic-code constructors and leaves built-in prototypes writable, while capability checks remain unchanged. It does not reload or change the log level. See [Capabilities](./capabilities.md#the-sandbox).
 
 ## Command reference
 
 ```text
-gpui-shell run [<name> | -d <directory>] [--watch] [--dev]
+gpui-shell run [<name> | -d <directory>] [--watch] [--dev] [--packaged]
+gpui-shell dev [<name> | -d <directory>] [--dev]
 gpui-shell
 gpui-shell new <directory>
 gpui-shell list
 gpui-shell check <name> | -d <directory> [--print-spec]
 gpui-shell types <name> | -d <directory>
 gpui-shell agents [<name> | -d <directory>]
+gpui-shell bundle [<name> | -d <directory>] [--target <platform>] [--icon <png>]
+                  [--out <directory>] [--download-url <url>]
 gpui-shell --help | --version
 ```
 
@@ -257,11 +260,14 @@ gpui-shell --help | --version
 | `-d`, `--dir <dir>`   | The application root, or the `main.js` inside it                         |
 | _(none)_               | The application packaged beside the executable, or else this help        |
 | `run`                  | Run one application in a window                                         |
+| `dev`                  | Run it while developing: reload on change, log at `DEBUG`                |
 | `new`                  | Create a blank application in a new directory                            |
 | `list`                 | Print the installed applications and their requested capabilities        |
 | `check`                | Load and render once without a window; exit `0` or `1`                   |
 | `types`                | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
 | `agents`               | Print, or write as `AGENTS.md`, the instructions for coding agents       |
-| `--watch`              | Reload when the sources change                                           |
-| `--dev`                | Development mode; implies `--watch`                                      |
+| `bundle`               | Make a desktop application in `dist/`; see [Packaging](./packaging.md)   |
+| `--packaged`           | With `run`, run a directory as a bundle's launcher does: data under the `id`, no editor files |
+| `--watch`              | With `run`, reload when the sources change; `dev` always does            |
+| `--dev`                | With `run` or `dev`, development mode: relax the sandbox                 |
 | `--print-spec`         | With `check`, also print the element description that was built          |
