@@ -371,7 +371,7 @@ DataTable::new(&state)
 
 - `↑/↓` 在行之间移动
 - `←/→` 在列之间移动
-- `Home` / `End` 跳到首尾
+- `Home` / `End` 跳到第一行或最后一行
 - `PageUp/PageDown` 按页移动
 - `Escape` 清除选中
 
