@@ -1,11 +1,13 @@
 //! Block editor spike (`block-editor` feature): paragraphs, headings, lists,
 //! bold/italic/code marks, cross-block selection, IME, undo/redo.
 
-use gpui_kit::base::text::block_editor::{BlockEditor, BlockEditorEvent, BlockEditorState};
+use gpui_kit::base::text::block_editor::{
+    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, EditorCommand,
+};
 use gpui_kit::component::{button::Button, h_flex, v_flex};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
-    Styled, Subscription, Window, div, px,
+    Styled, Subscription, Window, div,
 };
 
 use crate::section;
@@ -31,6 +33,8 @@ pub fn long_document(blocks: usize) -> String {
 pub struct BlockEditorStory {
     editor: Entity<BlockEditorState>,
     status: SharedString,
+    /// Markdown preview, refreshed on `Changed` only (never per frame).
+    markdown: SharedString,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -55,58 +59,121 @@ impl BlockEditorStory {
             if let BlockEditorEvent::Changed { revision, .. } = event {
                 let kind = editor.read(cx).block_kind_at_caret();
                 this.status = format!("revision {revision}, caret in {kind:?}").into();
+                this.refresh_markdown(cx);
                 cx.notify();
             }
         });
-        Self {
+        let mut this = Self {
             editor,
             status: "".into(),
+            markdown: "".into(),
             _subscriptions: vec![subscription],
-        }
+        };
+        this.refresh_markdown(cx);
+        this
+    }
+
+    fn refresh_markdown(&mut self, cx: &App) {
+        let source = self.editor.read(cx).source();
+        self.markdown = source.chars().take(2000).collect::<String>().into();
+    }
+
+    fn load(&mut self, source: &str, cx: &mut Context<Self>) {
+        self.editor.update(cx, |e, cx| {
+            let _ = e.set_source(source, cx);
+        });
+        self.refresh_markdown(cx);
+        cx.notify();
+    }
+
+    fn command_button(
+        id: &'static str,
+        label: &'static str,
+        command: EditorCommand,
+        cx: &mut Context<Self>,
+    ) -> Button {
+        Button::new(id)
+            .label(label)
+            .on_click(cx.listener(move |this, _, window, cx| {
+                let command = command.clone();
+                this.editor.update(cx, |e, cx| {
+                    let _ = e.run(command, cx);
+                    e.focus(window, cx);
+                });
+            }))
     }
 }
 
 impl Render for BlockEditorStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let source = self.editor.read(cx).source();
         v_flex()
             .w_full()
             .gap_3()
             .child(
                 h_flex()
                     .gap_2()
-                    .child(Button::new("sample").label("Sample").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.editor.update(cx, |e, cx| {
-                                let _ = e.set_source(SAMPLE, cx);
-                            });
-                        },
-                    )))
+                    .flex_wrap()
+                    .child(Self::command_button(
+                        "p",
+                        "Text",
+                        EditorCommand::SetBlockKind(BlockKind::Paragraph),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "h1",
+                        "H1",
+                        EditorCommand::SetBlockKind(BlockKind::Heading { level: 1 }),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "h2",
+                        "H2",
+                        EditorCommand::SetBlockKind(BlockKind::Heading { level: 2 }),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "h3",
+                        "H3",
+                        EditorCommand::SetBlockKind(BlockKind::Heading { level: 3 }),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "ul",
+                        "Bullets",
+                        EditorCommand::ToggleList { ordered: false },
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "ol",
+                        "Numbered",
+                        EditorCommand::ToggleList { ordered: true },
+                        cx,
+                    ))
                     .child(
-                        Button::new("long")
-                            .label("Load 1200 blocks")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.editor.update(cx, |e, cx| {
-                                    let _ = e.set_source(&long_document(1200), cx);
-                                });
-                            })),
+                        Button::new("sample")
+                            .label("Sample")
+                            .on_click(cx.listener(|this, _, _, cx| this.load(SAMPLE, cx))),
                     )
+                    .child(Button::new("long").label("Load 1200 blocks").on_click(
+                        cx.listener(|this, _, _, cx| this.load(&long_document(1200), cx)),
+                    ))
                     .child(div().text_sm().child(self.status.clone())),
             )
             .child(
-                section("Editor")
-                    .w(px(640.))
-                    .child(BlockEditor::new(&self.editor)),
+                section("Editor").child(
+                    div()
+                        .flex_1()
+                        .w_full()
+                        .child(BlockEditor::new(&self.editor)),
+                ),
             )
             .child(
-                section("Markdown").w(px(640.)).child(
+                section("Markdown").child(
                     div()
+                        .flex_1()
                         .text_xs()
-                        .font_family("monospace")
                         .whitespace_normal()
-                        .child(SharedString::from(
-                            source.chars().take(2000).collect::<String>(),
-                        )),
+                        .child(self.markdown.clone()),
                 ),
             )
     }
