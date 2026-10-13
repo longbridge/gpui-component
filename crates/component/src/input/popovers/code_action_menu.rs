@@ -216,13 +216,17 @@ impl CodeActionMenu {
         }
 
         cx.propagate();
-        if input::Enter::is_primary(&*action) {
+        if input::Enter::is_primary(&*action) || action.partial_eq(&input::OverlayMenuAccept) {
             self.on_action_enter(window, cx);
-        } else if action.partial_eq(&input::Escape) {
+        } else if action.partial_eq(&input::Escape) || action.partial_eq(&input::OverlayMenuDismiss)
+        {
             self.on_action_escape(window, cx);
-        } else if action.partial_eq(&input::MoveUp) {
+        } else if action.partial_eq(&input::MoveUp)
+            || action.partial_eq(&input::OverlayMenuPrevious)
+        {
             self.on_action_up(window, cx);
-        } else if action.partial_eq(&input::MoveDown) {
+        } else if action.partial_eq(&input::MoveDown) || action.partial_eq(&input::OverlayMenuNext)
+        {
             self.on_action_down(window, cx);
         } else {
             return false;

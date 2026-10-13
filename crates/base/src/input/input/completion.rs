@@ -102,8 +102,10 @@ impl InputBaseState<InputMode> {
         let Some(handler) = self.overlay_action_handler.clone() else {
             return false;
         };
-        let closes_overlay =
-            crate::input::Enter::is_primary(&*action) || action.partial_eq(&crate::input::Escape);
+        let closes_overlay = crate::input::Enter::is_primary(&*action)
+            || action.partial_eq(&crate::input::Escape)
+            || action.partial_eq(&crate::input::OverlayMenuAccept)
+            || action.partial_eq(&crate::input::OverlayMenuDismiss);
         let handled = handler(InputOverlayKind::Completion, action, window, cx);
         if handled && closes_overlay {
             self.hide_context_menu(cx);

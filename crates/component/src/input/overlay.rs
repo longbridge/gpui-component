@@ -219,7 +219,11 @@ impl OverlayMode for crate::input::InputMode {
         );
     }
 
-    fn collect_floating(lsp: &FieldOverlays, snapshot: &LspSnapshot, floating: &mut Vec<AnyElement>) {
+    fn collect_floating(
+        lsp: &FieldOverlays,
+        snapshot: &LspSnapshot,
+        floating: &mut Vec<AnyElement>,
+    ) {
         if snapshot.completion.open {
             floating.push(lsp.completion.clone().into_any_element());
         }
@@ -403,7 +407,6 @@ fn sync_completion<M: CompletionMode>(
         }
     });
 }
-
 
 #[derive(Default)]
 pub(super) struct InputOverlays {
@@ -890,5 +893,82 @@ mod tests {
                 assert_eq!(state.value(), "{{host}}");
             });
         });
+    }
+
+    #[gpui::test]
+    fn menu_keys_follow_the_keymap_and_can_be_rebound(cx: &mut gpui::TestAppContext) {
+        use crate::input::{Input, InputState, OverlayMenuAccept};
+        use gpui::ParentElement as _;
+        use gpui::{KeyBinding, VisualTestContext};
+        use lsp_types::{CompletionTextEdit, Position, Range, TextEdit};
+
+        struct Harness {
+            state: Entity<InputState>,
+        }
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                div().child(Input::new(&self.state))
+            }
+        }
+
+        fn item() -> CompletionItem {
+            CompletionItem {
+                label: "host".into(),
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                    range: Range::new(Position::new(0, 0), Position::new(0, 4)),
+                    new_text: "{{host}}".into(),
+                })),
+                ..Default::default()
+            }
+        }
+
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| InputState::new(window, cx)),
+        });
+        let state = harness.read_with(cx, |harness, _| harness.state.clone());
+        let present = |cx: &mut VisualTestContext| {
+            VisualTestContext::update(cx, |window, cx| {
+                state.update(cx, |state, cx| {
+                    state.set_value("{{ho", window, cx);
+                    state.set_selected_range(4..4, cx);
+                    state.focus(window, cx);
+                    state.present_completion_items(0, "ho", vec![item()], cx);
+                });
+            });
+            VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
+            VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
+        };
+
+        // Default bindings: Escape dismisses, Enter accepts.
+        present(cx);
+        cx.simulate_keystrokes("escape");
+        cx.read(|cx| {
+            assert!(!state.read(cx).completion_menu_state().open);
+            assert_eq!(state.read(cx).value(), "{{ho");
+        });
+
+        present(cx);
+        cx.simulate_keystrokes("enter");
+        cx.read(|cx| assert_eq!(state.read(cx).value(), "{{host}}"));
+
+        // An application binds its own key to the menu action. It is scoped to
+        // an open menu, so the key does nothing while the menu is closed.
+        cx.update(|_, cx| {
+            cx.bind_keys([KeyBinding::new(
+                "ctrl-y",
+                OverlayMenuAccept,
+                Some("Input && menu_open"),
+            )])
+        });
+        VisualTestContext::update(cx, |window, cx| {
+            state.update(cx, |state, cx| state.set_value("{{ho", window, cx))
+        });
+        cx.simulate_keystrokes("ctrl-y");
+        cx.read(|cx| assert_eq!(state.read(cx).value(), "{{ho"));
+
+        present(cx);
+        cx.simulate_keystrokes("ctrl-y");
+        cx.read(|cx| assert_eq!(state.read(cx).value(), "{{host}}"));
     }
 }

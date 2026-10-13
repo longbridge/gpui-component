@@ -117,6 +117,10 @@ actions!(
         Escape,
         ToggleCodeActions,
         ShowCompletions,
+        OverlayMenuNext,
+        OverlayMenuPrevious,
+        OverlayMenuAccept,
+        OverlayMenuDismiss,
         Search,
         Replace,
         GoToDefinition,
@@ -132,6 +136,12 @@ pub enum InputEvent {
 }
 
 pub(super) const CONTEXT: &str = "Input";
+
+/// Added to the input's key context while a completion or code-action menu is
+/// open. The menu bindings below match `Input && menu_open`, so applications
+/// rebind them without touching caret movement or editing keys.
+pub(super) const MENU_OPEN_CONTEXT: &str = "menu_open";
+const MENU_CONTEXT: &str = "Input && menu_open";
 
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
@@ -305,6 +315,13 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-shift-f", Replace, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-h", Replace, Some(CONTEXT)),
+        // Registered last so they win over the plain bindings above while a menu
+        // is open: GPUI breaks ties between equally deep contexts by order.
+        KeyBinding::new("up", OverlayMenuPrevious, Some(MENU_CONTEXT)),
+        KeyBinding::new("down", OverlayMenuNext, Some(MENU_CONTEXT)),
+        KeyBinding::new("enter", OverlayMenuAccept, Some(MENU_CONTEXT)),
+        KeyBinding::new("shift-enter", OverlayMenuAccept, Some(MENU_CONTEXT)),
+        KeyBinding::new("escape", OverlayMenuDismiss, Some(MENU_CONTEXT)),
     ]);
 }
 
@@ -4621,7 +4638,14 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
 
         let element = div()
             .id("input-state")
-            .key_context(CONTEXT)
+            .key_context({
+                let mut context = gpui::KeyContext::new_with_defaults();
+                context.add(CONTEXT);
+                if M::is_context_menu_open(self, cx) {
+                    context.add(MENU_OPEN_CONTEXT);
+                }
+                context
+            })
             .track_focus(&self.focus_handle)
             .when(self.is_editable(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::backspace))
@@ -4649,10 +4673,22 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
             .on_action(window.listener_for(&entity, InputBaseState::right))
             .on_action(window.listener_for(&entity, InputBaseState::select_left))
             .on_action(window.listener_for(&entity, InputBaseState::select_right))
-            .when(!self.is_multi_line(), |this| {
-                this.on_action(window.listener_for(&entity, InputBaseState::menu_up))
-                    .on_action(window.listener_for(&entity, InputBaseState::menu_down))
-            })
+            .on_action(window.listener_for(
+                &entity,
+                InputBaseState::overlay_menu_action::<OverlayMenuNext>,
+            ))
+            .on_action(window.listener_for(
+                &entity,
+                InputBaseState::overlay_menu_action::<OverlayMenuPrevious>,
+            ))
+            .on_action(window.listener_for(
+                &entity,
+                InputBaseState::overlay_menu_action::<OverlayMenuAccept>,
+            ))
+            .on_action(window.listener_for(
+                &entity,
+                InputBaseState::overlay_menu_action::<OverlayMenuDismiss>,
+            ))
             .when(self.is_multi_line(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::up))
                     .on_action(window.listener_for(&entity, InputBaseState::down))

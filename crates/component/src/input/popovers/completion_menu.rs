@@ -22,7 +22,6 @@ use crate::{
     list::{List, ListDelegate, ListEvent, ListState},
 };
 
-
 /// A kind of input that can host a [`CompletionMenu`].
 ///
 /// The menu is generic over the input it serves, so the pieces that differ
@@ -43,7 +42,9 @@ pub(crate) trait CompletionMode: input::InputModeKind + Sized {
 
     fn completion_max_width(state: &InputBaseState<Self>) -> Pixels;
 
-    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState;
+    fn completion_menu_state(
+        state: &InputBaseState<Self>,
+    ) -> &gpui_base::input::CompletionMenuState;
 }
 
 impl CompletionMode for EditorMode {
@@ -68,7 +69,9 @@ impl CompletionMode for EditorMode {
         state.lsp().completion_menu.max_width
     }
 
-    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState {
+    fn completion_menu_state(
+        state: &InputBaseState<Self>,
+    ) -> &gpui_base::input::CompletionMenuState {
         state.completion_menu_state()
     }
 }
@@ -95,7 +98,9 @@ impl CompletionMode for InputMode {
         gpui_base::input::CompletionMenuOptions::default().max_width
     }
 
-    fn completion_menu_state(state: &InputBaseState<Self>) -> &gpui_base::input::CompletionMenuState {
+    fn completion_menu_state(
+        state: &InputBaseState<Self>,
+    ) -> &gpui_base::input::CompletionMenuState {
         state.completion_menu_state()
     }
 }
@@ -330,13 +335,17 @@ impl<M: CompletionMode> CompletionMenu<M> {
         }
 
         cx.propagate();
-        if input::Enter::is_primary(&*action) {
+        if input::Enter::is_primary(&*action) || action.partial_eq(&input::OverlayMenuAccept) {
             self.on_action_enter(window, cx);
-        } else if action.partial_eq(&input::Escape) {
+        } else if action.partial_eq(&input::Escape) || action.partial_eq(&input::OverlayMenuDismiss)
+        {
             self.on_action_escape(window, cx);
-        } else if action.partial_eq(&input::MoveUp) {
+        } else if action.partial_eq(&input::MoveUp)
+            || action.partial_eq(&input::OverlayMenuPrevious)
+        {
             self.on_action_up(window, cx);
-        } else if action.partial_eq(&input::MoveDown) {
+        } else if action.partial_eq(&input::MoveDown) || action.partial_eq(&input::OverlayMenuNext)
+        {
             self.on_action_down(window, cx);
         } else {
             return false;
@@ -515,7 +524,8 @@ mod tests {
         cx.update(crate::init);
         let window = cx.add_empty_window();
         let (editor, menu) = window.update(|window, cx| {
-            let editor = cx.new(|cx| crate::input::EditorState::new(window, cx).default_value("co"));
+            let editor =
+                cx.new(|cx| crate::input::EditorState::new(window, cx).default_value("co"));
             let menu = CompletionMenu::new(editor.clone(), window, cx);
             let old_items = vec![CompletionItem {
                 label: "const".into(),
