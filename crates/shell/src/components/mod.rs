@@ -141,6 +141,10 @@ mod tests {
     /// used to raise was only half the problem: with `Root` in place but its
     /// dialog layer unrendered, the dialog opens into a window that never draws
     /// it — indistinguishable, from the outside, from one that does not open.
+    ///
+    /// Debug builds only: GPUI records `debug_selector`s only with
+    /// `debug_assertions`, so `debug_bounds` is always `None` under `--release`.
+    #[cfg(debug_assertions)]
     #[gpui::test]
     fn a_dialog_opened_through_the_catalog_window_is_drawn(cx: &mut gpui::TestAppContext) {
         use gpui::AppContext as _;
