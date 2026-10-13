@@ -254,6 +254,30 @@ Textarea::new(&self.composer).on_paste(move |item, _, cx| {
 
 已知限制：在 web 上 `read_from_clipboard()` 为 `None`（文本经由平台输入处理器到达）；那里的图片粘贴需要异步剪贴板访问和权限，不在本次范围内。
 
+### 补全菜单
+
+`Input` 可以显示与 `Editor` 相同的、锚定在光标处的补全菜单。何时补全、提供哪些候选项由应用决定；输入框负责显示候选项，在菜单打开时把上、下、回车和 Escape 交给菜单，并应用所选的编辑。输入、移动光标或失去焦点都会关闭菜单。
+
+```rust
+use lsp_types::{CompletionItem, CompletionTextEdit, Position, Range, TextEdit};
+
+// 用户输入了 `{{ho`；提供 `host`，替换已输入的 token。
+let item = CompletionItem {
+    label: "host".into(),
+    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+        range: Range::new(Position::new(0, 0), Position::new(0, 4)),
+        new_text: "{{host}}".into(),
+    })),
+    ..Default::default()
+};
+input.update(cx, |state, cx| {
+    // `0` 是被替换文本的起点；`"ho"` 是已输入的查询。
+    state.present_completion_items(0, "ho", vec![item], cx);
+});
+```
+
+在 `InputEvent::Change` 的订阅中调用 `present_completion_items`，用 `dismiss_completion_overlay` 关闭菜单；传入空列表同样会关闭。没有 `text_edit` 的候选项会在光标处插入其 `insert_text`（或 label）。
+
 ## 示例
 
 ### 搜索输入框

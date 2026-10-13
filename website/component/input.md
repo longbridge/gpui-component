@@ -289,6 +289,35 @@ Known limit: on web `read_from_clipboard()` is `None` (text arrives through
 the platform input handler); image paste there needs async clipboard access
 and permission, and is out of scope.
 
+### Completion Menu
+
+`Input` can show the same caret-anchored completion menu as `Editor`. The
+application decides when to complete and what to offer; the input shows the
+items, sends Up, Down, Enter and Escape to the menu while it is open, and
+applies the chosen edit. Typing, moving the caret or losing focus closes it.
+
+```rust
+use lsp_types::{CompletionItem, CompletionTextEdit, Position, Range, TextEdit};
+
+// The user typed `{{ho`; offer `host`, replacing the typed token.
+let item = CompletionItem {
+    label: "host".into(),
+    text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+        range: Range::new(Position::new(0, 0), Position::new(0, 4)),
+        new_text: "{{host}}".into(),
+    })),
+    ..Default::default()
+};
+input.update(cx, |state, cx| {
+    // `0` is where the replaced text starts; `"ho"` is the typed query.
+    state.present_completion_items(0, "ho", vec![item], cx);
+});
+```
+
+Call `present_completion_items` from an `InputEvent::Change` subscription, and
+`dismiss_completion_overlay` to close the menu. An empty list closes it. An
+item without a `text_edit` inserts its `insert_text` (or label) at the caret.
+
 ## Examples
 
 ### Search Input

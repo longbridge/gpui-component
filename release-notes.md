@@ -32,6 +32,25 @@ the selection without confirming, multiple-choice items still only toggle, and
 freeform input is unchanged. `QuestionnaireState::choose` is the new activation
 path; `activate_choice` keeps changing the answer without confirming.
 
+#### Added: completion menu for `InputState`
+
+```rust
+impl InputState {
+    pub fn present_completion_items(&mut self, trigger_start_offset: usize, query: impl Into<String>, items: Vec<CompletionItem>, cx: &mut Context<Self>)
+    pub fn dismiss_completion_overlay(&mut self, cx: &mut Context<Self>)
+    pub fn insert_completion(&mut self, item: &CompletionItem, fallback_range: Range<usize>, window: &mut Window, cx: &mut Context<Self>)
+    pub fn set_overlay_action_handler(&mut self, handler: impl Fn(InputOverlayKind, Box<dyn Action>, &mut Window, &mut Context<InputState>) -> bool + 'static)
+    pub fn has_overlay_action_handler(&self) -> bool
+}
+pub struct FieldExtras // gpui_base::input: the single-line field's extra state
+```
+
+A single-line input can now show the caret-anchored completion menu that only
+`EditorState` had, driven by the application: it presents the items, the input
+routes Up, Down, Enter and Escape to the open menu and applies the edit. An
+edit, caret move or blur closes the menu. `CompletionMenu` and its caret
+anchor are generic over the input kind; the editor is unchanged.
+
 #### Added: `SettingGroup::variant`
 
 ```rust
