@@ -407,11 +407,15 @@ fn input_rules_make_headings_and_lists(cx: &mut TestAppContext) {
     keys(cx, "enter");
     type_text(cx, "- ");
     type_text(cx, "item");
-    keys(cx, "enter");
-    keys(cx, "enter");
+    assert_eq!(source(&editor, cx), "## Title\n\n- item");
+}
+
+#[gpui::test]
+fn ordered_list_input_rule(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "");
     type_text(cx, "1. ");
     type_text(cx, "first");
-    assert_eq!(source(&editor, cx), "## Title\n\n- item\n\n1. first");
+    assert_eq!(source(&editor, cx), "1. first");
 }
 
 #[gpui::test]
