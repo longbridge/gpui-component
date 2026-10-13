@@ -57,6 +57,7 @@ mod serialize;
 mod state;
 mod step;
 mod style;
+mod table;
 mod transaction;
 mod undo;
 
@@ -69,6 +70,7 @@ pub use editor::BlockEditorModel;
 pub use element::BlockEditor;
 pub use state::{BlockEditorEvent, BlockEditorState};
 pub use style::BlockEditorStyle;
+pub use table::TableEdit;
 
 pub(crate) fn init(cx: &mut gpui::App) {
     state::init(cx);

@@ -14,6 +14,10 @@ pub enum BlockSelection {
     },
     /// Whole blocks as objects. Endpoints must be siblings.
     Blocks { anchor: BlockId, head: BlockId },
+    /// A rectangle of table cells (both ends in the same table), from
+    /// dragging or Shift+arrows across cells. Copy gives a Markdown table;
+    /// delete clears the cells' contents.
+    Cells { anchor: BlockId, head: BlockId },
 }
 
 impl BlockSelection {
@@ -75,6 +79,14 @@ impl EditorDocument {
                     return Err(SelectionError::NotSiblings);
                 }
             }
+            BlockSelection::Cells { anchor, head } => {
+                let table = |id: BlockId| super::table::table_of(self, id);
+                match (table(*anchor), table(*head)) {
+                    (Some(a), Some(b)) if a == b => {}
+                    (None, _) => return Err(SelectionError::UnknownBlock(*anchor)),
+                    _ => return Err(SelectionError::NotSiblings),
+                }
+            }
         }
         Ok(())
     }
@@ -98,6 +110,10 @@ impl EditorDocument {
                 };
                 (first(lo), last(hi))
             }
+            BlockSelection::Cells { anchor, head } => (
+                BlockPosition::new(*anchor, 0),
+                BlockPosition::new(*head, self.leaf_len(*head).unwrap_or(0)),
+            ),
         };
         if self.cmp_positions(a, b)?.is_le() {
             Ok(ResolvedSelection { start: a, end: b })

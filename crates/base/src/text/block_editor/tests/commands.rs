@@ -324,3 +324,172 @@ fn table_node_selection_moves_and_deletes() {
     assert!(m.source().starts_with("| x | y |"));
     assert_invariants(&m);
 }
+
+const GRID: &str = "| a | b |\n| :-: | --: |\n| 1 | 2 |";
+
+fn table_ids(m: &BlockEditorModel) -> Vec<BlockId> {
+    m.document().leaves().map(|b| b.id()).collect()
+}
+
+#[test]
+fn table_alignment_round_trips() {
+    for source in [
+        GRID,
+        "| l | c | r |\n| :-- | :-: | --: |\n| 1 | **2** | `3` |",
+        "x\n\n| a |\n| :-- |\n|  |\n\ny",
+    ] {
+        assert_eq!(model(source).source(), source);
+    }
+}
+
+#[test]
+fn typing_and_marks_in_cells() {
+    let mut m = model(GRID);
+    caret_in(&mut m, 2, 1);
+    m.insert_text("0", EditOrigin::Typing).unwrap();
+    m.split_block().ok(); // Enter in a cell does nothing.
+    assert_eq!(m.source(), "| a | b |\n| :-: | --: |\n| 10 | 2 |");
+    let ids = table_ids(&m);
+    m.set_selection(BlockSelection::Text {
+        anchor: BlockPosition::new(ids[2], 0),
+        head: BlockPosition::new(ids[2], 2),
+    })
+    .unwrap();
+    m.run(EditorCommand::ToggleMark(MarkKind::Italic)).unwrap();
+    assert_eq!(m.source(), "| a | b |\n| :-: | --: |\n| *10* | 2 |");
+    assert_invariants(&m);
+}
+
+#[test]
+fn tab_moves_between_cells_and_adds_rows() {
+    let mut m = model(GRID);
+    caret_in(&mut m, 0, 0);
+    m.run(EditorCommand::Indent).unwrap();
+    let ids = table_ids(&m);
+    assert_eq!(
+        m.selection(),
+        &BlockSelection::Text {
+            anchor: BlockPosition::new(ids[1], 0),
+            head: BlockPosition::new(ids[1], 1),
+        },
+        "Tab selects the next cell's text"
+    );
+    m.run(EditorCommand::Outdent).unwrap();
+    assert_eq!(m.selection().clone(), {
+        let len = 1;
+        BlockSelection::Text {
+            anchor: BlockPosition::new(ids[0], 0),
+            head: BlockPosition::new(ids[0], len),
+        }
+    });
+    caret_in(&mut m, 3, 1);
+    m.run(EditorCommand::Indent).unwrap();
+    assert_eq!(m.source(), format!("{GRID}\n|  |  |"));
+    m.insert_text("z", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), format!("{GRID}\n| z |  |"));
+    assert!(m.undo());
+    assert!(m.undo());
+    assert_eq!(m.source(), GRID);
+    assert_invariants(&m);
+}
+
+#[test]
+fn cell_selection_marks_clears_and_rejects_other_tables() {
+    let mut m = model("| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |");
+    let ids = table_ids(&m);
+    // b..2 is the 2×1... no: b (row 0, col 1) to 3 (row 1, col 2) is 2×2.
+    m.set_selection(BlockSelection::Cells {
+        anchor: ids[1],
+        head: ids[5],
+    })
+    .unwrap();
+    assert_eq!(
+        m.selected_cells().unwrap(),
+        vec![vec![ids[1], ids[2]], vec![ids[4], ids[5]]]
+    );
+    m.run(EditorCommand::ToggleMark(MarkKind::Bold)).unwrap();
+    assert_eq!(
+        m.source(),
+        "| a | **b** | **c** |\n| :-- | :-- | :-- |\n| 1 | **2** | **3** |"
+    );
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), "| a |  |  |\n| :-- | :-- | :-- |\n| 1 |  |  |");
+    assert_eq!(m.caret(), Some(BlockPosition::new(ids[1], 0)));
+    // Typing over a cell selection clears it, then types into the first cell.
+    m.set_selection(BlockSelection::Cells {
+        anchor: ids[0],
+        head: ids[3],
+    })
+    .unwrap();
+    m.insert_text("q", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "| q |  |  |\n| :-- | :-- | :-- |\n|  |  |  |");
+    // A cell selection cannot leave its table.
+    let mut two = model("| a |\n| --- |\n| 1 |\n\n| b |\n| --- |\n| 2 |");
+    let ids = table_ids(&two);
+    assert!(
+        two.set_selection(BlockSelection::Cells {
+            anchor: ids[0],
+            head: ids[2],
+        })
+        .is_err()
+    );
+}
+
+#[test]
+fn insert_table_and_row_column_commands() {
+    let mut m = model("");
+    m.run(EditorCommand::InsertTable { rows: 2, cols: 2 })
+        .unwrap();
+    assert_eq!(m.source(), "|  |  |\n| :-- | :-- |\n|  |  |");
+    m.insert_text("h", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "| h |  |\n| :-- | :-- |\n|  |  |");
+
+    let mut m = model(GRID);
+    caret_in(&mut m, 1, 0); // "b", right-aligned column
+    m.run(EditorCommand::EditTable(TableEdit::AddColumnLeft))
+        .unwrap();
+    assert_eq!(
+        m.source(),
+        "| a |  | b |\n| :-: | :-- | --: |\n| 1 |  | 2 |"
+    );
+    m.insert_text("n", EditOrigin::Typing).unwrap();
+    assert_eq!(
+        m.source(),
+        "| a | n | b |\n| :-: | :-- | --: |\n| 1 |  | 2 |"
+    );
+    m.run(EditorCommand::EditTable(TableEdit::RemoveColumn))
+        .unwrap();
+    assert_eq!(m.source(), GRID);
+    m.run(EditorCommand::EditTable(TableEdit::AddColumnRight))
+        .unwrap();
+    assert_eq!(
+        m.source(),
+        "| a | b |  |\n| :-: | --: | :-- |\n| 1 | 2 |  |"
+    );
+    assert!(m.undo());
+    assert_eq!(m.source(), GRID);
+    caret_in(&mut m, 2, 0);
+    m.run(EditorCommand::EditTable(TableEdit::AddRowAbove))
+        .unwrap();
+    assert_eq!(m.source(), "| a | b |\n| :-: | --: |\n|  |  |\n| 1 | 2 |");
+    m.run(EditorCommand::EditTable(TableEdit::RemoveRow))
+        .unwrap();
+    assert_eq!(m.source(), GRID);
+    m.run(EditorCommand::EditTable(TableEdit::AddRowBelow))
+        .unwrap();
+    assert_eq!(m.source(), format!("{GRID}\n|  |  |"));
+    assert_invariants(&m);
+    // Removing the header row promotes the next row.
+    let mut m = model(GRID);
+    caret_in(&mut m, 0, 0);
+    m.run(EditorCommand::EditTable(TableEdit::RemoveRow))
+        .unwrap();
+    assert_eq!(m.source(), "| 1 | 2 |\n| :-: | --: |");
+    // Removing the only row removes the table.
+    m.run(EditorCommand::EditTable(TableEdit::RemoveRow))
+        .unwrap();
+    assert_eq!(m.source(), "");
+    assert!(m.undo());
+    assert_eq!(m.source(), "| 1 | 2 |\n| :-: | --: |");
+    assert_invariants(&m);
+}

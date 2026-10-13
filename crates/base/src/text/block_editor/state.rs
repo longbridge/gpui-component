@@ -326,7 +326,9 @@ impl BlockEditorState {
         let doc = &self.model.doc;
         let mut ids = match self.model.selection() {
             BlockSelection::Text { anchor, head } => vec![anchor.block, head.block],
-            BlockSelection::Blocks { anchor, head } => vec![*anchor, *head],
+            BlockSelection::Blocks { anchor, head } | BlockSelection::Cells { anchor, head } => {
+                vec![*anchor, *head]
+            }
         };
         if let Some((block, _)) = self.marked_range() {
             ids.push(block);
@@ -338,6 +340,13 @@ impl BlockEditorState {
 
     /// Per-leaf selected byte ranges, for painting.
     pub(crate) fn selection_ranges(&self) -> Vec<(BlockId, Range<usize>)> {
+        if let Some(cells) = self.model.selected_cells() {
+            return cells
+                .into_iter()
+                .flatten()
+                .map(|c| (c, 0..self.model.doc.leaf_len(c).unwrap_or(0)))
+                .collect();
+        }
         let Ok(range) = self.model.doc.resolve_selection(self.model.selection()) else {
             return Vec::new();
         };
@@ -419,7 +428,10 @@ impl BlockEditorState {
 
     /// A whole-block selection collapses to its start or end.
     fn collapse_blocks(&mut self, forward: bool, cx: &mut Context<Self>) -> bool {
-        if !matches!(self.model.selection(), BlockSelection::Blocks { .. }) {
+        if !matches!(
+            self.model.selection(),
+            BlockSelection::Blocks { .. } | BlockSelection::Cells { .. }
+        ) {
             return false;
         }
         if let Ok(range) = self.model.doc.resolve_selection(self.model.selection()) {
@@ -433,6 +445,9 @@ impl BlockEditorState {
         match self.model.selection() {
             BlockSelection::Text { anchor, head } => Some((*anchor, *head)),
             BlockSelection::Blocks { .. } => None,
+            BlockSelection::Cells { anchor, head } => {
+                Some((BlockPosition::new(*anchor, 0), BlockPosition::new(*head, 0)))
+            }
         }
     }
 
@@ -442,9 +457,20 @@ impl BlockEditorState {
             _ => head,
         };
         self.end_composition();
-        let _ = self
-            .model
-            .set_selection(BlockSelection::Text { anchor, head });
+        // A drag or Shift+arrow from one cell into another of the same table
+        // selects cells, not text.
+        let doc = &self.model.doc;
+        let selection = match (
+            super::table::table_of(doc, anchor.block),
+            super::table::table_of(doc, head.block),
+        ) {
+            (Some(a), Some(b)) if a == b && anchor.block != head.block => BlockSelection::Cells {
+                anchor: anchor.block,
+                head: head.block,
+            },
+            _ => BlockSelection::Text { anchor, head },
+        };
+        let _ = self.model.set_selection(selection);
         self.selection_changed(cx);
     }
 
@@ -545,6 +571,15 @@ impl BlockEditorState {
             // Within the block, or into the laid-out adjacent leaf.
             (Some(t), _) if t.block == head.block => t,
             (Some(t), Some(next)) if t.block == next.block => t,
+            // Up/down inside a table goes to the cell above/below (cells of
+            // one table are laid out together).
+            (Some(t), _)
+                if super::table::table_of(&self.model.doc, head.block).is_some_and(|table| {
+                    super::table::table_of(&self.model.doc, t.block) == Some(table)
+                }) =>
+            {
+                t
+            }
             // Into a culled (or not yet laid-out) leaf: model fallback.
             (_, Some(next)) => {
                 let offset = if down { 0 } else { next.len };
@@ -618,16 +653,6 @@ impl BlockEditorState {
 
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
-        let table = self.frame.borrow().table_at(at);
-        if let Some(table) = table {
-            self.end_composition();
-            let _ = self.model.set_selection(BlockSelection::Blocks {
-                anchor: table,
-                head: table,
-            });
-            self.selection_changed(cx);
-            return;
-        }
         let hit = self.frame.borrow().hit_test(at);
         if let Some(pos) = hit {
             self.goal_x = None;
@@ -641,6 +666,9 @@ impl BlockEditorState {
     }
 
     fn selected_text(&self) -> String {
+        if let Some(table) = self.model.cells_markdown() {
+            return table;
+        }
         if let Some((parent, range)) = self.model.selected_blocks() {
             let ids = &self.model.doc.children(parent)[range];
             return super::serialize::join_blocks(&self.model.doc, ids);
@@ -976,6 +1004,8 @@ fn command_name(command: &EditorCommand) -> &'static str {
         EditorCommand::SelectAll => "select_all",
         EditorCommand::DeleteSelection => "delete_selection",
         EditorCommand::SetCodeBlock { .. } => "code_block",
+        EditorCommand::InsertTable { .. } => "insert_table",
+        EditorCommand::EditTable(_) => "edit_table",
     }
 }
 

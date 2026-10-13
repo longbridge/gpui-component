@@ -537,28 +537,95 @@ fn readonly_blocks_edits_but_not_navigation(cx: &mut TestAppContext) {
 
 const TABLE_DOC: &str = "a\n\n| x | y |\n| --- | --- |\n| 1 | 2 |\n\nb";
 
+/// Window point of `offset` in the `ix`-th document leaf (cells included).
+fn leaf_point(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    ix: usize,
+    offset: usize,
+) -> gpui::Point<gpui::Pixels> {
+    draw(cx);
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(ix).unwrap().id();
+        let b = e
+            .frame
+            .borrow()
+            .caret_bounds(BlockPosition::new(id, offset), px(1.))
+            .expect("leaf laid out");
+        gpui::point(b.origin.x + px(1.), b.center().y)
+    })
+}
+
 #[gpui::test]
-fn click_selects_table_as_node_then_delete_and_undo(cx: &mut TestAppContext) {
+fn table_cells_click_type_tab_and_cell_selection(cx: &mut TestAppContext) {
+    // Leaves: a, x, y, 1, 2, b.
     let (editor, cx) = open(cx, TABLE_DOC);
     let original = source(&editor, cx);
-    let (center, cells) = editor.read_with(cx, |e, _| {
-        let f = e.frame.borrow();
-        let (_, bounds) = f.tables.first().copied().expect("table has bounds");
-        (bounds.center(), f.tables.len())
-    });
-    assert_eq!(cells, 1);
-    cx.simulate_mouse_down(center, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_up(center, MouseButton::Left, Modifiers::none());
-    draw(cx);
+    // Click in cell "1": a caret, not a node selection.
+    let at = leaf_point(&editor, cx, 3, 1);
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    assert_eq!(caret_leaf(&editor, cx), Some(3));
+    type_text(cx, "0");
+    keys(cx, "M-b");
+    type_text(cx, "B");
+    assert!(
+        source(&editor, cx).contains("| 10**B** | 2 |"),
+        "{}",
+        source(&editor, cx)
+    );
+    // Arrows cross cell boundaries: right into "2", up into "y", down back.
+    keys(cx, "right");
+    assert_eq!(caret_leaf(&editor, cx), Some(4));
+    keys(cx, "up");
+    assert_eq!(caret_leaf(&editor, cx), Some(2));
+    keys(cx, "down");
+    assert_eq!(caret_leaf(&editor, cx), Some(4));
+    // Shift+Tab / Tab move between cells; Tab in the last cell adds a row.
+    keys(cx, "shift-tab");
+    assert_eq!(caret_leaf(&editor, cx), Some(3));
+    keys(cx, "tab tab");
+    let s = source(&editor, cx);
+    assert!(s.contains("| 10**B** | 2 |\n|  |  |"), "{s}");
+    type_text(cx, "n");
+    assert!(source(&editor, cx).contains("| n |  |"));
+    keys(cx, "M-z M-z M-z M-z M-z");
+    assert_eq!(source(&editor, cx), original);
+    // Drag from "x" to "2": a cell selection; copy gives a table.
+    let from = leaf_point(&editor, cx, 1, 0);
+    let to = leaf_point(&editor, cx, 4, 1);
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
     assert!(editor.read_with(cx, |e, _| matches!(
         e.model().selection(),
-        BlockSelection::Blocks { .. }
+        BlockSelection::Cells { .. }
     )));
-    // The selected table's cells get selection backgrounds.
-    let painted = editor.update(cx, |e, _| e.selection_ranges().len());
-    assert_eq!(painted, 4);
+    eprintln!(
+        "LEAVES {:?} CELLS {:?}",
+        editor.read_with(cx, |e, _| e
+            .model()
+            .document()
+            .leaves()
+            .map(|b| b.id())
+            .collect::<Vec<_>>()),
+        editor.read_with(cx, |e, _| e.model().selected_cells())
+    );
+    eprintln!(
+        "SEL {:?} from {from:?} to {to:?} src {:?}",
+        editor.read_with(cx, |e, _| e.model().selection().clone()),
+        source(&editor, cx)
+    );
+    assert_eq!(editor.update(cx, |e, _| e.selection_ranges().len()), 4);
+    keys(cx, "M-c");
+    let copied = cx.read_from_clipboard().and_then(|c| c.text()).unwrap();
+    assert_eq!(copied, "| x | y |\n| --- | --- |\n| 1 | 2 |");
+    // Delete clears contents and keeps the table.
     keys(cx, "backspace");
-    assert_eq!(source(&editor, cx), "a\n\nb");
+    assert_eq!(
+        source(&editor, cx),
+        "a\n\n|  |  |\n| :-- | :-- |\n|  |  |\n\nb"
+    );
     keys(cx, "M-z");
     assert_eq!(source(&editor, cx), original);
 }
@@ -622,8 +689,8 @@ fn table_rows_are_cached_per_row(cx: &mut TestAppContext) {
     );
     draw(cx);
     let steady = editor.read_with(cx, |e, _| e.projection.built());
-    // Leaves: a, b, 1, 2, 3, 4, after. Typing into cell "3" (model-level;
-    // there is no cell editing UI) rebuilds the table and that one row.
+    // Leaves: a, b, 1, 2, 3, 4, after. Typing into cell "3" rebuilds the
+    // table and that one row.
     caret_at(&editor, cx, 4, 0);
     type_text(cx, "x");
     assert!(

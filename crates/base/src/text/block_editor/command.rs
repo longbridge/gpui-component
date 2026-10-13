@@ -35,6 +35,14 @@ pub enum EditorCommand {
     SetCodeBlock {
         lang: Option<String>,
     },
+    /// Insert an empty table (`rows` includes the header row) after the
+    /// caret's block, replacing it when it is an empty paragraph.
+    InsertTable {
+        rows: usize,
+        cols: usize,
+    },
+    /// Add or remove a row or column at the caret's cell.
+    EditTable(super::table::TableEdit),
     SelectAll,
     DeleteSelection,
 }
@@ -262,6 +270,9 @@ impl BlockEditorModel {
 
     /// Insert plain text at the selection (replacing it); `\n` splits blocks.
     pub fn insert_text(&mut self, text: &str, origin: EditOrigin) -> Result<(), CommandError> {
+        if self.selected_cells().is_some() {
+            self.clear_cells(origin)?;
+        }
         let range = self.resolved()?;
         let stored = self.stored_marks.clone();
         let marks = match &stored {
@@ -301,6 +312,11 @@ impl BlockEditorModel {
 
     /// Backspace (`forward == false`) or Delete: a grapheme, the selection, a join with the neighbouring block, or (next to a table) select the table.
     pub fn delete(&mut self, forward: bool) -> Result<(), CommandError> {
+        if self.selected_cells().is_some() {
+            return self
+                .clear_cells(EditOrigin::Command("clear_cells"))
+                .map(|_| ());
+        }
         if self.selected_blocks().is_some() {
             return self.delete_blocks().map(|_| ());
         }
@@ -796,6 +812,9 @@ impl BlockEditorModel {
                 Ok(true)
             }
             EditorCommand::DeleteSelection => {
+                if self.selected_cells().is_some() {
+                    return self.clear_cells(EditOrigin::Command("clear_cells"));
+                }
                 if self.selected_blocks().is_some() {
                     return self.delete_blocks();
                 }
@@ -838,6 +857,11 @@ impl BlockEditorModel {
                 let pos = self.caret().unwrap_or_else(|| self.doc.first_caret());
                 self.code_indent(pos, command == EditorCommand::Outdent)
             }
+            EditorCommand::Indent | EditorCommand::Outdent if self.current_cell().is_some() => {
+                self.tab_cell(command == EditorCommand::Outdent)
+            }
+            EditorCommand::InsertTable { rows, cols } => self.insert_table(rows, cols),
+            EditorCommand::EditTable(edit) => self.edit_table(edit),
             EditorCommand::Indent => self.indent(),
             EditorCommand::Outdent => self.outdent(),
             EditorCommand::SetCodeBlock { lang } => self.set_code_block(lang),
@@ -870,7 +894,14 @@ impl BlockEditorModel {
             self.stored_marks = Some(change.apply(&current));
             return Ok(false);
         }
-        let ranges = self.text_ranges(range);
+        let ranges = match self.selected_cells() {
+            Some(cells) => cells
+                .into_iter()
+                .flatten()
+                .map(|c| (c, 0, self.doc.leaf_len(c).unwrap_or(0)))
+                .collect(),
+            None => self.text_ranges(range),
+        };
         let selection = self.selection.clone();
         self.transact(EditOrigin::Command("toggle_mark"), |tx| {
             for (block, lo, hi) in ranges {

@@ -157,6 +157,8 @@ impl FrameLayout {
     }
 
     /// The table under a window point.
+    /// Kept for the block handle (not built yet); clicks in a table place the caret.
+    #[allow(dead_code)]
     pub(crate) fn table_at(&self, at: Point<Pixels>) -> Option<BlockId> {
         self.tables
             .iter()
@@ -171,8 +173,44 @@ impl FrameLayout {
             .leaves
             .partition_point(|leaf| leaf.bounds().bottom() <= at.y)
             .min(last);
+        let ix = self.nearest_in_band(ix, at.x);
         let leaf = &self.leaves[ix];
         Some(BlockPosition::new(leaf.info.block, leaf.offset_at(at)))
+    }
+
+    /// Leaves side by side with `ix` (table cells in one row share a
+    /// vertical band): the one horizontally nearest to `x`.
+    fn nearest_in_band(&self, ix: usize, x: Pixels) -> usize {
+        let band = self.leaves[ix].bounds();
+        let overlaps = |i: usize| {
+            let b = self.leaves[i].bounds();
+            b.top() < band.bottom() && b.bottom() > band.top()
+        };
+        let mut lo = ix;
+        while lo > 0 && overlaps(lo - 1) {
+            lo -= 1;
+        }
+        let mut hi = ix;
+        while hi + 1 < self.leaves.len() && overlaps(hi + 1) {
+            hi += 1;
+        }
+        let distance = |i: usize| {
+            let b = self.leaves[i].bounds();
+            if x < b.left() {
+                b.left() - x
+            } else if x > b.right() {
+                x - b.right()
+            } else {
+                px(0.)
+            }
+        };
+        (lo..=hi)
+            .min_by(|a, b| {
+                distance(*a)
+                    .partial_cmp(&distance(*b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(ix)
     }
 
     /// One visual line above/below `pos`, keeping `x`.
@@ -198,11 +236,24 @@ impl FrameLayout {
                 leaf.offset_at(point(x, y)),
             ));
         }
-        let next = if down {
-            self.leaves.get(ix + 1)?
-        } else {
-            self.leaves.get(ix.checked_sub(1)?)?
+        // The next leaf above/below that is not side by side with this one
+        // (skips the rest of a table row), then the nearest in its band.
+        let side_by_side = |i: usize| {
+            let b = self.leaves[i].bounds();
+            b.top() < bounds.bottom() && b.bottom() > bounds.top()
         };
+        let mut j = ix;
+        loop {
+            j = if down {
+                Some(j + 1).filter(|j| *j < self.leaves.len())?
+            } else {
+                j.checked_sub(1)?
+            };
+            if !side_by_side(j) {
+                break;
+            }
+        }
+        let next = &self.leaves[self.nearest_in_band(j, x)];
         let b = next.bounds();
         let y = if down {
             b.top() + next.line_height() / 2.

@@ -89,7 +89,7 @@ impl BlockEditorModel {
     pub fn caret(&self) -> Option<BlockPosition> {
         match &self.selection {
             BlockSelection::Text { head, .. } => Some(*head),
-            BlockSelection::Blocks { .. } => None,
+            BlockSelection::Blocks { .. } | BlockSelection::Cells { .. } => None,
         }
     }
 
@@ -191,7 +191,12 @@ impl BlockEditorModel {
             Ok(()) => selection,
             Err(_) => match selection {
                 BlockSelection::Text { head, .. } => BlockSelection::caret(self.doc.clamp(head)),
-                BlockSelection::Blocks { .. } => BlockSelection::caret(self.doc.first_caret()),
+                BlockSelection::Cells { head, .. } if self.doc.get(head).is_some() => {
+                    BlockSelection::caret(BlockPosition::new(head, 0))
+                }
+                BlockSelection::Blocks { .. } | BlockSelection::Cells { .. } => {
+                    BlockSelection::caret(self.doc.first_caret())
+                }
             },
         }
     }

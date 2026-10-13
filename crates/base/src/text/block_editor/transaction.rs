@@ -52,7 +52,7 @@ impl Transaction {
                 anchor: map(*anchor)?,
                 head: map(*head)?,
             }),
-            BlockSelection::Blocks { .. } => Some(selection.clone()),
+            BlockSelection::Blocks { .. } | BlockSelection::Cells { .. } => Some(selection.clone()),
         }
     }
 

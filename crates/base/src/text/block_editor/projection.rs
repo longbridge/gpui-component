@@ -126,7 +126,7 @@ impl ProjectionCache {
 fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
     let entry = doc.get(id)?;
     match &entry.content {
-        BlockContent::Inline(inline) if entry.kind != BlockKindData::TableCell => Some(LeafInfo {
+        BlockContent::Inline(inline) => Some(LeafInfo {
             block: id,
             atomic: false,
             len: inline.len(),
