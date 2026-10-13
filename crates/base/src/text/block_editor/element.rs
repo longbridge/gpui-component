@@ -31,6 +31,9 @@ use crate::text::{
     node::{BlockNode, NodeContext},
 };
 
+/// Items per cull unit of a long top-level list.
+const LIST_CHUNK: usize = 32;
+
 /// A block-based WYSIWYG Markdown editor (spike). Hold an
 /// `Entity<BlockEditorState>` and pass it here in `render`.
 #[derive(IntoElement)]
@@ -74,29 +77,43 @@ impl RenderOnce for BlockEditor {
         if style.selection_is_default() {
             style = style.with_selection(text_style.selection());
         }
-        let (focus, snapshot, backgrounds, extensions, keep) = self.state.update(cx, |state, _| {
-            let snapshot = state.snapshot();
-            let mut backgrounds: HashMap<u64, Vec<(Range<usize>, Hsla)>> = HashMap::new();
-            for (block, range) in state.selection_ranges() {
-                let range = match snapshot.leaves.iter().find(|l| l.block == block) {
-                    Some(LeafInfo {
-                        atomic: true, len, ..
-                    }) => 0..*len,
-                    _ => range,
-                };
-                backgrounds
-                    .entry(block.as_u64())
-                    .or_default()
-                    .push((range, style.selection()));
-            }
-            (
-                state.focus_handle.clone(),
-                snapshot,
-                backgrounds,
-                state.model.doc.extensions.clone(),
-                state.pinned_blocks(),
-            )
-        });
+        let (focus, snapshot, backgrounds, extensions, keep, list_items) =
+            self.state.update(cx, |state, _| {
+                let snapshot = state.snapshot();
+                let mut backgrounds: HashMap<u64, Vec<(Range<usize>, Hsla)>> = HashMap::new();
+                for (block, range) in state.selection_ranges() {
+                    let range = match snapshot.leaves.iter().find(|l| l.block == block) {
+                        Some(LeafInfo {
+                            atomic: true, len, ..
+                        }) => 0..*len,
+                        _ => range,
+                    };
+                    backgrounds
+                        .entry(block.as_u64())
+                        .or_default()
+                        .push((range, style.selection()));
+                }
+                (
+                    state.focus_handle.clone(),
+                    snapshot,
+                    backgrounds,
+                    state.model.doc.extensions.clone(),
+                    state.pinned_blocks(),
+                    {
+                        let doc = &state.model.doc;
+                        doc.children(doc.root)
+                            .iter()
+                            .filter(|id| {
+                                matches!(
+                                    doc.kind(**id),
+                                    Some(super::kind::BlockKindData::List { .. })
+                                ) && doc.children(**id).len() > LIST_CHUNK
+                            })
+                            .map(|id| (*id, doc.children(*id).to_vec()))
+                            .collect::<HashMap<_, _>>()
+                    },
+                )
+            });
 
         let node_cx = NodeContext {
             style: Arc::new(text_style),
@@ -110,14 +127,41 @@ impl RenderOnce for BlockEditor {
             .iter()
             .flat_map(|b| b.nodes.iter())
             .collect();
-        let owners: Vec<BlockId> = snapshot
-            .blocks
-            .iter()
-            .flat_map(|b| b.nodes.iter().map(|_| b.id))
-            .collect();
+        // Cull units: each top-level block, except that a long top-level
+        // list is split into chunks of `LIST_CHUNK` items, each rendered as a
+        // list of its own (continuing the numbering, no gap between chunks).
+        struct Unit<'a> {
+            id: BlockId,
+            node: &'a BlockNode,
+            items: Option<(std::ops::Range<usize>, &'a [BlockId])>,
+        }
+        let mut units: Vec<Unit> = Vec::with_capacity(nodes.len());
+        for block in snapshot.blocks.iter() {
+            for node in &block.nodes {
+                match (node, list_items.get(&block.id)) {
+                    (BlockNode::List { children, .. }, Some(ids))
+                        if ids.len() == children.len() =>
+                    {
+                        for start in (0..ids.len()).step_by(LIST_CHUNK) {
+                            let range = start..(start + LIST_CHUNK).min(ids.len());
+                            units.push(Unit {
+                                id: ids[start],
+                                node,
+                                items: Some((range, ids)),
+                            });
+                        }
+                    }
+                    _ => units.push(Unit {
+                        id: block.id,
+                        node,
+                        items: None,
+                    }),
+                }
+            }
+        }
         let count = nodes.len();
         let cull = self.state.read(cx).cull.clone();
-        let mut children: Vec<AnyElement> = Vec::with_capacity(count.min(256));
+        let mut children: Vec<AnyElement> = Vec::with_capacity(units.len().min(256));
         {
             let mut cull_state = cull.borrow_mut();
             cull_state.measured.clear();
@@ -128,15 +172,27 @@ impl RenderOnce for BlockEditor {
             let mut y = px(0.);
             let mut spacer = px(0.);
             let mut rendered = 0;
-            for (ix, node) in nodes.iter().enumerate() {
-                let id = owners[ix];
-                let height = cull_state.height(id);
+            let mut node_ix = 0;
+            let mut prev_node: Option<*const BlockNode> = None;
+            for (unit_ix, unit) in units.iter().enumerate() {
+                // Index of the unit's node among the top-level nodes.
+                if prev_node != Some(unit.node as *const _) {
+                    if prev_node.is_some() {
+                        node_ix += 1;
+                    }
+                    prev_node = Some(unit.node as *const _);
+                }
+                let height = cull_state.height(unit.id);
                 let visible = match window_span {
                     None => true,
                     Some((top, bottom)) => y + height >= top && y <= bottom,
                 };
                 y += height;
-                if !visible && !keep.contains(&id) {
+                let pinned = match &unit.items {
+                    None => keep.contains(&unit.id),
+                    Some((range, ids)) => ids[range.clone()].iter().any(|id| keep.contains(id)),
+                };
+                if !visible && !pinned {
                     spacer += height;
                     continue;
                 }
@@ -145,23 +201,60 @@ impl RenderOnce for BlockEditor {
                     spacer = px(0.);
                 }
                 rendered += 1;
-                let (is_first, prev) = prev_block(&nodes, ix);
-                let element = node.render_block(
-                    NodeRenderOptions {
-                        ix,
-                        is_first,
-                        prev,
-                        is_last: ix + 1 == count,
-                        ..Default::default()
-                    },
-                    &node_cx,
-                    window,
-                    cx,
-                );
+                let (is_first, prev) = prev_block(&nodes, node_ix);
+                let is_last_node = node_ix + 1 == count;
+                let element = match (&unit.items, unit.node) {
+                    (
+                        Some((range, ids)),
+                        BlockNode::List {
+                            children: items,
+                            ordered,
+                            start,
+                            ..
+                        },
+                    ) => {
+                        let last_chunk = range.end == ids.len();
+                        let chunk = BlockNode::List {
+                            children: items[range.clone()].to_vec(),
+                            ordered: *ordered,
+                            start: if *ordered {
+                                Some(start.unwrap_or(1) + range.start as u32)
+                            } else {
+                                *start
+                            },
+                            span: None,
+                        };
+                        chunk.render_block(
+                            NodeRenderOptions {
+                                ix: node_ix,
+                                is_first: is_first && range.start == 0,
+                                prev,
+                                // Inner chunks drop the list's bottom gap.
+                                is_last: !last_chunk || is_last_node,
+                                ..Default::default()
+                            },
+                            &node_cx,
+                            window,
+                            cx,
+                        )
+                    }
+                    _ => unit.node.render_block(
+                        NodeRenderOptions {
+                            ix: node_ix,
+                            is_first,
+                            prev,
+                            is_last: is_last_node,
+                            ..Default::default()
+                        },
+                        &node_cx,
+                        window,
+                        cx,
+                    ),
+                };
                 children.push(
                     Measured {
-                        id,
-                        index: ix,
+                        id: unit.id,
+                        index: unit_ix,
                         state: cull.clone(),
                         child: Some(element),
                     }

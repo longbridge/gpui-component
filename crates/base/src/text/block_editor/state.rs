@@ -291,8 +291,8 @@ impl BlockEditorState {
         self.projection.snapshot(&self.model.doc)
     }
 
-    /// Top-level blocks that are always laid out: the ones holding the
-    /// selection ends and the IME composition.
+    /// Blocks that are always laid out: the selection ends, the IME
+    /// composition, and their ancestors.
     pub(crate) fn pinned_blocks(&self) -> Vec<BlockId> {
         let doc = &self.model.doc;
         let mut ids = match self.model.selection() {
@@ -302,9 +302,9 @@ impl BlockEditorState {
         if let Some((block, _)) = self.marked_range() {
             ids.push(block);
         }
-        ids.into_iter()
-            .filter_map(|id| doc.path(id).get(1).copied())
-            .collect()
+        // Every ancestor, so a chunk of a long list holding the caret's item
+        // is pinned too.
+        ids.into_iter().flat_map(|id| doc.path(id)).collect()
     }
 
     /// Per-leaf selected byte ranges, for painting.

@@ -270,7 +270,12 @@ fn long_document_reprojects_one_leaf_per_keystroke(cx: &mut TestAppContext) {
     assert!(leaves >= 1000, "{leaves}");
     let before = editor.read_with(cx, |e, _| (e.projection.built(), e.projection.rebuilds));
     draw(cx);
-    draw(cx);
+    let frame = std::time::Instant::now();
+    cx.update(|window, cx| {
+        window.refresh();
+        let _ = window.draw(cx);
+    });
+    let frame = frame.elapsed();
     let steady = editor.read_with(cx, |e, _| (e.projection.built(), e.projection.rebuilds));
     assert_eq!(before, steady, "steady frames do not re-project");
     caret_at(&editor, cx, 500, 0);
@@ -281,7 +286,7 @@ fn long_document_reprojects_one_leaf_per_keystroke(cx: &mut TestAppContext) {
     assert_eq!(after.0 - steady.0, 1, "one node re-projected");
     assert_eq!(after.1 - steady.1, 1);
     eprintln!(
-        "perf: {leaves} leaves, keystroke+frame {elapsed:?} ({} build, test platform)",
+        "perf: {leaves} leaves, full frame {frame:?}, keystroke+frame {elapsed:?} ({} build, test platform)",
         if cfg!(debug_assertions) {
             "debug"
         } else {
@@ -584,6 +589,12 @@ fn edit_inside_big_list_rebuilds_only_the_item_path(cx: &mut TestAppContext) {
     let doc: String = (0..1000).map(|i| format!("- item {i}\n")).collect();
     let (editor, cx) = open(cx, &doc);
     draw(cx);
+    let frame = std::time::Instant::now();
+    cx.update(|window, cx| {
+        window.refresh();
+        let _ = window.draw(cx);
+    });
+    let frame = frame.elapsed();
     let steady = editor.read_with(cx, |e, _| e.projection.built());
     caret_at(&editor, cx, 500, 0);
     let t = std::time::Instant::now();
@@ -593,7 +604,7 @@ fn edit_inside_big_list_rebuilds_only_the_item_path(cx: &mut TestAppContext) {
     assert_eq!(after - steady, 3, "paragraph + item + list");
     assert!(source(&editor, cx).contains("- xitem 500\n"));
     eprintln!(
-        "perf: 1000-item list, keystroke+frame {elapsed:?} ({} build, test platform)",
+        "perf: 1000-item list, full frame {frame:?}, keystroke+frame {elapsed:?} ({} build, test platform)",
         if cfg!(debug_assertions) {
             "debug"
         } else {
@@ -662,4 +673,25 @@ fn culled_blocks_are_navigable(cx: &mut TestAppContext) {
     caret_at(&editor, cx, 599, 0);
     type_text(cx, "x");
     assert!(source(&editor, cx).ends_with("xparagraph 599"));
+}
+
+/// A long top-level list is culled in chunks; up/down crosses culled items
+/// and ordered numbering continues across chunks.
+#[gpui::test]
+fn long_list_is_culled_in_chunks_and_navigable(cx: &mut TestAppContext) {
+    let doc: String = (0..1000)
+        .map(|i| format!("{}. item {i}\n", i + 1))
+        .collect();
+    let (editor, cx) = open(cx, &doc);
+    draw(cx);
+    draw(cx);
+    let rendered = editor.read_with(cx, |e, _| e.cull.borrow().rendered);
+    assert!(rendered < 10, "laid out {rendered} chunks of ~32");
+    caret_at(&editor, cx, 0, 0);
+    for _ in 0..300 {
+        keys(cx, "down");
+    }
+    assert_eq!(caret_leaf(&editor, cx), Some(300));
+    type_text(cx, "x");
+    assert!(source(&editor, cx).contains("301. xitem 300\n"));
 }
