@@ -318,6 +318,28 @@ Call `present_completion_items` from an `InputEvent::Change` subscription, and
 `dismiss_completion_overlay` to close the menu. An empty list closes it. An
 item without a `text_edit` inserts its `insert_text` (or label) at the caret.
 
+While a completion or code-action menu is open, the input adds `menu_open` to
+its key context and binds `up`, `down`, `enter`, `shift-enter` and `escape` to
+`OverlayMenuPrevious`, `OverlayMenuNext`, `OverlayMenuAccept` (twice) and
+`OverlayMenuDismiss` in `Input && menu_open`. Rebind them with the ordinary
+keymap; the bindings apply only while a menu is open, so caret and editing keys
+are untouched. `Tab` is not bound by default: it indents in an `Editor` and
+moves focus in an `Input`.
+
+```rust
+use gpui_kit::component::input::{OverlayMenuAccept, OverlayMenuNext, OverlayMenuPrevious};
+
+cx.bind_keys([
+    KeyBinding::new("ctrl-n", OverlayMenuNext, Some("Input && menu_open")),
+    KeyBinding::new("ctrl-p", OverlayMenuPrevious, Some("Input && menu_open")),
+    KeyBinding::new("tab", OverlayMenuAccept, Some("Input && menu_open")),
+]);
+```
+
+The same actions drive the `Editor` completion and code-action menus. The
+menus still accept `MoveUp`, `MoveDown`, `Enter` and `Escape`, so existing
+bindings to those keep working.
+
 ## Examples
 
 ### Search Input

@@ -122,6 +122,8 @@ editor.update(cx, |state, cx| state.show_completions(window, cx));
 
 补全菜单已打开时，命令保留当前选择。否则，它会取消上一轮浮层请求和 inline suggestion，并关闭 code action 菜单，再请求补全。编辑、移动光标、关闭菜单或失去焦点后，迟到的结果不会重新打开补全。
 
+菜单按键（`up`、`down`、`enter`、`escape`）在 `Input && menu_open` 上下文中分别绑定到 `OverlayMenuPrevious`、`OverlayMenuNext`、`OverlayMenuAccept` 和 `OverlayMenuDismiss`，仅在补全或代码操作菜单打开时生效。可通过 `cx.bind_keys` 重新绑定，不会影响光标移动。
+
 ## 快捷键与矩形列选
 
 以下默认快捷键在编辑器聚焦时生效。macOS 的 Option 对应 Alt 修饰键；Linux 的这些操作不使用 Super/Win。

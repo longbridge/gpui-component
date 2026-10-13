@@ -51,6 +51,21 @@ routes Up, Down, Enter and Escape to the open menu and applies the edit. An
 edit, caret move or blur closes the menu. `CompletionMenu` and its caret
 anchor are generic over the input kind; the editor is unchanged.
 
+#### Added: rebindable completion and code-action menu keys
+
+```rust
+pub struct OverlayMenuNext;    // gpui_base::input, re-exported by gpui_component::input
+pub struct OverlayMenuPrevious;
+pub struct OverlayMenuAccept;
+pub struct OverlayMenuDismiss;
+```
+
+While a completion or code-action menu is open, the input adds `menu_open` to
+its key context and binds `up`, `down`, `enter`, `shift-enter` and `escape` to
+these actions in `Input && menu_open`. An application rebinds the menu keys,
+for example `ctrl-n` / `ctrl-p`, without changing caret movement or editing
+keys. The menus still accept `MoveUp`, `MoveDown`, `Enter` and `Escape`.
+
 #### Added: `SettingGroup::variant`
 
 ```rust

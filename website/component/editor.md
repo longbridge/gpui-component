@@ -147,6 +147,11 @@ Otherwise it cancels the previous overlay request and inline suggestion and
 closes code actions before requesting completions. Late results cannot reopen
 suggestions after editing, moving the caret, dismissing, or losing focus.
 
+The menu keys (`up`, `down`, `enter`, `escape`) are bound to `OverlayMenuPrevious`,
+`OverlayMenuNext`, `OverlayMenuAccept` and `OverlayMenuDismiss` in the context
+`Input && menu_open`, which applies only while the completion or code-action
+menu is open. Rebind them with `cx.bind_keys` without touching caret movement.
+
 ## Keyboard shortcuts and column selection
 
 These defaults apply while the editor is focused. On macOS, Option is the Alt

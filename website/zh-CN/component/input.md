@@ -278,6 +278,20 @@ input.update(cx, |state, cx| {
 
 在 `InputEvent::Change` 的订阅中调用 `present_completion_items`，用 `dismiss_completion_overlay` 关闭菜单；传入空列表同样会关闭。没有 `text_edit` 的候选项会在光标处插入其 `insert_text`（或 label）。
 
+补全或代码操作菜单打开期间，输入框会在 key context 中加入 `menu_open`，并在 `Input && menu_open` 中把 `up`、`down`、`enter`、`shift-enter` 和 `escape` 分别绑定到 `OverlayMenuPrevious`、`OverlayMenuNext`、`OverlayMenuAccept`（两次）和 `OverlayMenuDismiss`。用普通的 keymap 即可重新绑定；这些绑定只在菜单打开时生效，不会影响光标移动和编辑按键。默认不绑定 `Tab`：它在 `Editor` 中用于缩进，在 `Input` 中用于切换焦点。
+
+```rust
+use gpui_kit::component::input::{OverlayMenuAccept, OverlayMenuNext, OverlayMenuPrevious};
+
+cx.bind_keys([
+    KeyBinding::new("ctrl-n", OverlayMenuNext, Some("Input && menu_open")),
+    KeyBinding::new("ctrl-p", OverlayMenuPrevious, Some("Input && menu_open")),
+    KeyBinding::new("tab", OverlayMenuAccept, Some("Input && menu_open")),
+]);
+```
+
+同一组 action 也驱动 `Editor` 的补全和代码操作菜单。菜单仍然接受 `MoveUp`、`MoveDown`、`Enter` 和 `Escape`，因此已有的绑定继续有效。
+
 ## 示例
 
 ### 搜索输入框
