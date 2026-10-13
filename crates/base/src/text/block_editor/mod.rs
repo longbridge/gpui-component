@@ -11,6 +11,9 @@
 mod command;
 mod document;
 mod editor;
+// Wired up by the view in the next commit.
+#[allow(dead_code)]
+mod frame;
 mod id;
 mod import;
 mod inline;
