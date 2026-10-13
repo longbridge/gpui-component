@@ -16,7 +16,7 @@ use super::{
     kind::BlockKind,
     marks::MarkKind,
     position::BlockPosition,
-    projection::{LeafProjection, ProjectionCache},
+    projection::{ProjectionCache, Snapshot},
     selection::BlockSelection,
     style::BlockEditorStyle,
     transaction::EditOrigin,
@@ -125,6 +125,8 @@ pub struct BlockEditorState {
     /// Last complete frame, written by the element after prepaint.
     pub(crate) frame: Rc<RefCell<FrameLayout>>,
     marked: Option<Marked>,
+    /// An IME composition opened an undo group that is not committed yet.
+    composition_open: bool,
     /// Remembered x for repeated up/down.
     goal_x: Option<Pixels>,
     pub(crate) dragging: bool,
@@ -173,6 +175,7 @@ impl BlockEditorState {
             projection: ProjectionCache::default(),
             frame: Rc::default(),
             marked: None,
+            composition_open: false,
             goal_x: None,
             dragging: false,
             readonly: false,
@@ -258,8 +261,15 @@ impl BlockEditorState {
             return Ok(false);
         }
         let name = command_name(&command);
+        self.end_composition();
+        let revision = self.model.revision();
         let changed = self.model.run(command)?;
-        self.after_edit(EditOrigin::Command(name), cx);
+        if self.model.revision() != revision {
+            self.after_edit(EditOrigin::Command(name), cx);
+        } else {
+            // Stored-mark toggles change no text but show in the toolbar.
+            cx.notify();
+        }
         Ok(changed)
     }
 
@@ -275,7 +285,7 @@ impl BlockEditorState {
         }
     }
 
-    pub(crate) fn snapshot(&mut self) -> Rc<Vec<Rc<LeafProjection>>> {
+    pub(crate) fn snapshot(&mut self) -> Rc<Snapshot> {
         self.projection.snapshot(&self.model.doc)
     }
 
@@ -346,9 +356,28 @@ impl BlockEditorState {
     }
 
     fn end_composition(&mut self) {
-        if self.marked.take().is_some() {
+        self.marked = None;
+        if std::mem::take(&mut self.composition_open) {
             self.model.history.commit_transaction();
         }
+    }
+
+    /// Whether an IME undo group is open (tests: it must never leak).
+    #[cfg(test)]
+    pub(crate) fn composition_open(&self) -> bool {
+        self.composition_open
+    }
+
+    /// A whole-block selection collapses to its start or end.
+    fn collapse_blocks(&mut self, forward: bool, cx: &mut Context<Self>) -> bool {
+        if !matches!(self.model.selection(), BlockSelection::Blocks { .. }) {
+            return false;
+        }
+        if let Ok(range) = self.model.doc.resolve_selection(self.model.selection()) {
+            let target = if forward { range.end } else { range.start };
+            self.move_to(target, false, cx);
+        }
+        true
     }
 
     fn head_anchor(&self) -> Option<(BlockPosition, BlockPosition)> {
@@ -405,6 +434,9 @@ impl BlockEditorState {
     }
 
     fn horizontal(&mut self, forward: bool, extend: bool, cx: &mut Context<Self>) {
+        if self.collapse_blocks(forward, cx) {
+            return;
+        }
         let Some((anchor, head)) = self.head_anchor() else {
             return;
         };
@@ -424,6 +456,9 @@ impl BlockEditorState {
     }
 
     fn vertical(&mut self, down: bool, extend: bool, cx: &mut Context<Self>) {
+        if self.collapse_blocks(down, cx) {
+            return;
+        }
         let Some((_, head)) = self.head_anchor() else {
             return;
         };
@@ -447,17 +482,26 @@ impl BlockEditorState {
         self.goal_x = goal;
     }
 
+    /// Home/End: the visual (soft-wrapped) line from the last frame, else
+    /// the block edge.
     fn line_edge(&mut self, end: bool, extend: bool, cx: &mut Context<Self>) {
+        if self.collapse_blocks(end, cx) {
+            return;
+        }
         let Some((_, head)) = self.head_anchor() else {
             return;
         };
-        let offset = if end {
-            self.model.doc.leaf_len(head.block).unwrap_or(0)
-        } else {
-            0
-        };
+        let visual = self.frame.borrow().line_edge(head, end);
+        let target = visual.unwrap_or_else(|| {
+            let offset = if end {
+                self.model.doc.leaf_len(head.block).unwrap_or(0)
+            } else {
+                0
+            };
+            BlockPosition::new(head.block, offset)
+        });
         self.goal_x = None;
-        self.move_to(BlockPosition::new(head.block, offset), extend, cx);
+        self.move_to(self.model.doc.clamp(target), extend, cx);
     }
 
     /// Mouse: place or extend the caret at a window point.
@@ -472,8 +516,6 @@ impl BlockEditorState {
 
     fn toggle_mark(&mut self, kind: MarkKind, cx: &mut Context<Self>) {
         let _ = self.run(EditorCommand::ToggleMark(kind), cx);
-        // A collapsed toggle only changes stored marks (no transaction).
-        cx.notify();
     }
 
     fn selected_text(&self) -> String {
@@ -611,6 +653,7 @@ impl BlockEditorState {
         }
     }
     pub(crate) fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+        self.end_composition();
         self.on_copy(&Copy, window, cx);
         self.edit(
             EditOrigin::Cut,
@@ -627,6 +670,65 @@ impl BlockEditorState {
                 cx,
             );
         }
+    }
+
+    /// Markdown input rules (design §5.3): `# `..`###### `, `- `/`* `/`+ `
+    /// and `1. ` at the start of a plain paragraph. The conversion is its own
+    /// undo group after the typing, so one undo reverts it and keeps the
+    /// typed text.
+    fn apply_input_rule(&mut self, cx: &mut Context<Self>) {
+        use super::kind::BlockKindData;
+        let Some(caret) = self.model.caret() else {
+            return;
+        };
+        let doc = &self.model.doc;
+        if doc.kind(caret.block) != Some(&BlockKindData::Paragraph) {
+            return;
+        }
+        let in_list = doc
+            .parent(caret.block)
+            .and_then(|parent| doc.kind(parent))
+            .is_some_and(|kind| matches!(kind, BlockKindData::ListItem { .. }));
+        let Some(text) = doc.inline(caret.block).map(|i| i.text().to_string()) else {
+            return;
+        };
+        let prefix = &text[..caret.offset.min(text.len())];
+        let Some(marker) = prefix.strip_suffix(' ') else {
+            return;
+        };
+        let (command, rule) =
+            if !marker.is_empty() && marker.len() <= 6 && marker.bytes().all(|b| b == b'#') {
+                let level = marker.len() as u8;
+                (
+                    EditorCommand::SetBlockKind(BlockKind::Heading { level }),
+                    "heading",
+                )
+            } else if !in_list && matches!(marker, "-" | "*" | "+") {
+                (EditorCommand::ToggleList { ordered: false }, "bullet_list")
+            } else if !in_list
+                && marker.len() >= 2
+                && marker.ends_with('.')
+                && marker[..marker.len() - 1]
+                    .bytes()
+                    .all(|b| b.is_ascii_digit())
+            {
+                (EditorCommand::ToggleList { ordered: true }, "ordered_list")
+            } else {
+                return;
+            };
+        let block = caret.block;
+        let len = prefix.len();
+        self.model.break_coalescing();
+        self.model.history.begin_transaction();
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: BlockPosition::new(block, 0),
+            head: BlockPosition::new(block, len),
+        });
+        let _ = self.model.delete(false);
+        let _ = self.model.run(command);
+        self.model.history.commit_transaction();
+        self.model.break_coalescing();
+        self.after_edit(EditOrigin::InputRule(rule), cx);
     }
 
     // ---- IME ---------------------------------------------------------------
@@ -772,6 +874,9 @@ impl EntityInputHandler for BlockEditorState {
         };
         self.edit(origin, |m| m.insert_text(text, origin), cx);
         self.end_composition();
+        if text == " " {
+            self.apply_input_rule(cx);
+        }
     }
 
     fn replace_and_mark_text_in_range(
@@ -785,41 +890,57 @@ impl EntityInputHandler for BlockEditorState {
         if self.readonly {
             return;
         }
-        if self.marked.is_none() {
-            // The whole composition is one undo step.
-            self.model.history.begin_transaction();
+        if new_text.is_empty() {
+            // Cancelled composition: remove the marked text, close the group.
+            if let Some(marked) = self.marked.clone() {
+                self.select_marked_or(None);
+                if !marked.range.is_empty() {
+                    self.edit(EditOrigin::Ime, |m| m.delete(false), cx);
+                }
+            }
+            self.end_composition();
+            return;
         }
         self.select_marked_or(range16);
-        let Some((anchor, head)) = self.head_anchor() else {
-            return;
+        let start = match self.model.doc.resolve_selection(self.model.selection()) {
+            Ok(range) => range.start,
+            Err(_) => return,
         };
-        let start = if anchor.block == head.block {
-            anchor.offset.min(head.offset)
-        } else {
-            head.offset
-        };
+        if !self.composition_open {
+            // The whole composition is one undo step. Opened only once
+            // something is about to be inserted; always closed by
+            // `end_composition`.
+            self.model.history.begin_transaction();
+            self.composition_open = true;
+        }
+        let revision = self.model.revision();
         self.edit(
             EditOrigin::Ime,
             |m| m.insert_text(new_text, EditOrigin::Ime),
             cx,
         );
-        let Some((_, head)) = self.head_anchor() else {
-            return;
-        };
-        if new_text.is_empty() {
+        let inserted = self.model.revision() != revision;
+        let Some((_, head)) = self.head_anchor().filter(|_| inserted) else {
+            // Nothing was inserted (e.g. into a code block): close the group.
             self.end_composition();
             return;
-        }
-        let range = start..start + new_text.len();
+        };
+        let block = head.block;
+        let begin = if block == start.block {
+            start.offset
+        } else {
+            head.offset.saturating_sub(new_text.len())
+        };
+        let range = begin..begin + new_text.len();
         self.marked = Some(Marked {
-            block: head.block,
+            block,
             range: range.clone(),
         });
         if let Some(sel16) = new_selected16 {
             let sel = utf16_to_byte(new_text, sel16.start)..utf16_to_byte(new_text, sel16.end);
             let _ = self.model.set_selection(BlockSelection::Text {
-                anchor: BlockPosition::new(head.block, range.start + sel.start),
-                head: BlockPosition::new(head.block, range.start + sel.end),
+                anchor: BlockPosition::new(block, range.start + sel.start),
+                head: BlockPosition::new(block, range.start + sel.end),
             });
         }
     }

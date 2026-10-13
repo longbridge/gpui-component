@@ -239,6 +239,9 @@ pub(crate) struct InlineState {
     /// The text that actually rendering, matched with selection.
     pub(super) text: SharedString,
     pub(super) selection: Option<Selection>,
+    /// Set only by the block editor's projection (design D3): the leaf
+    /// reports its layout to the installed [`super::editor_seam`] sink.
+    pub(crate) editor_key: Option<u64>,
 }
 
 /// One frame's [`StyledText`], kept for the next frame's [`Inline`] of the
@@ -317,6 +320,20 @@ impl InlineState {
 }
 
 impl Inline {
+    /// Editor seam (design D3): report this leaf's layout and take the
+    /// editor's backgrounds. Inert unless the state carries an editor key
+    /// and an editor sink is installed.
+    fn report_to_editor(&mut self) {
+        let Some(key) = self.state.lock().ok().and_then(|state| state.editor_key) else {
+            return;
+        };
+        let Some(sink) = super::editor_seam::current() else {
+            return;
+        };
+        sink.report(key, self.styled_text.layout());
+        self.range_backgrounds.extend(sink.backgrounds(key));
+    }
+
     /// Hands the shaped text to the next frame (see [`RetainedLayout`]).
     /// Called after prepaint, so an element that is laid out but never
     /// painted (scrolled out of view) keeps its layout too; paint takes it
@@ -916,6 +933,7 @@ impl Element for Inline {
         let bounds = Bounds::new(self.paint_origin.unwrap_or(bounds.origin), bounds.size);
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+        self.report_to_editor();
 
         // Report this element's laid-out extent so an ancestor TextView with
         // `max_lines` can snap its clip to a whole-line boundary. The state

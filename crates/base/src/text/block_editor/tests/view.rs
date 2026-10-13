@@ -225,8 +225,8 @@ fn list_and_heading_commands(cx: &mut TestAppContext) {
     // The list leaf is indented in the frame; the heading is not.
     editor.read_with(cx, |e, _| {
         let frame = e.frame.borrow();
-        assert!(frame.leaves[0].origin.x > frame.leaves[1].origin.x);
-        assert!(frame.leaves[1].line_height > frame.leaves[0].line_height);
+        assert!(frame.leaves[0].bounds().left() > frame.leaves[1].bounds().left());
+        assert!(frame.leaves[1].line_height() > frame.leaves[0].line_height());
     });
 }
 
@@ -238,8 +238,8 @@ fn mouse_click_and_drag_select(cx: &mut TestAppContext) {
         let l0 = &f.leaves[0];
         let l1 = &f.leaves[1];
         (
-            l0.origin + gpui::point(px(1.), l0.line_height / 2.),
-            l1.origin + gpui::point(px(1000.), l1.line_height / 2.),
+            l0.bounds().origin + gpui::point(px(1.), l0.line_height() / 2.),
+            l1.bounds().origin + gpui::point(px(1000.), l1.line_height() / 2.),
         )
     });
     cx.simulate_mouse_down(a, MouseButton::Left, Modifiers::none());
@@ -288,4 +288,239 @@ fn long_document_reprojects_one_leaf_per_keystroke(cx: &mut TestAppContext) {
             "release"
         }
     );
+}
+
+fn events(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+) -> std::rc::Rc<std::cell::RefCell<usize>> {
+    let count = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let c = count.clone();
+    cx.update(|_, cx| {
+        cx.subscribe(
+            editor,
+            move |_, event: &crate::text::block_editor::BlockEditorEvent, _| {
+                if matches!(
+                    event,
+                    crate::text::block_editor::BlockEditorEvent::Changed { .. }
+                ) {
+                    *c.borrow_mut() += 1;
+                }
+            },
+        )
+        .detach();
+    });
+    count
+}
+
+/// Review P1: an empty composition must not leave an undo group open.
+#[gpui::test]
+fn empty_ime_mark_does_not_leak_undo_group(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a");
+    caret_at(&editor, cx, 0, 1);
+    cx.update(|window, cx| {
+        editor.update(cx, |e, cx| {
+            e.replace_and_mark_text_in_range(None, "", None, window, cx);
+            assert!(!e.composition_open());
+        })
+    });
+    type_text(cx, "b");
+    keys(cx, "enter");
+    type_text(cx, "c");
+    assert_eq!(source(&editor, cx), "ab\n\nc");
+    keys(cx, "M-z");
+    assert_ne!(
+        source(&editor, cx),
+        "ab\n\nc",
+        "undo works after an empty mark"
+    );
+}
+
+#[gpui::test]
+fn cancelled_ime_restores_text_and_closes_group(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab");
+    caret_at(&editor, cx, 0, 2);
+    cx.update(|window, cx| {
+        editor.update(cx, |e, cx| {
+            e.replace_and_mark_text_in_range(None, "n", None, window, cx);
+            e.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+            e.replace_and_mark_text_in_range(None, "", None, window, cx);
+            assert!(!e.composition_open());
+            assert_eq!(e.marked_text_range(window, cx), None);
+        })
+    });
+    draw(cx);
+    assert_eq!(source(&editor, cx), "ab");
+    type_text(cx, "c");
+    assert_eq!(source(&editor, cx), "abc");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "ab");
+}
+
+#[gpui::test]
+fn ime_over_cross_block_selection(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "abc\n\ndef");
+    editor.update(cx, |e, cx| {
+        let ids: Vec<_> = e.model().document().leaves().map(|l| l.id()).collect();
+        e.set_selection(
+            BlockSelection::Text {
+                anchor: BlockPosition::new(ids[0], 1),
+                head: BlockPosition::new(ids[1], 2),
+            },
+            cx,
+        )
+        .unwrap();
+    });
+    cx.update(|window, cx| {
+        editor.update(cx, |e, cx| {
+            e.replace_and_mark_text_in_range(None, "x", None, window, cx);
+            assert_eq!(e.marked_text_range(window, cx), Some(1..2));
+            e.replace_text_in_range(None, "X", window, cx);
+            assert!(!e.composition_open());
+        })
+    });
+    draw(cx);
+    assert_eq!(source(&editor, cx), "aXf");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "abc\n\ndef");
+}
+
+fn caret_text_and_kind(
+    editor: &Entity<BlockEditorState>,
+    cx: &VisualTestContext,
+) -> (String, Option<BlockKind>) {
+    editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        let leaf = e.model().document().block(c.block).unwrap();
+        (
+            leaf.text().unwrap_or("").to_string(),
+            e.block_kind_at_caret(),
+        )
+    })
+}
+
+#[gpui::test]
+fn input_rules_make_headings_and_lists(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "");
+    type_text(cx, "## ");
+    type_text(cx, "Title");
+    keys(cx, "enter");
+    type_text(cx, "- ");
+    type_text(cx, "item");
+    keys(cx, "enter");
+    keys(cx, "enter");
+    type_text(cx, "1. ");
+    type_text(cx, "first");
+    assert_eq!(source(&editor, cx), "## Title\n\n- item\n\n1. first");
+}
+
+#[gpui::test]
+fn undo_reverts_input_rule_but_keeps_typed_marker(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "");
+    type_text(cx, "# ");
+    assert_eq!(
+        caret_text_and_kind(&editor, cx),
+        (String::new(), Some(BlockKind::Heading { level: 1 }))
+    );
+    keys(cx, "M-z");
+    assert_eq!(
+        caret_text_and_kind(&editor, cx),
+        ("# ".to_string(), Some(BlockKind::Paragraph))
+    );
+}
+
+#[gpui::test]
+fn no_change_event_on_noop_command(cx: &mut TestAppContext) {
+    use crate::text::block_editor::EditorCommand;
+    let (editor, cx) = open(cx, "plain");
+    let count = events(&editor, cx);
+    editor.update(cx, |e, cx| {
+        let _ = e.run(EditorCommand::Outdent, cx);
+    });
+    assert_eq!(*count.borrow(), 0);
+    editor.update(cx, |e, cx| {
+        e.run(EditorCommand::ToggleList { ordered: false }, cx)
+            .unwrap();
+    });
+    assert_eq!(*count.borrow(), 1);
+}
+
+#[gpui::test]
+fn arrows_collapse_whole_block_selection(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "one\n\ntwo\n\nthree");
+    editor.update(cx, |e, cx| {
+        let ids: Vec<_> = e
+            .model()
+            .document()
+            .root()
+            .children()
+            .map(|b| b.id())
+            .collect();
+        e.set_selection(
+            BlockSelection::Blocks {
+                anchor: ids[0],
+                head: ids[1],
+            },
+            cx,
+        )
+        .unwrap();
+    });
+    keys(cx, "right");
+    let caret = editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        let ix = e
+            .model()
+            .document()
+            .leaves()
+            .position(|l| l.id() == c.block);
+        (ix, c.offset)
+    });
+    assert_eq!(caret, (Some(1), 3));
+}
+
+#[gpui::test]
+fn backspace_and_delete_join_blocks(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab\n\ncd\n\nef");
+    caret_at(&editor, cx, 1, 0);
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "abcd\n\nef");
+    keys(cx, "end delete");
+    assert_eq!(source(&editor, cx), "abcdef");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "abcd\n\nef");
+}
+
+#[gpui::test]
+fn paste_multiline_splits_blocks(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab");
+    caret_at(&editor, cx, 0, 1);
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("X\nY".into()));
+    keys(cx, "M-v");
+    assert_eq!(source(&editor, cx), "aX\n\nYb");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "ab");
+}
+
+#[gpui::test]
+fn readonly_blocks_edits_but_not_navigation(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab\n\ncd");
+    editor.update(cx, |e, cx| e.set_readonly(true, cx));
+    caret_at(&editor, cx, 0, 2);
+    type_text(cx, "x");
+    keys(cx, "backspace enter M-b");
+    cx.update(|window, cx| {
+        editor.update(cx, |e, cx| {
+            e.replace_and_mark_text_in_range(None, "n", None, window, cx)
+        })
+    });
+    assert_eq!(source(&editor, cx), "ab\n\ncd");
+    keys(cx, "right");
+    let ix = editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        e.model()
+            .document()
+            .leaves()
+            .position(|l| l.id() == c.block)
+    });
+    assert_eq!(ix, Some(1));
 }

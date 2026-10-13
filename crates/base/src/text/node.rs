@@ -2223,6 +2223,12 @@ impl PartialEq for CodeBlock {
 }
 
 impl CodeBlock {
+    /// The rendered text state, for the block editor's seam (design D3).
+    #[cfg_attr(not(feature = "block-editor"), allow(dead_code))]
+    pub(crate) fn inline_state(&self) -> &Arc<Mutex<InlineState>> {
+        &self.state
+    }
+
     /// Get the language of the code block.
     pub fn lang(&self) -> Option<SharedString> {
         self.lang.clone()

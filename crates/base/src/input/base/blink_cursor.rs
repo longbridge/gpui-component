@@ -6,9 +6,9 @@ static PAUSE_DELAY: Duration = Duration::from_millis(300);
 
 // On Windows, Linux, we should use integer to avoid blurry cursor.
 #[cfg(not(target_os = "macos"))]
-pub(super) const CURSOR_WIDTH: Pixels = px(2.);
+pub(crate) const CURSOR_WIDTH: Pixels = px(2.);
 #[cfg(target_os = "macos")]
-pub(super) const CURSOR_WIDTH: Pixels = px(1.5);
+pub(crate) const CURSOR_WIDTH: Pixels = px(1.5);
 
 /// To manage the Input cursor blinking.
 ///

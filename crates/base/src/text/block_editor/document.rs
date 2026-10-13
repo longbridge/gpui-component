@@ -45,6 +45,11 @@ pub(crate) struct EditorDocument {
     /// Set by structural steps; the order index is rebuilt at commit.
     pub(crate) structure_dirty: bool,
     pub(crate) extensions: Arc<MarkdownExtensions>,
+    /// Per-block content revision, bumped for a block and all its ancestors
+    /// by every step that touches it; absent means never edited. The view
+    /// re-projects a top-level block only when its revision changes.
+    pub(crate) block_revisions: HashMap<BlockId, u64>,
+    edit_counter: u64,
 }
 
 impl EditorDocument {
@@ -76,9 +81,25 @@ impl EditorDocument {
             order: OrderIndex::default(),
             structure_dirty: true,
             extensions,
+            block_revisions: HashMap::new(),
+            edit_counter: 0,
         };
         doc.refresh_order();
         doc
+    }
+
+    /// Bump the content revision of `id` and its ancestors.
+    pub(crate) fn touch(&mut self, id: BlockId) {
+        self.edit_counter += 1;
+        let mut next = Some(id);
+        while let Some(id) = next {
+            self.block_revisions.insert(id, self.edit_counter);
+            next = self.parent(id);
+        }
+    }
+
+    pub(crate) fn block_revision(&self, id: BlockId) -> u64 {
+        self.block_revisions.get(&id).copied().unwrap_or(0)
     }
 
     pub(crate) fn get(&self, id: BlockId) -> Option<&BlockEntry> {

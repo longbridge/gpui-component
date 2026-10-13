@@ -1,174 +1,178 @@
-//! Projection of caret leaves into an immutable render snapshot (§7.3).
+//! Projection of the editing model into the shared renderer's `BlockNode`s
+//! (design §7.3, D3).
 //!
-//! The snapshot is rebuilt only when the document revision changes. Per
-//! leaf, the previous projection is reused when its content is unchanged,
-//! so a keystroke re-projects exactly one leaf.
+//! Each top-level block is written to Markdown in render mode and parsed by
+//! gpui-kit's own parser, so the editor renders exactly like `TextView`.
+//! Every text leaf's `InlineState` is tagged with its `BlockId` as the
+//! `editor_key`, which is how the renderer reports layouts back (the seam
+//! in `text::editor_seam`). A top-level block is re-projected only when its
+//! per-block revision changes, so one keystroke re-projects one block.
 
-use std::{collections::HashMap, rc::Rc};
-
-use gpui::SharedString;
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use super::{
     document::{BlockContent, EditorDocument},
     id::BlockId,
     kind::BlockKindData,
+    serialize::block_for_render,
 };
-use crate::text::node::TextMark;
+use crate::text::{
+    format::markdown,
+    node::{BlockNode, NodeContext},
+};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum LeafStyle {
-    Paragraph,
-    Heading(u8),
-    Code,
-    Rule,
-    Atom,
+/// One projected top-level block.
+pub(crate) struct ProjectedBlock {
+    revision: u64,
+    pub(crate) nodes: Vec<BlockNode>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
-pub(crate) struct LeafProjection {
+/// Geometry facts the frame needs about a caret leaf.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LeafInfo {
     pub(crate) block: BlockId,
-    pub(crate) style: LeafStyle,
-    /// Shaped text. For atoms this is a display label, not caret text.
-    pub(crate) text: SharedString,
-    pub(crate) runs: Vec<(usize, TextMark)>,
-    /// List and blockquote nesting depth.
-    pub(crate) depth: u8,
-    pub(crate) quote: bool,
-    /// List marker for the first leaf of a list item.
-    pub(crate) marker: Option<SharedString>,
+    /// Caret offsets are 0/1 (code blocks in the spike).
+    pub(crate) atomic: bool,
+    /// Model text length (bytes); for atomic leaves the rendered text length.
+    pub(crate) len: usize,
+}
+
+#[derive(Default)]
+pub(crate) struct Snapshot {
+    pub(crate) blocks: Vec<Rc<ProjectedBlock>>,
+    /// Leaves that have a rendered text layout, in document order.
+    pub(crate) leaves: Rc<Vec<LeafInfo>>,
 }
 
 #[derive(Default)]
 pub(crate) struct ProjectionCache {
     revision: Option<u64>,
-    leaves: Rc<Vec<Rc<LeafProjection>>>,
-    by_block: HashMap<BlockId, Rc<LeafProjection>>,
-    /// Number of leaf projections built (not reused); a `cfg(test)` perf
-    /// counter (D9).
+    snapshot: Rc<Snapshot>,
+    by_id: HashMap<BlockId, Rc<ProjectedBlock>>,
+    /// `cfg(test)`-checked perf counters (D9): top-level blocks parsed, and
+    /// snapshot rebuilds.
     pub(crate) built: usize,
     pub(crate) rebuilds: usize,
 }
 
 impl ProjectionCache {
-    pub(crate) fn snapshot(&mut self, doc: &EditorDocument) -> Rc<Vec<Rc<LeafProjection>>> {
+    pub(crate) fn snapshot(&mut self, doc: &EditorDocument) -> Rc<Snapshot> {
         if self.revision == Some(doc.revision) {
-            return self.leaves.clone();
+            return self.snapshot.clone();
         }
         self.rebuilds += 1;
-        let mut by_block = HashMap::with_capacity(doc.leaves().len());
-        let mut leaves = Vec::with_capacity(doc.leaves().len());
-        for id in doc.leaves() {
-            let fresh = project(doc, *id);
-            let leaf = match self.by_block.get(id) {
-                Some(prev) if **prev == fresh => prev.clone(),
+        let top = doc.children(doc.root);
+        let mut blocks = Vec::with_capacity(top.len());
+        let mut by_id = HashMap::with_capacity(top.len());
+        for id in top {
+            let revision = doc.block_revision(*id);
+            let block = match self.by_id.get(id) {
+                Some(prev) if prev.revision == revision => prev.clone(),
                 _ => {
                     self.built += 1;
-                    Rc::new(fresh)
+                    Rc::new(project(doc, *id, revision))
                 }
             };
-            by_block.insert(*id, leaf.clone());
-            leaves.push(leaf);
+            by_id.insert(*id, block.clone());
+            blocks.push(block);
         }
-        self.by_block = by_block;
-        self.leaves = Rc::new(leaves);
+        let leaves = doc
+            .leaves()
+            .iter()
+            .filter_map(|id| leaf_info(doc, *id))
+            .collect();
+        self.by_id = by_id;
+        self.snapshot = Rc::new(Snapshot {
+            blocks,
+            leaves: Rc::new(leaves),
+        });
         self.revision = Some(doc.revision);
-        self.leaves.clone()
+        self.snapshot.clone()
     }
 
     pub(crate) fn invalidate(&mut self) {
         self.revision = None;
-        self.by_block.clear();
+        self.by_id.clear();
     }
 }
 
-fn project(doc: &EditorDocument, id: BlockId) -> LeafProjection {
-    let entry = doc.get(id);
-    let kind = entry.map(|e| &e.kind);
-    let (style, text, runs) = match (kind, entry.map(|e| &e.content)) {
-        (_, Some(BlockContent::Inline(inline))) => {
-            let style = match kind {
-                Some(BlockKindData::Heading { level }) => LeafStyle::Heading(*level),
-                _ => LeafStyle::Paragraph,
-            };
-            let runs = inline
-                .runs()
-                .iter()
-                .map(|run| (run.len, run.marks.clone()))
-                .collect();
-            (style, SharedString::from(inline.text().to_string()), runs)
-        }
-        (_, Some(BlockContent::Plain(code))) => {
-            let text = code.trim_end_matches('\n').to_string();
-            let len = text.len();
-            (
-                LeafStyle::Code,
-                SharedString::from(text),
-                vec![(len, TextMark::default().code())],
-            )
-        }
-        (Some(BlockKindData::HorizontalRule), _) => (
-            LeafStyle::Rule,
-            SharedString::from(" "),
-            vec![(1, TextMark::default())],
-        ),
-        (kind, _) => {
-            let label = format!("[{:?}]", kind.map(|k| k.public()));
-            let len = label.len();
-            (
-                LeafStyle::Atom,
-                SharedString::from(label),
-                vec![(len, TextMark::default())],
-            )
-        }
-    };
+fn leaf_info(doc: &EditorDocument, id: BlockId) -> Option<LeafInfo> {
+    let entry = doc.get(id)?;
+    match &entry.content {
+        BlockContent::Inline(inline) if entry.kind != BlockKindData::TableCell => Some(LeafInfo {
+            block: id,
+            atomic: false,
+            len: inline.len(),
+        }),
+        BlockContent::Plain(code) => Some(LeafInfo {
+            block: id,
+            atomic: true,
+            len: code.trim_end_matches('\n').len(),
+        }),
+        _ => None,
+    }
+}
 
-    let path = doc.path(id);
-    let mut depth = 0u8;
-    let mut quote = false;
-    for ancestor in &path {
-        match doc.kind(*ancestor) {
-            Some(BlockKindData::List { .. }) => depth += 1,
-            Some(BlockKindData::Blockquote) => {
-                depth += 1;
-                quote = true;
+/// Model leaves under `id` that the renderer draws as one text leaf each.
+fn text_leaves(doc: &EditorDocument, id: BlockId, out: &mut Vec<BlockId>) {
+    match doc.get(id).map(|e| (&e.kind, &e.content)) {
+        Some((BlockKindData::Table { .. }, _)) => {}
+        Some((BlockKindData::TableCell, _)) => {}
+        Some((_, BlockContent::Children(children))) => {
+            for child in children {
+                text_leaves(doc, *child, out);
             }
-            _ => {}
         }
-    }
-    let marker = list_marker(doc, id);
-    LeafProjection {
-        block: id,
-        style,
-        text,
-        runs,
-        depth,
-        quote,
-        marker,
+        Some((_, BlockContent::Inline(_) | BlockContent::Plain(_))) => out.push(id),
+        _ => {}
     }
 }
 
-fn list_marker(doc: &EditorDocument, id: BlockId) -> Option<SharedString> {
-    let (item, index) = doc.index_in_parent(id)?;
-    if index != 0 {
-        return None;
-    }
-    let Some(BlockKindData::ListItem { checked, .. }) = doc.kind(item) else {
-        return None;
-    };
-    let (list, item_ix) = doc.index_in_parent(item)?;
-    let marker = match (checked, doc.kind(list)) {
-        (Some(true), _) => "☑".to_string(),
-        (Some(false), _) => "☐".to_string(),
-        (
-            None,
-            Some(BlockKindData::List {
-                ordered: true,
-                start,
-            }),
-        ) => {
-            format!("{}.", start.unwrap_or(1) as usize + item_ix)
+/// Rendered text leaves in a parsed tree, in order.
+fn node_states(
+    node: &BlockNode,
+    out: &mut Vec<Arc<std::sync::Mutex<crate::text::inline::InlineState>>>,
+) {
+    match node {
+        BlockNode::Paragraph(paragraph) => out.push(paragraph.state.clone()),
+        BlockNode::Heading { children, .. } => out.push(children.state.clone()),
+        BlockNode::CodeBlock(code) => out.push(code.inline_state().clone()),
+        BlockNode::Root { children, .. }
+        | BlockNode::Blockquote { children, .. }
+        | BlockNode::List { children, .. }
+        | BlockNode::ListItem { children, .. } => {
+            for child in children {
+                node_states(child, out);
+            }
         }
-        _ => "•".to_string(),
+        _ => {}
+    }
+}
+
+fn project(doc: &EditorDocument, id: BlockId, revision: u64) -> ProjectedBlock {
+    let source = block_for_render(doc, id);
+    let mut node_cx = NodeContext {
+        markdown_extensions: doc.extensions.clone(),
+        ..Default::default()
     };
-    Some(marker.into())
+    let nodes = markdown::parse(&source, &mut node_cx)
+        .map(|parsed| parsed.blocks.as_ref().clone())
+        .unwrap_or_default();
+    let mut leaves = Vec::new();
+    text_leaves(doc, id, &mut leaves);
+    let mut states = Vec::new();
+    for node in &nodes {
+        node_states(node, &mut states);
+    }
+    // The parser reads back what the serializer wrote, so leaves pair up in
+    // order. If they ever don't, leave the block unkeyed (no caret geometry)
+    // rather than misplace carets.
+    if leaves.len() == states.len() {
+        for (leaf, state) in leaves.iter().zip(states) {
+            if let Ok(mut state) = state.lock() {
+                state.editor_key = Some(leaf.as_u64());
+            }
+        }
+    }
+    ProjectedBlock { revision, nodes }
 }

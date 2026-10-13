@@ -84,6 +84,7 @@ impl InlineText {
         self.text.is_empty()
     }
 
+    #[cfg(test)]
     pub(crate) fn runs(&self) -> &[MarkRun] {
         &self.runs
     }

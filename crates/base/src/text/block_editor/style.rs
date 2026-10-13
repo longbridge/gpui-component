@@ -1,4 +1,4 @@
-use gpui::{Hsla, Pixels, px};
+use gpui::{Hsla, Pixels};
 
 use crate::SemanticThemeTokens;
 
@@ -13,10 +13,7 @@ pub struct BlockEditorStyle {
     caret: Hsla,
     caret_width: Pixels,
     selection: Hsla,
-    code_background: Hsla,
     composition_underline: Hsla,
-    block_gap: f32,
-    indent: Pixels,
 }
 
 impl Default for BlockEditorStyle {
@@ -26,12 +23,9 @@ impl Default for BlockEditorStyle {
             foreground: unset,
             muted_foreground: unset,
             caret: unset,
-            caret_width: px(1.5),
+            caret_width: crate::input::blink_cursor::CURSOR_WIDTH,
             selection: unset,
-            code_background: unset,
             composition_underline: unset,
-            block_gap: 0.5,
-            indent: px(24.),
         }
     }
 }
@@ -54,12 +48,13 @@ impl BlockEditorStyle {
     style_field!(with_caret, caret, Hsla);
     style_field!(with_caret_width, caret_width, Pixels);
     style_field!(with_selection, selection, Hsla);
-    style_field!(with_code_background, code_background, Hsla);
     style_field!(with_composition_underline, composition_underline, Hsla);
-    // Vertical gap between blocks, in line heights.
-    style_field!(with_block_gap, block_gap, f32);
-    // Indent per list or blockquote level.
-    style_field!(with_indent, indent, Pixels);
+
+    /// Whether no selection colour was set, so the view uses the text
+    /// renderer's own (`TextViewStyle::selection`).
+    pub(crate) fn selection_is_default(&self) -> bool {
+        self.selection.a == 0.
+    }
 
     /// Fill unset colours from the active palette.
     pub fn resolved(&self, tokens: &SemanticThemeTokens) -> Self {
@@ -70,8 +65,6 @@ impl BlockEditorStyle {
             foreground,
             muted_foreground: or(self.muted_foreground, colors.muted_foreground),
             caret: or(self.caret, foreground),
-            selection: or(self.selection, colors.selection),
-            code_background: or(self.code_background, colors.muted),
             composition_underline: or(self.composition_underline, foreground),
             ..self.clone()
         }
