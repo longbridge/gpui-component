@@ -229,6 +229,10 @@ pub(super) struct Inline {
     /// The shaped text is in the table, not in `styled_text`, until paint
     /// takes it back.
     handed_over: bool,
+    /// A fragment of an editor leaf laid out by `InlineFlow`: the leaf's key
+    /// and the leaf byte offset of this text's index 0.
+    #[cfg(feature = "block-editor")]
+    editor_piece: Option<(u64, usize)>,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -332,6 +336,21 @@ impl Inline {
         let Some(sink) = super::editor_seam::current() else {
             return;
         };
+        if let Some((key, start)) = self.editor_piece {
+            let layout = self.styled_text.layout();
+            let end = start + layout.len();
+            sink.report_text_piece(key, start, layout);
+            self.range_backgrounds
+                .extend(
+                    sink.backgrounds(key)
+                        .into_iter()
+                        .filter_map(|(range, color)| {
+                            let (lo, hi) = (range.start.max(start), range.end.min(end));
+                            (lo < hi).then(|| (lo - start..hi - start, color))
+                        }),
+                );
+            return;
+        }
         let Some(key) = self.state.lock().ok().and_then(|state| state.editor_key) else {
             return;
         };
@@ -408,6 +427,8 @@ impl Inline {
             link_click_handler,
             retained_key: None,
             handed_over: false,
+            #[cfg(feature = "block-editor")]
+            editor_piece: None,
             state,
         }
     }
@@ -419,6 +440,14 @@ impl Inline {
     }
 
     /// Preserve the shared inline-flow baseline through GPUI's element-bound snapping.
+    /// Report this text as a fragment of the editor leaf `key`, starting at
+    /// the leaf's byte `start` (see `report_to_editor`).
+    #[cfg(feature = "block-editor")]
+    pub(super) fn editor_piece(mut self, piece: Option<(u64, usize)>) -> Self {
+        self.editor_piece = piece;
+        self
+    }
+
     pub(super) fn paint_origin(mut self, origin: Point<Pixels>) -> Self {
         self.paint_origin = Some(origin);
         self

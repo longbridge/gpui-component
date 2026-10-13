@@ -16,7 +16,7 @@ use crate::text::editor_seam::EditorSink;
 
 /// Frame-local sink installed while the editor's children prepaint.
 pub(crate) struct FrameSink {
-    layouts: RefCell<HashMap<u64, TextLayout>>,
+    layouts: RefCell<HashMap<u64, Vec<Piece>>>,
     backgrounds: HashMap<u64, Vec<(Range<usize>, Hsla)>>,
 }
 
@@ -33,23 +33,24 @@ impl FrameSink {
         leaves: Rc<Vec<LeafInfo>>,
         tables: &[(BlockId, Vec<BlockId>)],
     ) -> FrameLayout {
-        let layouts = self.layouts.into_inner();
+        let mut layouts = self.layouts.into_inner();
+        layouts.retain(|_, pieces| !pieces.is_empty());
         let mut frame = FrameLayout::default();
         for (table, cells) in tables {
             let bounds = cells
                 .iter()
-                .filter_map(|cell| layouts.get(&cell.as_u64()).map(TextLayout::bounds))
+                .filter_map(|cell| layouts.get(&cell.as_u64()).map(|p| pieces_bounds(p)))
                 .reduce(|a, b| a.union(&b));
             if let Some(bounds) = bounds {
                 frame.tables.push((*table, bounds));
             }
         }
         for info in leaves.iter() {
-            if let Some(layout) = layouts.get(&info.block.as_u64()) {
+            if let Some(pieces) = layouts.remove(&info.block.as_u64()) {
                 frame.index.insert(info.block, frame.leaves.len());
                 frame.leaves.push(LeafGeom {
                     info: *info,
-                    layout: layout.clone(),
+                    pieces,
                 });
             }
         }
@@ -59,7 +60,32 @@ impl FrameSink {
 
 impl EditorSink for FrameSink {
     fn report(&self, key: u64, layout: &TextLayout) {
-        self.layouts.borrow_mut().insert(key, layout.clone());
+        self.layouts
+            .borrow_mut()
+            .insert(key, vec![Piece::Whole(layout.clone())]);
+    }
+
+    fn begin_pieces(&self, key: u64) {
+        self.layouts.borrow_mut().insert(key, Vec::new());
+    }
+
+    fn report_text_piece(&self, key: u64, start: usize, layout: &TextLayout) {
+        self.layouts
+            .borrow_mut()
+            .entry(key)
+            .or_default()
+            .push(Piece::Text {
+                start,
+                layout: layout.clone(),
+            });
+    }
+
+    fn report_box_piece(&self, key: u64, range: Range<usize>, bounds: Bounds<Pixels>) {
+        self.layouts
+            .borrow_mut()
+            .entry(key)
+            .or_default()
+            .push(Piece::Atom { range, bounds });
     }
 
     fn backgrounds(&self, key: u64) -> Vec<(Range<usize>, Hsla)> {
@@ -67,33 +93,87 @@ impl EditorSink for FrameSink {
     }
 }
 
-pub(crate) struct LeafGeom {
-    pub(crate) info: LeafInfo,
-    pub(crate) layout: TextLayout,
+/// How a leaf was laid out: one `TextLayout` for the whole leaf, or (for
+/// a mixed paragraph rendered by `InlineFlow`) single-line text fragments
+/// and atom boxes in leaf byte order.
+#[derive(Clone)]
+pub(crate) enum Piece {
+    Whole(TextLayout),
+    Text {
+        start: usize,
+        layout: TextLayout,
+    },
+    Atom {
+        range: Range<usize>,
+        bounds: Bounds<Pixels>,
+    },
 }
 
-impl LeafGeom {
-    pub(crate) fn bounds(&self) -> Bounds<Pixels> {
-        self.layout.bounds()
-    }
-
-    pub(crate) fn line_height(&self) -> Pixels {
-        self.layout.line_height()
-    }
-
-    /// Rendered index for a model offset.
-    fn index(&self, offset: usize) -> usize {
-        if self.info.atomic {
-            if offset == 0 { 0 } else { self.layout.len() }
-        } else {
-            offset.min(self.info.len).min(self.layout.len())
+impl Piece {
+    fn bounds(&self) -> Bounds<Pixels> {
+        match self {
+            Piece::Whole(layout) | Piece::Text { layout, .. } => layout.bounds(),
+            Piece::Atom { bounds, .. } => *bounds,
         }
     }
 
-    /// Model offset for a rendered index.
-    fn offset(&self, index: usize) -> usize {
+    fn range(&self) -> Range<usize> {
+        match self {
+            Piece::Whole(layout) => 0..layout.len(),
+            Piece::Text { start, layout } => *start..start + layout.len(),
+            Piece::Atom { range, .. } => range.clone(),
+        }
+    }
+}
+
+fn pieces_bounds(pieces: &[Piece]) -> Bounds<Pixels> {
+    pieces
+        .iter()
+        .map(Piece::bounds)
+        .reduce(|a, b| a.union(&b))
+        .unwrap_or_default()
+}
+
+pub(crate) struct LeafGeom {
+    pub(crate) info: LeafInfo,
+    pub(crate) pieces: Vec<Piece>,
+}
+
+impl LeafGeom {
+    fn whole(&self) -> Option<&TextLayout> {
+        match self.pieces.as_slice() {
+            [Piece::Whole(layout)] => Some(layout),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn bounds(&self) -> Bounds<Pixels> {
+        pieces_bounds(&self.pieces)
+    }
+
+    pub(crate) fn line_height(&self) -> Pixels {
+        self.pieces
+            .iter()
+            .find_map(|piece| match piece {
+                Piece::Whole(layout) | Piece::Text { layout, .. } => Some(layout.line_height()),
+                Piece::Atom { .. } => None,
+            })
+            .unwrap_or_else(|| self.bounds().size.height)
+    }
+
+    /// Rendered index for a model offset (whole-leaf layouts).
+    fn index(&self, layout: &TextLayout, offset: usize) -> usize {
         if self.info.atomic {
-            usize::from(index * 2 > self.layout.len().max(1))
+            if offset == 0 { 0 } else { layout.len() }
+        } else {
+            offset.min(self.info.len).min(layout.len())
+        }
+    }
+
+    /// Model offset for a rendered index (whole-leaf layouts).
+    fn offset(&self, layout: &TextLayout, index: usize) -> usize {
+        if self.info.atomic {
+            usize::from(index * 2 > layout.len().max(1))
         } else {
             index.min(self.info.len)
         }
@@ -101,37 +181,126 @@ impl LeafGeom {
 
     /// Top of the caret at `offset`, window coordinates.
     pub(crate) fn caret_point(&self, offset: usize) -> Point<Pixels> {
-        self.layout
-            .position_for_index(self.index(offset))
-            .unwrap_or_else(|| self.bounds().origin)
+        if let Some(layout) = self.whole() {
+            return layout
+                .position_for_index(self.index(layout, offset))
+                .unwrap_or_else(|| self.bounds().origin);
+        }
+        // The piece the offset starts, else the one it ends (a caret at a
+        // fragment boundary sits at the start of the next fragment).
+        let piece = self
+            .pieces
+            .iter()
+            .find(|p| p.range().contains(&offset))
+            .or_else(|| self.pieces.iter().rev().find(|p| p.range().end == offset))
+            .or(self.pieces.last());
+        let Some(piece) = piece else {
+            return self.bounds().origin;
+        };
+        match piece {
+            Piece::Whole(layout) | Piece::Text { layout, .. } => {
+                let index = offset.saturating_sub(piece.range().start).min(layout.len());
+                layout
+                    .position_for_index(index)
+                    .unwrap_or_else(|| layout.bounds().origin)
+            }
+            Piece::Atom { range, bounds } => {
+                let x = if offset >= range.end {
+                    bounds.right()
+                } else {
+                    bounds.left()
+                };
+                // Align with the text line: an atom taller than the line
+                // keeps the caret at its bottom line.
+                let y = (bounds.bottom() - self.line_height()).max(bounds.top());
+                point(x, y)
+            }
+        }
     }
 
     /// Closest model offset for a window point (glyph halves round, unlike
     /// `TextLayout::index_for_position`).
     pub(crate) fn offset_at(&self, at: Point<Pixels>) -> usize {
-        let bounds = self.bounds();
-        let line_height = self.line_height();
-        let mut top = bounds.top();
-        let mut start = 0;
-        let lines = self.layout.line_layouts();
-        for (ix, line) in lines.iter().enumerate() {
-            let height = line.size(line_height).height.max(line_height);
-            let is_last = ix + 1 == lines.len();
-            if at.y < top + height || is_last {
-                let local = point(
-                    (at.x - bounds.left()).max(px(0.)),
-                    (at.y - top).clamp(px(0.), (height - px(1.)).max(px(0.))),
-                );
-                let index = match line.closest_index_for_position(local, line_height) {
-                    Ok(ix) | Err(ix) => ix,
-                };
-                return self.offset(start + index);
-            }
-            top += height;
-            start += line.len() + 1;
+        if let Some(layout) = self.whole() {
+            return self.offset(layout, whole_index_at(layout, at));
         }
-        0
+        // The visual line under the point (pieces whose vertical extent
+        // holds it, else the nearest), then the horizontally nearest piece.
+        let dy = |p: &Piece| {
+            let b = p.bounds();
+            if at.y < b.top() {
+                b.top() - at.y
+            } else if at.y > b.bottom() {
+                at.y - b.bottom()
+            } else {
+                px(0.)
+            }
+        };
+        let dx = |p: &Piece| {
+            let b = p.bounds();
+            if at.x < b.left() {
+                b.left() - at.x
+            } else if at.x > b.right() {
+                at.x - b.right()
+            } else {
+                px(0.)
+            }
+        };
+        let Some(piece) = self.pieces.iter().min_by(|a, b| {
+            (dy(a), dx(a))
+                .partial_cmp(&(dy(b), dx(b)))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) else {
+            return 0;
+        };
+        let offset = match piece {
+            Piece::Whole(layout) | Piece::Text { layout, .. } => {
+                piece.range().start + whole_index_at(layout, at)
+            }
+            Piece::Atom { range, bounds } => {
+                if at.x < bounds.center().x {
+                    range.start
+                } else {
+                    range.end
+                }
+            }
+        };
+        offset.min(self.info.len)
     }
+
+    /// The inline atom drawn under `at`, as its leaf byte range.
+    pub(crate) fn atom_at(&self, at: Point<Pixels>) -> Option<Range<usize>> {
+        self.pieces.iter().find_map(|piece| match piece {
+            Piece::Atom { range, bounds } if bounds.contains(&at) => Some(range.clone()),
+            _ => None,
+        })
+    }
+}
+
+/// Closest index in a `TextLayout` for a window point.
+fn whole_index_at(layout: &TextLayout, at: Point<Pixels>) -> usize {
+    let bounds = layout.bounds();
+    let line_height = layout.line_height();
+    let mut top = bounds.top();
+    let mut start = 0;
+    let lines = layout.line_layouts();
+    for (ix, line) in lines.iter().enumerate() {
+        let height = line.size(line_height).height.max(line_height);
+        let is_last = ix + 1 == lines.len();
+        if at.y < top + height || is_last {
+            let local = point(
+                (at.x - bounds.left()).max(px(0.)),
+                (at.y - top).clamp(px(0.), (height - px(1.)).max(px(0.))),
+            );
+            let index = match line.closest_index_for_position(local, line_height) {
+                Ok(ix) | Err(ix) => ix,
+            };
+            return start + index;
+        }
+        top += height;
+        start += line.len() + 1;
+    }
+    0
 }
 
 /// The last complete frame's leaf geometry, in document order.

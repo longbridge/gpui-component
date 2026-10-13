@@ -675,24 +675,12 @@ impl BlockEditorState {
         }
     }
 
-    /// The start of the inline atom under the window point `at`, given the
-    /// caret position a hit test gave for it (the atom's either side).
+    /// The start of the inline atom drawn under the window point `at` in
+    /// the leaf a hit test found.
     fn atom_under(&self, pos: BlockPosition, at: Point<Pixels>) -> Option<BlockPosition> {
-        let inline = self.model.doc.inline(pos.block)?;
         let frame = self.frame.borrow();
-        let leaf = frame.leaf(pos.block)?;
-        let width = super::inline::ATOM_CHAR.len_utf8();
-        let candidates = [Some(pos.offset), pos.offset.checked_sub(width)];
-        candidates.into_iter().flatten().find_map(|start| {
-            if !inline.text()[start..].starts_with(super::inline::ATOM_CHAR) {
-                return None;
-            }
-            let left = leaf.caret_point(start);
-            let right = leaf.caret_point(start + width);
-            let line = leaf.line_height();
-            (at.x >= left.x && at.x <= right.x && at.y >= left.y && at.y <= left.y + line)
-                .then_some(BlockPosition::new(pos.block, start))
-        })
+        let range = frame.leaf(pos.block)?.atom_at(at)?;
+        Some(BlockPosition::new(pos.block, range.start))
     }
 
     fn toggle_mark(&mut self, kind: MarkKind, cx: &mut Context<Self>) {

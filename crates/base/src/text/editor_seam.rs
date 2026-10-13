@@ -13,11 +13,21 @@
 
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use gpui::{Hsla, TextLayout};
+use gpui::{Bounds, Hsla, Pixels, TextLayout};
 
 pub(crate) trait EditorSink {
-    /// The leaf `key` was laid out this frame.
+    /// The leaf `key` was laid out this frame as one `TextLayout`.
     fn report(&self, key: u64, layout: &TextLayout);
+    /// The leaf `key` is laid out in pieces this frame (a mixed text /
+    /// image / custom-inline paragraph rendered by `InlineFlow`); drops
+    /// pieces reported for it earlier in the frame.
+    fn begin_pieces(&self, key: u64);
+    /// One single-line text fragment of `key`, whose index 0 is the leaf's
+    /// byte `start`.
+    fn report_text_piece(&self, key: u64, start: usize, layout: &TextLayout);
+    /// An inline atom (image, custom node) of `key` covering the leaf bytes
+    /// `range`, drawn in `bounds`.
+    fn report_box_piece(&self, key: u64, range: Range<usize>, bounds: Bounds<Pixels>);
     /// Extra backgrounds to paint behind the leaf `key`, in its text's bytes.
     fn backgrounds(&self, key: u64) -> Vec<(Range<usize>, Hsla)>;
 }

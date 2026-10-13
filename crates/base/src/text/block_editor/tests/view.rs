@@ -1104,3 +1104,117 @@ fn inline_code_paragraph_is_laid_out(cx: &mut TestAppContext) {
         3
     );
 }
+
+/// Window point at the middle of the inline atom starting at `offset` in the
+/// first leaf.
+fn atom_point(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    offset: usize,
+) -> gpui::Point<gpui::Pixels> {
+    draw(cx);
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).expect("mixed paragraph reports its pieces");
+        let l = leaf.caret_point(offset);
+        let r = leaf.caret_point(offset + 3);
+        gpui::point((l.x + r.x) / 2., l.y + leaf.line_height() / 2.)
+    })
+}
+
+#[gpui::test]
+fn image_paragraph_has_caret_clicks_and_atom_selection(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab![pic](x.png)cd\n\nnext");
+    draw(cx);
+    // Laid out: carets before and after the atom are distinct, text after
+    // the image is right of it.
+    let (before, after, end) = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).expect("mixed paragraph reports its pieces");
+        (
+            leaf.caret_point(2),
+            leaf.caret_point(5),
+            leaf.caret_point(7),
+        )
+    });
+    assert!(
+        after.x >= before.x && end.x > after.x,
+        "{before:?} {after:?} {end:?}"
+    );
+    // Click in the text after the image places the caret there.
+    let at = gpui::point(end.x - px(1.), end.y + px(2.));
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    let caret = editor.read_with(cx, |e, _| e.model().caret().unwrap());
+    assert_eq!(caret_leaf(&editor, cx), Some(0));
+    assert!(caret.offset >= 6, "{caret:?}");
+    // Down goes to the next paragraph, up comes back into the mixed one.
+    keys(cx, "down");
+    assert_eq!(caret_leaf(&editor, cx), Some(1));
+    keys(cx, "up");
+    assert_eq!(caret_leaf(&editor, cx), Some(0));
+    // A click on the image selects it whole.
+    assert!(after.x > before.x, "the image has width");
+    {
+        let at = atom_point(&editor, cx, 2);
+        cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+        cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+        let sel = editor.read_with(cx, |e, _| e.model().selection().clone());
+        let BlockSelection::Text { anchor, head } = sel else {
+            panic!("{sel:?}")
+        };
+        assert_eq!((anchor.offset, head.offset), (2, 5));
+        // Selection paints on the text pieces too.
+        keys(cx, "shift-right shift-right");
+        assert!(!editor.update(cx, |e, _| e.selection_ranges()).is_empty());
+    }
+}
+
+#[gpui::test]
+fn image_only_paragraph_is_laid_out(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a\n\n![pic](x.png)\n\nb");
+    draw(cx);
+    let laid_out = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(1).unwrap().id();
+        e.frame.borrow().leaf(id).is_some()
+    });
+    assert!(laid_out);
+    caret_at(&editor, cx, 0, 1);
+    keys(cx, "down");
+    assert_eq!(caret_leaf(&editor, cx), Some(1));
+    keys(cx, "down");
+    assert_eq!(caret_leaf(&editor, cx), Some(2));
+}
+
+/// Inline code keeps its pill (InlineFlow) in the editor, and the caret
+/// geometry follows the padded text.
+#[gpui::test]
+fn inline_code_keeps_pill_and_caret_geometry(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "ab `cd` ef");
+    draw(cx);
+    let (pieces, b, c, d) = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).unwrap();
+        (
+            leaf.pieces.len(),
+            leaf.caret_point(3),
+            leaf.caret_point(4),
+            leaf.caret_point(5),
+        )
+    });
+    assert!(pieces > 1, "rendered by the flow, in fragments");
+    assert!(b.x < c.x && c.x < d.x, "{b:?} {c:?} {d:?}");
+    // Clicking between `c` and `d` puts the caret at 4.
+    let at = gpui::point(c.x - px(1.), c.y + px(3.));
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        4
+    );
+    type_text(cx, "X");
+    assert_eq!(source(&editor, cx), "ab `cXd` ef");
+}

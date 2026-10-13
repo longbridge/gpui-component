@@ -2650,12 +2650,14 @@ impl Paragraph {
         let backgrounds = node_cx.range_backgrounds(fade_key);
 
         if self.should_render_inline_flow() {
-            return InlineFlow::new(
+            let flow = InlineFlow::new(
                 leaf_element_id(fade_key),
                 self.inline_flow_items(fade_key, fades, backgrounds, node_cx, cx),
                 node_cx.link_click_handler.clone(),
-            )
-            .into_any_element();
+            );
+            #[cfg(feature = "block-editor")]
+            let flow = flow.editor_key(self.state.lock().ok().and_then(|s| s.editor_key));
+            return flow.into_any_element();
         }
 
         let has_image = children.iter().any(|child| child.image.is_some());
@@ -2837,18 +2839,17 @@ impl Paragraph {
     fn should_render_inline_flow(&self) -> bool {
         let has_image = self.children.iter().any(|child| child.image.is_some());
         let has_text = self.children.iter().any(|child| !child.text.is_empty());
-        // Block editor leaves render inline code through the single-`Inline`
-        // path (code as a highlight, without the pill padding), so the
-        // leaf reports one `TextLayout` the editor can hit-test.
+        // A block editor leaf with an image always uses the flow, which
+        // reports its pieces to the editor (an image-only paragraph would
+        // otherwise take the plain image path, which reports nothing).
         #[cfg(feature = "block-editor")]
-        if !has_image
-            && self.children.iter().all(|child| child.custom.is_none())
+        if has_image
             && self
                 .state
                 .lock()
                 .is_ok_and(|state| state.editor_key.is_some())
         {
-            return false;
+            return true;
         }
         self.children.iter().any(|child| child.custom.is_some())
             || (has_image && has_text)
