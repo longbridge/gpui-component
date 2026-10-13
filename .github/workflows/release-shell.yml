@@ -115,3 +115,38 @@ jobs:
             dist/gpui-shell-*.zip
             dist/gpui-shell-*.sha256
           fail_on_unmatched_files: false
+      # The installer goes with the binaries it downloads, once per release.
+      - name: Upload the installer
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: website/public/shell/install.sh
+
+  # A run that rebuilds an existing release's binaries from another commit
+  # records that commit as `shell-<tag>`, so the website's Shell pages for the
+  # release describe the binary people download (see script/snapshot-website).
+  # A tag push builds the tag itself and needs no record.
+  record:
+    name: Record the commit the binaries were built from
+    needs: build
+    if: ${{ github.event_name != 'push' && (github.event_name != 'pull_request' || github.event.label.name == 'release-shell') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Tag the build
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            tag="$INPUT_TAG"
+          else
+            version=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/shell/Cargo.toml | head -n 1)
+            tag="v$version"
+          fi
+          git tag -f "shell-$tag"
+          git push -f origin "refs/tags/shell-$tag"

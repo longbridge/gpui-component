@@ -130,6 +130,8 @@ cargo run -p gpui-shell -- run examples/js_todolist
 curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 ```
 
+每个 release 也附带同一个脚本，所以 `https://github.com/longbridge/gpui-kit/releases/latest/download/install.sh` 同样可用。
+
 脚本会把二进制装到 `~/.local/bin`，并创建 `~/.gpui-shell/apps`。`GPUI_SHELL_VERSION=v0.7.1` 可以固定某个版本。`GPUI_SHELL_HOME` 会替换 `~/.gpui-shell` 目录——已安装的应用和 Git 依赖缓存都随之移动；`gpui-shell` 运行时也读取这个变量，所以要保持导出。产物名不带版本号（`gpui-shell-aarch64-apple-darwin.tar.gz`，旁边附 `.sha256`），所以 Homebrew formula 或 mise 的 `ubi` backend 也可以直接下载 `releases/latest/download/<asset>`。
 
 ## 已安装与随包的应用

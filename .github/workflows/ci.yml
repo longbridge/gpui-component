@@ -6,6 +6,9 @@ on:
       - main
     tags:
       - "*"
+      # `shell-<tag>` only records which commit a release's gpui-shell
+      # binaries were built from; that commit has been tested already.
+      - "!shell-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.ref_name == 'main' && github.sha || 'anysha' }}
