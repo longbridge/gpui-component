@@ -3706,65 +3706,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         ))
     }
 
-    /// Return the number of display rows: the rows the text takes once it is
-    /// soft-wrapped, less those hidden by folds.
+    /// Return the editor-owned display map for read-only coordinate queries.
     ///
-    /// Every display row is one line height tall. Soft wrapping follows the
-    /// width of the last layout, so an editor that has not been laid out has no
-    /// display rows.
-    pub fn display_row_count(&self) -> usize {
-        self.display_map.display_row_count()
-    }
-
-    /// Return the display rows a zero-based buffer line takes, one per soft-wrapped
-    /// row, whether or not they are laid out.
+    /// The map covers the whole buffer, including lines outside the viewport.
+    /// Wrapping uses the most recently prepared layout parameters. Before the
+    /// text has been prepared, the map has no display rows. The state owns all
+    /// updates; callers can use [`DisplayMap::version`] to invalidate cached
+    /// mappings after edits, rewrapping, or folding changes.
     ///
-    /// A line hidden by a fold takes none: the range is empty, at the row the fold
-    /// is shown on. A line past the end is an empty range at the end.
-    pub fn buffer_line_to_display_rows(&self, line: usize) -> Range<usize> {
-        if line >= self.display_map.buffer_line_count() {
-            let count = self.display_map.display_row_count();
-            return count..count;
-        }
-        self.display_map
-            .buffer_line_to_display_row_range(line)
-            .unwrap_or_else(|| {
-                let row = self.display_map.buffer_line_to_display_row(line);
-                row..row
-            })
-    }
-
-    /// Return the zero-based buffer line a display row shows, and which of the
-    /// line's soft-wrapped rows it is.
-    ///
-    /// A row past the end is read as the last row, and a spacer row as the
-    /// row of the line it stands beside that is nearest it.
-    pub fn display_row_to_buffer_line(&self, row: usize) -> (usize, usize) {
-        let row = self
-            .display_map
-            .display_row_beside(row.min(self.display_map.display_row_count().saturating_sub(1)));
-        let line = self.display_map.display_row_to_buffer_line(row);
-        let start = self
-            .display_map
-            .buffer_line_to_display_row_range(line)
-            .map_or(row, |rows| rows.start);
-        (line, row.saturating_sub(start))
-    }
-
-    /// Return whether a display row is a spacer row: a blank row that holds no
-    /// text, standing above or below a line. See [`crate::input::Spacer`].
-    pub fn is_spacer_row(&self, row: usize) -> bool {
-        self.display_map.is_spacer_row(row)
-    }
-
-    /// Return a number that changes whenever a buffer line may have taken
-    /// different display rows: an edit, a rewrap, or a fold opened or closed.
-    ///
-    /// Something that reads the display rows, such as an editor kept level
-    /// with this one, can compare it with the number it last read to know
-    /// whether to read them again.
-    pub fn display_rows_version(&self) -> usize {
-        self.display_map.version()
+    /// Display coordinates describe text after wrapping and folding. They do
+    /// not include inline completion ghost lines; use [`Self::row_bounds`] for
+    /// the actual painted geometry of a visible buffer line.
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
     }
 
     /// Replace text in range in silent.
