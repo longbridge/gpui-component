@@ -779,3 +779,129 @@ fn copied_table_pastes_back_as_a_table(cx: &mut TestAppContext) {
     keys(cx, "M-z");
     assert_eq!(source(&editor, cx), original, "paste is one undo step");
 }
+
+fn paste(cx: &mut VisualTestContext, text: &str, plain: bool) {
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.into()));
+    keys(cx, if plain { "M-shift-v" } else { "M-v" });
+}
+
+#[gpui::test]
+fn paste_converts_multi_block_markdown(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "xy");
+    caret_at(&editor, cx, 0, 1);
+    paste(cx, "**p1**\n\n# H\n\n- a\n- b\n\np2", false);
+    assert_eq!(source(&editor, cx), "x**p1**\n\n# H\n\n- a\n- b\n\np2y");
+    type_text(cx, "Z");
+    assert_eq!(source(&editor, cx), "x**p1**\n\n# H\n\n- a\n- b\n\np2Zy");
+    keys(cx, "M-z");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "xy", "paste is one undo step");
+    // Structure only (no paragraph at either end).
+    paste(cx, "# H\n\n- a", false);
+    assert_eq!(source(&editor, cx), "x\n\n# H\n\n- a\n\ny");
+}
+
+#[gpui::test]
+fn single_line_and_plain_paste_stay_inline(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "xy");
+    caret_at(&editor, cx, 0, 1);
+    paste(cx, "# not a heading", false);
+    assert_eq!(source(&editor, cx), "x# not a headingy");
+    keys(cx, "M-z");
+    paste(cx, "# H\n\n- a", true);
+    let src = source(&editor, cx);
+    assert!(
+        !src.contains("\n# H"),
+        "plain paste keeps markers as text: {src:?}"
+    );
+    assert_eq!(src, "x# H\n\n\\- ay", "markers stay text");
+}
+
+/// Spacers are sized from top-to-next-top distances, so a block far down
+/// sits at the same y whether the blocks above it are culled or not.
+#[gpui::test]
+fn culled_spacers_keep_block_positions(cx: &mut TestAppContext) {
+    let doc: String = (0..300)
+        .map(|i| match i % 3 {
+            0 => format!("## Heading {i}\n\n"),
+            1 => format!("- item {i}\n\n---\n\n"),
+            _ => format!("paragraph {i}\n\n"),
+        })
+        .collect();
+    let (editor, cx) = open(cx, &doc);
+    // A text leaf well down the document (rules are atoms with no layout).
+    let (target, id) = editor.read_with(cx, |e, _| {
+        let doc = &e.model().doc;
+        doc.leaves()
+            .iter()
+            .enumerate()
+            .skip(250)
+            .find(|(_, id)| doc.inline(**id).is_some())
+            .map(|(ix, id)| (ix, *id))
+            .unwrap()
+    });
+    caret_at(&editor, cx, target, 0);
+    draw(cx);
+    // A frame with culling off (no visible span yet) lays out everything.
+    editor.update(cx, |e, cx| {
+        e.cull.borrow_mut().visible = None;
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        let _ = window.draw(cx);
+    });
+    let full = editor.read_with(cx, |e, _| {
+        e.frame.borrow().leaf(id).map(|l| l.bounds().top())
+    });
+    let full = full.expect("unculled frame");
+    draw(cx);
+    draw(cx);
+    let (rendered, culled) = editor.read_with(cx, |e, _| {
+        (
+            e.cull.borrow().rendered,
+            e.frame.borrow().leaf(id).map(|l| l.bounds().top()),
+        )
+    });
+    assert!(rendered < 300, "culling active ({rendered})");
+    let culled = culled.expect("caret block pinned");
+    assert!((culled - full).abs() < px(0.5), "{culled:?} vs {full:?}");
+}
+
+#[gpui::test]
+fn end_at_soft_wrap_stays_on_the_visual_line(cx: &mut TestAppContext) {
+    let long = "word ".repeat(60);
+    let (editor, cx) = open(cx, long.trim_end());
+    caret_at(&editor, cx, 0, 0);
+    draw(cx);
+    keys(cx, "end");
+    let (line_top, caret_top, offset) = editor.read_with(cx, |e, _| {
+        let f = e.frame.borrow();
+        let c = e.model().caret().unwrap();
+        let leaf = f.leaf(c.block).unwrap();
+        (
+            leaf.caret_point(0).y,
+            leaf.caret_point(c.offset).y,
+            c.offset,
+        )
+    });
+    assert!(offset > 0 && offset < long.trim_end().len(), "{offset}");
+    assert_eq!(caret_top, line_top, "End stays on the first visual line");
+    keys(cx, "home");
+    assert_eq!(caret_leaf(&editor, cx), Some(0));
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        0
+    );
+}
+
+/// Without a scroll handle, caret-into-view is a no-op (no panic, flag
+/// cleared).
+#[gpui::test]
+fn reveal_without_scroll_handle_is_a_noop(cx: &mut TestAppContext) {
+    let doc: String = (0..400).map(|i| format!("p {i}\n\n")).collect();
+    let (editor, cx) = open(cx, &doc);
+    caret_at(&editor, cx, 399, 0);
+    draw(cx);
+    draw(cx);
+    assert!(editor.read_with(cx, |e, _| e.scroll_handle.is_none() && !e.reveal.get()));
+}

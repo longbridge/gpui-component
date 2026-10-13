@@ -166,7 +166,9 @@ impl RenderOnce for BlockEditor {
             let mut cull_state = cull.borrow_mut();
             cull_state.measured.clear();
             let window_span = cull_state.visible.map(|(top, bottom)| {
-                let margin = (bottom - top).max(px(200.));
+                // Overscan two viewports each way, so a fast scroll stays
+                // within laid-out blocks until the next frame catches up.
+                let margin = ((bottom - top) * 2.).max(px(600.));
                 (top - margin, bottom + margin)
             });
             let mut y = px(0.);
@@ -300,6 +302,7 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_copy))
             .on_action(window.listener_for(s, BlockEditorState::on_cut))
             .on_action(window.listener_for(s, BlockEditorState::on_paste))
+            .on_action(window.listener_for(s, BlockEditorState::on_paste_plain))
             .child(EditorRoot {
                 state: self.state.clone(),
                 child: Some(div().w_full().children(children).into_any_element()),

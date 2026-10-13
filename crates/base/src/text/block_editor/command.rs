@@ -425,10 +425,18 @@ impl BlockEditorModel {
         Ok(true)
     }
 
-    /// Paste Markdown that holds a table (what Copy writes for a selected
-    /// table) as blocks, so a copied table comes back as a table. Other text
-    /// pastes as plain text (`insert_text`). Returns whether it applied.
+    /// Paste Markdown as blocks, as one undo step. Text without a line
+    /// break, or that parses to a single paragraph, is left to plain
+    /// insertion (`insert_text`). Otherwise the text is parsed: a
+    /// leading paragraph merges into the text before the caret, a trailing
+    /// one into the text after it, and the blocks between are inserted
+    /// between the two halves. Returns whether it applied (`false` for
+    /// single-line text or when the caret is not in an editable text block;
+    /// the caller then inserts plain text).
     pub fn paste_blocks(&mut self, text: &str) -> Result<bool, CommandError> {
+        if !text.trim_end_matches('\n').contains('\n') {
+            return Ok(false);
+        }
         let mut cx = crate::text::node::NodeContext {
             markdown_extensions: self.doc.extensions.clone(),
             ..Default::default()
@@ -436,59 +444,89 @@ impl BlockEditorModel {
         let Ok(parsed) = crate::text::format::markdown::parse(text, &mut cx) else {
             return Ok(false);
         };
-        if !parsed
-            .blocks
-            .iter()
-            .any(|node| matches!(node, crate::text::node::BlockNode::Table(_)))
-        {
-            return Ok(false);
-        }
         let mut defs = super::import::Defs::new();
         super::import::collect_definitions(&parsed.blocks, &mut defs);
         let mut blocks = Vec::new();
         for node in parsed.blocks.iter() {
             super::import::import_block(node, &defs, &mut blocks);
         }
+        // Nothing structural (one paragraph, soft line breaks only): plain
+        // text, where each line becomes a block as typed.
+        if blocks.is_empty() || (blocks.len() == 1 && blocks[0].kind == BlockKindData::Paragraph) {
+            return Ok(false);
+        }
         if self.selected_blocks().is_some() {
             self.delete_blocks()?;
         }
         let range = self.resolved()?;
+        let editable = |doc: &EditorDocument, pos: BlockPosition| {
+            doc.inline(pos.block).is_some()
+                && doc.kind(pos.block) != Some(&BlockKindData::TableCell)
+        };
+        if !editable(&self.doc, range.start) || !editable(&self.doc, range.end) {
+            return Ok(false);
+        }
+        let paragraph_inline = |block: &DetachedBlock| match (&block.kind, &block.content) {
+            (BlockKindData::Paragraph, DetachedContent::Leaf(BlockContent::Inline(inline))) => {
+                Some(inline.clone())
+            }
+            _ => None,
+        };
         self.transact(EditOrigin::Paste, |tx| {
-            let mut pos = if range.is_collapsed() {
+            let pos = if range.is_collapsed() {
                 range.start
             } else {
                 delete_range(tx, range)?
             };
-            // Insert next to the caret's top-level block (tables live at the
-            // top level in the spike).
-            let doc = &*tx.doc;
-            let path = doc.path(pos.block);
-            let top = path.get(1).copied().unwrap_or(pos.block);
-            let len = doc.leaf_len(pos.block).unwrap_or(0);
-            let simple = top == pos.block && doc.inline(pos.block).is_some();
-            if simple && pos.offset > 0 && pos.offset < len {
-                pos = split_at(tx, pos)?;
+            let mut blocks = blocks;
+            let head = blocks.first().and_then(paragraph_inline);
+            if head.is_some() {
+                blocks.remove(0);
             }
-            let doc = &*tx.doc;
-            let top = doc.path(pos.block).get(1).copied().unwrap_or(pos.block);
-            let (root, index) = doc
-                .index_in_parent(top)
-                .ok_or(PositionError::UnknownBlock(top))?;
-            let before = simple
-                && tx
-                    .doc
-                    .leaf_len(pos.block)
-                    .is_some_and(|l| pos.offset == 0 && (l > 0 || index > 0));
-            let at = if before { index } else { index + 1 };
+            let tail = if blocks.is_empty() {
+                None
+            } else {
+                blocks.last().and_then(paragraph_inline)
+            };
+            if tail.is_some() {
+                blocks.pop();
+            }
+            // Only one paragraph: plain inline insertion with its marks.
+            if blocks.is_empty() && tail.is_none() {
+                let inline = head.unwrap_or_default();
+                let len = inline.len();
+                tx.replace_text(pos.block, pos.offset..pos.offset, inline)?;
+                return Ok(caret(BlockPosition::new(pos.block, pos.offset + len)));
+            }
+            let left = pos.block;
+            let right = split_at(tx, pos)?.block;
+            let merged_head = head.is_some();
+            if let Some(head) = head {
+                let at = tx.doc.leaf_len(left).unwrap_or(0);
+                tx.replace_text(left, at..at, head)?;
+            }
+            let mut caret_at = BlockPosition::new(right, 0);
+            if let Some(tail) = tail.clone() {
+                caret_at.offset = tail.len();
+                tx.replace_text(right, 0..0, tail)?;
+            }
+            let (parent, index) = tx
+                .doc
+                .index_in_parent(left)
+                .ok_or(PositionError::UnknownBlock(left))?;
             let last = blocks.last().map(|b| b.id);
-            let count = blocks.len();
-            tx.insert(root, at, blocks)?;
-            let after = tx.doc.children(root).get(at + count).copied();
-            Ok(match (after, last) {
-                (Some(next), _) => caret(tx.doc.first_leaf_in(next)),
-                (None, Some(last)) => caret(tx.doc.last_leaf_in(last)),
-                _ => None,
-            })
+            tx.insert(parent, index + 1, blocks)?;
+            // Halves that stayed empty go away.
+            if !merged_head && tx.doc.leaf_len(left) == Some(0) {
+                tx.remove_block(left)?;
+            }
+            if tail.is_none() && tx.doc.leaf_len(right) == Some(0) {
+                if let Some(last) = last {
+                    tx.remove_block(right)?;
+                    caret_at = tx.doc.last_leaf_in(last);
+                }
+            }
+            Ok(caret(caret_at))
         })?;
         Ok(true)
     }

@@ -54,6 +54,7 @@ actions!(
         Copy,
         Cut,
         Paste,
+        PastePlain,
     ]
 );
 
@@ -92,6 +93,7 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new(&format!("{m}-c"), Copy, ctx),
         KeyBinding::new(&format!("{m}-x"), Cut, ctx),
         KeyBinding::new(&format!("{m}-v"), Paste, ctx),
+        KeyBinding::new(&format!("{m}-shift-v"), PastePlain, ctx),
     ]);
 }
 
@@ -544,6 +546,26 @@ impl BlockEditorState {
             return;
         };
         let visual = self.frame.borrow().line_edge(head, end);
+        // End at a soft wrap: the line's end index is also the next line's
+        // start, where the caret would draw. Stay before the wrap point.
+        let visual = visual.map(|pos| {
+            if !end || pos.block != head.block {
+                return pos;
+            }
+            let frame = self.frame.borrow();
+            let (Some(leaf), Some(inline)) =
+                (frame.leaf(pos.block), self.model.doc.inline(pos.block))
+            else {
+                return pos;
+            };
+            let line_y = leaf.caret_point(head.offset).y;
+            if pos.offset < inline.len() && leaf.caret_point(pos.offset).y > line_y {
+                let prev = inline.prev_grapheme(pos.offset).unwrap_or(pos.offset);
+                BlockPosition::new(pos.block, prev)
+            } else {
+                pos
+            }
+        });
         let target = visual.unwrap_or_else(|| {
             let offset = if end {
                 self.model.doc.leaf_len(head.block).unwrap_or(0)
@@ -738,6 +760,23 @@ impl BlockEditorState {
                     }
                     m.insert_text(&text, EditOrigin::Paste)
                 },
+                cx,
+            );
+        }
+    }
+
+    /// Cmd/Ctrl+Shift+V: paste as plain text (line breaks still split blocks).
+    pub(crate) fn on_paste_plain(
+        &mut self,
+        _: &PastePlain,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+            self.end_composition();
+            self.edit(
+                EditOrigin::Paste,
+                |m| m.insert_text(&text, EditOrigin::Paste),
                 cx,
             );
         }
