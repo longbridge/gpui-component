@@ -610,7 +610,7 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 | Home / End | Visual line start/end | Visual line start/end via `FrameLayout::line_edge` | End at a soft wrap may land on the next line; `Affinity` still unused |
 | IME (§2) | Port #3049's handler over `BlockPosition` | The IME document is the caret leaf. An undo group opens only when marked text is actually inserted (fixes the leaked group from empty or cancelled marks); a cancel removes the marked text; composing over a cross-block selection deletes the selection first; Cut ends a composition first | Accessibility text ranges need the full document (D8) |
 | Atoms / custom nodes | Block frame with own renderer | Images and custom inline nodes render, but get no caret geometry | Deferred |
-| Lists | — | Enter on an empty list item does not lift out of the list (model command missing) | Deferred |
+| Lists | — | Enter in an empty list item exits the list: a top-level item becomes a paragraph after the list (splitting it when mid-list, `exit_list`), a nested item outdents one level. One transaction, one undo step (`tests/commands.rs`) | Done |
 | Feature plumbing (D2) | No `gpui-component` re-export until Phase 3 | `gpui-kit` gained a `block-editor` feature forwarding to `gpui-base/block-editor` so the story can reach it | Decision for review |
 | Virtualization | Phase 5 | None | See perf note |
 

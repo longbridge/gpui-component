@@ -344,6 +344,9 @@ impl BlockEditorModel {
 
     pub fn split_block(&mut self) -> Result<(), CommandError> {
         let range = self.resolved()?;
+        if range.is_collapsed() && self.exit_empty_item(range.start)? {
+            return Ok(());
+        }
         self.transact(EditOrigin::Command("split_block"), |tx| {
             let pos = if range.is_collapsed() {
                 range.start
@@ -353,6 +356,67 @@ impl BlockEditorModel {
             Ok(caret(split_at(tx, pos)?))
         })?;
         Ok(())
+    }
+
+    /// Enter in an empty list item whose only child is the caret's empty
+    /// paragraph: a nested item outdents one level, a top-level item becomes
+    /// a paragraph after the list (splitting it when mid-list). One
+    /// transaction, so one undo step. Returns `false` when it does not apply.
+    fn exit_empty_item(&mut self, pos: BlockPosition) -> Result<bool, CommandError> {
+        let doc = &self.doc;
+        if doc.kind(pos.block) != Some(&BlockKindData::Paragraph)
+            || doc.inline(pos.block).is_none_or(|inline| inline.len() != 0)
+        {
+            return Ok(false);
+        }
+        let Some((item, 0)) = doc.index_in_parent(pos.block) else {
+            return Ok(false);
+        };
+        if !doc.kind(item).is_some_and(is_list_item) || doc.children(item).len() != 1 {
+            return Ok(false);
+        }
+        let Some((list, index)) = doc.index_in_parent(item) else {
+            return Ok(false);
+        };
+        let Some(BlockKindData::List { ordered, .. }) = doc.kind(list).cloned() else {
+            return Ok(false);
+        };
+        let Some((outer, list_index)) = doc.index_in_parent(list) else {
+            return Ok(false);
+        };
+        if doc.kind(outer).is_some_and(is_list_item) {
+            self.outdent()?;
+            return Ok(true);
+        }
+        let leaf = pos.block;
+        self.transact(EditOrigin::Command("exit_list"), |tx| {
+            let count = tx.doc.children(list).len();
+            let mut removed = tx.remove(list, index..count)?;
+            let rest: Vec<_> = removed.drain(1..).collect();
+            let item = removed.pop().ok_or(StepError::OutOfRange)?;
+            let DetachedContent::Children(content) = item.content else {
+                return Err(StepError::KindMismatch.into());
+            };
+            let mut at = list_index + 1;
+            if index == 0 {
+                tx.remove(outer, list_index..list_index + 1)?;
+                at = list_index;
+            }
+            let inserted = content.len();
+            tx.insert(outer, at, content)?;
+            if !rest.is_empty() {
+                let tail = DetachedBlock::container(
+                    BlockKindData::List {
+                        ordered,
+                        start: None,
+                    },
+                    rest,
+                );
+                tx.insert(outer, at + inserted, vec![tail])?;
+            }
+            Ok(caret(BlockPosition::new(leaf, 0)))
+        })?;
+        Ok(true)
     }
 
     pub fn run(&mut self, command: EditorCommand) -> Result<bool, CommandError> {

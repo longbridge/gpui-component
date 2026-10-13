@@ -196,3 +196,43 @@ fn input_order_is_document_order() {
     let texts: Vec<_> = m.document().leaves().filter_map(|b| b.text()).collect();
     assert_eq!(texts, ["a", "b", "c", "d", "e", "f", "g"]);
 }
+
+/// Enter, Enter at the end of `leaf`, then type `x`; one undo reverts the exit.
+fn exit_list_after(source: &str, leaf: usize, offset: usize) -> (String, BlockEditorModel) {
+    let mut m = model(source);
+    caret_in(&mut m, leaf, offset);
+    m.split_block().unwrap();
+    let before = m.source();
+    let revision = m.revision();
+    m.split_block().unwrap();
+    assert_invariants(&m);
+    assert!(m.revision() > revision);
+    let after = m.source();
+    assert!(m.undo());
+    assert_eq!(m.source(), before, "exit is one undo step");
+    assert!(m.redo());
+    assert_eq!(m.source(), after);
+    m.insert_text("x", EditOrigin::Typing).unwrap();
+    (m.source(), m)
+}
+
+#[test]
+fn enter_in_empty_last_item_exits_list() {
+    let (source, m) = exit_list_after("- a\n- b", 1, 1);
+    assert_eq!(source, "- a\n- b\n\nx");
+    assert_invariants(&m);
+}
+
+#[test]
+fn enter_in_empty_middle_item_splits_list() {
+    let (source, m) = exit_list_after("1. a\n2. b", 0, 1);
+    assert_eq!(source, "1. a\n\nx\n\n1. b");
+    assert_invariants(&m);
+}
+
+#[test]
+fn enter_in_empty_nested_item_outdents() {
+    let (source, m) = exit_list_after("- a\n  - b", 1, 1);
+    assert_eq!(source, "- a\n  - b\n- x");
+    assert_invariants(&m);
+}
