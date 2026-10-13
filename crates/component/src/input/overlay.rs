@@ -5,7 +5,7 @@ use ropey::Rope;
 
 use super::{
     InputBaseState, InputModeKind,
-    popovers::{CodeActionMenu, CompletionMenu, CompletionMode, DiagnosticPopover, HoverPopover},
+    popovers::{CodeActionMenu, CompletionHost, CompletionMenu, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
 
@@ -219,7 +219,11 @@ impl OverlayMode for crate::input::InputMode {
         );
     }
 
-    fn collect_floating(lsp: &FieldOverlays, snapshot: &LspSnapshot, floating: &mut Vec<AnyElement>) {
+    fn collect_floating(
+        lsp: &FieldOverlays,
+        snapshot: &LspSnapshot,
+        floating: &mut Vec<AnyElement>,
+    ) {
         if snapshot.completion.open {
             floating.push(lsp.completion.clone().into_any_element());
         }
@@ -371,7 +375,7 @@ impl OverlayMode for crate::input::EditorMode {
 }
 
 /// Mirrors the engine's completion state into `menu` when it changed.
-fn sync_completion<M: CompletionMode>(
+fn sync_completion<M: CompletionHost>(
     menu: &Entity<CompletionMenu<M>>,
     signature: &mut OverlaySignature,
     state: &Entity<InputBaseState<M>>,
@@ -403,7 +407,6 @@ fn sync_completion<M: CompletionMode>(
         }
     });
 }
-
 
 #[derive(Default)]
 pub(super) struct InputOverlays {
