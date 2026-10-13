@@ -8441,7 +8441,7 @@ mod tests {
             });
             let rows = input
                 .unwrap()
-                .read_with(cx, |state, _| state.wrap_row_count());
+                .read_with(cx, |state, _| state.display_map().wrap_row_count());
             // Two lines; at 120px the first wraps unless soft wrap is off.
             assert_eq!(rows > 2, wraps, "soft_wrap({soft_wrap}): {rows} rows");
             if !wraps {
@@ -8473,7 +8473,7 @@ mod tests {
             rows.push(
                 input
                     .unwrap()
-                    .read_with(cx, |state, _| state.wrap_row_count()),
+                    .read_with(cx, |state, _| state.display_map().wrap_row_count()),
             );
         }
         assert!(rows[0] > rows[1], "rows with Same, None: {rows:?}");
@@ -8503,14 +8503,14 @@ mod tests {
         let mut cx = VisualTestContext::from_window(window.into(), cx);
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let laid_out = input.read_with(&cx, |state, _| state.wrap_row_count());
+        let laid_out = input.read_with(&cx, |state, _| state.display_map().wrap_row_count());
         assert!(laid_out >= 2, "laid out to {laid_out} rows");
         let font = cx.update(|window, _| window.text_style().font());
         input.update(&mut cx, |state, cx| {
             state.prewrap(font, px(14.), px(60.), cx)
         });
         assert_eq!(
-            input.read_with(&cx, |state, _| state.wrap_row_count()),
+            input.read_with(&cx, |state, _| state.display_map().wrap_row_count()),
             laid_out
         );
     }
@@ -11422,19 +11422,15 @@ impl InputBaseState<crate::input::EditorMode> {
         self
     }
 
-    /// The number of rows the text takes once soft wrapped, the count the
-    /// scroll height uses.
+    /// The editor's display map for querying wrapped rows and display positions.
     ///
-    /// The buffer's line count undercounts it whenever a line wraps, so a host
-    /// that sizes an editor to its content, such as a read-only one, uses this.
-    /// It is 0 until the editor is laid out or [`Self::prewrap`] is called.
-    /// Folded rows are still counted.
-    pub fn wrap_row_count(&self) -> usize {
-        self.display_map.wrap_row_count()
+    /// Text is prepared during layout or by [`Self::prewrap`].
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
     }
 
     /// Wrap the text for `font`, `font_size` and `width` before the first
-    /// layout, so that [`Self::wrap_row_count`] is known on the first frame.
+    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
     ///
     /// Call it after setting the value and the wrapping indent. `width` is the
     /// width of the editor's text area: its width less its padding, and less
