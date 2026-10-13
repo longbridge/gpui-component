@@ -4,7 +4,7 @@ use std::ops::Range;
 use gpui_kit::component::{
     IndexPath,
     list::{List, ListDelegate, ListItem, ListState},
-    table::{Column, ColumnSort, DataTable, TableDelegate, TableSelection, TableState},
+    table::{Column, ColumnSort, DataTable, TableDelegate, TableEvent, TableSelection, TableState},
     tree::{Tree, TreeItem, TreeState},
 };
 use gpui_kit::test::{TestSupportExt, TestWindowExt};
@@ -222,6 +222,100 @@ fn right_click_row(window: &mut Window, row: usize, cx: &mut App) {
         cx,
     );
     window.render_frame(cx);
+}
+
+/// Rows whose second cell selects its row on mouse down.
+struct RowsSelectedOnPress;
+impl TableDelegate for RowsSelectedOnPress {
+    fn columns_count(&self, _: &App) -> usize {
+        2
+    }
+    fn rows_count(&self, _: &App) -> usize {
+        3
+    }
+    fn column(&self, ix: usize, _: &App) -> Column {
+        Column::new(format!("column-{ix}"), format!("Column {ix}")).width(px(180.))
+    }
+    fn render_td(
+        &mut self,
+        row: usize,
+        col: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        div().size_full().when(col == 1, |this| {
+            this.on_mouse_down(
+                gpui_kit::MouseButton::Left,
+                cx.listener(move |table, _, _, cx| table.set_selected_row(row, cx)),
+            )
+        })
+    }
+}
+struct PressRecords {
+    table: Entity<TableState<RowsSelectedOnPress>>,
+}
+impl Render for PressRecords {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(DataTable::new(&self.table))
+    }
+}
+fn open_press_records(
+    cx: &mut TestAppContext,
+    cell_selectable: bool,
+) -> (
+    gpui_kit::AnyWindowHandle,
+    Entity<TableState<RowsSelectedOnPress>>,
+) {
+    cx.update(gpui_kit::init);
+    let (handle, content) =
+        common::open_window(cx, Some(size(px(640.), px(320.))), move |window, cx| {
+            cx.new(|cx| PressRecords {
+                table: cx.new(|cx| {
+                    TableState::new(RowsSelectedOnPress, window, cx)
+                        .cell_selectable(cell_selectable)
+                }),
+            })
+        });
+    let table = cx
+        .update_window(handle.into(), |_, _, cx| content.read(cx).table.clone())
+        .unwrap();
+    (handle.into(), table)
+}
+
+#[gpui_kit::test]
+fn table_keeps_focus_when_a_cell_selects_its_row_on_mouse_down(cx: &mut TestAppContext) {
+    let (handle, table) = open_press_records(cx, false);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        // Inside the second cell, past the row header and the first column.
+        window.click_at(("row", 1usize), point(px(260.), px(5.)), cx);
+        assert_eq!(table.read(cx).selected_row(), Some(1));
+        assert!(table.focus_handle(cx).is_focused(window));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn table_row_header_click_selects_its_row_once(cx: &mut TestAppContext) {
+    let (handle, table) = open_press_records(cx, true);
+    let selected = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    cx.update(|cx| {
+        let selected = selected.clone();
+        cx.subscribe(&table, move |_, event: &TableEvent, _| {
+            if let TableEvent::SelectRow(row) = event {
+                selected.borrow_mut().push(*row);
+            }
+        })
+        .detach();
+    });
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        // The row header is the narrow column before the cells.
+        window.click_at(("row", 2usize), point(px(6.), px(5.)), cx);
+        assert_eq!(table.read(cx).selected_row(), Some(2));
+    })
+    .unwrap();
+    assert_eq!(*selected.borrow(), [2]);
 }
 
 #[gpui_kit::test]
