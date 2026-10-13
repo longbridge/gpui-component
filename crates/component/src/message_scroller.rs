@@ -66,6 +66,17 @@ impl MessageScrollerState {
         self.list_state.is_following_tail()
     }
 
+    /// Return the row at the top of the viewport and how far into it the list
+    /// is scrolled.
+    ///
+    /// Wheel, trackpad, and scrollbar scrolls and [`Self::scroll_to_item`]
+    /// update it at once. [`Self::scroll_to_end`] and tail following settle it
+    /// when the list next lays out; right after `scroll_to_end`, `item_ix` is
+    /// [`Self::item_count`] until then.
+    pub fn logical_scroll_top(&self) -> ListOffset {
+        self.list_state.logical_scroll_top()
+    }
+
     /// Reset the list to `item_count` rows.
     pub fn reset(&mut self, item_count: usize, cx: &mut Context<Self>) {
         self.list_state.reset(item_count);
@@ -481,6 +492,63 @@ mod tests {
                 assert!(state.is_following_tail());
             });
         });
+    }
+
+    struct ScrollerHarness {
+        state: Entity<MessageScrollerState>,
+    }
+
+    impl gpui::Render for ScrollerHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size(px(400.)).child(
+                MessageScroller::new("messages", self.state.clone(), |_, _, _| div().h(px(40.)))
+                    .scrollbar(false)
+                    .jump_button(false),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn test_logical_scroll_top_reports_the_row_at_the_top(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.new(|cx| MessageScrollerState::new(30, cx));
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| ScrollerHarness { state }
+        });
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            cx.run_until_parked();
+            cx.update(|window, cx| {
+                _ = window.draw(cx);
+            });
+        };
+        let top = |cx: &mut gpui::VisualTestContext| {
+            cx.update(|_, cx| state.read(cx).logical_scroll_top())
+        };
+        draw(cx);
+
+        // Following the tail, layout settles on the row the tail starts on.
+        let tail = top(cx);
+        assert!(
+            tail.item_ix > 0 && tail.item_ix < 30,
+            "the row at the top while following the tail: {tail:?}"
+        );
+
+        cx.update(|_, cx| state.update(cx, |state, cx| state.scroll_to_item(10, cx)));
+        draw(cx);
+        assert_eq!(top(cx).item_ix, 10);
+
+        // A wheel scroll by one row: its 40px and the 32px gap after it.
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position: gpui::point(px(200.), px(200.)),
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-72.))),
+            ..Default::default()
+        });
+        let after_wheel = top(cx);
+        assert_eq!(
+            (after_wheel.item_ix, after_wheel.offset_in_item),
+            (11, px(0.))
+        );
     }
 
     #[gpui::test]
