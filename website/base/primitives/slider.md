@@ -46,7 +46,12 @@ The command above supplies application initialization, window creation, and shar
 
 ## Accessibility
 
-Expose label, current value, and bounds; support keyboard increments.
+Use `.accessibility_label(...)` to name the existing Slider accessibility node. This does not add a visible label.
+
+```rust
+Slider::new(&slider_state)
+    .accessibility_label("Corner radius")
+```
 
 ## Notes
 

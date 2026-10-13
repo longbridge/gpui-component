@@ -5,8 +5,8 @@ use gpui::{
     AccessibleAction, Along, AnyElement, App, AppContext as _, Axis, Bounds, Context, Div,
     DragMoveEvent, Empty, Entity, EntityId, EventEmitter, HitboxBehavior, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, Orientation, ParentElement, Pixels, Point, Render,
-    RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, TouchDragEvent,
-    TouchPhase, Window, div, prelude::FluentBuilder as _, px,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    TouchDragEvent, TouchPhase, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{element_ext::ElementExt, geometry::AxisExt};
@@ -443,6 +443,7 @@ pub struct Slider {
     state: Entity<SliderState>,
     axis: Axis,
     disabled: bool,
+    accessibility_label: Option<SharedString>,
     base: Div,
     children: Vec<AnyElement>,
 }
@@ -453,6 +454,7 @@ impl Slider {
             state: state.clone(),
             axis: Axis::Horizontal,
             disabled: false,
+            accessibility_label: None,
             base: div(),
             children: Vec::new(),
         }
@@ -475,6 +477,12 @@ impl Slider {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Sets the label exposed to accessibility clients.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 }
@@ -502,6 +510,9 @@ impl RenderOnce for Slider {
             .id(("slider", entity_id))
             .test_support()
             .role(Role::Slider)
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .aria_numeric_value(state.value().end() as f64)
             .aria_min_numeric_value(state.min_value() as f64)
             .aria_max_numeric_value(state.max_value() as f64)
