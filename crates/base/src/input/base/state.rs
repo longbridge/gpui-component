@@ -40,7 +40,9 @@ use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
-    InputExtras as _, Position, RopeExt as _, element::RIGHT_MARGIN, layout::LastLayout,
+    InputExtras as _, Position, RopeExt as _,
+    element::RIGHT_MARGIN,
+    layout::{InputHit, InputHitArea, LastLayout},
 };
 use crate::{AutoScroll, StepAction};
 
@@ -405,6 +407,8 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) input_bounds: Bounds<Pixels>,
     /// The text bounds
     pub(super) last_bounds: Option<Bounds<Pixels>>,
+    /// The gutter bounds, `None` without a gutter.
+    pub(super) last_gutter_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<CursorSelection>,
     pub(super) selecting: bool,
     /// Anchor point of an in-progress columnar (block) selection.
@@ -774,6 +778,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             mode: LayoutMode::default(),
             last_layout: None,
             last_bounds: None,
+            last_gutter_bounds: None,
             last_selected_range: None,
             column_select_start: None,
             last_cursor: None,
@@ -3703,6 +3708,57 @@ impl<M: InputModeKind> InputBaseState<M> {
         Some(Bounds::new(
             point(self.input_bounds.origin.x, last_bounds.origin.y + top),
             gpui::size(self.input_bounds.size.width, height),
+        ))
+    }
+
+    /// Return the bounds of the gutter as last painted, from the text's margin to
+    /// the outer edge of the input's padding.
+    ///
+    /// Returns `None` before the first paint and when the input has no gutter.
+    pub fn gutter_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.last_gutter_bounds
+    }
+
+    /// Return what `position`, in window coordinates, is over, as last painted.
+    ///
+    /// A point on a spacer row is beside the row of text it stands by, as for
+    /// a click. Returns `None` before the first paint and outside the input.
+    pub fn hit_test(&self, position: Point<Pixels>) -> Option<InputHit> {
+        let last_layout = self.last_layout.as_ref()?;
+        let last_bounds = self.last_bounds?;
+        let beside = last_layout.row_at(position.y - last_bounds.origin.y);
+        let spacer = beside.is_some_and(|(_, spacer)| spacer);
+
+        if self
+            .last_gutter_bounds
+            .is_some_and(|gutter| gutter.contains(&position))
+        {
+            let folding = self.mode.is_folding();
+            let column = last_layout.gutter_order.iter().copied().find(|&column| {
+                let (x, width) = super::element::gutter_column(last_layout, folding, column);
+                let left = self.input_bounds.origin.x + x;
+                position.x >= left && position.x < left + width
+            });
+            return Some(InputHit::new(
+                InputHitArea::Gutter { column },
+                beside.map(|(row, _)| row),
+                spacer,
+            ));
+        }
+
+        let paddings = self.editor_paddings;
+        let outer = Bounds::from_corners(
+            self.input_bounds.origin - point(paddings.left, paddings.top),
+            self.input_bounds.bottom_right() + point(paddings.right, paddings.bottom),
+        );
+        if !outer.contains(&position) {
+            return None;
+        }
+        let (offset, _) = self.index_for_mouse_position(position);
+        Some(InputHit::new(
+            InputHitArea::Text { offset },
+            Some(self.text.offset_to_point(offset).row),
+            spacer,
         ))
     }
 
