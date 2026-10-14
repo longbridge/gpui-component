@@ -106,9 +106,9 @@ matching Cargo feature, such as `tree-sitter-rust` or `tree-sitter-markdown`;
 use `tree-sitter-languages` to bundle all built-in grammars.
 
 Highlighting comes from one of two engines, chosen with a Cargo feature of
-`gpui-kit`:
+`gpui-kit`. Neither is enabled by default.
 
-- `tree-sitter` (default) parses a syntax tree, which also drives folding and
+- `tree-sitter` parses a syntax tree, which also drives folding and
   syntax-aware editing. Each language is a grammar feature as above; all of
   them together add tens of megabytes to an application.
 - `syntect` highlights about 200 languages with regular expressions for a few
@@ -117,7 +117,7 @@ Highlighting comes from one of two engines, chosen with a Cargo feature of
   rather than a structural editor:
 
 ```toml
-gpui-kit = { version = "{{gpui_kit_version}}", default-features = false, features = ["component", "assets", "syntect"] }
+gpui-kit = { version = "{{gpui_kit_version}}", features = ["syntect"] }
 ```
 
 With both enabled, `tree-sitter` is used.

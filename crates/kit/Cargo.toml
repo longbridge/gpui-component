@@ -16,7 +16,7 @@ edition.workspace = true
 workspace = true
 
 [features]
-default = ["component", "assets", "tree-sitter"]
+default = ["component", "assets"]
 # Select GPUI Fast across the core, platforms, and already-enabled layers.
 gpui-fast = ["dep:gpui-fast", "dep:gpui-fast-platform", "dep:gpui-fast-web", "gpui-base/gpui-fast", "gpui-component?/gpui-fast", "gpui-kit-assets?/gpui-fast"]
 # The styled component library, `gpui_kit::component`. Initializes `gpui-base` too.
@@ -35,8 +35,7 @@ speech = ["component", "gpui-component/speech"]
 # and syntax-aware editing. Each language is a `tree-sitter-*` grammar feature.
 tree-sitter = ["component", "gpui-component/tree-sitter"]
 # Lighter syntax highlighting: about 200 languages from syntect for a few
-# megabytes, with no syntax tree. Turn off default features to leave out
-# tree-sitter; with both enabled, tree-sitter is used.
+# megabytes, with no syntax tree. With both enabled, tree-sitter is used.
 syntect = ["component", "gpui-component/syntect"]
 tree-sitter-languages = ["component", "gpui-component/tree-sitter-languages"]
 tree-sitter-astro = ["component", "gpui-component/tree-sitter-astro"]
