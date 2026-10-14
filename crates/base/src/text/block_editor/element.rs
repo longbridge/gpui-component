@@ -20,11 +20,7 @@ use gpui::{
 };
 
 use super::{
-    cull::Measured,
-    frame::FrameSink,
-    id::BlockId,
-    projection::{LeafInfo, Snapshot},
-    state::*,
+    cull::Measured, frame::FrameSink, id::BlockId, projection::Snapshot, state::*,
     style::BlockEditorStyle,
 };
 use crate::text::{
@@ -105,10 +101,11 @@ impl RenderOnce for BlockEditor {
                 let snapshot = state.snapshot();
                 let mut backgrounds: HashMap<u64, Vec<(Range<usize>, Hsla)>> = HashMap::new();
                 for (block, range) in state.selection_ranges() {
-                    let range = match snapshot.leaves.iter().find(|l| l.block == block) {
-                        Some(LeafInfo {
-                            atomic: true, len, ..
-                        }) => 0..*len,
+                    // Atoms paint whole (O(1) lookup, not a scan of the leaves).
+                    let range = match state.model.doc.get(block).map(|e| &e.content) {
+                        Some(super::document::BlockContent::Atom(_)) => {
+                            0..state.model.doc.leaf_len(block).unwrap_or(range.end)
+                        }
                         _ => range,
                     };
                     backgrounds

@@ -238,10 +238,12 @@ impl BlockEditorModel {
 
     /// Per-leaf `(block, start, end)` covered by a text range.
     pub(crate) fn text_ranges(&self, range: ResolvedSelection) -> Vec<(BlockId, usize, usize)> {
+        // O(1) leaf lookups through the order index (Phase 5: painting a
+        // selection costs O(selected leaves), not O(document)).
         let leaves = self.doc.leaves();
         let (Some(si), Some(ei)) = (
-            leaves.iter().position(|id| *id == range.start.block),
-            leaves.iter().position(|id| *id == range.end.block),
+            self.doc.order.rank(range.start.block).map(|r| r as usize),
+            self.doc.order.rank(range.end.block).map(|r| r as usize),
         ) else {
             return Vec::new();
         };
