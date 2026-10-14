@@ -1076,6 +1076,7 @@ impl StoryRoot {
                     content.child(with_command_entries(
                         Command::new(&theme_palette)
                             .bordered(false)
+                            .rounded(cx.theme().radius_lg)
                             .placeholder("Search themes...")
                             .max_h(px(400.))
                             .scroll_bounce(true)
@@ -1156,6 +1157,7 @@ impl StoryRoot {
                     content.child(with_command_entries(
                         Command::new(&component_palette)
                             .bordered(false)
+                            .rounded(cx.theme().radius_lg)
                             .placeholder("Search components...")
                             .max_h(px(400.))
                             .scroll_bounce(true)
