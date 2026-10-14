@@ -2343,6 +2343,17 @@ impl PrepaintState {
     }
 }
 
+/// Align a caret to whole device pixels.
+///
+/// Text positions are fractional, and a one-pixel caret at a fractional x is
+/// spread over two device pixels by antialiasing, which draws it faint and
+/// thin. Rounding its edges to the device grid keeps every caret crisp.
+fn snap_caret_to_device_pixels(bounds: Bounds<Pixels>, scale_factor: f32) -> Bounds<Pixels> {
+    let x = (bounds.origin.x * scale_factor).round() / scale_factor;
+    let width = (bounds.size.width * scale_factor).round().max(px(1.)) / scale_factor;
+    Bounds::new(point(x, bounds.origin.y), size(width, bounds.size.height))
+}
+
 impl<M: InputModeKind> IntoElement for TextElement<M> {
     type Element = Self;
 
@@ -3265,7 +3276,10 @@ impl<M: InputModeKind> Element for TextElement<M> {
         // Paint blinking cursors (shared blink state for all carets)
         if focused && show_cursor {
             for cursor_info in prepaint.cursor_infos_with_scroll() {
-                window.paint_quad(fill(cursor_info.bounds, editor_style.caret));
+                window.paint_quad(fill(
+                    snap_caret_to_device_pixels(cursor_info.bounds, window.scale_factor()),
+                    editor_style.caret,
+                ));
             }
         }
 
