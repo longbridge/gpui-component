@@ -80,6 +80,8 @@ impl WebView {
         let origin = Rc::new(Cell::new(gpui::Point::default()));
         #[cfg(target_os = "linux")]
         linux::forward_mouse_down(&webview, origin.clone(), window, cx);
+        #[cfg(target_os = "linux")]
+        linux::match_scale_factor(&webview, window.scale_factor());
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = window;
 
@@ -93,7 +95,7 @@ impl WebView {
             #[cfg(target_os = "linux")]
             composition: None,
             #[cfg(target_os = "linux")]
-            scale_factor: Cell::new(0.),
+            scale_factor: Cell::new(window.scale_factor()),
             #[cfg(target_os = "linux")]
             origin,
         }
@@ -147,6 +149,8 @@ impl WebView {
 
     /// Apply full document bounds and an inherited clip without changing the DOM viewport.
     /// Empty clips hide the native surface while preserving the loaded document.
+    /// On macOS and Linux, partial clipping requires native window composition;
+    /// fully visible documents also work without composition.
     pub fn set_geometry(
         &self,
         document: Bounds<Pixels>,
@@ -154,10 +158,9 @@ impl WebView {
     ) -> anyhow::Result<()> {
         let visible = document.intersect(&clip);
         if visible.is_empty() || !self.visible.get() {
-            self.webview.set_visible(false)?;
+            self.set_native_visible(false)?;
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             if let Some(surface) = &self.composition {
-                surface.set_visible(false)?;
                 // Hidden preparation still gives WebKit its real layout width.
                 if self.visible.get() && !document.is_empty() {
                     surface.set_geometry(&self.webview, document, document)?;
@@ -173,24 +176,41 @@ impl WebView {
             return Ok(());
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        anyhow::bail!("Inline WebView clipping requires native window composition");
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        {
-            self.set_bounds(Rect {
-                position: wry::dpi::LogicalPosition::new(
-                    f64::from(document.origin.x),
-                    f64::from(document.origin.y),
-                )
-                .into(),
-                size: wry::dpi::LogicalSize::new(
-                    f64::from(document.size.width),
-                    f64::from(document.size.height),
-                )
-                .into(),
-            })?;
-            self.webview.set_visible(true)?;
-            Ok(())
+        anyhow::ensure!(
+            visible == document,
+            "Inline WebView clipping requires native window composition"
+        );
+        #[cfg(target_os = "linux")]
+        let rect = linux::device_bounds(document, self.scale_factor.get());
+        #[cfg(not(target_os = "linux"))]
+        let rect = Rect {
+            position: wry::dpi::LogicalPosition::new(
+                f64::from(document.origin.x),
+                f64::from(document.origin.y),
+            )
+            .into(),
+            size: wry::dpi::LogicalSize::new(
+                f64::from(document.size.width),
+                f64::from(document.size.height),
+            )
+            .into(),
+        };
+        self.set_bounds(rect)?;
+        self.set_native_visible(true)?;
+        Ok(())
+    }
+
+    // Geometry can temporarily hide the native view without changing the caller's
+    // visibility preference, so prepaint can retry when the view becomes unclipped.
+    fn set_native_visible(&self, visible: bool) -> wry::Result<()> {
+        self.webview.set_visible(visible)?;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if let Some(surface) = &self.composition {
+            surface
+                .set_visible(visible)
+                .map_err(|error| wry::Error::Io(std::io::Error::other(error)))?;
         }
+        Ok(())
     }
 
     /// Set visibility and report native errors without discarding the loaded page.
@@ -201,13 +221,7 @@ impl WebView {
         } else {
             Ok(())
         };
-        self.webview.set_visible(visible)?;
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if let Some(surface) = &self.composition {
-            surface
-                .set_visible(visible)
-                .map_err(|error| wry::Error::Io(std::io::Error::other(error)))?;
-        }
+        self.set_native_visible(visible)?;
         self.visible.set(visible);
         focus_result
     }
@@ -381,7 +395,7 @@ impl Element for WebViewElement {
         let clip = window.content_mask().bounds;
         if let Err(error) = parent.set_geometry(bounds, clip) {
             log::warn!("WebView geometry update failed: {error:#}");
-            let _ = parent.set_visible(false);
+            let _ = parent.set_native_visible(false);
             return None;
         }
         let visible = bounds.intersect(&clip);
