@@ -320,4 +320,207 @@ impl BlockEditorModel {
         })?;
         Ok(true)
     }
+
+    /// Enter in a cell (D13). Returns `false` when the caret is not in a
+    /// cell. Each branch is one undo step:
+    /// - a body row whose cells are all empty: remove it and leave the
+    ///   table to a new paragraph after it;
+    /// - the last row: append an empty row, caret in its first cell;
+    /// - any other row: the same column of the next row.
+    pub(crate) fn table_enter(&mut self) -> Result<bool, CommandError> {
+        let Some((table, cell)) = self.current_cell() else {
+            return Ok(false);
+        };
+        let Some((r, c)) = cell_coords(&self.doc, table, cell) else {
+            return Ok(false);
+        };
+        let grid = grid(&self.doc, table);
+        let row_empty = grid[r]
+            .iter()
+            .all(|id| self.doc.leaf_len(*id).unwrap_or(0) == 0);
+        if r > 0 && row_empty {
+            let para = empty_paragraph();
+            let target = para.id;
+            self.transact(EditOrigin::Command("table_exit_row"), |tx| {
+                tx.remove(table, r..r + 1)?;
+                let (parent, index) = tx
+                    .doc
+                    .index_in_parent(table)
+                    .ok_or(PositionError::UnknownBlock(table))?;
+                tx.insert(parent, index + 1, vec![para])?;
+                Ok(Some(BlockSelection::caret(BlockPosition::new(target, 0))))
+            })?;
+            return Ok(true);
+        }
+        if r + 1 == grid.len() {
+            let cols = grid.iter().map(Vec::len).max().unwrap_or(1).max(1);
+            let row = empty_row(cols);
+            let mut ids = Vec::new();
+            row.ids(&mut ids);
+            let first = ids[1];
+            let rows = grid.len();
+            self.transact(EditOrigin::Command("table_add_row"), |tx| {
+                tx.insert(table, rows, vec![row])?;
+                Ok(Some(BlockSelection::caret(BlockPosition::new(first, 0))))
+            })?;
+            return Ok(true);
+        }
+        let next = &grid[r + 1];
+        let target = next[c.min(next.len().saturating_sub(1))];
+        self.set_selection(BlockSelection::caret(BlockPosition::new(target, 0)))?;
+        Ok(true)
+    }
+
+    /// Shift+Enter in a cell: a soft line break (`<br>` in Markdown).
+    pub(crate) fn cell_soft_break(&mut self) -> Result<bool, CommandError> {
+        let Some((_, cell)) = self.current_cell() else {
+            return Ok(false);
+        };
+        let BlockSelection::Text { anchor, head } = self.selection().clone() else {
+            return Ok(false);
+        };
+        if anchor.block != cell || head.block != cell {
+            return Ok(false);
+        }
+        let (lo, hi) = (
+            anchor.offset.min(head.offset),
+            anchor.offset.max(head.offset),
+        );
+        let marks = self
+            .doc
+            .inline(cell)
+            .and_then(|i| i.mark_before(lo).cloned())
+            .unwrap_or_default();
+        self.transact(EditOrigin::Command("cell_soft_break"), |tx| {
+            tx.replace_text(cell, lo..hi, InlineText::plain("\n", marks))?;
+            Ok(Some(BlockSelection::caret(BlockPosition::new(
+                cell,
+                lo + 1,
+            ))))
+        })?;
+        Ok(true)
+    }
+
+    /// Down past the last row or Cmd/Ctrl+Enter: the caret goes to the
+    /// text block after the table, creating an empty paragraph (one undo
+    /// step) when there is none. Returns `false` outside a table.
+    pub(crate) fn exit_table(&mut self) -> Result<bool, CommandError> {
+        let Some((table, _)) = self.current_cell() else {
+            return Ok(false);
+        };
+        let Some((parent, index)) = self.doc.index_in_parent(table) else {
+            return Ok(false);
+        };
+        if let Some(next) = self.doc.children(parent).get(index + 1).copied()
+            && self.doc.inline(next).is_some()
+        {
+            self.set_selection(BlockSelection::caret(BlockPosition::new(next, 0)))?;
+            return Ok(true);
+        }
+        let para = empty_paragraph();
+        let target = para.id;
+        self.transact(EditOrigin::Command("table_exit"), |tx| {
+            tx.insert(parent, index + 1, vec![para])?;
+            Ok(Some(BlockSelection::caret(BlockPosition::new(target, 0))))
+        })?;
+        Ok(true)
+    }
+
+    /// Whether the caret is in the last row of a table.
+    pub(crate) fn in_last_table_row(&self) -> bool {
+        self.current_cell().is_some_and(|(table, cell)| {
+            cell_coords(&self.doc, table, cell)
+                .is_some_and(|(r, _)| r + 1 == self.doc.children(table).len())
+        })
+    }
+
+    /// The table input rule (D13): a paragraph `| a | b |` becomes a table
+    /// with those cells as the header row and one empty body row, caret in
+    /// its first cell; no alignment. One undo step. Returns `false` when
+    /// `block` is not such a paragraph.
+    pub(crate) fn paragraph_to_table(&mut self, block: BlockId) -> Result<bool, CommandError> {
+        if self.doc.kind(block) != Some(&BlockKindData::Paragraph)
+            || table_of(&self.doc, block).is_some()
+        {
+            return Ok(false);
+        }
+        let Some(inline) = self.doc.inline(block).cloned() else {
+            return Ok(false);
+        };
+        let Some(ranges) = table_row_cells(inline.text()) else {
+            return Ok(false);
+        };
+        let cols = ranges.len();
+        let header = DetachedBlock::container(
+            BlockKindData::TableRow,
+            ranges
+                .into_iter()
+                .map(|r| {
+                    DetachedBlock::leaf(
+                        BlockKindData::TableCell,
+                        BlockContent::Inline(inline.slice(r)),
+                    )
+                })
+                .collect(),
+        );
+        let body = empty_row(cols);
+        let mut ids = Vec::new();
+        body.ids(&mut ids);
+        let first = ids[1];
+        let table = DetachedBlock::container(
+            BlockKindData::Table {
+                aligns: vec![ColumnumnAlign::None; cols],
+            },
+            vec![header, body],
+        );
+        self.transact(EditOrigin::InputRule("table"), |tx| {
+            let (parent, index) = tx
+                .doc
+                .index_in_parent(block)
+                .ok_or(PositionError::UnknownBlock(block))?;
+            tx.remove_block(block)?;
+            tx.insert(parent, index, vec![table])?;
+            Ok(Some(BlockSelection::caret(BlockPosition::new(first, 0))))
+        })?;
+        Ok(true)
+    }
+}
+
+fn empty_paragraph() -> DetachedBlock {
+    DetachedBlock::leaf(
+        BlockKindData::Paragraph,
+        BlockContent::Inline(InlineText::new()),
+    )
+}
+
+/// The trimmed byte ranges of the cells of a `| a | b |` line, if it is one
+/// (starts and ends with `|`, at least one cell; `\|` does not split).
+pub(crate) fn table_row_cells(text: &str) -> Option<Vec<std::ops::Range<usize>>> {
+    let start = text.len() - text.trim_start().len();
+    let end = text.trim_end().len();
+    let line = &text[start..end];
+    if line.len() < 2 || !line.starts_with('|') || !line.ends_with('|') || line.contains('\n') {
+        return None;
+    }
+    let mut bars = Vec::new();
+    let bytes = text.as_bytes();
+    for i in start..end {
+        if bytes[i] == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
+            bars.push(i);
+        }
+    }
+    if bars.len() < 2 {
+        return None;
+    }
+    Some(
+        bars.windows(2)
+            .map(|w| {
+                let (a, b) = (w[0] + 1, w[1]);
+                let cell = &text[a..b];
+                let lead = cell.len() - cell.trim_start().len();
+                a + lead..a + cell.trim_end().len()
+            })
+            .map(|r| if r.start > r.end { r.start..r.start } else { r })
+            .collect(),
+    )
 }

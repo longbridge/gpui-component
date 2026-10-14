@@ -58,7 +58,7 @@ mod serialize;
 mod state;
 mod step;
 mod style;
-mod table;
+pub(crate) mod table;
 mod transaction;
 mod undo;
 

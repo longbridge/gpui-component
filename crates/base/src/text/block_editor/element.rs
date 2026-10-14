@@ -336,6 +336,8 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_backspace))
             .on_action(window.listener_for(s, BlockEditorState::on_delete))
             .on_action(window.listener_for(s, BlockEditorState::on_enter))
+            .on_action(window.listener_for(s, BlockEditorState::on_soft_break))
+            .on_action(window.listener_for(s, BlockEditorState::on_exit_block))
             .on_action(window.listener_for(s, BlockEditorState::on_move_left))
             .on_action(window.listener_for(s, BlockEditorState::on_move_right))
             .on_action(window.listener_for(s, BlockEditorState::on_move_up))

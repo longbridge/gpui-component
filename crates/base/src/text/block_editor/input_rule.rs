@@ -19,6 +19,7 @@ pub(crate) enum RuleKind {
     HorizontalRule,
     InlineMarks,
     Link,
+    Table,
 }
 
 impl InputRule {
@@ -60,6 +61,12 @@ impl InputRule {
         Self(RuleKind::Link)
     }
 
+    /// `| a | b |` then Enter at the end of a paragraph: a table whose
+    /// header row holds those cells, plus one empty body row.
+    pub const fn table() -> Self {
+        Self(RuleKind::Table)
+    }
+
     /// Every built-in rule.
     pub fn markdown_defaults() -> Vec<Self> {
         vec![
@@ -72,6 +79,7 @@ impl InputRule {
             Self::horizontal_rule(),
             Self::inline_marks(),
             Self::link(),
+            Self::table(),
         ]
     }
 }

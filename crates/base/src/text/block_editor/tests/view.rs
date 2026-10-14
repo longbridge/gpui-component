@@ -1945,3 +1945,118 @@ fn d14_toolbar_task_toggle(cx: &mut TestAppContext) {
     });
     assert_eq!(source(&editor, cx).trim_end(), "- a");
 }
+
+fn caret_cell(editor: &Entity<BlockEditorState>, cx: &VisualTestContext) -> Option<(usize, usize)> {
+    editor.read_with(cx, |e, _| {
+        let (table, cell) = e.model.current_cell()?;
+        crate::text::block_editor::table::cell_coords(&e.model.doc, table, cell)
+    })
+}
+
+#[gpui::test]
+fn d13_table_rule_on_enter(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "Start");
+    caret_at(&editor, cx, 0, 5);
+    keys(cx, "end enter");
+    ime_type(&editor, cx, "| Name | **Age** |");
+    // Not on the closing '|': still a paragraph.
+    assert_eq!(source(&editor, cx), "Start\n\n\\| Name \\| **Age** \\|");
+    keys(cx, "enter");
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "Start\n\n| Name | **Age** |\n| --- | --- |\n|  |  |"
+    );
+    assert_eq!(caret_cell(&editor, cx), Some((1, 0)));
+    ime_type(&editor, cx, "Ann");
+    assert!(source(&editor, cx).contains("| Ann |  |"));
+    keys(cx, &format!("{M}-z"));
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx), "Start\n\n\\| Name \\| **Age** \\|");
+    // A one-cell row and a non-row are handled; disabled rule types literally.
+    let (editor, cx) = open(cx, "| solo |");
+    caret_at(&editor, cx, 0, 8);
+    keys(cx, "enter");
+    assert_eq!(source(&editor, cx).trim_end(), "| solo |\n| --- |\n|  |");
+    let (editor, cx) = open(cx, "a | b |");
+    caret_at(&editor, cx, 0, 7);
+    keys(cx, "enter");
+    assert!(!source(&editor, cx).contains("---"));
+}
+
+#[gpui::test]
+fn d13_enter_in_tables(cx: &mut TestAppContext) {
+    let src = "| h1 | h2 |\n| --- | --- |\n| a | b |\n| c | d |";
+    let (editor, cx) = open(cx, src);
+    // Header (0,1) -> next row, same column; no undo step.
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "enter");
+    assert_eq!(caret_cell(&editor, cx), Some((1, 1)));
+    assert_eq!(source(&editor, cx).trim_end(), src);
+    keys(cx, "enter");
+    assert_eq!(caret_cell(&editor, cx), Some((2, 1)));
+    // Last row: append an empty row, caret in its first cell.
+    keys(cx, "enter");
+    assert_eq!(caret_cell(&editor, cx), Some((3, 0)));
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n|  |  |"));
+    // All-empty row: removed, caret in a new paragraph after the table.
+    keys(cx, "enter");
+    assert_eq!(caret_cell(&editor, cx), None);
+    ime_type(&editor, cx, "after");
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n\nafter"));
+    // One undo step each.
+    keys(cx, &format!("{M}-z"));
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n|  |  |"));
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), src);
+}
+
+#[gpui::test]
+fn d13_shift_enter_is_a_cell_soft_break(cx: &mut TestAppContext) {
+    let src = "| h |\n| --- |\n| ab |";
+    let (editor, cx) = open(cx, src);
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "shift-enter");
+    assert_eq!(source(&editor, cx).trim_end(), "| h |\n| --- |\n| a<br>b |");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), src);
+    // Round trip.
+    let br = "| x<br>y | z |\n| --- | --- |\n| 1<br>2<br>3 |  |";
+    let (editor, cx) = open(cx, br);
+    assert_eq!(source(&editor, cx).trim_end(), br);
+    // Tab unchanged: next cell, text selected.
+    caret_at(&editor, cx, 0, 0);
+    keys(cx, "tab");
+    assert_eq!(caret_cell(&editor, cx), Some((0, 1)));
+}
+
+#[gpui::test]
+fn d13_leave_table_with_down_or_secondary_enter(cx: &mut TestAppContext) {
+    let src = "| h |\n| --- |\n| a |";
+    // Cmd/Ctrl+Enter with no block after: creates a paragraph (undoable).
+    let (editor, cx) = open(cx, src);
+    caret_at(&editor, cx, 0, 1);
+    keys(cx, &format!("{M}-enter"));
+    assert_eq!(caret_cell(&editor, cx), None);
+    ime_type(&editor, cx, "p");
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n\np"));
+    // Down past the last row into an existing paragraph: no new block.
+    let (editor, cx) = open(cx, &format!("{src}\n\nnext"));
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "down");
+    assert_eq!(caret_cell(&editor, cx), None);
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n\nnext"));
+    ime_type(&editor, cx, "X");
+    assert_eq!(source(&editor, cx).trim_end(), format!("{src}\n\nXnext"));
+    // Down with nothing after creates one; one undo removes it.
+    let (editor, cx) = open(cx, src);
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "down");
+    assert_eq!(caret_cell(&editor, cx), None);
+    assert_eq!(source(&editor, cx).trim_end(), src);
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(
+        caret_cell(&editor, cx),
+        Some((1, 0)).or(caret_cell(&editor, cx))
+    );
+}

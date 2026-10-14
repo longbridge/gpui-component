@@ -110,8 +110,9 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
                     .children(*row)
                     .iter()
                     .map(|cell| match doc.inline(*cell) {
+                        // A soft line break in a cell is `<br>` (D13).
                         Some(inline) => inline_markdown(inline)
-                            .replace('\n', " ")
+                            .replace('\n', "<br>")
                             .trim()
                             .to_string(),
                         None => String::new(),

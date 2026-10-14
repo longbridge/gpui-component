@@ -54,6 +54,8 @@ actions!(
         ToggleBold,
         ToggleItalic,
         EditLink,
+        SoftBreak,
+        ExitBlock,
         ToggleCode,
         Indent,
         Outdent,
@@ -106,6 +108,8 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new(&format!("{m}-i"), ToggleItalic, ctx),
         KeyBinding::new(&format!("{m}-e"), ToggleCode, ctx),
         KeyBinding::new(&format!("{m}-k"), EditLink, ctx),
+        KeyBinding::new("shift-enter", SoftBreak, ctx),
+        KeyBinding::new(&format!("{m}-enter"), ExitBlock, ctx),
         KeyBinding::new(&format!("{m}-c"), Copy, ctx),
         KeyBinding::new(&format!("{m}-x"), Cut, ctx),
         KeyBinding::new(&format!("{m}-v"), Paste, ctx),
@@ -769,6 +773,16 @@ impl BlockEditorState {
         let target = match (visual, adjacent) {
             // Within the block, or into the laid-out adjacent leaf.
             (Some(t), _) if t.block == head.block => t,
+            // Down past a table's last row leaves the table (D13).
+            _ if down && !extend && self.model.in_last_table_row() => {
+                drop(frame);
+                self.edit(
+                    EditOrigin::Command("table_exit"),
+                    |m| m.exit_table().map(|_| ()),
+                    cx,
+                );
+                return;
+            }
             (Some(t), Some(next)) if t.block == next.block => t,
             // Up/down inside a table goes to the cell above/below (cells of
             // one table are laid out together).
@@ -1161,6 +1175,38 @@ impl BlockEditorState {
             self.fence_to_code_block(caret.block, lang, cx);
             return;
         }
+        // Enter in a table cell (D13).
+        if !self.readonly && self.model.current_cell().is_some() {
+            self.model.break_coalescing();
+            self.edit(
+                EditOrigin::Command("table_enter"),
+                |m| m.table_enter().map(|_| ()),
+                cx,
+            );
+            self.model.break_coalescing();
+            return;
+        }
+        // "| a | b |" then Enter at the end of a paragraph: a table.
+        if !self.readonly
+            && self.rule_on(RuleKind::Table)
+            && let Some(caret) = self.model.caret()
+            && caret.offset == self.model.doc.leaf_len(caret.block).unwrap_or(0)
+            && self
+                .model
+                .doc
+                .inline(caret.block)
+                .is_some_and(|i| super::table::table_row_cells(i.text()).is_some())
+        {
+            let block = caret.block;
+            self.model.break_coalescing();
+            self.edit(
+                EditOrigin::InputRule("table"),
+                |m| m.paragraph_to_table(block).map(|_| ()),
+                cx,
+            );
+            self.model.break_coalescing();
+            return;
+        }
         // "---" then Enter in an otherwise empty paragraph: a rule.
         if !self.readonly
             && self.rule_on(RuleKind::HorizontalRule)
@@ -1186,6 +1232,46 @@ impl BlockEditorState {
         }
         self.edit(EditOrigin::Command("split_block"), |m| m.split_block(), cx);
     }
+    /// Shift+Enter: a soft line break in a table cell; Enter elsewhere.
+    pub(crate) fn on_soft_break(
+        &mut self,
+        _: &SoftBreak,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.end_composition();
+        if self.readonly {
+            return;
+        }
+        if self.model.current_cell().is_some() {
+            self.model.break_coalescing();
+            self.edit(
+                EditOrigin::Command("cell_soft_break"),
+                |m| m.cell_soft_break().map(|_| ()),
+                cx,
+            );
+            self.model.break_coalescing();
+        } else {
+            self.on_enter(&Enter, window, cx);
+        }
+    }
+
+    /// Cmd/Ctrl+Enter: leave a table to the block after it.
+    pub(crate) fn on_exit_block(&mut self, _: &ExitBlock, _: &mut Window, cx: &mut Context<Self>) {
+        self.end_composition();
+        if self.readonly || self.model.current_cell().is_none() {
+            cx.propagate();
+            return;
+        }
+        self.model.break_coalescing();
+        self.edit(
+            EditOrigin::Command("table_exit"),
+            |m| m.exit_table().map(|_| ()),
+            cx,
+        );
+        self.model.break_coalescing();
+    }
+
     pub(crate) fn on_move_left(&mut self, _: &MoveLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.horizontal(false, false, cx);
     }

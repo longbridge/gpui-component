@@ -545,11 +545,25 @@ The default rules:
 - *Horizontal rule:* `---` then Enter.
 - *Inline marks:* `` `x` ``, `**x**`, `*x*`, `~~x~~` on the closing delimiter.
 - *Link:* `[text](url)` on the closing `)`.
+- *Table:* a paragraph line that starts and ends with `|` and has at least one cell (for example `| Name | Age |`) converts on Enter at its end, not on the closing `|`.
+  - The cells (marks kept) become the header row, and an empty body row is added with the caret in its first cell.
+  - No alignment is set (`---`).
+  - One undo step brings back the literal line.
+
+*Keys in tables (D13):*
+- *Enter:*
+  - In the last row, it appends an empty row with the caret in its first cell.
+  - In a body row whose cells are all empty, it deletes the row and leaves the table to a new paragraph after it.
+  - In any other row, it moves to the same column of the next row (a caret move, not an edit).
+- *Shift+Enter:* a soft line break in the cell, saved as `<br>`. `<br>` in a cell loads back as a line break, so it round-trips.
+- *Tab / Shift+Tab:* unchanged.
+- *Down past the last row, or Cmd/Ctrl+Enter:* moves to the text block after the table, and creates an empty paragraph when there is none.
+- Each edit is one undo step.
 
 Block rules fire only at the start of a paragraph. An empty list turns them all off.
 *Rationale:* The rules in TipTap/ProseMirror are composable, but the spike's rules run against our own model and caret. For now the API is a closed set of built-ins, a newtype over a private enum, so custom closure rules can be added later without breaking anything.
 *Alternative considered:* Closure-based rules (`Fn(&str) -> Option<Edit>`) now. That is deferred until there is a consumer.
-*Status:* The rules are implemented and tested: typing through `replace_text_in_range` (the platform input path), one undo step each, and disabling.
+*Status:* The rules (table rule and table keys included) are implemented and tested: typing through `replace_text_in_range` (the platform input path), one undo step each, and disabling.
 
 **D14. Links and tasks UI: Cmd/Ctrl+K opens a popover to add, edit or remove a link. Hovering a link shows its URL. Cmd/Ctrl+click on a link emits a `BlockEditorEvent` (the editor never opens a browser). Task checkboxes are clickable through `BlockEditorState::set_task_checked` (one undo step), and the toolbar has a Task toggle (`EditorCommand::ToggleTask`).**
 *Rationale:* The host owns navigation and policy, and the popover is the one in-editor affordance needed for marks that carry data.
