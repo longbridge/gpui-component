@@ -179,15 +179,20 @@ quickjs-jit-sys = { opt-level = 3 }
 quickjs-jit-core = { opt-level = 3 }
 cap-std = { opt-level = 3 }
 
+# Stripping the symbol table costs no build time and removes about a quarter of
+# a release binary (`gpui-shell`: 106 MB to 78 MB on Linux x86_64).
+[profile.release]
+strip = "symbols"
+
 # The profile the published `gpui-shell` binaries are built with (see
-# `.github/workflows/release-shell.yml`). It is separate from `release` so that
-# local release builds keep their link time. `panic` stays `unwind`: the shell
-# turns a panic in a binding into a script error with `catch_unwind`.
+# `.github/workflows/release-shell.yml`). LTO lives here rather than in
+# `release` because it adds minutes to every release link. `panic` stays
+# `unwind`: the shell turns a panic in a binding into a script error with
+# `catch_unwind`.
 [profile.dist]
 inherits = "release"
 lto = "fat"
 codegen-units = 1
-strip = "symbols"
 
 [patch.crates-io]
 # LLRT's public modules still name their compatible binding dependency
