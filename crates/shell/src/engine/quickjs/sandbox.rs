@@ -294,12 +294,32 @@ fn install_absent_globals(ctx: &Ctx<'_>) -> JsResult<()> {
 /// Output is captured rather than inherited. A script that runs a command
 /// almost always wants what it said, and in a windowed application a child
 /// writing to the host's stdout is writing to nowhere a user will look.
-fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<Promise<'js>> {
-    if !host::capabilities().may_run(&command) {
-        return Err(js_error::type_error(
-            &ctx,
-            &CapabilityError::ExecuteDenied(command).to_string(),
-        ));
+///
+/// The deadline is 30 seconds unless `options.timeoutMs` names another. A
+/// command that runs for longer than that, or whose output should be read as
+/// it arrives, wants [`spawn`] instead.
+fn run<'js>(
+    ctx: Ctx<'js>,
+    command: String,
+    args: Opt<Vec<String>>,
+    options: Opt<Value<'js>>,
+) -> JsResult<Promise<'js>> {
+    const API: &str = "process.run(command, args, options)";
+    ensure_may_run(&ctx, &command)?;
+    let options = options.0.and_then(|value| value.into_object());
+    let cwd = options
+        .as_ref()
+        .map(|options| working_directory(&ctx, API, options))
+        .transpose()?
+        .flatten();
+    let mut limits = crate::process::Limits::default();
+    if let Some(timeout) = options
+        .as_ref()
+        .map(|options| timeout(&ctx, API, options))
+        .transpose()?
+        .flatten()
+    {
+        limits = limits.with_timeout(timeout);
     }
 
     let args = args.0.unwrap_or_default();
@@ -313,11 +333,230 @@ fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<
             crate::process::run_bounded(
                 &command,
                 &args,
-                crate::process::Limits::default(),
+                cwd.as_deref(),
+                limits,
                 worker_cancellation,
             )
         },
     )
+}
+
+/// Starts a command and streams what it does: `process.spawn`.
+///
+/// For a command that runs for minutes, talks over stdin, or is read line by
+/// line as it works — an AI command line in JSON-lines mode is the case it was
+/// made for. The same grant as `run`, and the same empty environment.
+///
+/// The native half returns the control surface (`pid`, `write`, `end`,
+/// `kill`); the prelude wraps it with `on()`, keeping the handlers in script so
+/// nothing here holds a script function past its runtime. Events go to the one
+/// `dispatch` function, through [`scheduler::stream`], which also ties the
+/// child to the view that started it: releasing the view, reloading the
+/// application or closing the window kills it.
+fn spawn_native<'js>(
+    ctx: Ctx<'js>,
+    command: String,
+    args: Vec<String>,
+    options: Value<'js>,
+    dispatch: Function<'js>,
+) -> JsResult<Object<'js>> {
+    const API: &str = "process.spawn(command, args, options)";
+    ensure_may_run(&ctx, &command)?;
+    let mut spawn_options = crate::process::SpawnOptions::default();
+    if let Some(options) = options.into_object() {
+        spawn_options.cwd = working_directory(&ctx, API, &options)?;
+        spawn_options.timeout = timeout(&ctx, API, &options)?;
+        spawn_options.stdin = match options.get::<_, Value>("stdin")? {
+            stdin if stdin.is_undefined() => false,
+            stdin => match stdin
+                .as_string()
+                .and_then(|text| text.to_string().ok())
+                .as_deref()
+            {
+                Some("pipe") => true,
+                Some("null") => false,
+                _ => {
+                    return Err(js_error::type_error(
+                        &ctx,
+                        &format!("{API}: options.stdin must be \"pipe\" or \"null\""),
+                    ));
+                }
+            },
+        };
+        spawn_options.lines = match options.get::<_, Value>("lines")? {
+            lines if lines.is_undefined() => false,
+            lines => lines.as_bool().ok_or_else(|| {
+                js_error::type_error(&ctx, &format!("{API}: options.lines must be a boolean"))
+            })?,
+        };
+    }
+
+    let spawned = crate::process::spawn_streaming(&command, &args, spawn_options)
+        .map_err(|error| js_error::error(&ctx, &error))?;
+    let killer = spawned.killer.clone();
+    let stopper = spawned.killer.clone();
+    scheduler::stream(&ctx, "process.spawn", dispatch, spawned.events, move || {
+        stopper.kill()
+    })
+    .inspect_err(|_| killer.kill())?;
+
+    let child = Object::new(ctx.clone())?;
+    child.set("pid", spawned.pid)?;
+    let stdin = std::rc::Rc::new(std::cell::RefCell::new(spawned.stdin));
+    let writer = stdin.clone();
+    child.set(
+        "write",
+        Func::from(move |ctx: Ctx<'_>, text: String| -> JsResult<()> {
+            let mut stdin = writer.borrow_mut();
+            let stdin = stdin.as_mut().ok_or_else(|| {
+                js_error::type_error(
+                    &ctx,
+                    "ChildProcess.write(text) needs a child spawned with { stdin: \"pipe\" }",
+                )
+            })?;
+            stdin.write(text).map_err(|error| {
+                js_error::error(&ctx, &format!("ChildProcess.write(text): {error}"))
+            })
+        }),
+    )?;
+    child.set(
+        "end",
+        Func::from(move || {
+            if let Some(stdin) = stdin.borrow_mut().as_mut() {
+                stdin.end();
+            }
+        }),
+    )?;
+    child.set("kill", Func::from(move || killer.kill()))?;
+    Ok(child)
+}
+
+/// The `ChildProcess` a script holds: the native control surface plus `on()`.
+const SPAWN_PRELUDE: &str = r#"
+(() => {
+  const spawnNative = globalThis.__process_spawn;
+  delete globalThis.__process_spawn;
+  globalThis.process.spawn = function spawn(command, args, options) {
+    const handlers = { stdout: [], stderr: [], exit: [] };
+    const dispatch = (event, payload, cx) => {
+      for (const handler of handlers[event].slice()) handler(payload, cx);
+    };
+    const child = spawnNative(
+      String(command),
+      Array.from(args ?? [], String),
+      options ?? {},
+      dispatch,
+    );
+    child.on = function on(event, handler) {
+      if (!Object.hasOwn(handlers, event)) {
+        throw new TypeError(
+          `ChildProcess.on(event, handler): event must be "stdout", "stderr" or "exit", not ${JSON.stringify(event)}`,
+        );
+      }
+      if (typeof handler !== "function") {
+        throw new TypeError("ChildProcess.on(event, handler) expects a function");
+      }
+      handlers[event].push(handler);
+      return child;
+    };
+    return Object.freeze(child);
+  };
+})();
+"#;
+
+fn ensure_may_run(ctx: &Ctx<'_>, command: &str) -> JsResult<()> {
+    if host::capabilities().may_run(command) {
+        Ok(())
+    } else {
+        Err(js_error::type_error(
+            ctx,
+            &CapabilityError::ExecuteDenied(command.to_owned()).to_string(),
+        ))
+    }
+}
+
+/// `options.cwd`, which has to be a directory the script could read.
+fn working_directory(
+    ctx: &Ctx<'_>,
+    api: &str,
+    options: &Object<'_>,
+) -> JsResult<Option<std::path::PathBuf>> {
+    let cwd: Value = options.get("cwd")?;
+    if cwd.is_undefined() || cwd.is_null() {
+        return Ok(None);
+    }
+    let Some(cwd) = cwd.as_string().and_then(|text| text.to_string().ok()) else {
+        return Err(js_error::type_error(
+            ctx,
+            &format!("{api}: options.cwd must be a string"),
+        ));
+    };
+    let grant = host::grant(ctx, &cwd, crate::capability::Access::Read)?;
+    let path = grant
+        .system_path()
+        .ok()
+        .filter(|path| path.is_dir())
+        .ok_or_else(|| {
+            js_error::type_error(
+                ctx,
+                &format!("{api}: options.cwd `{cwd}` is not a directory"),
+            )
+        })?;
+    Ok(Some(path))
+}
+
+/// `options.timeoutMs`: a positive number of milliseconds, or absent.
+fn timeout(ctx: &Ctx<'_>, api: &str, options: &Object<'_>) -> JsResult<Option<Duration>> {
+    let timeout: Value = options.get("timeoutMs")?;
+    if timeout.is_undefined() || timeout.is_null() {
+        return Ok(None);
+    }
+    timeout
+        .as_number()
+        .filter(|ms| ms.is_finite() && *ms > 0. && *ms <= u32::MAX as f64)
+        .map(|ms| Some(Duration::from_secs_f64(ms / 1000.)))
+        .ok_or_else(|| {
+            js_error::type_error(
+                ctx,
+                &format!("{api}: options.timeoutMs must be a positive number of milliseconds"),
+            )
+        })
+}
+
+/// A streaming child's events, as `dispatch(name, payload, cx)` receives them.
+impl scheduler::StreamEvent for crate::process::ProcessEvent {
+    fn into_args<'js>(self, ctx: &Ctx<'js>) -> JsResult<(&'static str, Value<'js>)> {
+        Ok(match self {
+            Self::Stdout(text) => ("stdout", text.into_js(ctx)?),
+            Self::Stderr(text) => ("stderr", text.into_js(ctx)?),
+            Self::Exit {
+                code,
+                signal,
+                error,
+            } => {
+                // `null`, not `undefined`, for the half that does not apply:
+                // a process exits with a code or is ended by a signal.
+                let null = || Value::new_null(ctx.clone());
+                let result = Object::new(ctx.clone())?;
+                result.set(
+                    "code",
+                    code.map_or_else(|| Ok(null()), |code| code.into_js(ctx))?,
+                )?;
+                result.set(
+                    "signal",
+                    signal.map_or_else(|| Ok(null()), |signal| signal.into_js(ctx))?,
+                )?;
+                if let Some(error) = error {
+                    result.set("error", error)?;
+                }
+                ("exit", result.into_value())
+            }
+        })
+    }
+
+    fn is_last(&self) -> bool {
+        self.is_exit()
+    }
 }
 
 fn next_tick<'js>(ctx: Ctx<'js>, callback: Function<'js>, args: Rest<Value<'js>>) -> JsResult<()> {
@@ -403,6 +642,9 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
         .enumerable(),
     )?;
     ctx.globals().set("process", process)?;
+    ctx.globals()
+        .set("__process_spawn", Func::from(spawn_native))?;
+    ctx.eval::<(), _>(SPAWN_PRELUDE)?;
     Ok(())
 }
 

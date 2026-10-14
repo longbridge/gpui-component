@@ -668,7 +668,7 @@ fn check_readdir_budget(entries: usize, name_bytes: usize) -> std::io::Result<()
 
 /// The single path gate. Nothing in this module touches the filesystem except
 /// through a [`Grant`] it got back from here.
-fn grant(ctx: &Ctx<'_>, path: &str, access: Access) -> JsResult<Grant> {
+pub(super) fn grant(ctx: &Ctx<'_>, path: &str, access: Access) -> JsResult<Grant> {
     capabilities()
         .open(Path::new(path), access)
         .map_err(|error| js_error::type_error(ctx, &denial(&error)))
