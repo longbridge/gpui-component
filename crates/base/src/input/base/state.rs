@@ -2591,8 +2591,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         let old_offset = self.scroll_handle.offset();
         self.update_scroll_offset(Some(old_offset + delta), cx);
 
-        // Only stop propagation if the offset actually changed
-        if self.scroll_handle.offset() != old_offset {
+        // Text that has room to scroll keeps a scroll over it even where the
+        // text ends, so reaching the end does not scroll the region around the
+        // input; text that fits leaves the scroll to that region.
+        if self.scroll_handle.offset() != old_offset || self.overflows_along(delta) {
             cx.stop_propagation();
         }
 
@@ -2602,6 +2604,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         // The handles follow the text; the menu would sit over whatever
         // scrolls underneath it, so it steps aside until the finger lifts.
         self.edit_menu_on_scroll(event.touch_phase, cx);
+    }
+
+    /// Whether the text has room to scroll along the axis `delta` mostly
+    /// moves on. A trackpad swipe drifts a little off its axis, so the drift
+    /// alone does not claim the scroll.
+    fn overflows_along(&self, delta: Point<Pixels>) -> bool {
+        if delta.y.abs() >= delta.x.abs() {
+            self.is_multi_line()
+                && delta.y != px(0.)
+                && self.scroll_size.height > self.input_bounds.size.height
+        } else {
+            self.scroll_size.width > self.input_bounds.size.width
+        }
     }
 
     pub(super) fn update_scroll_offset(
@@ -5853,6 +5868,42 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_set_line_number_notifies_only_on_change(cx: &mut TestAppContext) {
+        use std::{cell::Cell, rc::Rc};
+
+        cx.update(crate::init);
+        let mut input = None;
+        let window = cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            input = Some(cx.new(|cx| crate::input::EditorState::new(window, cx)));
+            gpui::EmptyView
+        });
+        let input = input.unwrap();
+        let shown = input.read_with(cx, |state, _| state.mode.line_number());
+        let notifications = Rc::new(Cell::new(0));
+        let count = notifications.clone();
+        let _subscription =
+            cx.update(|cx| cx.observe(&input, move |_, _| count.set(count.get() + 1)));
+
+        window
+            .update(cx, |_, window, cx| {
+                input.update(cx, |state, cx| state.set_line_number(shown, window, cx))
+            })
+            .unwrap();
+        assert_eq!(notifications.get(), 0);
+
+        window
+            .update(cx, |_, window, cx| {
+                input.update(cx, |state, cx| state.set_line_number(!shown, window, cx))
+            })
+            .unwrap();
+        assert_eq!(notifications.get(), 1);
+        assert_eq!(
+            input.read_with(cx, |state, _| state.mode.line_number()),
+            !shown
+        );
+    }
+
+    #[gpui::test]
     fn test_set_value_on_unfocused_input_stays_quiet(cx: &mut TestAppContext) {
         use std::{cell::Cell, rc::Rc};
 
@@ -8383,6 +8434,100 @@ mod tests {
             assert!(!state.is_single_line());
             assert!(!state.is_code_editor());
         });
+    }
+
+    #[gpui::test]
+    fn test_prewrap_counts_wrapped_rows_before_the_first_paint(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let text = "select id, name, email, phone from users where active\nlimit 10";
+        for (soft_wrap, wraps) in [(true, true), (false, false)] {
+            let mut input = None;
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                let editor = cx.new(|cx| {
+                    let mut state = crate::input::EditorState::new(window, cx)
+                        .soft_wrap(soft_wrap)
+                        .default_value(text);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    state
+                });
+                input = Some(editor);
+                gpui::EmptyView
+            });
+            let rows = input
+                .unwrap()
+                .read_with(cx, |state, _| state.display_map().wrap_row_count());
+            // Two lines; at 120px the first wraps unless soft wrap is off.
+            assert_eq!(rows > 2, wraps, "soft_wrap({soft_wrap}): {rows} rows");
+            if !wraps {
+                assert_eq!(rows, 2);
+            }
+        }
+    }
+
+    /// Prewrap counts with the state's wrapping indent, as the first layout
+    /// does: continuation rows indented as deep as their line take more rows.
+    #[gpui::test]
+    fn test_prewrap_wraps_with_the_wrapping_indent(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let text = "            select id, name, email, phone from users where active";
+        let mut rows = Vec::new();
+        for indent in [WrappingIndent::Same, WrappingIndent::None] {
+            let mut input = None;
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                input = Some(cx.new(|cx| {
+                    let mut state = crate::input::EditorState::new(window, cx)
+                        .wrapping_indent(indent)
+                        .default_value(text);
+                    state.prewrap(font, px(14.), px(200.), cx);
+                    state
+                }));
+                gpui::EmptyView
+            });
+            rows.push(
+                input
+                    .unwrap()
+                    .read_with(cx, |state, _| state.display_map().wrap_row_count()),
+            );
+        }
+        assert!(rows[0] > rows[1], "rows with Same, None: {rows:?}");
+    }
+
+    /// Once the editor is laid out, layout owns the wrap and prewrap leaves it.
+    #[gpui::test]
+    fn test_prewrap_does_nothing_once_laid_out(cx: &mut TestAppContext) {
+        struct Frame(Entity<crate::input::EditorState>);
+        impl Render for Frame {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                crate::input::InputBase::new("frame")
+                    .h(px(100.))
+                    .child(crate::input::Editor::new(&self.0))
+            }
+        }
+
+        cx.update(crate::init);
+        let text = "select id, name, email, phone from users where active\nlimit 10";
+        let mut input = None;
+        let window = cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::EditorState::new(window, cx).default_value(text));
+            input = Some(state.clone());
+            Frame(state)
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let laid_out = input.read_with(&cx, |state, _| state.display_map().wrap_row_count());
+        assert!(laid_out >= 2, "laid out to {laid_out} rows");
+        let font = cx.update(|window, _| window.text_style().font());
+        input.update(&mut cx, |state, cx| {
+            state.prewrap(font, px(14.), px(60.), cx)
+        });
+        assert_eq!(
+            input.read_with(&cx, |state, _| state.display_map().wrap_row_count()),
+            laid_out
+        );
     }
 
     /// Soft wrap is on by default, for every mode that can wrap.
@@ -11292,9 +11437,47 @@ impl InputBaseState<crate::input::EditorMode> {
         self
     }
 
+    /// The editor's display map for querying wrapped rows and display positions.
+    ///
+    /// Text is prepared during layout or by [`Self::prewrap`].
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
+    }
+
+    /// Wrap the text for `font`, `font_size` and `width` before the first
+    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
+    ///
+    /// Call it after setting the value and the wrapping indent. `width` is the
+    /// width of the editor's text area: its width less its padding, and less
+    /// the line-number gutter when line numbers are shown. It wraps as layout
+    /// does, a little short of that width and with the state's wrapping
+    /// indent. Once the editor has been laid out this does nothing, and layout
+    /// keeps the wrap up to date.
+    pub fn prewrap(
+        &mut self,
+        font: gpui::Font,
+        font_size: Pixels,
+        width: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        if self.last_layout.is_some() {
+            return;
+        }
+        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
+        self.display_map.set_font(font, font_size, cx);
+        self.display_map
+            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
+        self.display_map
+            .set_wrapping_indent(self.wrapping_indent, cx);
+        self.display_map.ensure_text_prepared(&self.text, cx);
+    }
+
     /// Set line number.
     pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
         if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            if *l == line_number {
+                return;
+            }
             *l = line_number;
         }
         cx.notify();

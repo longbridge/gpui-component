@@ -1,10 +1,10 @@
 use rquickjs::{
-    Ctx, Object, Result, Value,
+    Ctx, Exception, Object, Result, Value,
     function::Func,
     module::{Declarations, Exports, ModuleDef},
 };
 
-const EXPORTS: &[&str] = &["platform", "arch", "EOL"];
+const EXPORTS: &[&str] = &["platform", "arch", "EOL", "homedir"];
 
 pub(super) struct OsModule;
 
@@ -22,6 +22,21 @@ impl ModuleDef for OsModule {
         os.set("platform", Func::from(|| std::env::consts::OS))?;
         os.set("arch", Func::from(|| std::env::consts::ARCH))?;
         os.set("EOL", if cfg!(windows) { "\r\n" } else { "\n" })?;
+        // Needs no grant: the path names where the user's files are, not a way
+        // to reach them, and `${homeDir}` in the manifest is what grants that.
+        os.set(
+            "homedir",
+            Func::from(|ctx: Ctx<'_>| -> Result<String> {
+                crate::runtime::home_dir()
+                    .map(|home| home.to_string_lossy().into_owned())
+                    .ok_or_else(|| {
+                        Exception::throw_message(
+                            &ctx,
+                            "os.homedir(): neither HOME nor USERPROFILE names an absolute directory",
+                        )
+                    })
+            }),
+        )?;
         exports.export("default", Value::from_object(os.clone()))?;
         for name in EXPORTS {
             exports.export(*name, os.get::<_, Value>(*name)?)?;

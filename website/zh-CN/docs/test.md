@@ -398,9 +398,9 @@ window.pointer_up(start + point(px(24.), px(0.)), MouseButton::Left, cx);
 
 ```sh
 script/test-input # 完整回归入口：Base、Component 和 Kit（使用 Bash）
-cargo test -p gpui-kit --features test-support --test input --test input_focus --locked
-cargo test -p gpui-kit --features test-support --test input --locked -- history::paste_is_atomic_and_separate_from_surrounding_typing --exact
-cargo test -p gpui-kit --features test-support --test input_focus --locked -- reverse_tab_cycles_three_inputs_with_passive_addons --exact
+cargo test -p gpui-kit --features test-support --test integration --locked -- input:: input_focus::
+cargo test -p gpui-kit --features test-support --test integration --locked -- input::history::paste_is_atomic_and_separate_from_surrounding_typing --exact
+cargo test -p gpui-kit --features test-support --test integration --locked -- input_focus::reverse_tab_cycles_three_inputs_with_passive_addons --exact
 ```
 
 在合并运行命令后追加 `-- --list`，可列出用例而不执行。

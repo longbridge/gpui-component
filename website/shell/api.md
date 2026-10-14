@@ -610,6 +610,7 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `on_mouse_up(button, handler)`   | `(MouseButtonEvent, cx)` on its release                                             |
 | `on_mouse_down_out(handler)`     | `(MouseButtonEvent, cx)` on a press anywhere outside this element                   |
 | `on_scroll_wheel(handler)`       | `(ScrollWheelEvent, cx)` on wheel or trackpad scrolling                             |
+| `on_pinch(handler)`              | `(PinchEvent, cx)` on each step of a trackpad or touch pinch                        |
 | `on_action(action, handler)`     | `(ActionEvent, cx)` when that named action is dispatched to this element or into it |
 | `on_change(handler)`             | `(checked, cx)` on a toggle; the script owns the new value                          |
 | `on_step(handler)`               | `("increment" \| "decrement", cx)`, and it **replaces** built-in stepping           |

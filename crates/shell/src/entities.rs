@@ -1114,7 +1114,7 @@ impl EntityStore {
 /// Generic over the mode marker rather than written once per state: the filter
 /// and the subscription are identical, and duplicating them would let the two
 /// drift into answering `change` differently.
-fn subscribe_to_events<M: InputModeKind>(
+pub(crate) fn subscribe_to_events<M: InputModeKind>(
     state: &Entity<InputBaseState<M>>,
     event: InputEventName,
     window: &mut Window,

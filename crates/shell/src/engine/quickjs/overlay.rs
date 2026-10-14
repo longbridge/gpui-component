@@ -333,9 +333,11 @@ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
 ///
 /// Two ways this fails, and they are different mistakes. Outside any host call
 /// there is no window to reach, which is the script calling from somewhere it
-/// cannot. A window whose root view is not a [`ShellRoot`] is the *host's*
-/// mistake — it opened the window with something else — and the message says so
-/// rather than blaming the script.
+/// cannot. A window with no [`ShellRoot`] is either one still being opened —
+/// the application's own view is constructed, and its `init` run, before the
+/// root that will hold it — or the *host's* mistake of opening it with
+/// something else, and the message names both rather than only blaming the
+/// host.
 fn with_root<R>(
     ctx: &Ctx<'_>,
     api: &str,
@@ -355,8 +357,9 @@ fn with_root<R>(
         Err(Exception::throw_type(
             ctx,
             &format!(
-                "{api} needs a ShellRoot as the window's first view; this window was \
-                 opened with another view"
+                "{api} found no ShellRoot in this window. A view's init() runs before \
+                 its window has one, so open overlays from an event handler or a task; \
+                 otherwise the host opened the window with another root view"
             ),
         ))
     })
@@ -751,6 +754,62 @@ mod tests {
             eval(&runtime, cx, ScopePhase::Event, "window.close_dialog()").expect("close_dialog");
         assert!(closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 1);
+    }
+
+    /// The `gpui-shell` command opens its window through the catalog's opener,
+    /// which roots it at `gpui_component::Root` with the `ShellRoot` one level
+    /// down. Every overlay call used to look only at the first view, so in
+    /// every window the command opened they threw "needs a ShellRoot".
+    #[cfg(feature = "components")]
+    #[gpui::test]
+    fn overlays_reach_the_root_inside_the_catalog_window(cx: &mut TestAppContext) {
+        cx.update(crate::components::init);
+        let runtime = cx.update(ShellRuntime::new).expect("runtime");
+        std::mem::forget(runtime.clone());
+
+        let open = crate::components::components()
+            .expect("catalog")
+            .window_opener()
+            .expect("the catalog opens its own window");
+        let built = Rc::new(std::cell::RefCell::new(None));
+        let sink = built.clone();
+        let handle = cx
+            .update(|cx| {
+                let options = gpui::WindowOptions {
+                    show: false,
+                    ..Default::default()
+                };
+                open(cx, options, &mut |window, cx| {
+                    let content = cx.new(|_| Empty).into();
+                    let root = cx.new(|cx| ShellRoot::new(content, window, cx));
+                    *sink.borrow_mut() = Some(root.clone());
+                    root.into()
+                })
+            })
+            .expect("window");
+        let root: Entity<ShellRoot> = built.borrow_mut().take().expect("root");
+        let cx = &mut VisualTestContext::from_window(handle, cx);
+
+        let depth: u32 = eval(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            "window.open_dialog(() => __gpui.text('confirm'))",
+        )
+        .expect("open_dialog");
+        assert_eq!(depth, 1);
+        eval::<()>(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            r#"window.push_toast({ title: "Saved" })"#,
+        )
+        .expect("push_toast");
+
+        root.read_with(cx, |root, _| {
+            assert_eq!(root.dialog_count(), 1);
+            assert_eq!(root.toast_count(), 1);
+        });
     }
 
     #[gpui::test]

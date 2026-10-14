@@ -134,6 +134,14 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
         }),
     )?;
     globals.set(
+        "__window_start_move",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<()> {
+            write(&ctx, "window.start_window_move()", |window, _| {
+                window.start_window_move()
+            })
+        }),
+    )?;
+    globals.set(
         "__window_toggle_fullscreen",
         Func::from(|ctx: Ctx<'_>| -> JsResult<()> {
             write(&ctx, "window.toggle_fullscreen()", |window, _| {

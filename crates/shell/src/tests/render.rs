@@ -797,7 +797,7 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
         declarations
             .contains("import { ClickEvent, Context, Element, NativeElement } from \"gpui-kit\";")
     );
-    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
+    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement; new: (id: string) => TestBoxElement }"));
     assert!(declarations.contains("tone(value: string): TestBoxElement;"));
     assert!(declarations.contains("A test component."));
     assert!(declarations.contains("Sets the visual tone."));
@@ -3977,11 +3977,13 @@ impl gpui::Render for Empty {
 
 use std::ops::Deref;
 
+// The example imports its title bar from `gpui-component`.
+#[cfg(feature = "components")]
 #[gpui::test]
 fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::init(cx));
+    cx.update(crate::components::init);
 
-    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let runtime = crate::components::new_isolated_runtime().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     // The example is the contract with users: if it stops rendering, the
@@ -4689,6 +4691,64 @@ export default class Code extends View {
         runtime.metrics().read().script_renders(),
         renders,
         "and drawing them must not need the script"
+    );
+}
+
+/// A keystroke repaints the cells inside `ShellRoot`'s cached content.
+///
+/// `OtpState` is a plain entity that the cells read while they are built, so
+/// its `notify` dirties no view of its own. The first key also switches the
+/// window to keyboard modality, which refreshes every view and hides the
+/// problem; the second key has only the state's notification to go on.
+#[gpui::test]
+fn every_otp_keystroke_repaints_the_cached_script_content(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui-kit";
+import { OtpState, OtpInput } from "gpui-base";
+
+export default class Code extends View {
+  init() { this.code = OtpState.new(4); }
+  render(cx) {
+    return OtpInput.new(this.code).flex().gap(8).cell_style((cell) => cell.size(40));
+  }
+}
+"#;
+    let view_type = runtime.load_source("otp-repaint", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let (_root, context) = cx.add_window_view(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime_for_view, object));
+        crate::root::ShellRoot::new(view.into(), window, cx)
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let state = runtime
+        .entities()
+        .first_otp()
+        .expect("the script's OTP state");
+    context.update(|window, cx| {
+        state.update(cx, |state, cx| state.focus(window, cx));
+    });
+    context.simulate_keystrokes("1");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let materialized = runtime.metrics().read().materializations();
+    context.simulate_keystrokes("2");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "12"
+    );
+    assert!(
+        runtime.metrics().read().materializations() > materialized,
+        "the second digit must rebuild the cells on the next frame, not wait for the pointer"
     );
 }
 
@@ -5564,11 +5624,13 @@ export default class ZeroScale extends View {
 /// state, controlled checkboxes, a dialog, a toast, capability-gated storage,
 /// and a filter that must survive every mutation. If a subsystem regresses,
 /// this is the test that notices.
+// The example imports its title bar from `gpui-component`.
+#[cfg(feature = "components")]
 #[gpui::test]
 fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::init(cx));
+    cx.update(crate::components::init);
 
-    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let runtime = crate::components::new_isolated_runtime().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -6251,6 +6313,36 @@ fn an_unknown_built_in_module_names_the_ones_that_exist(cx: &mut TestAppContext)
             "the refusal must name {expected}: {message}"
         );
     }
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+/// The component module belongs to a runtime with a catalog. One without it
+/// says how to get one instead of listing the module as one it has.
+#[gpui::test]
+fn the_component_module_without_a_catalog_names_the_host_that_has_it(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-no-catalog-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    std::fs::write(
+        directory.join("main.js"),
+        "import { View } from \"gpui-kit\";\n\
+         import { Button } from \"gpui-component\";\n\
+         export default class Panel extends View { render() { return Button.new(\"x\"); } }\n",
+    )
+    .expect("main.js");
+
+    let message = runtime
+        .load_app(&directory, "main.js")
+        .expect_err("a bare runtime has no component module")
+        .to_string();
+    assert!(message.contains("`components`"), "{message}");
+    assert!(!message.contains("built-in modules are"), "{message}");
 
     let _ = std::fs::remove_dir_all(directory);
 }
@@ -7169,6 +7261,92 @@ export default class Modifiers extends View {
     );
 }
 
+/// A script's title bar is the window's, so `window_control_area` has to
+/// reach GPUI for each of its four areas. A drag area also carries the press
+/// and double-click handling a native title bar would, and none of it may get
+/// in the way of a press on an ordinary element inside the bar.
+#[gpui::test]
+fn a_window_control_area_renders_and_leaves_its_children_clickable(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { h_flex } from "gpui-base";
+
+export default class Bar extends View {
+  init() {
+    this.clicks = 0;
+  }
+
+  render(_cx) {
+    return h_flex()
+      .id("title-bar")
+      .w(300)
+      .h(34)
+      .window_control_area("drag")
+      .child(
+        div()
+          .id("action")
+          .w(40)
+          .h(34)
+          .on_click((_event, cx) => {
+            this.clicks += 1;
+            cx.notify();
+          }),
+      )
+      .child(div().id("close").w(20).h(20).window_control_area("close"))
+      .child(div().id("max").w(20).h(20).window_control_area("max"))
+      .child(div().id("min").w(20).h(20).window_control_area("min"))
+      .child(div().child(`clicks=${this.clicks}`));
+  }
+}
+"#;
+    let view_type = runtime.load_source("title_bar", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    // A press dragged across the bar would ask the platform to move the
+    // window, which the test platform does not implement; a plain click on a
+    // child is what this can drive.
+    context.simulate_click(point(px(20.), px(17.)), Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("clicks=1"),
+        "a press on a child of the drag area still clicks it: {tree}"
+    );
+    // The method has to arrive under its own name. An op the engine does not
+    // know by name is recorded as an accessibility label, which renders
+    // nothing wrong and moves no window.
+    for area in ["drag", "close", "max", "min"] {
+        assert!(
+            tree.contains(&format!(":window_control_area[Str(\"{area}\")]")),
+            "`{area}` must reach the element as a window control area: {tree}"
+        );
+    }
+    assert!(!tree.contains("accessibility_label"), "{tree}");
+}
+
 /// A script binds a chord to an action, and the action reaches its handler.
 ///
 /// This is the whole loop, and every step of it is the real one: the script
@@ -7562,7 +7740,7 @@ export default class Surface extends View {
       "appearance", "is_window_active", "is_fullscreen", "is_maximized",
       "set_rem_size", "refresh", "focus_next", "focus_prev",
       "activate_window", "minimize_window", "zoom_window", "toggle_fullscreen",
-      "dispatch_action",
+      "start_window_move", "dispatch_action",
     ]) {
       if (typeof window[name] !== "function") this.missing.push(`window.${name}`);
     }
@@ -8136,6 +8314,73 @@ export default class Surface extends View {
         tree.contains("log=down:left:1 up:left outside"),
         "a press and release inside, then a press outside, and no right-button \
          handler firing for a left press: {tree}"
+    );
+}
+
+/// A pinch reaches the element under it with GPUI's zoom delta and phase, so a
+/// script can zoom a viewport the way it would with the wheel.
+#[gpui::test]
+fn a_script_hears_a_pinch_over_its_element(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+
+export default class Map extends View {
+  init(_props, _cx) {
+    this.zoom = 1;
+    this.phase = "none";
+  }
+
+  render(_cx) {
+    return div()
+      .id("map")
+      .w(300)
+      .h(200)
+      .on_pinch((event, cx) => {
+        this.zoom *= 1 + event.delta;
+        this.phase = `${event.phase}@${event.local_position.x}`;
+        cx.notify();
+      })
+      .child(`zoom=${this.zoom.toFixed(2)} ${this.phase}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("pinch", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    context.simulate_event(gpui::PinchEvent {
+        position: point(px(40.), px(30.)),
+        delta: 0.5,
+        phase: gpui::TouchPhase::Moved,
+        ..Default::default()
+    });
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("zoom=1.50 moved@40"),
+        "a pinch must reach the handler with its delta, phase and local position: {tree}"
     );
 }
 
