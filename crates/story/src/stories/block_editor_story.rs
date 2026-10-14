@@ -4,9 +4,14 @@
 use gpui_kit::base::text::block_editor::{
     BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, EditorCommand, MarkKind, TableEdit,
 };
-use gpui_kit::component::{button::Button, h_flex, v_flex};
+use gpui_kit::component::{
+    button::Button,
+    h_flex,
+    input::{Input, InputState},
+    v_flex,
+};
 use gpui_kit::{
-    App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
+    App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
     Styled, Subscription, Window, div, rems,
 };
@@ -39,6 +44,13 @@ pub struct BlockEditorStory {
     revision: u64,
     /// Markdown preview, refreshed on `Changed` only (never per frame).
     markdown: SharedString,
+    /// The link popover (Cmd/Ctrl+K, D14): open while `Some`.
+    link_input: Entity<InputState>,
+    link_open: bool,
+    /// A Cmd/Ctrl+K request not yet shown (needs a window to fill the input).
+    pending_link: Option<SharedString>,
+    /// The url under the mouse, shown as the link hover.
+    hovered_url: Option<SharedString>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -73,13 +85,34 @@ impl BlockEditorStory {
                     this.refresh_markdown(cx);
                 }
                 BlockEditorEvent::SelectionChanged => {}
+                BlockEditorEvent::EditLinkRequested { url } => {
+                    this.pending_link = Some(url.clone().unwrap_or_default());
+                    cx.notify();
+                    return;
+                }
+                BlockEditorEvent::LinkHovered { url } => {
+                    this.hovered_url = url.clone();
+                    cx.notify();
+                    return;
+                }
+                BlockEditorEvent::LinkClicked { url } => {
+                    // The host decides what to do; the story only reports it.
+                    this.status = format!("link clicked: {url}").into();
+                    cx.notify();
+                    return;
+                }
                 _ => return,
             }
             let kind = editor.read(cx).block_kind_at_caret();
             this.status = format!("revision {}, caret in {kind:?}", this.revision).into();
             cx.notify();
         });
+        let link_input = cx.new(|cx| InputState::new(window, cx).placeholder("https://…"));
         let mut this = Self {
+            link_input,
+            link_open: false,
+            pending_link: None,
+            hovered_url: None,
             editor,
             scroll,
             // Never empty, so the toolbar row keeps its height and the
@@ -106,6 +139,17 @@ impl BlockEditorStory {
         cx.notify();
     }
 
+    fn close_link(&mut self, url: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(url) = url {
+            self.editor.update(cx, |e, cx| {
+                e.set_link(Some(&url).filter(|u| !u.is_empty()).map(|u| u.as_str()), cx)
+            });
+        }
+        self.link_open = false;
+        self.editor.update(cx, |e, cx| e.focus(window, cx));
+        cx.notify();
+    }
+
     fn command_button(
         id: &'static str,
         label: &'static str,
@@ -125,7 +169,44 @@ impl BlockEditorStory {
 }
 
 impl Render for BlockEditorStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(url) = self.pending_link.take() {
+            self.link_input
+                .update(cx, |input, cx| input.set_value(url, window, cx));
+            self.link_open = true;
+            let focus = self.link_input.read(cx).focus_handle(cx);
+            window.focus(&focus, cx);
+        }
+        let link_bar =
+            self.link_open.then(|| {
+                h_flex()
+                    .gap_2()
+                    .child(div().text_sm().child("Link"))
+                    .child(div().w(rems(20.)).child(Input::new(&self.link_input)))
+                    .child(
+                        Button::new("link-apply")
+                            .label("Apply")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let url = this.link_input.read(cx).value().to_string();
+                                this.close_link(Some(url), window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("link-remove")
+                            .label("Remove")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.close_link(Some(String::new()), window, cx)
+                            })),
+                    )
+                    .child(Button::new("link-cancel").label("Cancel").on_click(
+                        cx.listener(|this, _, window, cx| this.close_link(None, window, cx)),
+                    ))
+            });
+        let hover = self
+            .hovered_url
+            .clone()
+            .map(|url| format!("{url}  (Ctrl/Cmd-click to follow)"))
+            .unwrap_or_default();
         v_flex()
             .w_full()
             .gap_3()
@@ -194,6 +275,17 @@ impl Render for BlockEditorStory {
                         cx,
                     ))
                     .child(Self::command_button(
+                        "task",
+                        "Task",
+                        EditorCommand::ToggleTask,
+                        cx,
+                    ))
+                    .child(Button::new("link").label("Link").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.editor.update(cx, |e, cx| e.request_link_edit(cx));
+                        },
+                    )))
+                    .child(Self::command_button(
                         "code",
                         "Code",
                         EditorCommand::SetCodeBlock { lang: None },
@@ -239,6 +331,8 @@ impl Render for BlockEditorStory {
                     ))
                     .child(div().text_sm().child(self.status.clone())),
             )
+            .children(link_bar)
+            .child(div().h(rems(1.25)).text_xs().child(hover))
             .child(
                 section("Editor").child(
                     div()

@@ -53,6 +53,7 @@ actions!(
         Redo,
         ToggleBold,
         ToggleItalic,
+        EditLink,
         ToggleCode,
         Indent,
         Outdent,
@@ -104,6 +105,7 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new(&format!("{m}-b"), ToggleBold, ctx),
         KeyBinding::new(&format!("{m}-i"), ToggleItalic, ctx),
         KeyBinding::new(&format!("{m}-e"), ToggleCode, ctx),
+        KeyBinding::new(&format!("{m}-k"), EditLink, ctx),
         KeyBinding::new(&format!("{m}-c"), Copy, ctx),
         KeyBinding::new(&format!("{m}-x"), Cut, ctx),
         KeyBinding::new(&format!("{m}-v"), Paste, ctx),
@@ -121,6 +123,20 @@ pub enum BlockEditorEvent {
         origin: EditOrigin,
     },
     SelectionChanged,
+    /// Cmd/Ctrl+K: the host should show its link popover (D14) for the
+    /// selection or the link at the caret, then call
+    /// [`BlockEditorState::set_link`]. `url` is the current link, if any.
+    EditLinkRequested {
+        url: Option<SharedString>,
+    },
+    /// Cmd/Ctrl+click on a link. The editor never opens a browser.
+    LinkClicked {
+        url: SharedString,
+    },
+    /// The link under the mouse changed (`None` when it left a link).
+    LinkHovered {
+        url: Option<SharedString>,
+    },
     Focus,
     Blur,
 }
@@ -155,6 +171,7 @@ pub struct BlockEditorState {
     pub(crate) dragging: bool,
     readonly: bool,
     input_rules: Vec<super::input_rule::InputRule>,
+    hovered_link: Option<SharedString>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -209,6 +226,7 @@ impl BlockEditorState {
             dragging: false,
             readonly: false,
             input_rules: super::input_rule::InputRule::markdown_defaults(),
+            hovered_link: None,
             _subscriptions: subscriptions,
         }
     }
@@ -832,8 +850,159 @@ impl BlockEditorState {
         self.move_to(self.model.doc.clamp(target), extend, cx);
     }
 
+    /// The link drawn under the window point `at`: its leaf, byte range
+    /// and url.
+    pub fn link_at(&self, at: Point<Pixels>) -> Option<(BlockId, Range<usize>, SharedString)> {
+        let pos = {
+            let frame = self.frame.borrow();
+            let pos = frame.hit_test(at)?;
+            if !frame.leaf(pos.block)?.bounds().contains(&at) {
+                return None;
+            }
+            pos
+        };
+        let inline = self.model.doc.inline(pos.block)?;
+        let url = inline.mark_after(pos.offset)?.link.as_ref()?.url.clone();
+        let range = link_extent(inline, pos.offset, &url)?;
+        Some((pos.block, range, url))
+    }
+
+    /// The url of the link under the mouse, if any (D14 hover).
+    pub fn hovered_link(&self) -> Option<&SharedString> {
+        self.hovered_link.as_ref()
+    }
+
+    pub(crate) fn hover_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let url = self.link_at(at).map(|(_, _, url)| url);
+        if url != self.hovered_link {
+            self.hovered_link = url.clone();
+            cx.emit(BlockEditorEvent::LinkHovered { url });
+            cx.notify();
+        }
+    }
+
+    /// Cmd/Ctrl+click: emit [`BlockEditorEvent::LinkClicked`] for the link
+    /// under `at`. Returns whether there was one.
+    pub(crate) fn follow_link_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) -> bool {
+        match self.link_at(at) {
+            Some((_, _, url)) => {
+                cx.emit(BlockEditorEvent::LinkClicked { url });
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The url of the link at the caret (or the selection start).
+    pub fn link_at_caret(&self) -> Option<SharedString> {
+        self.link_range_at_caret().map(|(_, _, url)| url)
+    }
+
+    fn link_range_at_caret(&self) -> Option<(BlockId, Range<usize>, SharedString)> {
+        let head = match &self.model.selection {
+            BlockSelection::Text { anchor, head } => {
+                if anchor.block == head.block && anchor.offset < head.offset {
+                    *anchor
+                } else {
+                    *head
+                }
+            }
+            _ => return None,
+        };
+        let inline = self.model.doc.inline(head.block)?;
+        let mark = inline
+            .mark_after(head.offset)
+            .filter(|m| m.link.is_some())
+            .or_else(|| inline.mark_before(head.offset))?;
+        let url = mark.link.as_ref()?.url.clone();
+        let probe = if inline
+            .mark_after(head.offset)
+            .is_some_and(|m| m.link.is_some())
+        {
+            head.offset
+        } else {
+            head.offset.checked_sub(1)?
+        };
+        let range = link_extent(inline, probe, &url)?;
+        Some((head.block, range, url))
+    }
+
+    /// Cmd/Ctrl+K: ask the host for its link popover.
+    pub fn request_link_edit(&mut self, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
+        let url = self.link_at_caret();
+        cx.emit(BlockEditorEvent::EditLinkRequested { url });
+    }
+
+    pub(crate) fn on_edit_link(&mut self, _: &EditLink, _: &mut Window, cx: &mut Context<Self>) {
+        self.request_link_edit(cx);
+    }
+
+    /// Add, change (`Some(url)`) or remove (`None`) the link on the
+    /// selection, or on the whole link at a collapsed caret. One undo step.
+    pub fn set_link(&mut self, url: Option<&str>, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
+        let collapsed = matches!(
+            &self.model.selection,
+            BlockSelection::Text { anchor, head } if anchor == head
+        );
+        if collapsed && let Some((block, range, _)) = self.link_range_at_caret() {
+            let _ = self.model.set_selection(BlockSelection::Text {
+                anchor: BlockPosition::new(block, range.start),
+                head: BlockPosition::new(block, range.end),
+            });
+        } else if collapsed {
+            return;
+        }
+        let change = match url.map(str::trim).filter(|u| !u.is_empty()) {
+            Some(url) => super::marks::MarkChange::new().with_link(url.to_string(), None),
+            None => super::marks::MarkChange::new().clear(MarkKind::Link),
+        };
+        self.model.break_coalescing();
+        let _ = self.run(EditorCommand::ApplyMark(change), cx);
+        self.model.break_coalescing();
+    }
+
+    /// The task checkbox drawn left of a task item's first line under
+    /// `at`: the item's text leaf and whether it is checked.
+    pub(crate) fn task_checkbox_at(&self, at: Point<Pixels>) -> Option<(BlockId, bool)> {
+        use super::kind::BlockKindData;
+        use gpui::px;
+        let frame = self.frame.borrow();
+        frame.leaves.iter().find_map(|leaf| {
+            let b = leaf.bounds();
+            let line = px(28.).min(b.size.height);
+            if !(at.y >= b.top()
+                && at.y < b.top() + line
+                && at.x < b.left()
+                && at.x >= b.left() - px(28.))
+            {
+                return None;
+            }
+            let block = leaf.info.block;
+            let (item, index) = self.model.doc.index_in_parent(block)?;
+            match self.model.doc.kind(item) {
+                Some(BlockKindData::ListItem {
+                    checked: Some(c), ..
+                }) if index == 0 => Some((block, *c)),
+                _ => None,
+            }
+        })
+    }
+
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
+        // A click on a task checkbox toggles it (one undo step).
+        if !extend && let Some((leaf, checked)) = self.task_checkbox_at(at) {
+            self.end_composition();
+            self.dragging = false;
+            self.set_task_checked(leaf, !checked, cx);
+            return;
+        }
         // Block handle: a click in the left edge beside a table or code
         // block (left of its text) selects the block as a node.
         if !extend && let Some(block) = self.block_handle_at(at) {
@@ -1637,6 +1806,30 @@ impl EntityInputHandler for BlockEditorState {
         }
         Some(byte_to_utf16(self.ime_text(), pos.offset))
     }
+}
+
+/// The byte range of the contiguous run linking to `url` around `offset`.
+fn link_extent(
+    inline: &super::inline::InlineText,
+    offset: usize,
+    url: &SharedString,
+) -> Option<Range<usize>> {
+    let pieces: Vec<_> = inline
+        .pieces()
+        .map(|(range, marks, _)| (range, marks.link.as_ref().map(|l| l.url.clone())))
+        .collect();
+    let ix = pieces
+        .iter()
+        .position(|(r, _)| r.start <= offset && offset < r.end)?;
+    let same = |i: usize| pieces[i].1.as_ref() == Some(url);
+    let (mut lo, mut hi) = (ix, ix);
+    while lo > 0 && same(lo - 1) {
+        lo -= 1;
+    }
+    while hi + 1 < pieces.len() && same(hi + 1) {
+        hi += 1;
+    }
+    Some(pieces[lo].0.start..pieces[hi].0.end)
 }
 
 /// `[text](url)` ending at `caret`: the `[` offset, the text and the url.

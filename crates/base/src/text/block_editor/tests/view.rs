@@ -3,7 +3,7 @@
 
 use gpui::{
     AppContext as _, Context, Entity, EntityInputHandler, InteractiveElement as _, IntoElement,
-    Modifiers, MouseButton, ParentElement as _, Render, StatefulInteractiveElement as _,
+    Modifiers, MouseButton, ParentElement as _, Pixels, Render, StatefulInteractiveElement as _,
     Styled as _, TestAppContext, VisualTestContext, Window, div, px,
 };
 
@@ -1785,4 +1785,163 @@ fn d14_task_and_link_round_trip(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, "> [x] not a task");
     assert_eq!(source(&editor, cx).trim_end(), "> \\[x\\] not a task");
     {}
+}
+
+fn event_log(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+) -> std::rc::Rc<std::cell::RefCell<Vec<crate::text::block_editor::BlockEditorEvent>>> {
+    let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let l = log.clone();
+    cx.update(|_, cx| {
+        cx.subscribe(
+            editor,
+            move |_, event: &crate::text::block_editor::BlockEditorEvent, _| {
+                l.borrow_mut().push(event.clone());
+            },
+        )
+        .detach();
+    });
+    log
+}
+
+fn first_line_point(
+    editor: &Entity<BlockEditorState>,
+    cx: &VisualTestContext,
+    leaf: usize,
+    dx: Pixels,
+) -> gpui::Point<Pixels> {
+    editor.read_with(cx, |e, _| {
+        let f = e.frame.borrow();
+        let l = &f.leaves[leaf];
+        l.bounds().origin + gpui::point(dx, l.line_height() / 2.)
+    })
+}
+
+#[gpui::test]
+fn d14_click_task_checkbox_toggles_in_one_undo_step(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "- [ ] a\n- [x] b");
+    let p = first_line_point(&editor, cx, 0, px(-10.));
+    cx.simulate_click(p, Modifiers::none());
+    draw(cx);
+    assert_eq!(source(&editor, cx).trim_end(), "- [x] a\n- [x] b");
+    let p = first_line_point(&editor, cx, 1, px(-10.));
+    cx.simulate_click(p, Modifiers::none());
+    draw(cx);
+    assert_eq!(source(&editor, cx).trim_end(), "- [x] a\n- [ ] b");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), "- [x] a\n- [x] b");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), "- [ ] a\n- [x] b");
+    // A click in the text still places the caret.
+    let p = first_line_point(&editor, cx, 0, px(1.));
+    cx.simulate_click(p, Modifiers::none());
+    assert_eq!(source(&editor, cx).trim_end(), "- [ ] a\n- [x] b");
+}
+
+#[gpui::test]
+fn d14_hover_and_secondary_click_on_link(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "[docs](https://x.dev) tail");
+    let log = event_log(&editor, cx);
+    let on = first_line_point(&editor, cx, 0, px(4.));
+    cx.simulate_mouse_move(on, None, Modifiers::none());
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.hovered_link().cloned()),
+        Some("https://x.dev".into())
+    );
+    let off = first_line_point(&editor, cx, 0, px(500.));
+    cx.simulate_mouse_move(off, None, Modifiers::none());
+    assert_eq!(editor.read_with(cx, |e, _| e.hovered_link().cloned()), None);
+    // A plain click edits; Cmd/Ctrl+click emits LinkClicked, no edit.
+    let before = editor.read_with(cx, |e, _| e.model.selection.clone());
+    cx.simulate_click(on, Modifiers::secondary_key());
+    let clicked: Vec<_> = log
+        .borrow()
+        .iter()
+        .filter_map(|e| match e {
+            crate::text::block_editor::BlockEditorEvent::LinkClicked { url } => Some(url.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(clicked, vec![gpui::SharedString::from("https://x.dev")]);
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model.selection.clone()),
+        before
+    );
+    cx.simulate_click(on, Modifiers::none());
+    assert_eq!(
+        log.borrow()
+            .iter()
+            .filter(|e| matches!(
+                e,
+                crate::text::block_editor::BlockEditorEvent::LinkClicked { .. }
+            ))
+            .count(),
+        1
+    );
+}
+
+#[gpui::test]
+fn d14_cmd_k_requests_popover_and_set_link_edits(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "hello world");
+    let log = event_log(&editor, cx);
+    // Add: select "world", Cmd/Ctrl+K, host calls set_link.
+    editor.update(cx, |e, _| {
+        let b = e.model.caret().unwrap().block;
+        let _ = e.model.set_selection(BlockSelection::Text {
+            anchor: BlockPosition::new(b, 6),
+            head: BlockPosition::new(b, 11),
+        });
+    });
+    keys(cx, &format!("{M}-k"));
+    assert!(log.borrow().iter().any(|e| matches!(
+        e,
+        crate::text::block_editor::BlockEditorEvent::EditLinkRequested { url: None }
+    )));
+    editor.update(cx, |e, cx| e.set_link(Some("https://a.dev"), cx));
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "hello [world](https://a.dev)"
+    );
+    // Edit: caret inside the link, Cmd/Ctrl+K reports the current url.
+    caret_at(&editor, cx, 0, 8);
+    keys(cx, &format!("{M}-k"));
+    assert!(log.borrow().iter().any(|e| matches!(
+        e,
+        crate::text::block_editor::BlockEditorEvent::EditLinkRequested { url: Some(u) } if u == "https://a.dev"
+    )));
+    editor.update(cx, |e, cx| e.set_link(Some("https://b.dev"), cx));
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "hello [world](https://b.dev)"
+    );
+    // Remove at caret, then undo is one step each.
+    caret_at(&editor, cx, 0, 8);
+    editor.update(cx, |e, cx| e.set_link(None, cx));
+    assert_eq!(source(&editor, cx).trim_end(), "hello world");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "hello [world](https://b.dev)"
+    );
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "hello [world](https://a.dev)"
+    );
+}
+
+#[gpui::test]
+fn d14_toolbar_task_toggle(cx: &mut TestAppContext) {
+    // The story's Task button runs `EditorCommand::ToggleTask`.
+    let (editor, cx) = open(cx, "- a");
+    caret_at(&editor, cx, 0, 1);
+    editor.update(cx, |e, cx| {
+        let _ = e.run(crate::text::block_editor::EditorCommand::ToggleTask, cx);
+    });
+    assert_eq!(source(&editor, cx).trim_end(), "- [ ] a");
+    editor.update(cx, |e, cx| {
+        let _ = e.run(crate::text::block_editor::EditorCommand::ToggleTask, cx);
+    });
+    assert_eq!(source(&editor, cx).trim_end(), "- a");
 }

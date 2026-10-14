@@ -553,7 +553,13 @@ Block rules fire only at the start of a paragraph. An empty list turns them all 
 
 **D14. Links and tasks UI: Cmd/Ctrl+K opens a popover to add, edit or remove a link. Hovering a link shows its URL. Cmd/Ctrl+click on a link emits a `BlockEditorEvent` (the editor never opens a browser). Task checkboxes are clickable through `BlockEditorState::set_task_checked` (one undo step), and the toolbar has a Task toggle (`EditorCommand::ToggleTask`).**
 *Rationale:* The host owns navigation and policy, and the popover is the one in-editor affordance needed for marks that carry data.
-*Status:* `EditorCommand::SetTaskChecked` and `set_task_checked` are implemented and tested, and task/link round-trip tests are in. Still to do: the hit-test from a checkbox click to `set_task_checked`, the popover, hover, the Ctrl+click event and the story's toolbar button.
+*Status:* Implemented and tested.
+- *Task checkboxes:* clicking the checkbox, in the strip left of the item's first line, toggles it through `set_task_checked`, as one undo step. `EditorCommand::SetTaskChecked` is public too.
+- *Links:* Cmd/Ctrl+K (`EditLink`) emits `BlockEditorEvent::EditLinkRequested { url }`, where `url` is the link at the caret if there is one. The host shows its popover and calls `set_link(Some(url) | None)`. That call adds or changes the link on the selection, or on the whole link at a collapsed caret, or removes it, as one undo step.
+- *Hover:* `BlockEditorEvent::LinkHovered` plus `hovered_link()`. The editor draws no tooltip; the host shows the URL (the story shows it in a line above the editor).
+- *Cmd/Ctrl+click:* emits `BlockEditorEvent::LinkClicked { url }` and does not move the caret.
+- *Story:* has Task and Link toolbar buttons and an inline link bar (input plus Apply / Remove / Cancel).
+- *Not done:* the popover is a bar, not anchored at the link, and there is no in-editor tooltip.
 
 **D15. Markdown the model does not represent stays literal text and is escaped on save, so a load/save cycle is lossless in meaning. For example, `> [x]` stays a quote with literal text, and HTML and footnote text stay as text.**
 *Rationale:* Silent rewrites are worse than visible literals. Escaping ensures that typed `*` or `[` don't become syntax on reload.

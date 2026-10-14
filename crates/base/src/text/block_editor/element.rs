@@ -357,6 +357,7 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_redo))
             .on_action(window.listener_for(s, BlockEditorState::on_toggle_bold))
             .on_action(window.listener_for(s, BlockEditorState::on_toggle_italic))
+            .on_action(window.listener_for(s, BlockEditorState::on_edit_link))
             .on_action(window.listener_for(s, BlockEditorState::on_toggle_code))
             .on_action(window.listener_for(s, BlockEditorState::on_indent))
             .on_action(window.listener_for(s, BlockEditorState::on_outdent))
@@ -601,6 +602,9 @@ impl Element for EditorRoot {
             entity.update(cx, |state, cx| {
                 let focus = state.focus_handle.clone();
                 window.focus(&focus, cx);
+                if event.modifiers.secondary() && state.follow_link_at(event.position, cx) {
+                    return;
+                }
                 state.dragging = true;
                 state.mouse_at(event.position, event.modifiers.shift, cx);
                 if !event.modifiers.shift && event.click_count >= 2 {
@@ -610,7 +614,14 @@ impl Element for EditorRoot {
         });
         let entity = self.state.clone();
         window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
-            if phase != DispatchPhase::Bubble || event.pressed_button != Some(MouseButton::Left) {
+            if phase != DispatchPhase::Bubble {
+                return;
+            }
+            if event.pressed_button.is_none() {
+                entity.update(cx, |state, cx| state.hover_at(event.position, cx));
+                return;
+            }
+            if event.pressed_button != Some(MouseButton::Left) {
                 return;
             }
             entity.update(cx, |state, cx| {
