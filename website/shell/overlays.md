@@ -227,7 +227,7 @@ a task; otherwise the host opened the window with another root view
 
 The first case is a script one: `init` runs while the window is still being built, before it has a root to hold an overlay, so open it from an event handler or from a task the View spawns. The second is a host wiring problem.
 
-See [Getting started](./getting-started.md#add-the-runtime-to-a-rust-application).
+See [Getting started](./getting-started.md#build-the-runtime-yourself).
 
 ## Not there yet
 
