@@ -20,8 +20,122 @@ use super::id::BlockId;
 /// Estimated height of a never-measured top-level block.
 pub(crate) const ESTIMATE: Pixels = px(28.);
 
+/// Prefix sums of the cull units' heights (a Fenwick tree), so a frame
+/// finds the visible units and sizes the spacers in `O(log n)` instead of
+/// summing every unit (Phase 5, step 1). Rebuilt when the unit list changes
+/// (a new document revision); a measurement updates one entry.
+#[derive(Default)]
+pub(crate) struct HeightIndex {
+    /// Document revision the units were built for.
+    revision: Option<u64>,
+    /// Unit index of every block a unit covers (its id, or every item of a
+    /// list chunk), for pinning and measurement updates.
+    pub(crate) unit_of: HashMap<BlockId, usize>,
+    /// Each unit's own id.
+    ids: Vec<BlockId>,
+    heights: Vec<Pixels>,
+    tree: Vec<f32>,
+}
+
+impl HeightIndex {
+    pub(crate) fn len(&self) -> usize {
+        self.heights.len()
+    }
+
+    pub(crate) fn is_current(&self, revision: u64) -> bool {
+        self.revision == Some(revision)
+    }
+
+    /// Rebuild for `units` (each unit's id and the blocks it covers).
+    pub(crate) fn rebuild<'a>(
+        &mut self,
+        revision: u64,
+        units: impl Iterator<Item = (BlockId, &'a [BlockId])>,
+        heights: &HashMap<BlockId, Pixels>,
+    ) {
+        self.revision = Some(revision);
+        self.unit_of.clear();
+        self.ids.clear();
+        self.heights.clear();
+        for (ix, (id, covered)) in units.enumerate() {
+            self.ids.push(id);
+            self.heights
+                .push(heights.get(&id).copied().unwrap_or(ESTIMATE));
+            self.unit_of.insert(id, ix);
+            for block in covered {
+                self.unit_of.insert(*block, ix);
+            }
+        }
+        // O(n) Fenwick construction.
+        let n = self.heights.len();
+        self.tree = vec![0.; n + 1];
+        for i in 1..=n {
+            self.tree[i] += f32::from(self.heights[i - 1]);
+            let parent = i + (i.isolate_lowest_one());
+            if parent <= n {
+                let value = self.tree[i];
+                self.tree[parent] += value;
+            }
+        }
+    }
+
+    pub(crate) fn height(&self, ix: usize) -> Pixels {
+        self.heights[ix]
+    }
+
+    /// Set the height of the unit whose id is `id`.
+    pub(crate) fn set(&mut self, id: BlockId, height: Pixels) {
+        let Some(&ix) = self.unit_of.get(&id) else {
+            return;
+        };
+        if self.ids[ix] != id {
+            return;
+        }
+        let delta = f32::from(height) - f32::from(self.heights[ix]);
+        self.heights[ix] = height;
+        let mut i = ix + 1;
+        while i < self.tree.len() {
+            self.tree[i] += delta;
+            i += i.isolate_lowest_one();
+        }
+    }
+
+    /// Sum of the heights of units `0..ix`.
+    pub(crate) fn prefix(&self, ix: usize) -> Pixels {
+        let mut i = ix.min(self.len());
+        let mut sum = 0.;
+        while i > 0 {
+            sum += self.tree[i];
+            i -= i.isolate_lowest_one();
+        }
+        px(sum)
+    }
+
+    /// The unit containing editor-local `y`: the first `ix` whose bottom
+    /// (`prefix(ix + 1)`) is past `y`; `len()` when `y` is past the end.
+    pub(crate) fn find(&self, y: Pixels) -> usize {
+        let n = self.len();
+        let mut pos = 0;
+        let mut rest = f32::from(y);
+        let mut step = n.checked_next_power_of_two().unwrap_or(0);
+        if step > n {
+            step /= 2;
+        }
+        while step > 0 {
+            let next = pos + step;
+            if next <= n && self.tree[next] <= rest {
+                pos = next;
+                rest -= self.tree[next];
+            }
+            step /= 2;
+        }
+        pos
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct CullState {
+    pub(crate) index: HeightIndex,
     /// Top-to-next-top distance of each measured top-level block.
     pub(crate) heights: HashMap<BlockId, Pixels>,
     /// Visible span of the editor in editor-local y, from the last prepaint.
@@ -35,10 +149,6 @@ pub(crate) struct CullState {
 }
 
 impl CullState {
-    pub(crate) fn height(&self, id: BlockId) -> Pixels {
-        self.heights.get(&id).copied().unwrap_or(ESTIMATE)
-    }
-
     /// After prepaint: fold this frame's measurements into the heights and
     /// record the visible span. Returns whether the visible span left the
     /// laid-out span (the caller then requests another frame).
@@ -55,6 +165,7 @@ impl CullState {
                     .max(*bottom - *top),
             };
             self.heights.insert(*id, height);
+            self.index.set(*id, height);
         }
         let top = (mask.top() - editor.top()).max(px(0.));
         let bottom = (mask.bottom() - editor.top()).min(editor.size.height);
@@ -137,5 +248,37 @@ impl Element for Measured {
         cx: &mut App,
     ) {
         child.paint(window, cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn height_index_prefix_find_and_update() {
+        let ids: Vec<BlockId> = (0..100).map(|_| BlockId::next()).collect();
+        let mut heights = HashMap::new();
+        for (i, id) in ids.iter().enumerate() {
+            heights.insert(*id, px(10. + (i % 3) as f32));
+        }
+        let mut index = HeightIndex::default();
+        index.rebuild(1, ids.iter().map(|id| (*id, &[][..])), &heights);
+        let naive = |hs: &[f32], ix: usize| hs[..ix].iter().sum::<f32>();
+        let mut hs: Vec<f32> = (0..100).map(|i| 10. + (i % 3) as f32).collect();
+        for ix in [0, 1, 7, 50, 99, 100] {
+            assert!((f32::from(index.prefix(ix)) - naive(&hs, ix)).abs() < 0.01);
+        }
+        index.set(ids[42], px(500.));
+        hs[42] = 500.;
+        for ix in [42, 43, 100] {
+            assert!((f32::from(index.prefix(ix)) - naive(&hs, ix)).abs() < 0.01);
+        }
+        for y in [0., 5., 10.5, 400., 1000., 1050., 1500., 99999.] {
+            let found = index.find(px(y));
+            let want = (0..100).find(|ix| naive(&hs, ix + 1) > y).unwrap_or(100);
+            assert_eq!(found, want, "y = {y}");
+        }
+        assert!(index.is_current(1) && !index.is_current(2));
     }
 }

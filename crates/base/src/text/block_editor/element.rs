@@ -134,10 +134,15 @@ impl RenderOnce for BlockEditor {
             id: BlockId,
             node: &'a BlockNode,
             items: Option<(std::ops::Range<usize>, &'a [BlockId])>,
+            /// Index of the unit's node among the top-level nodes.
+            node_ix: usize,
         }
         let mut units: Vec<Unit> = Vec::with_capacity(nodes.len());
+        let mut node_ix = 0;
         for block in snapshot.blocks.iter() {
             for node in &block.nodes {
+                let this_node = node_ix;
+                node_ix += 1;
                 match (node, list_items.get(&block.id)) {
                     (BlockNode::List { children, .. }, Some(ids))
                         if ids.len() == children.len() =>
@@ -148,6 +153,7 @@ impl RenderOnce for BlockEditor {
                                 id: ids[start],
                                 node,
                                 items: Some((range, ids)),
+                                node_ix: this_node,
                             });
                         }
                     }
@@ -155,12 +161,16 @@ impl RenderOnce for BlockEditor {
                         id: block.id,
                         node,
                         items: None,
+                        node_ix: this_node,
                     }),
                 }
             }
         }
         let count = nodes.len();
-        let cull = self.state.read(cx).cull.clone();
+        let (cull, revision) = {
+            let state = self.state.read(cx);
+            (state.cull.clone(), state.model.revision())
+        };
         let mut children: Vec<AnyElement> = Vec::with_capacity(units.len().min(256));
         {
             let mut cull_state = cull.borrow_mut();
@@ -171,37 +181,49 @@ impl RenderOnce for BlockEditor {
                 let margin = ((bottom - top) * 2.).max(px(600.));
                 (top - margin, bottom + margin)
             });
-            let mut y = px(0.);
-            let mut spacer = px(0.);
+            let cull_state = &mut *cull_state;
+            if !cull_state.index.is_current(revision) || cull_state.index.len() != units.len() {
+                cull_state.index.rebuild(
+                    revision,
+                    units.iter().map(|u| {
+                        let covered: &[BlockId] = match &u.items {
+                            Some((range, ids)) => &ids[range.clone()],
+                            None => &[],
+                        };
+                        (u.id, covered)
+                    }),
+                    &cull_state.heights,
+                );
+            }
+            let index = &cull_state.index;
+            let n = units.len();
+            // Units to lay out: the visible range (binary search over the
+            // prefix sums) plus pinned units (selection ends, IME).
+            let (first, last) = match window_span {
+                None => (0, n),
+                Some((top, bottom)) => {
+                    let first = index.find(top.max(px(0.))).min(n);
+                    (first, (index.find(bottom) + 1).min(n).max(first))
+                }
+            };
+            let mut wanted: Vec<usize> = keep
+                .iter()
+                .filter_map(|id| index.unit_of.get(id).copied())
+                .filter(|ix| *ix < first || *ix >= last)
+                .collect();
+            wanted.extend(first..last);
+            wanted.sort_unstable();
+            wanted.dedup();
+            let mut cursor = px(0.);
             let mut rendered = 0;
-            let mut node_ix = 0;
-            let mut prev_node: Option<*const BlockNode> = None;
-            for (unit_ix, unit) in units.iter().enumerate() {
-                // Index of the unit's node among the top-level nodes.
-                if prev_node != Some(unit.node as *const _) {
-                    if prev_node.is_some() {
-                        node_ix += 1;
-                    }
-                    prev_node = Some(unit.node as *const _);
+            for unit_ix in wanted {
+                let unit = &units[unit_ix];
+                let node_ix = unit.node_ix;
+                let top = index.prefix(unit_ix);
+                if top > cursor {
+                    children.push(div().h(top - cursor).into_any_element());
                 }
-                let height = cull_state.height(unit.id);
-                let visible = match window_span {
-                    None => true,
-                    Some((top, bottom)) => y + height >= top && y <= bottom,
-                };
-                y += height;
-                let pinned = match &unit.items {
-                    None => keep.contains(&unit.id),
-                    Some((range, ids)) => ids[range.clone()].iter().any(|id| keep.contains(id)),
-                };
-                if !visible && !pinned {
-                    spacer += height;
-                    continue;
-                }
-                if spacer > px(0.) {
-                    children.push(div().h(spacer).into_any_element());
-                    spacer = px(0.);
-                }
+                cursor = top + index.height(unit_ix);
                 rendered += 1;
                 let (is_first, prev) = prev_block(&nodes, node_ix);
                 let is_last_node = node_ix + 1 == count;
@@ -263,8 +285,9 @@ impl RenderOnce for BlockEditor {
                     .into_any_element(),
                 );
             }
-            if spacer > px(0.) {
-                children.push(div().h(spacer).into_any_element());
+            let total = index.prefix(n);
+            if total > cursor {
+                children.push(div().h(total - cursor).into_any_element());
             }
             cull_state.rendered = rendered;
         }
