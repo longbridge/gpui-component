@@ -10237,21 +10237,124 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
     if !matches!(error, JsError::Exception) {
         return error.to_string();
     }
-    let value = ctx.catch();
-    match value.as_exception() {
-        Some(exception) => match exception.stack() {
-            Some(stack) => format!(
-                "{}\n{stack}",
-                exception.message().unwrap_or_else(|| "error".into())
-            ),
-            None => exception.message().unwrap_or_else(|| "error".into()),
-        },
-        None => format!("{value:?}"),
+    describe_value(ctx, &ctx.catch())
+}
+
+/// Renders a thrown value the way its author would want to read it: one line
+/// that says what happened, then the script stack that produced it.
+///
+/// The first line is what a failure surface shows collapsed, so it must stand
+/// on its own. That rules out a Rust `Debug` dump of a value that is not an
+/// `Error` — `throw null` used to surface as `Null"null"`.
+fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+    if let Some(exception) = value.as_exception() {
+        let message = exception.message().unwrap_or_default();
+        let message = sandbox::explain_interruption(&message).unwrap_or_else(|| {
+            match exception.get::<_, Option<String>>("name").ok().flatten() {
+                Some(name) if message.is_empty() => name,
+                Some(name) if name != "Error" => format!("{name}: {message}"),
+                _ if message.is_empty() => "Error".to_owned(),
+                _ => message,
+            }
+        });
+        return match exception.stack() {
+            Some(stack) if !stack.trim().is_empty() => {
+                format!("{message}\n{}", tidy_stack(&stack))
+            }
+            _ => message,
+        };
     }
+
+    if let Some(text) = value.as_string().and_then(|text| text.to_string().ok()) {
+        return text;
+    }
+
+    if value.is_null() || value.is_undefined() {
+        let thrown = if value.is_null() { "null" } else { "undefined" };
+        return format!(
+            "A script threw {thrown} instead of an Error.\n\
+             Throw an Error with a message so the failure says what went wrong and where."
+        );
+    }
+
+    let text = match ctx.json_stringify(value.clone()) {
+        Ok(Some(text)) => text.to_string().ok(),
+        _ => None,
+    };
+    let text = text.unwrap_or_else(|| value.type_name().to_owned());
+    format!(
+        "A script threw {text} instead of an Error.\n\
+         Throw an Error with a message so the failure says what went wrong and where."
+    )
+}
+
+/// Makes a QuickJS stack readable at a glance.
+///
+/// Module names carry a `?v=<generation>` tag the loader adds so an edited file
+/// re-evaluates; the author never wrote it and it means nothing to them. And
+/// recursion repeats one frame until the stack is mostly the same line, so a
+/// run of identical frames is shown once with its count.
+fn tidy_stack(stack: &str) -> String {
+    let mut frames: Vec<(String, usize)> = Vec::new();
+    for line in stack.lines().filter(|line| !line.trim().is_empty()) {
+        let line = strip_generation_tags(line);
+        match frames.last_mut() {
+            Some((last, count)) if *last == line => *count += 1,
+            _ => frames.push((line, 1)),
+        }
+    }
+    frames
+        .into_iter()
+        .map(|(line, count)| match count {
+            1 => line,
+            count => format!("{line} \u{d7}{count}"),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn strip_generation_tags(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find("?v=") {
+        let digits = rest[at + 3..]
+            .find(|character: char| !character.is_ascii_digit())
+            .unwrap_or(rest.len() - at - 3);
+        output.push_str(&rest[..at]);
+        if digits == 0 {
+            output.push_str("?v=");
+        }
+        rest = &rest[at + 3 + digits..];
+    }
+    output.push_str(rest);
+    output
 }
 
 fn js_setup_error(error: JsError) -> anyhow::Error {
     anyhow!("failed to start the JavaScript runtime: {error}")
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::tidy_stack;
+
+    #[test]
+    fn a_stack_drops_generation_tags_and_folds_recursion() {
+        let stack = "    at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at render (/app/main.js?v=12:870:21)\n";
+
+        assert_eq!(
+            tidy_stack(stack),
+            "    at walk (/app/lib/scan.js:237:72) \u{d7}3\n    at render (/app/main.js:870:21)"
+        );
+        assert_eq!(
+            tidy_stack("    at f (/app/query.js?v=:1:2)"),
+            "    at f (/app/query.js?v=:1:2)",
+            "only a numeric tag is the loader's"
+        );
+    }
 }
 
 #[cfg(test)]
