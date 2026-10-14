@@ -23,6 +23,7 @@ use web_time::Instant;
 pub struct ScrollBounceMotion {
     tracking: f32,
     response: Duration,
+    max_stretch: Option<f32>,
 }
 
 impl Default for ScrollBounceMotion {
@@ -30,18 +31,23 @@ impl Default for ScrollBounceMotion {
     /// are not UIKit constants. Elsewhere the input is a trackpad, whose
     /// accelerated deltas run far past a finger's travel, so the default is
     /// fitted to an `NSScrollView` measured on macOS: the stretch follows
-    /// about 0.075 of the travel, and the return decays at 12.5 per second.
+    /// about 0.075 of the travel, the return decays at 12.5 per second, and
+    /// the edge stops 36 px out. AppKit stretches by the unaccelerated
+    /// travel, which GPUI does not report; the limit keeps a hard swipe as
+    /// short as Finder's.
     fn default() -> Self {
         if cfg!(any(target_os = "ios", target_os = "android")) {
             Self {
                 tracking: 0.55,
                 response: Duration::from_millis(524),
+                max_stretch: None,
             }
         } else {
             Self {
                 tracking: 0.075,
                 // 2π / 12.5
                 response: Duration::from_micros(502_655),
+                max_stretch: Some(36.),
             }
         }
     }
@@ -78,6 +84,22 @@ impl ScrollBounceMotion {
         self
     }
 
+    /// The farthest the edge goes past its end, in pixels, whether stretched
+    /// or thrown by a fling. The stretch eases into it rather than stopping
+    /// at it.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `max_stretch` is not finite or not positive.
+    pub fn with_max_stretch(mut self, max_stretch: f32) -> Self {
+        assert!(
+            max_stretch.is_finite() && max_stretch > 0.,
+            "scroll bounce max stretch must be finite and positive"
+        );
+        self.max_stretch = Some(max_stretch);
+        self
+    }
+
     /// Fraction of finger travel the stretched edge follows at first.
     pub fn tracking(&self) -> f32 {
         self.tracking
@@ -86,6 +108,12 @@ impl ScrollBounceMotion {
     /// Time scale of the return once the finger lifts.
     pub fn response(&self) -> Duration {
         self.response
+    }
+
+    /// The farthest the edge goes past its end, or `None` when only the
+    /// viewport height bounds it.
+    pub fn max_stretch(&self) -> Option<f32> {
+        self.max_stretch
     }
 
     /// Undamped angular frequency of the return, or `None` when it snaps.
@@ -524,6 +552,35 @@ impl Element for ScrollBounce {
     }
 }
 
+/// The largest outward speed, at most `speed`, that lets an edge at
+/// `position` go no farther out than `max`.
+///
+/// The edge then follows `(position + speed * t) * e^(-ωt)`, which peaks at
+/// `speed / ω * e^(ω * position / speed - 1)` when the speed is enough to
+/// carry it outward at all.
+fn limit_throw(position: f32, speed: f32, omega: f32, max: f32) -> f32 {
+    let peak = |speed: f32| {
+        if speed <= omega * position {
+            position
+        } else {
+            speed / omega * (omega * position / speed - 1.).exp()
+        }
+    };
+    if peak(speed) <= max {
+        return speed;
+    }
+    let (mut low, mut high) = (0., speed);
+    for _ in 0..24 {
+        let mid = (low + high) / 2.;
+        if peak(mid) <= max {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    low
+}
+
 /// The stretch past an edge and its return, shared with the input's own
 /// scrolling.
 #[derive(Default)]
@@ -560,7 +617,12 @@ impl Physics {
         if self.dragging {
             let d = self.extent.max(1.);
             let tracking = self.motion.tracking;
-            self.position * tracking / (1. + tracking * self.position.abs() / d)
+            let stretch = self.position * tracking / (1. + tracking * self.position.abs() / d);
+            match self.motion.max_stretch {
+                // Follows the stretch closely at first, then eases into the limit.
+                Some(max) => max * (stretch / max).tanh(),
+                None => stretch,
+            }
         } else {
             self.position
         }
@@ -575,9 +637,13 @@ impl Physics {
         if offset == 0. || self.extent <= 0. {
             self.extent = extent.max(1.);
         }
-        // Invert the rubber-band curve so grabbing a returning edge is continuous.
+        // Invert the curves so grabbing a returning edge is continuous.
+        let stretch = match self.motion.max_stretch {
+            Some(max) => max * (offset / max).clamp(-0.999, 0.999).atanh(),
+            None => offset,
+        };
         let tracking = self.motion.tracking;
-        self.position = offset / (tracking * (1. - offset.abs() / self.extent).max(0.01));
+        self.position = stretch / (tracking * (1. - stretch.abs() / self.extent).max(0.01));
         self.velocity = 0.;
         self.dragging = true;
         self.suppress_momentum = false;
@@ -618,11 +684,15 @@ impl Physics {
             self.velocity = 0.;
             return;
         };
-        let outward = if self.position * velocity >= 0. {
+        let mut outward = if self.position * velocity >= 0. {
             velocity
         } else {
             0.
         };
+        if let Some(max) = self.motion.max_stretch {
+            outward =
+                outward.signum() * limit_throw(self.position.abs(), outward.abs(), omega, max);
+        }
         self.velocity = outward - omega * self.position;
     }
 
@@ -1156,9 +1226,11 @@ mod tests {
     fn motion_builder_configures_tracking_and_response() {
         let motion = ScrollBounceMotion::default()
             .with_tracking(0.4)
-            .with_response(Duration::from_millis(300));
+            .with_response(Duration::from_millis(300))
+            .with_max_stretch(24.);
         assert_eq!(motion.tracking(), 0.4);
         assert_eq!(motion.response(), Duration::from_millis(300));
+        assert_eq!(motion.max_stretch(), Some(24.));
     }
 
     #[test]

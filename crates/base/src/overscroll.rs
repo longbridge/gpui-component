@@ -311,30 +311,33 @@ mod tests {
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     #[test]
     fn a_fling_throws_the_edge_as_far_as_nsscrollview_does() {
-        // Measured on NSScrollView: a fling arriving at 5000 px/s peaks about
-        // 45 px out, roughly 80 ms after impact, and settles within 0.65 s.
-        let path = fling(5000.);
+        // Measured on NSScrollView: a fling arriving at 1500 px/s peaks about
+        // 14 px out, roughly 80 ms after impact, and settles within 0.65 s.
+        let path = fling(1500.);
         let peak = path.iter().copied().fold(0., f32::min);
-        assert!((-49. ..=-40.).contains(&peak), "peak {peak}");
+        assert!((-16. ..=-12.).contains(&peak), "peak {peak}");
         let turned = path.iter().position(|&offset| offset == peak).unwrap();
         assert!((4..=6).contains(&turned), "turned at frame {turned}");
         assert_eq!(path[50], 0., "the edge settles");
         // The momentum still arriving after impact never throws it again.
         assert!(path[turned..].windows(2).all(|pair| pair[1] >= pair[0]));
         assert!(path[50..].iter().all(|&offset| offset == 0.));
-        // And twice the speed throws it about twice as far.
-        let faster = fling(10_000.).iter().copied().fold(0., f32::min);
+        // Twice the speed throws it about twice as far.
+        let faster = fling(3000.).iter().copied().fold(0., f32::min);
         assert!((faster / peak - 2.).abs() < 0.15, "{faster} vs {peak}");
+        // But no fling throws it past the limit, as none does in Finder.
+        let hardest = fling(20_000.).iter().copied().fold(0., f32::min);
+        assert!((-36. ..=-34.).contains(&hardest), "{hardest}");
     }
 
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     #[test]
     fn packets_handed_over_at_once_do_not_throw_the_edge_further() {
         let peak = |path: Vec<f32>| path.iter().copied().fold(0., f32::min);
-        let even = peak(fling_through(5000., 800., 0));
-        let stalled = peak(fling_through(5000., 800., 3));
-        assert!(even < -20., "{even}");
-        // Read per packet, the burst threw it four times as far. Read over
+        let even = peak(fling_through(4000., 500., 0));
+        let stalled = peak(fling_through(4000., 500., 3));
+        assert!(even < -10., "{even}");
+        // Read per packet, the burst threw it out to the limit. Read over
         // the span, only the longer span's slower decay shows.
         assert!((stalled / even - 1.).abs() < 0.25, "{stalled} vs {even}");
     }
@@ -363,8 +366,9 @@ mod tests {
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     #[test]
     fn a_stretch_follows_the_travel_as_nsscrollview_does() {
-        // Measured on a 300 px NSScrollView: 764 px of travel past the end
-        // stretches it 46 px, 2400 px stretches it 112 px.
+        // Measured on a 300 px NSScrollView: 100 px of travel past the end
+        // stretches it 7 px. Further on, AppKit reads unaccelerated travel
+        // and Finder never goes past 36 px; the stretch eases into that.
         let stretch = |travel: f32| {
             let start = Instant::now();
             let mut overscroll = Overscroll::default();
@@ -373,12 +377,10 @@ mod tests {
             overscroll.packet(-travel, TouchPhase::Moved, 300., start, text(&mut room));
             -overscroll.offset()
         };
-        assert!((43. ..=50.).contains(&stretch(764.)), "{}", stretch(764.));
-        assert!(
-            (106. ..=118.).contains(&stretch(2400.)),
-            "{}",
-            stretch(2400.)
-        );
+        assert!((6.5..=8.).contains(&stretch(100.)), "{}", stretch(100.));
+        assert!((28. ..=34.).contains(&stretch(764.)), "{}", stretch(764.));
+        assert!((35. ..36.).contains(&stretch(2400.)), "{}", stretch(2400.));
+        assert!(stretch(100_000.) < 36.);
     }
 
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
