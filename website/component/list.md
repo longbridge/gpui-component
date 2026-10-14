@@ -503,5 +503,4 @@ spring back with precise pixel scrolling, such as a trackpad or Magic Mouse
 on macOS. Ordinary mouse wheels use line scrolling and do not bounce. A new
 precise gesture or reversed precise scroll takes over the return; ordinary
 wheel input cancels it and scrolls normally. The logical scroll position remains clamped,
-and scrollbars stay fixed. Content that fits does not bounce. It is enabled by default on iOS and Android
-and disabled elsewhere. Reduced motion disables displacement.
+and scrollbars stay fixed. Content that fits does not bounce. It is enabled by default on iOS, Android and macOS, whose own scroll views bounce, and disabled elsewhere. Reduced motion disables displacement.

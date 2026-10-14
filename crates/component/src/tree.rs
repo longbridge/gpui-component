@@ -35,7 +35,7 @@ pub struct Tree {
     style: StyleRefinement,
     render_item: Rc<RenderItem>,
     context_menu_builder: Option<Rc<ContextMenuBuilder>>,
-    scroll_bounce: bool,
+    scroll_bounce: Option<bool>,
 }
 
 impl Tree {
@@ -49,7 +49,7 @@ impl Tree {
             style: StyleRefinement::default(),
             render_item: Rc::new(render_item),
             context_menu_builder: None,
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: None,
         }
     }
 
@@ -63,10 +63,10 @@ impl Tree {
         self
     }
 
-    /// Bounce at the vertical boundaries. On by default on iOS and Android,
-    /// off elsewhere; reduced motion disables displacement.
+    /// Bounce at the vertical boundaries. On by default on iOS, Android and
+    /// macOS, off elsewhere; reduced motion disables displacement.
     pub fn scroll_bounce(mut self, enabled: bool) -> Self {
-        self.scroll_bounce = enabled;
+        self.scroll_bounce = Some(enabled);
         self
     }
 }
@@ -125,8 +125,7 @@ impl RenderOnce for Tree {
                     .size_full()
                     .map(|tree| {
                         gpui_base::ScrollBounce::new("tree-scroll-bounce", &scroll_handle, tree)
-                            .enabled(self.scroll_bounce)
-                            .scroll_wheel(true)
+                            .when_some(self.scroll_bounce, |bounce, on| bounce.enabled(on))
                     }),
             )
             .refine_style(&self.style)

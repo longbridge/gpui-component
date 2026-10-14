@@ -20,7 +20,7 @@ pub(crate) struct CommandOptions {
     pub(crate) placeholder: Option<SharedString>,
     pub(crate) empty: Option<Rc<CommandSlot>>,
     pub(crate) max_h: DefiniteLength,
-    pub(crate) scroll_bounce: bool,
+    pub(crate) scroll_bounce: Option<bool>,
     pub(crate) bordered: bool,
     pub(crate) header: Option<Rc<CommandSlot>>,
     pub(crate) footer: Option<Rc<CommandSlot>>,
@@ -33,7 +33,7 @@ impl Default for CommandOptions {
             placeholder: None,
             empty: None,
             max_h: rems(18.75).into(),
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: None,
             bordered: true,
             header: None,
             footer: None,
@@ -199,10 +199,10 @@ impl Command {
         self
     }
 
-    /// Bounce the command list at its vertical boundaries. On by default on
-    /// iOS and Android, off elsewhere; reduced motion disables displacement.
+    /// Bounce the command list at its vertical boundaries. On by default on iOS,
+    /// Android and macOS, off elsewhere; reduced motion disables displacement.
     pub fn scroll_bounce(mut self, enabled: bool) -> Self {
-        self.options.scroll_bounce = enabled;
+        self.options.scroll_bounce = Some(enabled);
         self
     }
 

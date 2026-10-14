@@ -803,7 +803,6 @@ impl Render for ListStory {
             )
             .child(
                 List::new(&self.company_list)
-                    .scroll_bounce(true)
                     .p(px(8.))
                     .flex_1()
                     .w_full()

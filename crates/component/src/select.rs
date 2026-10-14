@@ -88,7 +88,7 @@ struct SelectOptions {
     search_placeholder: Option<SharedString>,
     menu_width: Length,
     menu_max_h: Length,
-    scroll_bounce: bool,
+    scroll_bounce: Option<bool>,
     disabled: bool,
     appearance: bool,
     focus_ring_enabled: bool,
@@ -106,7 +106,7 @@ impl Default for SelectOptions {
             title_prefix: None,
             menu_width: Length::Auto,
             menu_max_h: rems(20.).into(),
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: None,
             disabled: false,
             appearance: true,
             focus_ring_enabled: true,
@@ -629,7 +629,9 @@ where
                                         )
                                         .with_size(self.state.size)
                                         .max_h(self.state.menu_max_h)
-                                        .scroll_bounce(self.state.scroll_bounce)
+                                        .when_some(self.state.scroll_bounce, |list, on| {
+                                            list.scroll_bounce(on)
+                                        })
                                         .paddings(Edges::all(DROPDOWN_LIST_PADDING)),
                                 )
                                 .on_mouse_down_out(cx.listener(|this, _, window, cx| {
@@ -717,10 +719,10 @@ where
         self
     }
 
-    /// Bounce the dropdown list at its vertical boundaries. On by default on
-    /// iOS and Android, off elsewhere; reduced motion disables displacement.
+    /// Bounce the dropdown list at its vertical boundaries. On by default on iOS,
+    /// Android and macOS, off elsewhere; reduced motion disables displacement.
     pub fn scroll_bounce(mut self, enabled: bool) -> Self {
-        self.options.scroll_bounce = enabled;
+        self.options.scroll_bounce = Some(enabled);
         self
     }
 

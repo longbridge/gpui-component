@@ -1035,8 +1035,9 @@ impl Render for CommandState {
                                     &self.scroll_handle,
                                     list,
                                 )
-                                .enabled(self.options.scroll_bounce)
-                                .scroll_wheel(true)
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
                             }),
                         )
                         .child(Scrollbar::vertical(&self.scroll_handle))

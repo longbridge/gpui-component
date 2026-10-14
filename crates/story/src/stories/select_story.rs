@@ -227,7 +227,6 @@ impl Render for SelectStory {
                             .w(px(280.))
                             .with_size(self.size)
                             .search_placeholder("Search…")
-                            .scroll_bounce(true)
                             .cleanable(true)
                             .disabled(self.disabled),
                     ),
@@ -284,8 +283,7 @@ impl Render for SelectStory {
                             .disabled(self.disabled)
                             .placeholder("UI")
                             .title_prefix("UI: ")
-                            .menu_max_h(rems(6.))
-                            .scroll_bounce(true),
+                            .menu_max_h(rems(6.)),
                     ),
             )
             .child(

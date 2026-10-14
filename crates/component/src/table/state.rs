@@ -2697,8 +2697,9 @@ where
                                     &self.vertical_scroll_handle,
                                     rows,
                                 )
-                                .enabled(self.options.scroll_bounce)
-                                .scroll_wheel(true)
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
                             })
                             .into_any_element(),
                         ),

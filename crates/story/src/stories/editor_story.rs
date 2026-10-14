@@ -49,7 +49,6 @@ impl EditorStory {
             EditorState::new(window, cx)
                 .language("rust")
                 .folding(true)
-                .scroll_bounce(true)
                 .tab_size(TabSize {
                     tab_size: 4,
                     ..Default::default()

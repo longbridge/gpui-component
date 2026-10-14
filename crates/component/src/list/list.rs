@@ -45,7 +45,7 @@ pub enum ListEvent {
 }
 
 struct ListOptions {
-    scroll_bounce: bool,
+    scroll_bounce: Option<bool>,
     size: Size,
     scrollbar_visible: bool,
     search_placeholder: Option<SharedString>,
@@ -56,7 +56,7 @@ struct ListOptions {
 impl Default for ListOptions {
     fn default() -> Self {
         Self {
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: None,
             size: Size::default(),
             scrollbar_visible: true,
             max_height: None,
@@ -599,8 +599,9 @@ where
                         .track_scroll(&scroll_handle)
                         .map(|list| {
                             gpui_base::ScrollBounce::new("list-scroll-bounce", &scroll_handle, list)
-                                .enabled(self.options.scroll_bounce)
-                                .scroll_wheel(true)
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
                         })
                         .into_any_element(),
                     )
@@ -751,10 +752,10 @@ where
         self
     }
 
-    /// Bounce at the vertical boundaries. On by default on iOS and Android,
-    /// off elsewhere; reduced motion disables displacement.
+    /// Bounce at the vertical boundaries. On by default on iOS, Android and
+    /// macOS, off elsewhere; reduced motion disables displacement.
     pub fn scroll_bounce(mut self, enabled: bool) -> Self {
-        self.options.scroll_bounce = enabled;
+        self.options.scroll_bounce = Some(enabled);
         self
     }
 

@@ -1079,7 +1079,6 @@ impl StoryRoot {
                             .rounded(cx.theme().radius_lg)
                             .placeholder("Search themes...")
                             .max_h(px(400.))
-                            .scroll_bounce(true)
                             .on_select(move |index, _, cx| {
                                 _ = select_owner.update(cx, |root, cx| {
                                     root.on_theme_palette_select(
@@ -1160,7 +1159,6 @@ impl StoryRoot {
                             .rounded(cx.theme().radius_lg)
                             .placeholder("Search components...")
                             .max_h(px(400.))
-                            .scroll_bounce(true)
                             .on_confirm(move |index, window, cx| {
                                 _ = confirm_owner.update(cx, |root, cx| {
                                     root.on_component_palette_confirm(index, window, cx);

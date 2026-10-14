@@ -30,7 +30,7 @@ pub(super) fn init(cx: &mut App) {
 }
 
 pub(super) struct TableOptions {
-    pub(super) scroll_bounce: bool,
+    pub(super) scroll_bounce: Option<bool>,
     pub(super) scrollbar_visible: Edges<bool>,
     /// Set stripe style of the table.
     pub(super) stripe: bool,
@@ -47,7 +47,7 @@ pub(super) struct TableOptions {
 impl Default for TableOptions {
     fn default() -> Self {
         Self {
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: None,
             scrollbar_visible: Edges::all(true),
             stripe: false,
             bordered: true,
@@ -120,9 +120,10 @@ where
     }
 
     /// Bounce the rows at the vertical boundaries, keeping headers and
-    /// scrollbars fixed. On by default on iOS and Android, off elsewhere.
+    /// scrollbars fixed. On by default on iOS,
+    /// Android and macOS, off elsewhere.
     pub fn scroll_bounce(mut self, enabled: bool) -> Self {
-        self.options.scroll_bounce = enabled;
+        self.options.scroll_bounce = Some(enabled);
         self
     }
 

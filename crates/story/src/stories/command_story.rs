@@ -631,7 +631,6 @@ impl Render for CommandStory {
                                                 Command::new(&command)
                                                     .bordered(false)
                                                     .rounded(cx.theme().radius_lg)
-                                                    .scroll_bounce(true)
                                                     .placeholder("Type a command or search...")
                                                     .on_confirm(move |index_path, window, cx| {
                                                         _ = confirm_owner.update(cx, |story, cx| {
@@ -701,7 +700,6 @@ impl Render for CommandStory {
                     .child(with_entries(
                         Command::new(&self.scrollable)
                             .max_h(px(220.))
-                            .scroll_bounce(true)
                             .w(px(380.))
                             .on_confirm(move |index_path, _, cx| {
                                 _ = scrollable_owner.update(cx, |story, cx| {
