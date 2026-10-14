@@ -2904,6 +2904,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-syntect"
+version = "0.7.3"
+dependencies = [
+ "gpui-kit",
+]
+
+[[package]]
 name = "example-tig"
 version = "0.7.3"
 dependencies = [
