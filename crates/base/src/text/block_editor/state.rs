@@ -33,6 +33,7 @@ actions!(
         Backspace,
         Delete,
         Enter,
+        StructuralEnter,
         MoveLeft,
         MoveRight,
         MoveUp,
@@ -115,6 +116,18 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new(&format!("{m}-x"), Cut, ctx),
         KeyBinding::new(&format!("{m}-v"), Paste, ctx),
         KeyBinding::new(&format!("{m}-shift-v"), PastePlain, ctx),
+        // Composer overrides only; standalone Newline/ModifiedEnter keep
+        // Shift+Enter soft breaks and the platform secondary-Enter command.
+        KeyBinding::new(
+            "shift-enter",
+            StructuralEnter,
+            Some("BlockEditor && submit == enter"),
+        ),
+        KeyBinding::new(
+            "ctrl-enter",
+            SoftBreak,
+            Some("BlockEditor && submit == enter"),
+        ),
     ]);
 }
 
@@ -161,6 +174,8 @@ pub enum BlockEditorEvent {
 pub enum SubmitPolicy {
     #[default]
     Newline,
+    /// Enter submits; Shift+Enter edits structurally and Ctrl+Enter inserts
+    /// a cell soft break. On macOS Cmd+Enter also submits.
     Enter,
     ModifiedEnter,
 }
@@ -292,8 +307,17 @@ impl BlockEditorState {
         self.submit_policy = policy;
         self
     }
+    /// Replace the policy; notify the editor after changing it so the
+    /// retained view's policy-scoped key context is refreshed.
     pub fn set_submit_policy(&mut self, policy: SubmitPolicy) {
         self.submit_policy = policy;
+    }
+    pub(crate) fn key_context(&self) -> &'static str {
+        if self.submit_policy == SubmitPolicy::Enter {
+            "BlockEditor submit=enter"
+        } else {
+            CONTEXT
+        }
     }
     pub fn with_clipboard_policy(mut self, policy: ClipboardPolicy) -> Self {
         self.clipboard_policy = policy;
@@ -1353,6 +1377,17 @@ impl BlockEditorState {
         }
         self.newline(cx);
     }
+    pub(crate) fn on_structural_enter(
+        &mut self,
+        _: &StructuralEnter,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.readonly || self.is_composing() {
+            return;
+        }
+        self.newline(cx);
+    }
     fn newline(&mut self, cx: &mut Context<Self>) {
         self.end_composition();
         // "```lang" then Enter: a code block.
@@ -1427,7 +1462,8 @@ impl BlockEditorState {
         }
         self.edit(EditOrigin::Command("split_block"), |m| m.split_block(), cx);
     }
-    /// Shift+Enter: a soft line break in a table cell; Enter elsewhere.
+    /// Shift+Enter (Ctrl+Enter in composer mode): a cell soft break;
+    /// structural Enter elsewhere, without submission.
     pub(crate) fn on_soft_break(&mut self, _: &SoftBreak, _: &mut Window, cx: &mut Context<Self>) {
         if self.readonly || self.is_composing() {
             return;

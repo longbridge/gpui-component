@@ -8,21 +8,22 @@
 //! then paints the caret and the composition underline from that geometry.
 //! Paint never updates the editor entity.
 
-use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::Cell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, CursorStyle, DispatchPhase, Element, ElementId, ElementInputHandler,
-    Entity, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, InteractiveElement,
-    IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement, Styled, Window, div, fill,
-    point, px, size,
+    AnyElement, App, Bounds, CursorStyle, DefiniteLength, DispatchPhase, Edges, Element, ElementId,
+    ElementInputHandler, Entity, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
+    InteractiveElement, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, Refineable, RenderOnce, Role, StatefulInteractiveElement,
+    Style, StyleRefinement, Styled, TextStyle, Window, canvas, div, fill, point, px, size,
 };
 
 use super::{
     cull::Measured, frame::FrameSink, id::BlockId, projection::Snapshot, state::*,
     style::BlockEditorStyle,
 };
+use crate::StyledExt as _;
 use crate::text::{
     TextViewDefaults, TextViewStyle,
     document::{NodeRenderOptions, PrevBlock},
@@ -33,17 +34,28 @@ use crate::text::{
 const LIST_CHUNK: usize = 32;
 
 /// A block-based WYSIWYG Markdown editor (spike). Hold an
-/// `Entity<BlockEditorState>` and pass it here in `render`.
+/// `Entity<BlockEditorState>` and pass it here in `render`. Instance styling
+/// applies to the native input root; it installs no padding or height defaults.
 #[derive(IntoElement)]
 pub struct BlockEditor {
     state: Entity<BlockEditorState>,
+    style: StyleRefinement,
 }
 
 impl BlockEditor {
     pub fn new(state: &Entity<BlockEditorState>) -> Self {
         Self {
             state: state.clone(),
+            style: StyleRefinement::default(),
         }
+    }
+}
+
+// Presentation is applied inside EditorRoot so padding is part of its
+// native hitbox and input bounds, not an unfocusable outer wrapper.
+impl Styled for BlockEditor {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -96,6 +108,22 @@ impl RenderOnce for BlockEditor {
         if style.selection_is_default() {
             style = style.with_selection(text_style.selection());
         }
+        // Read the prior frame before request_layout can reset shared text
+        // layouts. Manual scrolling must not become a reflow reveal request.
+        let caret_was_visible = {
+            let state = self.state.read(cx);
+            state
+                .scroll_handle
+                .as_ref()
+                .zip(state.model.caret())
+                .is_some_and(|(handle, pos)| {
+                    state
+                        .frame
+                        .borrow()
+                        .caret_bounds(pos, style.caret_width())
+                        .is_some_and(|caret| handle.bounds().contains(&caret.center()))
+                })
+        };
         let (focus, snapshot, backgrounds, extensions, keep, list_items) =
             self.state.update(cx, |state, _| {
                 let snapshot = state.snapshot();
@@ -136,12 +164,16 @@ impl RenderOnce for BlockEditor {
                 )
             });
 
+        // Match the native root's effective inherited/instance typography
+        // before deriving body-relative node metrics and culling geometry.
+        let mut typography = window.text_style();
+        typography.refine(&self.style.text);
         let node_cx = NodeContext {
             style: Arc::new(text_style),
             code_block_highlighter: highlighter,
             markdown_extensions: extensions,
             image_policy: self.state.read(cx).image_policy(),
-            body_font_size: window.text_style().font_size.to_pixels(window.rem_size()),
+            body_font_size: typography.font_size.to_pixels(window.rem_size()),
             ..Default::default()
         };
         let (cull, revision) = {
@@ -321,6 +353,10 @@ impl RenderOnce for BlockEditor {
             cull_state.rendered = rendered;
         }
 
+        let content_bounds = Rc::new(Cell::new(Bounds::default()));
+        let measured_content = content_bounds.clone();
+        let mut root_style = Style::default();
+        root_style.refine(&self.style);
         let s = &self.state;
         div()
             .id("block-editor")
@@ -330,7 +366,7 @@ impl RenderOnce for BlockEditor {
             .when(window.is_a11y_active() || cfg!(test), |this| {
                 this.aria_value(self.state.read(cx).accessible_value())
             })
-            .key_context(CONTEXT)
+            .key_context(self.state.read(cx).key_context())
             .track_focus(&focus)
             .cursor(if self.state.read(cx).pointer_hand {
                 CursorStyle::PointingHand
@@ -341,6 +377,7 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_backspace))
             .on_action(window.listener_for(s, BlockEditorState::on_delete))
             .on_action(window.listener_for(s, BlockEditorState::on_enter))
+            .on_action(window.listener_for(s, BlockEditorState::on_structural_enter))
             .on_action(window.listener_for(s, BlockEditorState::on_soft_break))
             .on_action(window.listener_for(s, BlockEditorState::on_exit_block))
             .on_action(window.listener_for(s, BlockEditorState::on_move_left))
@@ -375,7 +412,28 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_paste_plain))
             .child(EditorRoot {
                 state: self.state.clone(),
-                child: Some(div().w_full().children(children).into_any_element()),
+                child: Some(
+                    div()
+                        .w_full()
+                        .refine_style(&self.style)
+                        .child(
+                            div().relative().w_full().children(children).child(
+                                canvas(
+                                    move |bounds, _, _| measured_content.set(bounds),
+                                    |_, _, _, _| {},
+                                )
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full(),
+                            ),
+                        )
+                        .into_any_element(),
+                ),
+                content_bounds,
+                padding: root_style.padding,
+                typography,
+                caret_was_visible,
                 sink: Some(Rc::new(FrameSink::new(backgrounds))),
                 snapshot,
                 style,
@@ -389,6 +447,10 @@ struct EditorRoot {
     sink: Option<Rc<FrameSink>>,
     snapshot: Rc<Snapshot>,
     style: BlockEditorStyle,
+    content_bounds: Rc<Cell<Bounds<Pixels>>>,
+    padding: Edges<DefiniteLength>,
+    typography: TextStyle,
+    caret_was_visible: bool,
 }
 
 impl IntoElement for EditorRoot {
@@ -406,7 +468,7 @@ impl EditorRoot {
     /// Scroll the caret into view in the owner's scroll container, once its
     /// block has been laid out (a culled block is pinned, so it is laid out
     /// in the frame after the caret moved there).
-    fn reveal_caret(&self, window: &mut Window, cx: &mut App) {
+    fn reveal_caret(&self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let state = self.state.read(cx);
         if !state.reveal.get() {
             return;
@@ -423,7 +485,14 @@ impl EditorRoot {
             return;
         };
         state.reveal.set(false);
-        let view = handle.bounds();
+        // The scroll owner stays at the region edge; text and the revealed
+        // caret stay inside the root's presentation inset at either scroll end.
+        let padding = self
+            .padding
+            .to_pixels(bounds.size.map(Into::into), window.rem_size());
+        let mut view = handle.bounds();
+        view.origin.y += padding.top;
+        view.size.height = (view.size.height - padding.top - padding.bottom).max(Pixels::ZERO);
         let mut offset = handle.offset();
         if caret.top() < view.top() {
             offset.y += view.top() - caret.top();
@@ -480,11 +549,25 @@ impl Element for EditorRoot {
                 let frame = sink.into_frame(self.snapshot.leaves.clone(), &self.snapshot.tables);
                 *self.state.read(cx).frame.borrow_mut() = frame;
             }
-            self.reveal_caret(window, cx);
             let mask = window.content_mask().bounds;
+            let content = self.content_bounds.get();
             let cull = self.state.read(cx).cull.clone();
-            if cull.borrow_mut().finish_frame(bounds, mask) {
-                // Scrolled past what was laid out: lay out the new span.
+            let geometry_changed = cull.borrow_mut().set_geometry(
+                content.size.width,
+                window.rem_size(),
+                &self.typography,
+            );
+            // Retain a visible caret or an existing reveal request, but do not
+            // interrupt manual scrolling. Wait for fresh spacer positions.
+            if geometry_changed {
+                if self.caret_was_visible {
+                    self.state.read(cx).reveal.set(true);
+                }
+            } else {
+                self.reveal_caret(bounds, window, cx);
+            }
+            if geometry_changed || cull.borrow_mut().finish_frame(content, mask) {
+                // Geometry changed or scrolling left the laid-out span.
                 let state = self.state.clone();
                 window.on_next_frame(move |_, cx| state.update(cx, |_, cx| cx.notify()));
             }

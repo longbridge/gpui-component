@@ -2184,16 +2184,27 @@ fn host_submit_policy_does_not_submit_composition_or_shift_enter(cx: &mut TestAp
             }
         })
     });
-    editor.update(cx, |state, _| state.set_submit_policy(SubmitPolicy::Enter));
+    editor.update(cx, |state, cx| {
+        state.set_submit_policy(SubmitPolicy::Enter);
+        cx.notify();
+    });
     caret_at(&editor, cx, 0, 5);
     keys(cx, "enter");
     assert_eq!(submits.get(), 1);
     assert_eq!(source(&editor, cx), "draft");
     keys(cx, "M-enter");
-    assert_eq!(submits.get(), 2);
-    assert_eq!(source(&editor, cx), "draft");
+    let after_secondary = 1 + usize::from(cfg!(target_os = "macos"));
+    assert_eq!(submits.get(), after_secondary);
+    assert_eq!(
+        source(&editor, cx),
+        if cfg!(target_os = "macos") {
+            "draft"
+        } else {
+            "draft\n\n"
+        }
+    );
     keys(cx, "shift-enter");
-    assert_eq!(submits.get(), 2);
+    assert_eq!(submits.get(), after_secondary);
     cx.update(|window, cx| {
         editor.update(cx, |state, cx| {
             state.replace_and_mark_text_in_range(None, "雪", Some(0..1), window, cx);
@@ -2201,17 +2212,18 @@ fn host_submit_policy_does_not_submit_composition_or_shift_enter(cx: &mut TestAp
     });
     assert!(editor.read_with(cx, |state, _| state.is_composing()));
     keys(cx, "enter");
-    assert_eq!(submits.get(), 2);
+    assert_eq!(submits.get(), after_secondary);
     cx.update(|window, cx| editor.update(cx, |state, cx| state.unmark_text(window, cx)));
     keys(cx, "enter");
-    assert_eq!(submits.get(), 3);
-    editor.update(cx, |state, _| {
-        state.set_submit_policy(SubmitPolicy::ModifiedEnter)
+    assert_eq!(submits.get(), after_secondary + 1);
+    editor.update(cx, |state, cx| {
+        state.set_submit_policy(SubmitPolicy::ModifiedEnter);
+        cx.notify();
     });
     keys(cx, "enter");
-    assert_eq!(submits.get(), 3);
+    assert_eq!(submits.get(), after_secondary + 1);
     keys(cx, "M-enter");
-    assert_eq!(submits.get(), 4);
+    assert_eq!(submits.get(), after_secondary + 2);
     drop(subscription);
 }
 
@@ -2339,4 +2351,294 @@ fn host_image_placeholder_load_and_paste_never_issue_http(cx: &mut TestAppContex
     draw(cx);
     assert!(source(&editor, cx).contains(" after"));
     assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+/// Exercise policy-scoped bindings through the real dispatch tree, including
+/// switching back to standalone policies on the same retained editor.
+#[gpui::test]
+fn host_composer_key_dispatch_keeps_structural_and_cell_breaks_distinct(cx: &mut TestAppContext) {
+    use crate::text::block_editor::{BlockEditorEvent, SubmitPolicy};
+    use std::{cell::Cell, rc::Rc};
+
+    let (editor, cx) = open(cx, "draft");
+    let submits = Rc::new(Cell::new(0));
+    let count = submits.clone();
+    let _subscription = cx.update(|_, cx| {
+        cx.subscribe(&editor, move |_, event: &BlockEditorEvent, _| {
+            if matches!(event, BlockEditorEvent::SubmitRequested) {
+                count.set(count.get() + 1);
+            }
+        })
+    });
+    editor.update(cx, |state, cx| {
+        state.set_submit_policy(SubmitPolicy::Enter);
+        cx.notify();
+    });
+    caret_at(&editor, cx, 0, 5);
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 1);
+    assert_eq!(source(&editor, cx), "draft");
+    keys(cx, "shift-enter");
+    type_text(cx, "next");
+    assert_eq!(source(&editor, cx), "draft\n\nnext");
+    editor.update(cx, |state, cx| state.set_source("- item", cx).unwrap());
+    caret_at(&editor, cx, 0, 4);
+    keys(cx, "shift-enter");
+    type_text(cx, "next");
+    assert_eq!(source(&editor, cx), "- item\n- next");
+    keys(cx, "shift-enter shift-enter");
+    type_text(cx, "after");
+    assert_eq!(source(&editor, cx), "- item\n- next\n\nafter");
+
+    let table = "| h1 | h2 |\n| --- | --- |\n| ab | cd |";
+    editor.update(cx, |state, cx| state.set_source(table, cx).unwrap());
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "shift-enter");
+    assert_eq!(caret_cell(&editor, cx), Some((1, 1)));
+    assert_eq!(source(&editor, cx), table);
+    keys(cx, "shift-tab");
+    assert_eq!(caret_cell(&editor, cx), Some((1, 0)));
+    keys(cx, "tab");
+    assert_eq!(caret_cell(&editor, cx), Some((1, 1)));
+    keys(cx, "tab");
+    assert_eq!(caret_cell(&editor, cx), Some((2, 0)));
+    assert_eq!(source(&editor, cx), format!("{table}\n|  |  |"));
+    keys(cx, "shift-enter");
+    assert_eq!(caret_cell(&editor, cx), None);
+    type_text(cx, "after");
+    assert_eq!(source(&editor, cx), format!("{table}\n\nafter"));
+
+    editor.update(cx, |state, cx| state.set_source(table, cx).unwrap());
+    caret_at(&editor, cx, 2, 1);
+    keys(cx, "ctrl-enter");
+    assert_eq!(
+        source(&editor, cx),
+        "| h1 | h2 |\n| --- | --- |\n| a<br>b | cd |"
+    );
+    assert_eq!(caret_cell(&editor, cx), Some((1, 0)));
+    assert_eq!(submits.get(), 1);
+    let before_submit = source(&editor, cx);
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 2);
+    assert_eq!(source(&editor, cx), before_submit);
+    keys(cx, "shift-enter");
+    assert_eq!(caret_cell(&editor, cx), Some((2, 0)));
+    keys(cx, "shift-enter");
+    assert_eq!(caret_cell(&editor, cx), None);
+    #[cfg(target_os = "macos")]
+    {
+        let before = source(&editor, cx);
+        keys(cx, "cmd-enter");
+        assert_eq!(submits.get(), 3);
+        assert_eq!(source(&editor, cx), before);
+    }
+
+    // Readonly and marked input cannot submit, split or insert a cell break.
+    editor.update(cx, |state, cx| state.set_readonly(true, cx));
+    let before = submits.get();
+    let readonly_source = source(&editor, cx);
+    keys(cx, "enter shift-enter ctrl-enter");
+    #[cfg(target_os = "macos")]
+    keys(cx, "cmd-enter");
+    assert_eq!(submits.get(), before);
+    assert_eq!(source(&editor, cx), readonly_source);
+    editor.update(cx, |state, cx| state.set_readonly(false, cx));
+
+    editor.update(cx, |state, cx| state.set_source(table, cx).unwrap());
+    caret_at(&editor, cx, 2, 1);
+    cx.update(|window, cx| {
+        editor.update(cx, |state, cx| {
+            state.replace_and_mark_text_in_range(None, "雪", Some(0..1), window, cx);
+        })
+    });
+    let marked_source = source(&editor, cx);
+    let before = submits.get();
+    keys(cx, "enter shift-enter ctrl-enter");
+    #[cfg(target_os = "macos")]
+    keys(cx, "cmd-enter");
+    assert_eq!(submits.get(), before);
+    assert_eq!(source(&editor, cx), marked_source);
+    cx.update(|window, cx| editor.update(cx, |state, cx| state.unmark_text(window, cx)));
+    keys(cx, "enter");
+    assert_eq!(submits.get(), before + 1);
+
+    // Standalone and modified-submit policies retain their old Enter/Shift
+    // behavior; composer bindings must leave the dispatch context with them.
+    for policy in [SubmitPolicy::Newline, SubmitPolicy::ModifiedEnter] {
+        editor.update(cx, |state, cx| {
+            state.set_source(table, cx).unwrap();
+            state.set_submit_policy(policy);
+            cx.notify();
+        });
+        caret_at(&editor, cx, 2, 1);
+        keys(cx, "shift-enter");
+        assert_eq!(
+            source(&editor, cx),
+            "| h1 | h2 |\n| --- | --- |\n| a<br>b | cd |"
+        );
+        #[cfg(target_os = "macos")]
+        {
+            let before = source(&editor, cx);
+            keys(cx, "ctrl-enter");
+            assert_eq!(source(&editor, cx), before);
+        }
+        keys(cx, "enter");
+        assert_eq!(caret_cell(&editor, cx), Some((2, 0)));
+        let before = submits.get();
+        keys(cx, "M-enter");
+        assert_eq!(
+            submits.get(),
+            before + usize::from(policy == SubmitPolicy::ModifiedEnter)
+        );
+    }
+}
+
+#[gpui::test]
+fn instance_typography_rewraps_heading_and_retains_caret(cx: &mut TestAppContext) {
+    struct TypographyEditor {
+        state: Entity<BlockEditorState>,
+        font_size: Pixels,
+        foreground: gpui::Hsla,
+    }
+    impl Render for TypographyEditor {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("typography-scroll")
+                .w(px(320.))
+                .h(px(160.))
+                .overflow_y_scroll()
+                .track_scroll(&self.state.read(cx).scroll_handle().unwrap())
+                .child(
+                    BlockEditor::new(&self.state)
+                        .text_size(self.font_size)
+                        .text_color(self.foreground),
+                )
+        }
+    }
+
+    cx.update(|cx| {
+        cx.set_http_client(gpui::http_client::FakeHttpClient::create(|_| async {
+            Err(anyhow::anyhow!(
+                "outbound requests forbidden in editor test"
+            ))
+        }));
+        crate::init(cx);
+    });
+    let heading = "heading words that wrap over several visual lines";
+    let tail = (0..80)
+        .map(|i| format!("\n\nparagraph {i} has words that wrap over several visual lines"))
+        .collect::<String>();
+    let doc = format!("# {heading}{tail}");
+    let (root, cx) = cx.add_window_view(|window, cx| TypographyEditor {
+        state: cx.new(|cx| BlockEditorState::new(window, cx).with_source(&doc)),
+        font_size: px(16.),
+        foreground: gpui::black(),
+    });
+    let editor = root.read_with(cx, |root, _| root.state.clone());
+    cx.update(|window, cx| {
+        let focus = editor.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+    });
+    caret_at(&editor, cx, 0, 0);
+    keys(cx, "end");
+    let original_line_end = editor.read_with(cx, |state, _| state.model().caret().unwrap().offset);
+    let last = editor.read_with(cx, |state, _| state.model().document().leaves().count() - 1);
+    let len = editor.read_with(cx, |state, _| {
+        state
+            .model()
+            .document()
+            .leaves()
+            .last()
+            .unwrap()
+            .text()
+            .unwrap()
+            .len()
+    });
+    caret_at(&editor, cx, last, len);
+    draw(cx);
+    let visible = |cx: &VisualTestContext| {
+        editor.read_with(cx, |state, _| {
+            let caret = state
+                .frame
+                .borrow()
+                .caret_bounds(state.model().caret().unwrap(), px(1.))
+                .unwrap();
+            state
+                .scroll_handle()
+                .unwrap()
+                .bounds()
+                .contains(&caret.center())
+        })
+    };
+    assert!(visible(cx));
+
+    // Only the native element's instance text size changes. Width and rem
+    // remain fixed; no explicit caret-reveal request repairs the result.
+    root.update(cx, |root, cx| {
+        root.font_size = px(32.);
+        cx.notify();
+    });
+    draw(cx);
+    draw(cx);
+    assert!(
+        visible(cx),
+        "instance typography retains the caret in its owner"
+    );
+    assert_eq!(source(&editor, cx), doc);
+
+    // A user may inspect another part of the document without moving the
+    // caret. Paint-only changes and subsequent reflow must not pull them back.
+    let scroll = editor.read_with(cx, |state, _| state.scroll_handle().unwrap());
+    scroll.set_offset(gpui::point(px(0.), px(0.)));
+    draw(cx);
+    draw(cx);
+    assert!(!visible(cx));
+    let inspected_offset = scroll.offset();
+    let selection = editor.read_with(cx, |state, _| state.model().selection().clone());
+    root.update(cx, |root, cx| {
+        root.foreground = gpui::white();
+        cx.notify();
+    });
+    draw(cx);
+    draw(cx);
+    assert_eq!(
+        scroll.offset(),
+        inspected_offset,
+        "color must not reveal the caret"
+    );
+    assert!(!visible(cx));
+    root.update(cx, |root, cx| {
+        root.font_size = px(40.);
+        cx.notify();
+    });
+    draw(cx);
+    draw(cx);
+    assert_eq!(
+        scroll.offset(),
+        inspected_offset,
+        "reflow must preserve manual scrolling"
+    );
+    assert!(!visible(cx));
+    assert_eq!(
+        editor.read_with(cx, |state, _| state.model().selection().clone()),
+        selection
+    );
+    assert_eq!(source(&editor, cx), doc);
+
+    caret_at(&editor, cx, 0, 0);
+    keys(cx, "end");
+    let wrapped_line_end = editor.read_with(cx, |state, _| state.model().caret().unwrap().offset);
+    assert!(
+        wrapped_line_end < original_line_end,
+        "End follows the rewrapped body-relative heading"
+    );
+    type_text(cx, "X");
+    assert_eq!(
+        source(&editor, cx),
+        format!(
+            "# {}X{}{tail}",
+            &heading[..wrapped_line_end],
+            &heading[wrapped_line_end..]
+        )
+    );
 }

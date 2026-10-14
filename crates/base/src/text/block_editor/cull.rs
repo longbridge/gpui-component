@@ -11,8 +11,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, Window, px,
+    AnyElement, App, Bounds, Element, ElementId, Font, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, Pixels, TextOverflow, TextStyle, WhiteSpace, Window, px,
 };
 
 use super::id::BlockId;
@@ -169,9 +169,57 @@ pub(crate) struct CullState {
     pub(crate) rendered_span: Option<(Pixels, Pixels)>,
     /// Number of top-level blocks laid out in the last render (perf tests).
     pub(crate) rendered: usize,
+    /// Layout metrics only: paint changes must not discard heights or scroll.
+    geometry: Option<Geometry>,
+}
+
+#[derive(PartialEq)]
+struct Geometry {
+    width: Pixels,
+    rem_size: Pixels,
+    font: Font,
+    font_size: Pixels,
+    line_height: Pixels,
+    white_space: WhiteSpace,
+    text_overflow: Option<TextOverflow>,
+    line_clamp: Option<usize>,
 }
 
 impl CullState {
+    /// Drop layout-dependent measurements when wrapping or zoom changes.
+    /// The current frame's spacers are stale; the next render measures all
+    /// units before culling resumes.
+    pub(crate) fn set_geometry(
+        &mut self,
+        width: Pixels,
+        rem_size: Pixels,
+        typography: &TextStyle,
+    ) -> bool {
+        let geometry = Geometry {
+            width,
+            rem_size,
+            font: typography.font(),
+            font_size: typography.font_size.to_pixels(rem_size),
+            line_height: typography.line_height_in_pixels(rem_size),
+            white_space: typography.white_space,
+            text_overflow: typography.text_overflow.clone(),
+            line_clamp: typography.line_clamp,
+        };
+        let changed = self
+            .geometry
+            .as_ref()
+            .is_some_and(|previous| previous != &geometry);
+        self.geometry = Some(geometry);
+        if changed {
+            self.heights.clear();
+            self.index.revision = None;
+            self.visible = None;
+            self.measured.clear();
+            return true;
+        }
+        false
+    }
+
     /// After prepaint: fold this frame's measurements into the heights and
     /// record the visible span. Returns whether the visible span left the
     /// laid-out span (the caller then requests another frame).

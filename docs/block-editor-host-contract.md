@@ -42,11 +42,29 @@ Destination/title escaping is shared by link, reference and image writers.
 ## Submission and overlapping grammar
 
 `SubmitPolicy::Newline` is the normal editor default.
-`Enter` emits `SubmitRequested` for plain and modified Enter; `ModifiedEnter`
-keeps plain Enter editing. Shift+Enter never routes through submit policy.
-Marked composition does not submit. The host gives its context/slash picker
-first refusal before Send. `with_input_rule_filter()` is a pure, pre-rule host
-policy for overlapping sigils, not a synthetic key or post-edit rollback.
+`Enter` emits `SubmitRequested` for plain Enter (and Cmd+Enter on macOS).
+Its composer-only Shift+Enter performs structural editing: paragraph/list
+continuation, table next row, bottom-row append, or empty-row exit. Ctrl+Enter
+inserts a table-cell soft break (`<br>` in source); outside tables it performs
+structural editing without submitting. Tab/Shift+Tab retain table traversal.
+`Newline` and `ModifiedEnter` keep their standalone bindings: Shift+Enter is a
+cell soft break, and the platform secondary Enter exits a table or submits,
+respectively. `ModifiedEnter` keeps plain Enter editing. Marked composition and
+readonly state prevent submission and Enter edits. After `set_submit_policy`,
+the owner must notify the editor to refresh its policy-scoped key context.
+The host gives its context/slash picker first refusal before Send.
+`with_input_rule_filter()` is a pure, pre-rule host policy for overlapping sigils, not a synthetic key or post-edit rollback.
+
+## Presentation and native geometry
+
+Base `BlockEditor` implements generic `Styled` on the native input root, with
+no padding or height defaults. Component adds Medium input-family proportions
+of 0.625rem horizontal and 0.5rem vertical padding inside its sole scroll owner.
+Auto-grow bounds include both the logical 1.5rem content rows and the insets.
+Pointer/selection and IME geometry use the same native frame as the caret.
+Culling invalidates heights on content width, rem and effective font/wrapping
+metrics, not text colors or decorations. Reflow retains a visible caret or a
+pending native reveal without pulling a manually scrolled-away caret into view.
 
 ## Clipboard and media
 
