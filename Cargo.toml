@@ -184,16 +184,6 @@ cap-std = { opt-level = 3 }
 [profile.release]
 strip = "symbols"
 
-# The profile the published `gpui-shell` binaries are built with (see
-# `.github/workflows/release-shell.yml`). LTO lives here rather than in
-# `release` because it adds minutes to every release link. `panic` stays
-# `unwind`: the shell turns a panic in a binding into a script error with
-# `catch_unwind`.
-[profile.dist]
-inherits = "release"
-lto = "fat"
-codegen-units = 1
-
 [patch.crates-io]
 # LLRT's public modules still name their compatible binding dependency
 # `rquickjs`. Route those dependencies through a source-compatible facade so

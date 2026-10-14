@@ -87,15 +87,15 @@ jobs:
         if: ${{ matrix.run_on != 'windows-latest' }}
         run: script/bootstrap
       - name: Build
-        run: cargo build -p gpui-shell --profile dist --locked --target ${{ matrix.target }}
+        run: cargo build -p gpui-shell --release --locked --target ${{ matrix.target }}
       - name: Package
         run: |
           name="gpui-shell-${{ matrix.target }}"
           mkdir -p "dist/$name"
           if [[ "${{ matrix.target }}" == *windows* ]]; then
-            cp "target/${{ matrix.target }}/dist/gpui-shell.exe" "dist/$name/"
+            cp "target/${{ matrix.target }}/release/gpui-shell.exe" "dist/$name/"
           else
-            cp "target/${{ matrix.target }}/dist/gpui-shell" "dist/$name/"
+            cp "target/${{ matrix.target }}/release/gpui-shell" "dist/$name/"
           fi
           cp crates/shell/README.md LICENSE-APACHE "dist/$name/"
           cd dist
