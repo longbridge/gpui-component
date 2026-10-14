@@ -284,8 +284,9 @@ Diff::new(&self.diff)
 Syntax language is detected from each file's path; `DiffFile::with_language`
 overrides it with a highlighter language name such as `rust`. Enable the
 matching Cargo grammar feature, such as `tree-sitter-rust`, or use
-`tree-sitter-languages` for all built-in grammars. Without a grammar, supplied
-code still renders with line change colors.
+`tree-sitter-languages` for all built-in grammars, or the lighter `syntect`
+feature described in [Editor](editor.md). Without a grammar, supplied code still
+renders with line change colors.
 
 Changed lines paired across the two sides also emphasize the words that differ.
 `with_inline_unit(Some(DiffInlineUnit::Character))` compares characters instead,
