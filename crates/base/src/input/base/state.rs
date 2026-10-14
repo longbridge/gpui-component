@@ -3688,6 +3688,21 @@ impl<M: InputModeKind> InputBaseState<M> {
         ))
     }
 
+    /// Return the editor-owned display map for read-only coordinate queries.
+    ///
+    /// The map covers the whole buffer, including lines outside the viewport.
+    /// Wrapping uses the most recently prepared layout parameters. Before the
+    /// text has been prepared, the map has no display rows. The state owns all
+    /// updates; callers can use [`DisplayMap::version`] to invalidate cached
+    /// mappings after edits, rewrapping, or folding changes.
+    ///
+    /// Display coordinates describe text after wrapping and folding. They do
+    /// not include inline completion ghost lines; use [`Self::row_bounds`] for
+    /// the actual painted geometry of a visible buffer line.
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
+    }
+
     /// Replace text in range in silent.
     ///
     /// This will not trigger any UI interaction, such as auto-completion.

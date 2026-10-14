@@ -228,6 +228,8 @@ pub(crate) struct TextWrapper {
     pub(crate) lines: SumTree<LineItem>,
 
     inline_metrics: Rc<[(Range<usize>, Pixels)]>,
+    /// Bumped whenever the lines are wrapped again.
+    version: usize,
     _initialized: bool,
 }
 
@@ -242,6 +244,7 @@ impl TextWrapper {
             wrapping_indent: WrappingIndent::default(),
             lines: SumTree::new(&()),
             inline_metrics: Rc::from([]),
+            version: 0,
             _initialized: false,
         }
     }
@@ -261,6 +264,12 @@ impl TextWrapper {
     #[inline]
     pub(crate) fn len(&self) -> usize {
         self.lines.summary().wrap_rows
+    }
+
+    /// A number that changes whenever the lines are wrapped again.
+    #[inline]
+    pub(crate) fn version(&self) -> usize {
+        self.version
     }
 
     /// Get the total number of buffer lines.
@@ -613,6 +622,7 @@ impl TextWrapper {
         }
 
         self.text = changed_text.clone();
+        self.version = self.version.wrapping_add(1);
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
