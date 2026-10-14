@@ -1,8 +1,8 @@
+use crate::engine::quickjs::js_error;
 use std::{io::Read as _, time::Duration};
 
 use rquickjs::{
-    ArrayBuffer, Ctx, Exception, FromJs, Function, IntoJs, Object, Promise, Result, TypedArray,
-    Value,
+    ArrayBuffer, Ctx, FromJs, Function, IntoJs, Object, Promise, Result, TypedArray, Value,
     function::{Func, Opt},
 };
 
@@ -18,11 +18,11 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
 
 fn fetch<'js>(ctx: Ctx<'js>, url: String, options: Opt<FetchOptions>) -> Result<Promise<'js>> {
     let initial = reqwest::Url::parse(&url)
-        .map_err(|error| Exception::throw_type(&ctx, &format!("invalid fetch URL: {error}")))?;
+        .map_err(|error| js_error::type_error(&ctx, &format!("invalid fetch URL: {error}")))?;
     let options = options.0.unwrap_or_default();
     let capabilities = host::capabilities();
     authorize_request(&capabilities, &options.method, &initial)
-        .map_err(|error| Exception::throw_type(&ctx, &error))?;
+        .map_err(|error| js_error::type_error(&ctx, &error))?;
 
     #[cfg(test)]
     let injected_client =
@@ -59,7 +59,7 @@ impl<'js> FromJs<'js> for FetchOptions {
             return Ok(Self::default());
         }
         let Some(object) = value.into_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 "fetch(url, options) expects an object with method, headers and/or body",
             ));
@@ -67,7 +67,7 @@ impl<'js> FromJs<'js> for FetchOptions {
         for key in object.keys::<String>() {
             let key = key?;
             if !matches!(key.as_str(), "method" | "headers" | "body") {
-                return Err(Exception::throw_type(
+                return Err(js_error::type_error(
                     ctx,
                     &format!(
                         "unknown option `{key}` for fetch(url, options); expected method, headers or body"
@@ -104,7 +104,7 @@ impl<'js> FromJs<'js> for FetchOptions {
 /// Known methods are upper-cased on the way through, as `fetch` does.
 fn parse_method(ctx: &Ctx<'_>, method: &str) -> Result<reqwest::Method> {
     reqwest::Method::from_bytes(method.to_ascii_uppercase().as_bytes()).map_err(|_| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!("fetch(url, options).method `{method}` is not an HTTP method"),
         )
@@ -116,7 +116,7 @@ fn parse_headers<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<reqwest::head
         return Ok(reqwest::header::HeaderMap::new());
     }
     let Some(object) = value.into_object() else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "fetch(url, options).headers expects a plain object of string values",
         ));
@@ -126,25 +126,25 @@ fn parse_headers<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<reqwest::head
     for entry in object.props::<String, Value>() {
         let (name, value) = entry?;
         if prohibited_header(&name) {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("fetch(url, options).headers may not set `{name}`"),
             ));
         }
         let name = reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 ctx,
                 "fetch(url, options).headers has an invalid header name",
             )
         })?;
         let value = String::from_js(ctx, value).map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 ctx,
                 "fetch(url, options).headers expects string header values",
             )
         })?;
         let value = reqwest::header::HeaderValue::from_str(&value).map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 ctx,
                 "fetch(url, options).headers has an invalid header value",
             )
@@ -178,13 +178,13 @@ fn parse_body<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<Vec<u8>> {
         return limited_body(ctx, String::from_js(ctx, value)?.into_bytes());
     }
     let bytes = TypedArray::<u8>::from_js(ctx, value).map_err(|_| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             "fetch(url, options).body expects a string or Uint8Array",
         )
     })?;
     let bytes = bytes.as_bytes().ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             "fetch(url, options).body received a detached Uint8Array",
         )
@@ -194,7 +194,7 @@ fn parse_body<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<Vec<u8>> {
 
 fn limited_body<'js>(ctx: &Ctx<'js>, body: Vec<u8>) -> Result<Vec<u8>> {
     if body.len() as u64 > MAX_BODY_BYTES {
-        return Err(Exception::throw_range(
+        return Err(js_error::range_error(
             ctx,
             &format!("fetch request body exceeded the {MAX_BODY_BYTES} byte limit"),
         ));

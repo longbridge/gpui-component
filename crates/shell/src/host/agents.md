@@ -176,6 +176,35 @@ source of truth over this guide.
   must be listed in `"process": { "env": ["MY_APP_MODE"] }`.
 - An application with a manifest keeps its data under its `id`, whether run
   with `-d`, installed or packaged.
+- `process.run(command, args, { cwd, timeoutMs })` waits for a command to
+  finish (30 s unless `timeoutMs` says otherwise). For one that runs longer,
+  reads stdin, or should be read as it works — an AI command line in JSON-lines
+  mode — use `process.spawn`. Same grant (`capabilities.fs.execute`), same empty
+  environment; handlers run on the UI thread with a `cx`, `exit` fires once
+  after the last output, and the child is killed when the view goes away, the
+  application reloads or the window closes:
+
+```js
+import process from "process";
+
+const child = process.spawn("claude", ["-p", prompt, "--output-format", "stream-json"], {
+  cwd: projectDir, // inside capabilities.fs.read
+  lines: true,
+});
+child
+  .on("stdout", (line, cx) => {
+    if (!line.trim()) return;
+    this.events.push(JSON.parse(line));
+    cx.notify();
+  })
+  .on("exit", ({ code, signal, error }, cx) => {
+    this.running = false;
+    this.failure = error ?? (code === 0 ? null : `exited with ${code ?? signal}`);
+    cx.notify();
+  });
+// child.kill() to stop it; { stdin: "pipe" } and child.write(text) / child.end() to talk to it.
+```
+
 - `console.log` / `console.error` go to the terminal running `{name}`.
 - Heavy or rarely used code belongs in modules loaded with dynamic
   `import()` from the handler that needs it; keep the entry module light.

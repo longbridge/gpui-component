@@ -862,19 +862,58 @@ impl SpecNode {
 /// inside the layout pass that asked for it, so nothing a row described
 /// outlives the frame that drew it — and two batches cannot see each other's
 /// nodes.
+///
+/// A batch whose rows registered handlers carries them in a snapshot of its
+/// own: its callback generation is retired when the last element drawn from it
+/// is dropped, which is when the next frame replaces this one.
 pub struct ItemSpecs {
-    arena: SpecArena,
+    batch: ItemBatch,
     roots: SmallVec<[SpecId; 16]>,
     keys: Vec<String>,
 }
 
+enum ItemBatch {
+    /// Rows that registered no handler: nothing has to outlive the layout pass.
+    Plain(SpecArena),
+    /// Rows that did, with the generation that owns their handlers.
+    Recorded(crate::snapshot::RenderSnapshot),
+}
+
 impl ItemSpecs {
     pub(crate) fn new(arena: SpecArena, roots: SmallVec<[SpecId; 16]>, keys: Vec<String>) -> Self {
-        Self { arena, roots, keys }
+        Self {
+            batch: ItemBatch::Plain(arena),
+            roots,
+            keys,
+        }
+    }
+
+    pub(crate) fn recorded(
+        snapshot: crate::snapshot::RenderSnapshot,
+        roots: SmallVec<[SpecId; 16]>,
+        keys: Vec<String>,
+    ) -> Self {
+        Self {
+            batch: ItemBatch::Recorded(snapshot),
+            roots,
+            keys,
+        }
     }
 
     pub fn arena(&self) -> &SpecArena {
-        &self.arena
+        match &self.batch {
+            ItemBatch::Plain(arena) => arena,
+            ItemBatch::Recorded(snapshot) => snapshot.arena(),
+        }
+    }
+
+    /// What keeps this batch's handlers callable, if its rows registered any.
+    /// Every element drawn from the batch has to hold it.
+    pub(crate) fn lease(&self) -> Option<crate::snapshot::RenderSnapshot> {
+        match &self.batch {
+            ItemBatch::Plain(_) => None,
+            ItemBatch::Recorded(snapshot) => Some(snapshot.clone()),
+        }
     }
 
     /// One root per item, in the order the script returned them.

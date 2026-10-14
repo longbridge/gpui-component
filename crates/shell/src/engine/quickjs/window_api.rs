@@ -13,8 +13,9 @@
 //! platform state — is a mutation, and a mutation from inside `render` is a
 //! frame arguing with itself, so those take the same guard the overlays do.
 
+use crate::engine::quickjs::js_error;
 use gpui::{Window, WindowAppearance};
-use rquickjs::{Ctx, Exception, Object, Result as JsResult, function::Func};
+use rquickjs::{Ctx, Object, Result as JsResult, function::Func};
 
 use crate::action::ShellAction;
 use crate::scope::{self, ScopePhase};
@@ -155,7 +156,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
         "__dispatch_action",
         Func::from(|ctx: Ctx<'_>, action: String| -> JsResult<()> {
             if action.is_empty() {
-                return Err(Exception::throw_type(
+                return Err(js_error::type_error(
                     &ctx,
                     "window.dispatch_action(action) expects a non-empty action name",
                 ));
@@ -183,7 +184,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
 fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
     let phase = scope::current_phase();
     if !phase.is_some_and(ScopePhase::allows_notify) {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             &ctx,
             &format!(
                 "cx.bind_keys() is not allowed during the `{}` phase; bind keys from \
@@ -196,19 +197,19 @@ fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
     let mut parsed = Vec::with_capacity(bindings.len());
     for (index, binding) in bindings.iter().enumerate() {
         let keystroke: String = binding.get("keystroke").map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 &ctx,
                 &format!("binding {index} needs a `keystroke`, such as \"cmd-s\""),
             )
         })?;
         let action: String = binding.get("action").map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 &ctx,
                 &format!("binding {index} needs an `action`, such as \"save\""),
             )
         })?;
         if action.is_empty() {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 &ctx,
                 &format!("binding {index} has an empty `action`"),
             ));
@@ -219,21 +220,21 @@ fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
         // where the failure is a thrown error naming the entry.
         for source in keystroke.split_whitespace() {
             gpui::Keystroke::parse(source).map_err(|error| {
-                Exception::throw_type(
+                js_error::type_error(
                     &ctx,
                     &format!("binding {index} has an unparsable keystroke `{source}`: {error:?}"),
                 )
             })?;
         }
         if keystroke.split_whitespace().next().is_none() {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 &ctx,
                 &format!("binding {index} has an empty `keystroke`"),
             ));
         }
         if let Some(context) = context.as_deref() {
             gpui::KeyBindingContextPredicate::parse(context).map_err(|error| {
-                Exception::throw_type(
+                js_error::type_error(
                     &ctx,
                     &format!("binding {index} has an unparsable `context` `{context}`: {error}"),
                 )
@@ -249,7 +250,7 @@ fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
         }));
     })
     .ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             &ctx,
             "cx.bind_keys() needs a live host call; call it from init(), an event \
              handler or a task",
@@ -313,7 +314,7 @@ fn appearance_name(appearance: WindowAppearance) -> &'static str {
 /// A measurement, legal from any host call including `render`.
 fn read<R>(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&Window) -> R) -> JsResult<R> {
     scope::with_current(|window, _| body(window)).ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "{api} needs a live host call; call it from render(), init(), \
@@ -327,7 +328,7 @@ fn read<R>(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&Window) -> R) -> JsResul
 fn write(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&mut Window, &mut gpui::App)) -> JsResult<()> {
     let phase = scope::current_phase();
     if !phase.is_some_and(ScopePhase::allows_notify) {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             &format!(
                 "{api} is not allowed during the `{}` phase; the window may only be \
@@ -338,7 +339,7 @@ fn write(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&mut Window, &mut gpui::App
     }
 
     scope::with_current(|window, app| body(window, app)).ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!("{api} needs a live host call; call it from an event handler or a task"),
         )
