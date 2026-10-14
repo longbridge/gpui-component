@@ -1028,7 +1028,16 @@ impl Render for CommandState {
                             // list edge.
                             .p_1()
                             .with_sizing_behavior(ListSizingBehavior::Infer)
-                            .track_scroll(&self.scroll_handle),
+                            .track_scroll(&self.scroll_handle)
+                            .map(|list| {
+                                gpui_base::ScrollBounce::new(
+                                    "command-scroll-bounce",
+                                    &self.scroll_handle,
+                                    list,
+                                )
+                                .enabled(self.options.scroll_bounce)
+                                .scroll_wheel(true)
+                            }),
                         )
                         .child(Scrollbar::vertical(&self.scroll_handle))
                     }),
