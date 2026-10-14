@@ -7,7 +7,7 @@ use lsp_types::{
     request::Completion,
 };
 use ropey::Rope;
-use std::{cell::RefCell, fmt, ops::Range, rc::Rc, time::Duration};
+use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::input::{InputBaseState, ShowCompletions};
 
@@ -113,8 +113,18 @@ fn chars_eq_ignore_case(left: char, right: char) -> bool {
 /// Display options for the LSP completion popover.
 ///
 /// Accessed through [`super::Lsp::completion_menu`] so embedders can tweak the
-/// popover without growing the [`InputBaseState`] API.
-#[derive(Clone)]
+/// popover without growing the [`InputBaseState`] API. Label highlighting is
+/// configured separately, on [`super::Lsp::completion_highlighter`].
+///
+/// ```
+/// use gpui_base::input::CompletionMenuOptions;
+/// let options = CompletionMenuOptions {
+///     max_width: gpui::px(480.),
+/// };
+/// let _copied = options;
+/// let _again = options;
+/// ```
+#[derive(Debug, Clone, Copy)]
 pub struct CompletionMenuOptions {
     /// Maximum width of the popover.
     ///
@@ -122,42 +132,13 @@ pub struct CompletionMenuOptions {
     /// truncate longer labels. Widen this when hosting an editor that
     /// surfaces long completion labels.
     pub max_width: Pixels,
-    highlight: Rc<CompletionHighlighter>,
-}
-
-impl fmt::Debug for CompletionMenuOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CompletionMenuOptions")
-            .field("max_width", &self.max_width)
-            .finish_non_exhaustive()
-    }
 }
 
 impl Default for CompletionMenuOptions {
     fn default() -> Self {
         Self {
             max_width: px(320.),
-            highlight: Rc::new(highlight_prefix),
         }
-    }
-}
-
-impl CompletionMenuOptions {
-    /// Paint matches with `highlight` instead of the prefix highlighter.
-    ///
-    /// The closure may capture whatever the host uses to decide the ranges.
-    /// The menu calls it once per visible row.
-    pub fn with_highlight(
-        mut self,
-        highlight: impl Fn(&str, &CompletionItem) -> Vec<Range<usize>> + 'static,
-    ) -> Self {
-        self.highlight = Rc::new(highlight);
-        self
-    }
-
-    /// The highlighter currently installed.
-    pub fn highlight(&self) -> &Rc<CompletionHighlighter> {
-        &self.highlight
     }
 }
 

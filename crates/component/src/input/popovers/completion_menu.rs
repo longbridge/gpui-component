@@ -13,15 +13,18 @@ use lsp_types::CompletionItem;
 const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
-/// Drop ranges a custom highlighter cannot safely paint.
+/// Drop ranges a custom highlighter cannot safely paint, then order the rest.
 ///
 /// A range past the label, or one that begins or ends inside a character,
-/// would split a glyph. Empty ranges paint nothing, so they go too.
+/// would split a glyph. Empty ranges paint nothing, so they go too. What
+/// remains is sorted and merged: GPUI builds text runs assuming highlights
+/// are ordered and do not overlap, and an overlap makes the run longer than
+/// the label.
 fn retained_highlight_ranges(
     label: &str,
     ranges: impl IntoIterator<Item = Range<usize>>,
 ) -> Vec<Range<usize>> {
-    ranges
+    let mut ranges: Vec<Range<usize>> = ranges
         .into_iter()
         .filter(|range| {
             range.start < range.end
@@ -29,7 +32,20 @@ fn retained_highlight_ranges(
                 && label.is_char_boundary(range.start)
                 && label.is_char_boundary(range.end)
         })
-        .collect()
+        .collect();
+    ranges.sort_by_key(|range| range.start);
+
+    let mut merged: Vec<Range<usize>> = Vec::new();
+    for range in ranges {
+        if let Some(last) = merged.last_mut() {
+            if range.start <= last.end {
+                last.end = last.end.max(range.end);
+                continue;
+            }
+        }
+        merged.push(range);
+    }
+    merged
 }
 
 use crate::{
@@ -484,6 +500,20 @@ impl Render for CompletionMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn highlight_ranges_are_ordered_and_do_not_overlap() {
+        assert_eq!(
+            retained_highlight_ranges("flag", [2..3, 0..1]),
+            vec![0..1, 2..3]
+        );
+        assert_eq!(retained_highlight_ranges("flag", [0..3, 2..4]), vec![0..4]);
+        assert_eq!(
+            retained_highlight_ranges("flag", [0..1, 1..2, 5..9, 2..3]),
+            vec![0..3]
+        );
+        assert_eq!(retained_highlight_ranges("你", [0..1, 0..3]), vec![0..3]);
+    }
 
     #[gpui::test]
     fn hiding_an_old_menu_does_not_dismiss_a_new_completion_response(

@@ -32,11 +32,11 @@ enum StoryCompletionHighlight {
 }
 
 impl StoryCompletionHighlight {
-    fn apply(self, options: CompletionMenuOptions) -> CompletionMenuOptions {
+    fn highlighter(self) -> Rc<CompletionHighlighter> {
         match self {
-            Self::Prefix => options.with_highlight(highlight_prefix),
-            Self::Contains => options.with_highlight(highlight_contains),
-            Self::Characters => options.with_highlight(highlight_characters),
+            Self::Prefix => Rc::new(highlight_prefix),
+            Self::Contains => Rc::new(highlight_contains),
+            Self::Characters => Rc::new(highlight_characters),
         }
     }
 
@@ -332,8 +332,7 @@ impl EditorStory {
     fn set_completion_highlight(&mut self, mode: StoryCompletionHighlight, cx: &mut Context<Self>) {
         self.completion_highlight.set(mode);
         self.completions_state.update(cx, |state, cx| {
-            let options = mode.apply(state.lsp().completion_menu.clone());
-            state.lsp_mut().completion_menu = options;
+            state.lsp_mut().completion_highlighter = mode.highlighter();
             let (open, query, start) = {
                 let menu = state.completion_menu_state();
                 (
