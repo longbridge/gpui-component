@@ -161,6 +161,24 @@ impl LeafGeom {
             .unwrap_or_else(|| self.bounds().size.height)
     }
 
+    /// Height of the caret: the font's ascent + descent (like a text
+    /// input's caret), not the whole line box, which includes leading.
+    pub(crate) fn caret_height(&self) -> Pixels {
+        let line_height = self.line_height();
+        self.pieces
+            .iter()
+            .find_map(|piece| match piece {
+                Piece::Whole(layout) | Piece::Text { layout, .. } => {
+                    let line = layout.line_layout_for_index(0)?;
+                    let h = line.unwrapped_layout.ascent + line.unwrapped_layout.descent;
+                    (h > Pixels::ZERO).then_some(h)
+                }
+                Piece::Atom { .. } => None,
+            })
+            .unwrap_or(line_height * 0.85)
+            .min(line_height)
+    }
+
     /// Rendered index for a model offset (whole-leaf layouts).
     fn index(&self, layout: &TextLayout, offset: usize) -> usize {
         if self.info.atomic {
@@ -331,10 +349,11 @@ impl FrameLayout {
 
     pub(crate) fn caret_bounds(&self, pos: BlockPosition, width: Pixels) -> Option<Bounds<Pixels>> {
         let leaf = self.leaf(pos.block)?;
-        Some(Bounds::new(
-            leaf.caret_point(pos.offset),
-            size(width, leaf.line_height()),
-        ))
+        let (line, h) = (leaf.line_height(), leaf.caret_height());
+        let mut origin = leaf.caret_point(pos.offset);
+        // GPUI centres the glyphs in the line box: so does the caret.
+        origin.y += (line - h) / 2.;
+        Some(Bounds::new(origin, size(width, h)))
     }
 
     /// The table under a window point.

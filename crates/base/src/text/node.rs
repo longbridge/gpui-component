@@ -2669,7 +2669,13 @@ impl Paragraph {
         // text, highlights and links are cached across frames.
         if !has_image {
             let (text, highlights, mut links) = self.plain_render(node_cx, cx);
-            if text.is_empty() {
+            // An editor leaf is laid out even when empty, so the editor gets
+            // a line box for the caret.
+            #[cfg(feature = "block-editor")]
+            let editor_leaf = self.state.lock().ok().and_then(|s| s.editor_key).is_some();
+            #[cfg(not(feature = "block-editor"))]
+            let editor_leaf = false;
+            if text.is_empty() && !editor_leaf {
                 return div().into_any_element();
             }
             for (_, link_mark) in &mut links {

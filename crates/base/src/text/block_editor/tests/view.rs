@@ -1493,3 +1493,35 @@ fn inline_code_shortcut_button_paste_and_marks(cx: &mut TestAppContext) {
     assert_eq!(source(&editor, cx), "`x`");
     assert_eq!(leaf_text(&editor, cx, 0), "x");
 }
+
+/// QA: empty paragraphs, list items, headings and table cells get a caret,
+/// sized to the font (ascent + descent), not the full line box.
+#[gpui::test]
+fn empty_leaves_have_a_font_sized_caret(cx: &mut TestAppContext) {
+    for (src, keys_) in [
+        ("a", "end enter"),
+        ("- a", "end enter"),
+        ("# a", "end backspace"),
+        ("| x | y |\n| --- | --- |\n|  | 2 |", ""),
+    ] {
+        let (editor, cx) = open(cx, src);
+        caret_at(&editor, cx, if src.starts_with('|') { 2 } else { 0 }, 0);
+        if !keys_.is_empty() {
+            keys(cx, keys_);
+        }
+        draw(cx);
+        let (caret, line) = editor.read_with(cx, |e, _| {
+            let c = e.model().caret().unwrap();
+            let f = e.frame.borrow();
+            let leaf = f.leaf(c.block).expect("empty leaf is laid out");
+            assert_eq!(e.model().document().leaves().count() > 0, true);
+            (f.caret_bounds(c, px(1.)).unwrap(), leaf.bounds())
+        });
+        assert!(caret.size.height > px(0.), "{src}");
+        assert!(
+            caret.size.height < line.size.height,
+            "{src}: caret {caret:?} line {line:?}"
+        );
+        assert!(line.contains(&caret.center()), "{src}");
+    }
+}

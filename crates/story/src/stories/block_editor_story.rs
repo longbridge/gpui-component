@@ -36,6 +36,7 @@ pub struct BlockEditorStory {
     /// The editor's scroll container; the editor keeps the caret in view.
     scroll: ScrollHandle,
     status: SharedString,
+    revision: u64,
     /// Markdown preview, refreshed on `Changed` only (never per frame).
     markdown: SharedString,
     _subscriptions: Vec<Subscription>,
@@ -64,17 +65,25 @@ impl BlockEditorStory {
             state
         });
         let subscription = cx.subscribe(&editor, |this, editor, event: &BlockEditorEvent, cx| {
-            if let BlockEditorEvent::Changed { revision, .. } = event {
-                let kind = editor.read(cx).block_kind_at_caret();
-                this.status = format!("revision {revision}, caret in {kind:?}").into();
-                this.refresh_markdown(cx);
-                cx.notify();
+            // The status follows every caret move, not only edits, so it
+            // never shows the previous action's caret.
+            match event {
+                BlockEditorEvent::Changed { revision, .. } => {
+                    this.revision = *revision;
+                    this.refresh_markdown(cx);
+                }
+                BlockEditorEvent::SelectionChanged => {}
+                _ => return,
             }
+            let kind = editor.read(cx).block_kind_at_caret();
+            this.status = format!("revision {}, caret in {kind:?}", this.revision).into();
+            cx.notify();
         });
         let mut this = Self {
             editor,
             scroll,
             status: "".into(),
+            revision: 0,
             markdown: "".into(),
             _subscriptions: vec![subscription],
         };
