@@ -1236,6 +1236,99 @@ fn subscribe(
     Ok(true)
 }
 
+/// Installs `state.on(event, handler)` for a registered state that declares
+/// [`StateDescriptor::with_input_events`](crate::StateDescriptor::with_input_events).
+///
+/// The events, their payloads and the call scope a handler runs in are those of
+/// [`subscribe`] — a `gpui-component` `InputState` is the same Rust entity as a
+/// `gpui-base` one — so only where the entity is found differs: the registry's
+/// retained-state table rather than the entity store, and the subscription
+/// ends with that slot.
+pub(super) fn install_component_state_events(
+    module: &Object<'_>,
+    runtime: Weak<ShellRuntime>,
+    descriptor: crate::StateDescriptor,
+) -> JsResult<()> {
+    if !descriptor.has_input_events() {
+        return Ok(());
+    }
+    module.set(
+        format!("{}.on", descriptor.export()),
+        Func::from(
+            move |ctx: Ctx<'_>,
+                  proof: String,
+                  handle: u64,
+                  name: String,
+                  handler: Handler|
+                  -> JsResult<bool> {
+                let shell = alive(&ctx, &runtime)?;
+                if proof != shell.component_state_proof {
+                    return Err(Exception::throw_type(&ctx, "state belongs to another runtime"));
+                }
+                if matches!(
+                    scope::current_phase(),
+                    Some(ScopePhase::Render | ScopePhase::Layout)
+                ) {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        "on(...) cannot run during render; subscribe from init() or an event handler",
+                    ));
+                }
+                let event = InputEventName::from_name(&name).ok_or_else(|| {
+                    Exception::throw_type(
+                        &ctx,
+                        &format!(
+                            "unknown input event `{name}`; expected one of: {}",
+                            InputEventName::NAMES.join(", ")
+                        ),
+                    )
+                })?;
+
+                let saved = handler.0;
+                let dispatch = runtime.clone();
+                let owner = shell.callback_owner();
+                shell.flush_component_state_releases();
+                let subscribed = scope::with_current(|window, cx| {
+                    let states = shell.component_states.try_borrow().map_err(|_| {
+                        anyhow::anyhow!("retained component state is already mutably borrowed")
+                    })?;
+                    states.subscribe(
+                        handle,
+                        &descriptor,
+                        event,
+                        Box::new(move |emitted, window, cx| {
+                            let Some(runtime) = dispatch.upgrade() else {
+                                return;
+                            };
+                            runtime.dispatch_input_event(&saved, &owner, emitted, window, cx);
+                        }),
+                        window,
+                        cx,
+                    )
+                })
+                .ok_or_else(|| {
+                    Exception::throw_type(
+                        &ctx,
+                        "on(...) needs a live host call; subscribe from init() or an event handler",
+                    )
+                })?
+                .and_then(|subscription| {
+                    shell
+                        .component_states
+                        .try_borrow_mut()
+                        .map_err(|_| {
+                            anyhow::anyhow!("retained component state is already borrowed")
+                        })?
+                        .attach(handle, subscription)
+                });
+                subscribed
+                    .map(|()| true)
+                    .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
+            },
+        ),
+    )
+}
+
 fn live_slider(
     ctx: &Ctx<'_>,
     runtime: &Weak<ShellRuntime>,

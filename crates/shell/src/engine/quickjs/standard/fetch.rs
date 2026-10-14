@@ -1,7 +1,8 @@
 use std::{io::Read as _, time::Duration};
 
 use rquickjs::{
-    Ctx, Exception, FromJs, Function, IntoJs, Object, Promise, Result, TypedArray, Value,
+    ArrayBuffer, Ctx, Exception, FromJs, Function, IntoJs, Object, Promise, Result, TypedArray,
+    Value,
     function::{Func, Opt},
 };
 
@@ -277,7 +278,7 @@ fn request(
         return Ok(FetchResponse {
             status,
             url: final_url,
-            body: String::from_utf8_lossy(&bytes).into_owned(),
+            body: bytes,
         });
     }
     Err(format!("fetch exceeded the {MAX_REDIRECTS} redirect limit"))
@@ -312,8 +313,12 @@ fn rewrite_redirect_request(
     }
 }
 
+/// The default `User-Agent` sits on the client rather than in the request's
+/// headers: a header the script sets still replaces it, and it does not count
+/// as a caller-supplied header that `authorize_redirect` keeps on its origin.
 fn client_builder() -> reqwest::blocking::ClientBuilder {
     reqwest::blocking::Client::builder()
+        .user_agent(super::USER_AGENT)
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
 }
@@ -618,7 +623,7 @@ mod tests {
 struct FetchResponse {
     status: u16,
     url: String,
-    body: String,
+    body: Vec<u8>,
 }
 
 impl<'js> IntoJs<'js> for FetchResponse {
@@ -627,8 +632,28 @@ impl<'js> IntoJs<'js> for FetchResponse {
         response.set("status", self.status)?;
         response.set("ok", (200..300).contains(&self.status))?;
         response.set("url", self.url)?;
-        let text = self.body;
+        let body = std::rc::Rc::new(self.body);
+        let text = String::from_utf8_lossy(&body).into_owned();
         let text_method = text.clone();
+        let buffer_body = body.clone();
+        response.set(
+            "arrayBuffer",
+            Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {
+                let (promise, resolve, _) = Promise::new(&ctx)?;
+                let buffer = ArrayBuffer::new_copy(ctx.clone(), buffer_body.as_slice())?;
+                resolve.call::<_, ()>((buffer,))?;
+                Ok(promise)
+            }),
+        )?;
+        response.set(
+            "bytes",
+            Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {
+                let (promise, resolve, _) = Promise::new(&ctx)?;
+                let bytes = TypedArray::<u8>::new_copy(ctx.clone(), body.as_slice())?;
+                resolve.call::<_, ()>((bytes,))?;
+                Ok(promise)
+            }),
+        )?;
         response.set(
             "text",
             Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {

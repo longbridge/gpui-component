@@ -61,6 +61,7 @@ use std::{
 use rquickjs::{
     Ctx, Exception, Function, IntoJs, Object, Promise, Result as JsResult, Value,
     function::{Args, Func, Opt, Rest},
+    object::Accessor,
 };
 
 use crate::{
@@ -387,8 +388,38 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
 
     process.set("platform", std::env::consts::OS)?;
     process.set("arch", std::env::consts::ARCH)?;
+
+    // Getters rather than values: one runtime hosts several applications, and
+    // each sees its own grant and its own directory, decided by the call that
+    // is reading them rather than by whichever application loaded first.
+    process.prop("env", Accessor::new_get(granted_env).enumerable())?;
+    process.prop(
+        "dataDir",
+        Accessor::new_get(|| {
+            scope::policy()
+                .data_dir()
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .enumerable(),
+    )?;
     ctx.globals().set("process", process)?;
     Ok(())
+}
+
+/// `process.env`: the variables that are set and either default or granted,
+/// under the spelling the environment uses.
+fn granted_env<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
+    let env = Object::new(ctx)?;
+    let capabilities = host::capabilities();
+    for (name, value) in std::env::vars_os() {
+        let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
+            continue;
+        };
+        if capabilities.may_show_env_variable(name) {
+            env.set(name, value)?;
+        }
+    }
+    Ok(env)
 }
 
 // ---------------------------------------------------------------------------

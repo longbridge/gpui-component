@@ -392,6 +392,128 @@ pub(super) fn mkdir<'js>(
     })
 }
 
+/// Describes a file, following a symlink to what it names. A link that leads
+/// out of the granted root is refused like any other path that does.
+pub(super) fn stat<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
+    scheduler::blocking(&ctx, "fs.stat(path)", move || {
+        dir.metadata(&relative)
+            .map(|metadata| Stats::new(&metadata))
+            .map_err(|error| message("stat", &name, &error))
+    })
+}
+
+/// Describes the symlink itself rather than what it names.
+pub(super) fn lstat<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
+    scheduler::blocking(&ctx, "fs.lstat(path)", move || {
+        dir.symlink_metadata(&relative)
+            .map(|metadata| Stats::new(&metadata))
+            .map_err(|error| message("stat", &name, &error))
+    })
+}
+
+/// Moves a file or directory, replacing a file already at the destination.
+///
+/// Both ends need write access: taking a file out of a directory changes that
+/// directory as much as putting one in does.
+pub(super) fn rename<'js>(ctx: Ctx<'js>, from: String, to: String) -> JsResult<Promise<'js>> {
+    let source = grant(&ctx, &from, Access::Write)?;
+    let destination = grant(&ctx, &to, Access::Write)?;
+    let name = source.describe();
+    let (source_dir, source_path) = source.into_parts();
+    let (destination_dir, destination_path) = destination.into_parts();
+
+    scheduler::blocking(&ctx, "fs.rename(from, to)", move || {
+        source_dir
+            .rename(&source_path, &destination_dir, &destination_path)
+            .map_err(|error| message("rename", &name, &error))
+    })
+}
+
+/// The target a symlink stores, as written — which may name a place outside
+/// every root. Reading the text is not following it; `stat` and `readFile`
+/// still refuse to go there.
+pub(super) fn readlink<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
+    scheduler::blocking(&ctx, "fs.readlink(path)", move || {
+        dir.read_link_contents(&relative)
+            .map(|target| target.to_string_lossy().into_owned())
+            .map_err(|error| message("read link", &name, &error))
+    })
+}
+
+/// What `fs.stat` answers: Node's `Stats` shape, cut to the fields every
+/// platform can fill. A time the filesystem does not record reads as the epoch,
+/// as it does in Node.
+pub(super) struct Stats {
+    file_type: cap_std::fs::FileType,
+    size: u64,
+    mode: u32,
+    modified: f64,
+    accessed: f64,
+    created: f64,
+}
+
+impl Stats {
+    fn new(metadata: &cap_std::fs::Metadata) -> Self {
+        fn millis(time: std::io::Result<cap_std::time::SystemTime>) -> f64 {
+            time.ok()
+                .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0.0, |since| since.as_secs_f64() * 1000.0)
+        }
+
+        #[cfg(unix)]
+        let mode = cap_std::fs::MetadataExt::mode(metadata);
+        #[cfg(not(unix))]
+        let mode = if metadata.permissions().readonly() {
+            0o444
+        } else {
+            0o666
+        };
+
+        Self {
+            file_type: metadata.file_type(),
+            size: metadata.len(),
+            mode,
+            modified: millis(metadata.modified()),
+            accessed: millis(metadata.accessed()),
+            created: millis(metadata.created()),
+        }
+    }
+}
+
+impl<'js> IntoJs<'js> for Stats {
+    fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+        let date: rquickjs::function::Constructor = ctx.globals().get("Date")?;
+        let object = Object::new(ctx.clone())?;
+        let file_type = self.file_type;
+        object.set("isFile", Func::from(move || file_type.is_file()))?;
+        object.set("isDirectory", Func::from(move || file_type.is_dir()))?;
+        object.set("isSymbolicLink", Func::from(move || file_type.is_symlink()))?;
+        object.set("size", self.size)?;
+        object.set("mode", self.mode)?;
+        for (name, millis) in [
+            ("mtime", self.modified),
+            ("atime", self.accessed),
+            ("birthtime", self.created),
+        ] {
+            object.set(format!("{name}Ms"), millis)?;
+            object.set(name, date.construct::<_, Value>((millis,))?)?;
+        }
+        Ok(object.into_value())
+    }
+}
+
 /// `{ recursive }`, and nothing else.
 #[derive(Default)]
 pub(super) struct MakeDirectory {
@@ -460,8 +582,8 @@ fn too_large(name: &str, size: u64) -> String {
 
 /// One entry of `fs.readdir(..., { withFileTypes: true })`.
 ///
-/// `is_dir` rides along because there is no `stat` in this surface, and without
-/// it every caller would have to guess from the name.
+/// `is_dir` rides along so that telling directories apart does not cost an
+/// `fs.stat` per entry.
 struct Dirent {
     name: String,
     is_dir: bool,

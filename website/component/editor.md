@@ -351,6 +351,34 @@ cx.subscribe(&editor, |this, state, event: &InputEvent, cx| {
 });
 ```
 
+## Sizing to content
+
+`display_map().wrap_row_count()` is the number of rows the text takes once soft
+wrapped, so a read-only editor can be sized to its content. Layout counts them
+on the first frame. To know the count before that, call `prewrap` with the font,
+font size and text-area width after setting the value:
+
+```rust
+use gpui_kit::component::ActiveTheme as _;
+
+let editor = cx.new(|cx| {
+    let mut state = EditorState::new(window, cx)
+        .line_number(false)
+        .default_value(snippet);
+    let mut font = window.text_style().font();
+    font.family = cx.theme().mono_font_family.clone();
+    state.prewrap(font, cx.theme().mono_font_size, width, cx);
+    state
+});
+let rows = editor.read(cx).display_map().wrap_row_count();
+```
+
+`width` is the editor's width less its padding, and less the line-number gutter
+when line numbers are shown. Folded rows are still counted.
+The font and font size must match the editor's actual text style. This example
+uses its theme defaults; if you customize the editor's font or font size, pass
+the same values to `prewrap`.
+
 ## Font
 
 The editor paints its code in the theme's monospace font — `mono_font_family` at
@@ -371,6 +399,22 @@ Editor::new(&editor)
 
 These are the ordinary [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
 methods every element has, so `font_weight` and `line_height` work the same way.
+
+## Sizes
+
+When an Editor shares a form with Input and Textarea, apply the same `Sizable`
+size tier to coordinate their padding and density. This keeps their presentation
+consistent while the editor retains its independently configured code font.
+
+```rust
+Editor::new(&editor).large()
+Editor::new(&editor) // medium (default)
+Editor::new(&editor).xsmall()
+```
+
+Unlike `Textarea`, the size changes only the padding around the code, not the
+font size (see [Font](#font)). `xsmall` leaves no padding above and below the
+code.
 
 ## Appearance
 

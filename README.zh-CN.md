@@ -19,7 +19,7 @@ gpui-kit             应用唯一需要依赖的 crate
 └── gpui-component   GPUI Component：完整的带样式 UI 系统
 ```
 
-`gpui-kit` 会固定配套的 GPUI 版本并导出 GPUI、base、component 和 assets，Rust 应用只需声明这一个依赖。JavaScript 扩展宿主另行依赖 `gpui-shell`；`gpui-component-shell` 提供带样式的组件目录。
+`gpui-kit` 会固定配套的 GPUI 版本并导出 GPUI、base、component 和 assets，Rust 应用只需声明这一个依赖。JavaScript 扩展宿主另行依赖 `gpui-shell`；它默认开启的 `components` feature 提供带样式的组件目录。
 
 ## 特性
 

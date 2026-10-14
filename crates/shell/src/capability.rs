@@ -34,6 +34,28 @@ pub struct Capabilities {
     clipboard_read: bool,
     clipboard_write: bool,
     exit: bool,
+    env_variables: Vec<String>,
+}
+
+/// Environment variables every application sees without asking.
+///
+/// Each one describes the user's setup — who they are, their language and
+/// time zone, the tools they prefer, where the platform keeps things — and none
+/// carries a secret. Without them every application would list the same names
+/// in its manifest, and a grant everyone writes is a grant nobody reads. A
+/// variable outside this list still needs `capabilities.process.env`.
+///
+/// The list lives in `default-env`, one name per line, so adding or
+/// reviewing a variable is a change to that file alone.
+pub(crate) fn default_env_variables() -> &'static [&'static str] {
+    static NAMES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        include_str!("default-env")
+            .lines()
+            .map(|line| line.split('#').next().unwrap_or_default().trim())
+            .filter(|name| !name.is_empty())
+            .collect()
+    })
 }
 
 /// A scheme-, effective-port-, method-, and path-scoped HTTP grant for one host.
@@ -131,7 +153,69 @@ pub enum ExecuteGrant {
     Unrestricted,
 }
 
+fn add_roots(granted: &mut Vec<PathBuf>, roots: impl IntoIterator<Item = PathBuf>) {
+    for root in roots {
+        if !granted.contains(&root) {
+            granted.push(root);
+        }
+    }
+}
+
 impl Capabilities {
+    /// One line per granted capability, for a host that shows what an
+    /// application asks for before running it. Empty when nothing is granted.
+    pub(crate) fn summary(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        let paths = |roots: &[PathBuf]| {
+            roots
+                .iter()
+                .map(|root| root.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        if !self.read_roots.is_empty() {
+            lines.push(format!("fs read: {}", paths(&self.read_roots)));
+        }
+        if !self.write_roots.is_empty() {
+            lines.push(format!("fs write: {}", paths(&self.write_roots)));
+        }
+        if !self.network_hosts.is_empty() {
+            lines.push(format!("network: {}", self.network_hosts.join(", ")));
+        }
+        for request in &self.http_requests {
+            lines.push(format!(
+                "http: {} {}://{}{}",
+                request.methods.join("|"),
+                request.scheme,
+                request.host,
+                request
+                    .port
+                    .map(|port| format!(":{port}"))
+                    .unwrap_or_default()
+            ));
+        }
+        match &self.execute {
+            ExecuteGrant::Denied => {}
+            ExecuteGrant::Allowed(commands) => {
+                lines.push(format!("process: {}", commands.join(", ")));
+            }
+            ExecuteGrant::Unrestricted => lines.push("process: any command".to_owned()),
+        }
+        if self.storage {
+            lines.push("storage".to_owned());
+        }
+        match (self.clipboard_read, self.clipboard_write) {
+            (true, true) => lines.push("clipboard: read, write".to_owned()),
+            (true, false) => lines.push("clipboard: read".to_owned()),
+            (false, true) => lines.push("clipboard: write".to_owned()),
+            (false, false) => {}
+        }
+        if !self.env_variables.is_empty() {
+            lines.push(format!("env: {}", self.env_variables.join(", ")));
+        }
+        lines
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -143,6 +227,20 @@ impl Capabilities {
 
     pub fn write_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
         self.write_roots = roots.into_iter().collect();
+        self
+    }
+
+    /// Adds read roots to the ones already granted, where [`Self::read_roots`]
+    /// replaces them. A host that anchors an application to its own directories
+    /// widens the manifest's grant this way rather than overwriting it.
+    pub(crate) fn add_read_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+        add_roots(&mut self.read_roots, roots);
+        self
+    }
+
+    /// Adds write roots to the ones already granted. See [`Self::add_read_roots`].
+    pub(crate) fn add_write_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+        add_roots(&mut self.write_roots, roots);
         self
     }
 
@@ -183,6 +281,35 @@ impl Capabilities {
     pub fn exit(mut self, allowed: bool) -> Self {
         self.exit = allowed;
         self
+    }
+
+    /// Environment variables `process.env` may show beyond
+    /// [`default_env_variables`]. Everything else in the host's environment
+    /// stays out of reach: it routinely holds tokens and keys that were handed
+    /// to the host, not to every script it runs.
+    pub fn env_variables(mut self, names: impl IntoIterator<Item = String>) -> Self {
+        self.env_variables = names.into_iter().collect();
+        self
+    }
+
+    /// Whether `process.env` may show `name`: one of the defaults or a
+    /// granted name, compared without regard to case.
+    ///
+    /// Case is ignored because the same variable is spelled both ways in the
+    /// wild — most Unix programs read `http_proxy`, others `HTTP_PROXY` — and
+    /// Windows does not distinguish them at all. One spelling in the list or
+    /// the manifest covers every one the environment uses.
+    pub(crate) fn may_show_env_variable(&self, name: &str) -> bool {
+        default_env_variables()
+            .iter()
+            .copied()
+            .chain(self.env_variables.iter().map(String::as_str))
+            .any(|visible| visible.eq_ignore_ascii_case(name))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn granted_env_variables(&self) -> &[String] {
+        &self.env_variables
     }
 
     pub fn may_exit(&self) -> bool {
@@ -765,5 +892,51 @@ mod symlink_tests {
             "a write followed a dangling symlink out of the root"
         );
         assert!(!outside.join("not-there.txt").exists());
+    }
+
+    #[test]
+    fn the_default_environment_holds_only_plain_unique_names_with_no_secrets() {
+        let names = default_env_variables();
+        assert!(names.contains(&"HOME"), "the list must parse: {names:?}");
+        for (index, name) in names.iter().enumerate() {
+            assert!(
+                name.chars().all(|c| {
+                    c.is_ascii_uppercase() || c.is_ascii_digit() || matches!(c, '_' | '(' | ')')
+                }),
+                "`{name}` in default-env is not an upper-case variable name; \
+                 one spelling covers every case"
+            );
+            assert!(
+                !names[..index].contains(name),
+                "`{name}` is listed twice in default-env"
+            );
+            for secret in [
+                "TOKEN",
+                "SECRET",
+                "PASSWORD",
+                "PASSWD",
+                "CREDENTIAL",
+                "KEY",
+                "AUTH",
+                "COOKIE",
+                "SESSION_ID",
+                "BUS_ADDRESS",
+            ] {
+                assert!(
+                    !name.contains(secret),
+                    "`{name}` looks like it can carry a secret or another program's \
+                     authority; ask for it in the manifest instead"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_variable_is_shown_under_any_spelling_of_a_listed_name() {
+        let capabilities = Capabilities::new().env_variables(["my_app_mode".to_owned()]);
+        assert!(capabilities.may_show_env_variable("HTTP_PROXY"));
+        assert!(capabilities.may_show_env_variable("http_proxy"));
+        assert!(capabilities.may_show_env_variable("MY_APP_MODE"));
+        assert!(!capabilities.may_show_env_variable("GITHUB_TOKEN"));
     }
 }

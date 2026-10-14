@@ -21,7 +21,7 @@ Two documents come before this one: [Architecture](ARCHITECTURE.md) for the
 `gpui-base` seam this runtime sits on, and [Styling and
 Motion](STYLING-AND-MOTION.md) for the token model it exposes to scripts.
 
-The runtime is real and runnable — `cargo run -p gpui-shell -- examples/js_todolist`
+The runtime is real and runnable — `cargo run -p gpui-shell -- run examples/js_todolist`
 opens a working application — but it is not complete. §26 states plainly what
 exists and what does not.
 
@@ -102,6 +102,7 @@ manifest-declared Git dependencies are resolved.
 | `os`                                      | Honest read-only subset: platform, architecture, and line ending; no invented home/temp paths                                                           |
 | `fs/promises`                             | Shell adapter over capability directory handles; no callback-style `fs` module or ambient `std::fs` access                                              |
 | global `fetch`                            | Capability-checked HTTP, including every redirect; 30-second timeout and 8 MiB buffered-body limit                                                      |
+| global `TextEncoder`, `TextDecoder`       | Shell implementation of the WHATWG Encoding classes, UTF-8 only; needs no capability                                                                    |
 | `net`                                     | Capability-checked TCP connect; 30-second I/O timeout and 1 MiB per-call read/write limit                                                               |
 | `websocket.WebSocket`                     | Capability-checked `connect` plus asynchronous text/binary `read`, `write`, and `close`; not a browser global or constructor; 8 MiB message/frame limit |
 
@@ -786,8 +787,9 @@ length; `.rounded("50%")` reports that radius needs an absolute one.
 
 `line_height` is the single exception in the grammar: a bare number is a
 multiplier, not pixels, because `line_height(1.45)` means 1.45× the font size
-everywhere else in the industry and 1.45px is never what anyone meant. A string
-still goes through the ordinary grammar.
+everywhere else in the industry — CSS's unitless `line-height: 1.45`, Rust's
+`line_height(relative(1.45))` — and 1.45px is never what anyone meant. A string
+still goes through the ordinary grammar, so `line_height("18px")` is fixed.
 
 ### 7.2 Descriptions
 
@@ -1416,8 +1418,8 @@ available to a script; the script re-derives them with `when`.
 ### 10.5 Input events
 
 `on_key_down`, `on_key_up`, `on_modifiers_changed`,
-`on_mouse_down(button, …)`, `on_mouse_up`, `on_mouse_down_out` and
-`on_scroll_wheel` are GPUI's own `InteractiveElement` builders, installed
+`on_mouse_down(button, …)`, `on_mouse_up`, `on_mouse_down_out`,
+`on_scroll_wheel` and `on_pinch` are GPUI's own `InteractiveElement` builders, installed
 together by `materialize::with_input_handlers`.
 
 ```js
@@ -2096,8 +2098,9 @@ import { Button } from "gpui-component"; // product visuals, ready-made
 Four points decided it then, and all four held. The protocol is one thing and
 the registries are two, which is exactly what separating the render protocol
 from component bindings bought. The crate dependency stays out of the runtime
-entirely: it lives in `crates/component-shell`, so linking `gpui-shell` alone
-keeps `gpui-component` out of the tree. The two module names are distinct,
+core: the catalog lives in `gpui_shell::components`, behind the `components`
+feature, so building `gpui-shell` without it keeps `gpui-component` out of the
+tree. The two module names are distinct,
 because both export `Button` with overlapping method names and different
 semantics, and in JavaScript they can be imported into the same file — the
 module name is the only thing that can distinguish them. And migration is a
@@ -2107,13 +2110,17 @@ change, the business logic and the state do not.
 ### 14.7 The component registry
 
 §14.6 described a second registry as the natural next step. It exists.
-`crates/component-shell` registers the `gpui-component` catalog against a
-registry API that `crates/shell` owns and that names no component. The
-dependency runs one way and only one way: the adapter uses both the runtime and
-the component library, and the runtime uses neither. `gpui_shell::init`
-installs the base layer; `gpui_component_shell::init` installs the catalog and
-then the runtime. A host that wants the protocol without the catalog links
-`gpui-shell` alone and gets an empty registry, which declares no module at all.
+`gpui_shell::components` (the default `components` feature) registers the
+`gpui-component` catalog against the registry API the rest of the crate owns,
+and that API names no component: the catalog is written against the public
+surface exactly as an embedding host's own catalog would be, and nothing
+outside `components` refers to it. It used to be a separate crate,
+`gpui-component-shell`; it moved in so that `gpui-shell` is the one package and
+the one command, and Cargo forbids the dependency cycle a feature on a separate
+crate would have needed. `gpui_shell::init` installs the base layer;
+`gpui_shell::components::init` installs the catalog and then the runtime. A
+host that wants the protocol without the catalog builds `gpui-shell` without
+the feature and gets an empty registry, which declares no module at all.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
@@ -2191,6 +2198,22 @@ keys: anything a script can observe — a process id, a clock, a counter — wou
 be reconstructible, and a forged handle would reach another application's state.
 Retained values are owned by the application generation that created them and
 are released with it.
+
+A retained state built on the text engine — an `Entity<InputBaseState<M>>`,
+which is what both `gpui-component`'s `InputState` and `TextareaState` are —
+declares `with_input_events::<M>()`, and its script object gains
+`on(event, handler)` with the events, payloads and call scope of `gpui-base`'s
+`InputState.on`: `change`, `submit` (Enter, carrying `secondary` and `shift`),
+`focus` and `blur`. The subscription lives in the state's slot and ends with it.
+The two modules' states share a kind name but not a handle table, so a
+registered component refuses a `gpui-base` state of a kind the registry also
+registers, naming the module whose state it wants, rather than resolving the
+handle in the wrong table.
+
+Every export of the generated module — component and state alike — is callable
+as `Type.new(...)`, the form `gpui-base` uses, as well as by the plain call and
+`new Type(...)` it accepted first. A script importing from both modules writes
+one construction form.
 
 **Effects.** Some native surfaces change state that outlives the render asking
 for it: an application menu bar, a window title. `MaterializeRequest::app_effects`
@@ -2380,10 +2403,13 @@ is what happens when two of them are open at once.
 
 `ShellRoot` is that decision, and it is the only reason `root.rs` exists: a
 stacking order plus a dismissal order, with the smallest presentation that makes
-them visible. The first view of a shell window is always a `ShellRoot`, the same
-way the first view of a `gpui-component` window is always a `Root`, and a script
-reaches it only through `ShellRoot::update` — never by constructing overlays
-itself.
+them visible. The first view of a shell window is a `ShellRoot`, the same way the
+first view of a `gpui-component` window is a `Root` — or, when a catalog opens
+the window itself so that its own overlays find their `Root`
+(`ComponentWindowOpener`), the view directly inside that `Root`. A script
+reaches it only through `ShellRoot::update`, which looks in both places — never
+by constructing overlays itself. A view's `init` runs before its window has a
+root, so an overlay call made there is refused with a message that says so.
 
 **Stacking**, painted back to front: the script's content; at most one sheet,
 anchored to a viewport edge; the dialog stack in open order, each deferred at
@@ -2539,7 +2565,15 @@ The public module is `fs/promises`; the callback-style `fs` name is deliberately
 not registered. `readFile(path)` resolves to `Uint8Array`, while an explicit
 `"utf8"` or `{ encoding: "utf8" }` resolves to text. `writeFile` accepts a string
 or `Uint8Array`. `readdir(path)` resolves to sorted names; pass
-`{ withFileTypes: true }` for `Dirent` objects with `isDirectory()`. The remaining
+`{ withFileTypes: true }` for `Dirent` objects with `isDirectory()`. `stat(path)`
+follows a symlink and `lstat(path)` does not; both resolve to a `Stats`-shaped
+object with `isFile()`, `isDirectory()`, `isSymbolicLink()`, `size`, `mode`, and
+`mtime`/`atime`/`birthtime` as `Date`s plus their `…Ms` numbers (a time the
+filesystem does not record reads as the epoch). `readlink(path)` resolves to the
+stored target text, which may name a place outside every root; reading the text
+is not following it. `stat`, `lstat`, and `readlink` need read access;
+`rename(from, to)` needs write access to both paths, because taking a file out
+of a directory changes that directory as much as putting one in. The remaining
 subset is `exists`, `unlink`, `rmdir`, and `mkdir`. Streams, file descriptors,
 watches, and sync operations are not part of the experimental contract.
 
@@ -2582,8 +2616,13 @@ flush barriers may wait for durability at once.
 Three experimental surfaces are implemented. Global `fetch(url, options?)`
 supports bounded requests of any HTTP method -- which methods actually reach a
 host is the capability policy's decision -- string or `Uint8Array` bodies, safe
-request headers, and resolves to `{ status, ok, url, , json() }`; both
-body readers return promises. The `gpui-kit` module exports
+request headers, and resolves to
+`{ status, ok, url, text(), json(), arrayBuffer(), bytes() }`; every body reader
+returns a promise. The body is kept as bytes until a reader asks for text, so a
+binary download survives `arrayBuffer()` unchanged. Requests carry
+`User-Agent: gpui-shell/<version>` unless the script sets its own, because some
+APIs, GitHub's among them, refuse a request without one; the WebSocket handshake
+does the same. The `gpui-kit` module exports
 `WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
 `connect(host, port)` with bounded async `read` and `write`; its synchronous
@@ -2721,6 +2760,16 @@ process: it ends it, with the code the script asked for.
 `process` is installed as a global as well as a `gpui-kit` module member, because
 `process` is the name a JavaScript author, or a model writing JavaScript, will
 reach for.
+
+An application also needs to know where things are. `process.dataDir` is its
+data directory (`Policy::with_data_dir`, which `set_bundle_id` sets);
+`os.homedir()` is the user's home; `import.meta.url` is the `file:` URL of the
+running module. None needs a grant: a path says where something is, and reaching
+it is still `capabilities.fs`'s decision. `process.env` is the exception, because
+an environment variable's _value_ can be a secret — it holds only the defaults
+in `crates/shell/src/default-env` and the names `capabilities.process.env` lists. `env` and `dataDir` are getters on the default
+object rather than named exports, so each read answers for the application whose
+code is running (§18.3).
 
 There is no streaming subprocess: pipe semantics conflict with the asynchronous
 model, and a case that needs streaming output belongs behind a host-registered
@@ -2973,6 +3022,13 @@ while producing no information the script did not already carry. The schema is
 generated from the types with `schemars`, following
 `crates/component/src/theme/schema.rs`, so the schema and the parser cannot disagree.
 
+`window` is the one field about presentation rather than permission or
+identity: `{ "width": 360, "height": 520 }` in logical pixels, the size the
+window opens at. It is data because the host opens the window before any
+script runs, so a script cannot say it in time; the person using the
+application can still resize the window, and an absent `window` keeps the
+host's default.
+
 Every parse failure names the field and says what was expected, because this is
 the first thing a plugin author meets and usually the only diagnostic they get:
 nothing has run, so there is no stack to fall back on. Three validation
@@ -3007,6 +3063,39 @@ come from the host and nowhere else. A relative path is anchored to the plugin
 directory; an absolute path is taken as written, and is exactly the case a host
 policy or an approval prompt exists to gate.
 
+`${homeDir}` is the user's home directory (`HOME`, or `USERPROFILE`), so an
+application that manages the user's own files — `${homeDir}/.claude/skills` —
+can ask for them without hard-coding a user name. It grants nothing the
+equivalent absolute path would not; it only makes that path portable. When no
+home directory is known, a root under it is dropped from the grant rather than
+left as a relative directory named `${homeDir}` inside the plugin. `~/` is not
+expanded: it is shell syntax, and a placeholder that looks like the other two is
+one rule for an author to learn instead of two. Any other `${…}` is an error.
+A root that starts with `$HOME`, `${HOME}`, `$USERPROFILE`, `%USERPROFILE%` or
+`~` is refused by name with the `${homeDir}` spelling to use: without that
+check the unbraced forms are not placeholders at all and would quietly become a
+relative directory that grants nothing.
+
+A local run (`gpui-shell run`) _adds_ the application directory and its data
+directory to the manifest's roots. An earlier version replaced the manifest's
+roots with those two, which silently dropped every other directory the manifest
+asked for.
+
+`process.env` shows a default set of variables that describe the user's
+machine, session and preferences (`HOME`, `USER`, `HOSTNAME`, `LANG`, `TZ`,
+`PATH`, `EDITOR`, `DISPLAY`, the proxy settings, the XDG directories and their
+Windows counterparts) and are never tokens, keys or passwords, so an application does not have
+to list the same names every other one does. The set is maintained in one
+place, `crates/shell/src/default-env`, one name per line; a test in
+`capability.rs` refuses a duplicate, a malformed name, or one that looks like it
+holds a credential. `capabilities.process.env` lists anything beyond it. Names match without regard
+to case, because the same variable is spelled both ways (`http_proxy`,
+`HTTP_PROXY`) and Windows does not distinguish them; the list keeps one
+upper-case spelling and `process.env` reports the one the environment uses. The
+rest of the environment stays out of reach, because it routinely holds tokens
+and keys handed to the host rather than to every script it runs; `process.env`
+is always an object, so `process.env.X ?? fallback` works without a grant.
+
 `execute` is either an allowlist of command names or the string `"*"`.
 Unrestricted execution has to be spellable — a host that cannot express it pushes
 its users toward granting a wildcard read root instead, which is worse — but it
@@ -3030,8 +3119,8 @@ non-zero start-up cost that has to be budgeted (§20.8), and makes "do real work
 in the entry module" a convention violation tooling can flag.
 
 Data lives under the plugin's `id` rather than under its path, so it survives an
-upgrade that moves the plugin directory — which is exactly what §23's path digest
-cannot do for a directory run from the command line.
+upgrade that moves the plugin directory. §23's path digest is only for a
+directory with no manifest, which has no `id` to use.
 
 ### 18.3 Authority travels with the code, not with the moment
 
@@ -3074,6 +3163,17 @@ the host policy, and `PluginManager::load` requires the host to authorize the
 inert manifest before code runs. A contribution registry is also missing: there
 is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
 `gpui.register_theme` for a script to register into.
+
+The command line host runs **one application per process**: `gpui-shell run <name>`
+runs the installed application `~/.gpui-shell/apps/<name>` (or
+`$GPUI_SHELL_HOME/apps/<name>`), `gpui-shell run -d <directory>` runs a directory,
+and with no argument it runs the application packaged beside the executable
+(`Contents/Resources/app` in a macOS bundle, `app` elsewhere). An installed or
+packaged application keeps its storage under its manifest `id`; a directory run
+by path is keyed by its path (§23). `list` reads manifests without executing
+anything, and `agents` writes generated development instructions for coding
+agents. Multi-application hosting stays the job of an embedding host and
+`PluginManager`.
 
 Today the grant comes from the host directly. Running a directory from the
 command line is an explicit act of trust, the same as `node app.js`, and
@@ -4198,20 +4298,22 @@ can fail, since a caller who mistyped a flag is exactly the caller who needs
 Usage errors exit 2; a runtime that fails to start exits 1.
 
 **Storage is per application, under the user's data directory, keyed by the
-canonical path of the application root.** The path is
-`<data home>/gpui-shell/apps/<directory name>-<16 hex digits>/store.json`, where
+manifest `id`.** The path is `<data home>/gpui-shell/apps/<id>/store.json`,
+whether the application is run with `-d`, installed or packaged, so a copy being
+edited and the installed copy share their data and the path an application shows
+its user is predictable. Script reads the directory as `process.dataDir`.
+
+A directory without a manifest has no `id`, and is keyed by its canonical path
+instead: `<data home>/gpui-shell/apps/<directory name>-<16 hex digits>/`, where
 the digits are an FNV-1a hash of the canonical root — not a security boundary,
 just enough to keep two directories from sharing a folder. Keeping the directory
-name in the path makes the folder recognizable; the digest disambiguates it, so
-two checkouts of the same application are genuinely different installations.
+name in the path makes the folder recognizable; the digest disambiguates it.
 `<data home>` honors `XDG_DATA_HOME`, and otherwise follows the platform
 convention — `~/Library/Application Support` on macOS, `%APPDATA%` on Windows,
 `~/.local/share` elsewhere.
 
 Storage lives outside the application directory because that directory may be
 read-only, is often a git checkout, and is not where a user expects their data.
-When the plugin model lands, a manifest `id` should replace the digest, so an
-installed plugin keeps its data across an upgrade that moves it.
 
 Assets — the files `svg(path)` names — are served from the application directory
 and nowhere else, with the same traversal check as the module resolver. Note the

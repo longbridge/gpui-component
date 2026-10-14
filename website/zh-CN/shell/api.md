@@ -609,6 +609,7 @@ render() {
 | `on_mouse_up(button, handler)`   | 松开时的 `(MouseButtonEvent, cx)`                                           |
 | `on_mouse_down_out(handler)`     | 在该元素之外任意位置按下时的 `(MouseButtonEvent, cx)`                       |
 | `on_scroll_wheel(handler)`       | 滚轮或触控板滚动时的 `(ScrollWheelEvent, cx)`                               |
+| `on_pinch(handler)`              | 触控板或触摸屏双指缩放每一步的 `(PinchEvent, cx)`                           |
 | `on_action(action, handler)`     | 该命名 action 被派发到此元素或其内部时的 `(ActionEvent, cx)`                |
 | `on_change(handler)`             | 开关变化时的 `(checked, cx)`；新值由脚本保存                                |
 | `on_step(handler)`               | `("increment" \| "decrement", cx)`，并且它会**取代**内置的步进              |

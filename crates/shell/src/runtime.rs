@@ -17,8 +17,9 @@ use anyhow::{Result, anyhow};
 use gpui::{
     AnyElement, App, BorderStyle, Bounds, ClipboardItem, Corners, Edges, Element, ElementId,
     Entity, GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, IntoElement,
-    LayoutId, PaintQuad, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement,
-    Styled, StyledText, WeakEntity, Window, div, px, relative, rems, transparent_black,
+    LayoutId, PaintQuad, ParentElement, PathBuilder, Pixels, Point, SharedString,
+    StatefulInteractiveElement, Styled, StyledText, WeakEntity, Window, canvas, div, point, px,
+    relative, rems, transparent_black,
 };
 use gpui_base::{
     Button, ColorTokens, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
@@ -85,16 +86,24 @@ pub(crate) fn path_identity(root: &Path) -> String {
     format!("{name}-{:016x}", path_digest(root))
 }
 
+/// The user's home directory: `HOME`, or `USERPROFILE` on Windows. `None` when
+/// neither names an absolute directory, rather than a relative path that would
+/// quietly resolve against wherever the process happened to start.
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    ["HOME", "USERPROFILE"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .find(|home| home.is_absolute())
+}
+
 /// The platform's per-user data directory, honouring the usual overrides.
 pub(crate) fn data_home() -> PathBuf {
     if let Some(explicit) = std::env::var_os("XDG_DATA_HOME").filter(|it| !it.is_empty()) {
         return PathBuf::from(explicit);
     }
 
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
+    let home = home_dir().unwrap_or_else(std::env::temp_dir);
 
     if cfg!(target_os = "macos") {
         home.join("Library").join("Application Support")
@@ -151,7 +160,7 @@ fn missing_entry_message(root: &Path, entry: &str) -> String {
     let mut message = format!(
         "no `{entry}` in {}
 
-An application directory must contain {entry},          which default-exports a view class.",
+An application directory must contain {entry}, which default-exports a view class.",
         root.display()
     );
 
@@ -703,6 +712,8 @@ pub fn failure_surface(
                                 .border_color(border)
                                 .child(
                                     div()
+                                        .flex_1()
+                                        .min_w_0()
                                         .text_size(rems(0.75))
                                         .line_height(relative(1.5))
                                         .text_color(muted)
@@ -858,6 +869,9 @@ fn paint_selection(layout: &gpui::TextLayout, range: Range<usize>, window: &mut 
 
 /// Copies the failure, and says so — a copy leaves no visible trace otherwise,
 /// which is exactly when confirmation is worth its space.
+/// Copies the heading and detail. An icon rather than a caption, so the
+/// recovery line beside it keeps the width and the button cannot be pushed out
+/// of the panel; the check mark confirms the copy in place.
 fn copy_button(
     state: Entity<bool>,
     copied: bool,
@@ -868,15 +882,12 @@ fn copy_button(
 ) -> AnyElement {
     Button::new("shell-failure-copy")
         .flex()
+        .flex_none()
         .items_center()
         .justify_center()
-        .h(rems(1.625))
-        .px(rems(0.75))
+        .size(rems(1.625))
         .border_1()
         .border_color(border)
-        .text_size(rems(0.75))
-        .line_height(relative(1.))
-        .text_color(if copied { muted } else { foreground })
         .hover(|style| style.opacity(0.8))
         .on_click(move |_, _, cx| {
             cx.write_to_clipboard(ClipboardItem::new_string(payload.clone()));
@@ -885,12 +896,54 @@ fn copy_button(
                 cx.notify();
             });
         })
-        .child(SharedString::from(if copied {
-            "Copied"
-        } else {
-            "Copy details"
-        }))
+        .child(
+            div()
+                .size(rems(0.875))
+                .child(copy_icon(copied, if copied { muted } else { foreground })),
+        )
         .into_any_element()
+}
+
+/// Lucide's `copy` and `check`, stroked directly.
+///
+/// Drawn rather than loaded because the asset source belongs to the
+/// application: an `svg()` here would be looked up in the very directory that
+/// just failed to load, or in an embedding host's own assets.
+fn copy_icon(copied: bool, color: Hsla) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, (), window, _| {
+            let side = if bounds.size.width < bounds.size.height {
+                bounds.size.width
+            } else {
+                bounds.size.height
+            };
+            // Lucide draws on a 24-unit grid with a 2-unit stroke.
+            let unit = side / 24.;
+            let at = |x: f32, y: f32| point(bounds.origin.x + unit * x, bounds.origin.y + unit * y);
+            let mut path = PathBuilder::stroke(unit * 2.);
+            if copied {
+                path.move_to(at(20., 6.));
+                path.line_to(at(9., 17.));
+                path.line_to(at(4., 12.));
+            } else {
+                path.move_to(at(8., 8.));
+                path.line_to(at(22., 8.));
+                path.line_to(at(22., 22.));
+                path.line_to(at(8., 22.));
+                path.close();
+                path.move_to(at(4., 16.));
+                path.line_to(at(2., 16.));
+                path.line_to(at(2., 2.));
+                path.line_to(at(16., 2.));
+                path.line_to(at(16., 4.));
+            }
+            if let Ok(path) = path.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .size_full()
 }
 
 /// Semantic token with a fallback, because a failure surface must render even
