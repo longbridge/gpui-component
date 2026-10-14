@@ -451,14 +451,22 @@ pub fn max_stack_size_bytes() -> usize {
 
 /// How long one host call may keep the interpreter before it is cut off.
 ///
+/// These are a watchdog for a script that will never return — an endless loop,
+/// a recursion that never bottoms out — not a performance target. Cutting off a
+/// call that would have finished is the worst outcome available: the render or
+/// the task is lost, the view shows an error, and the work has to start over.
+/// A slow call that completes only costs frames. So the limits sit well past
+/// anything a working application takes, and a call that is merely slow is
+/// reported in the log at `warn_after` instead, where its author will see it.
+///
 /// Kept private: the numbers are policy, not API, and tests need a version with
 /// a millisecond deadline so they finish quickly.
 #[derive(Clone, Copy)]
 struct Budgets {
-    /// Render and layout run inside GPUI's frame; overrunning here is visible
-    /// as a dropped frame, so the budget is the tight one.
+    /// Render and layout run inside GPUI's frame, so the window is frozen for
+    /// as long as they take; this is the tightest limit.
     render: Duration,
-    /// An event handler may legitimately do real work before it returns.
+    /// An event handler or a resumed task may legitimately do real work.
     event: Duration,
     /// Module evaluation at startup, which happens outside any call scope.
     detached: Duration,
@@ -467,10 +475,38 @@ struct Budgets {
 impl Default for Budgets {
     fn default() -> Self {
         Self {
-            render: Duration::from_millis(50),
-            event: Duration::from_millis(500),
-            detached: Duration::from_secs(5),
+            render: Duration::from_secs(2),
+            event: Duration::from_secs(5),
+            detached: Duration::from_secs(10),
         }
+    }
+}
+
+impl Budgets {
+    fn limit(&self, phase: Option<ScopePhase>) -> Duration {
+        match phase {
+            Some(ScopePhase::Render | ScopePhase::Layout) => self.render,
+            Some(ScopePhase::Event | ScopePhase::Task) => self.event,
+            None => self.detached,
+        }
+    }
+}
+
+/// When a call that is still running is worth a warning: a render past a few
+/// frames, or anything else past a pause a person would notice.
+fn warn_after(phase: Option<ScopePhase>) -> Duration {
+    match phase {
+        Some(ScopePhase::Render | ScopePhase::Layout) => Duration::from_millis(100),
+        Some(ScopePhase::Event | ScopePhase::Task) | None => Duration::from_secs(1),
+    }
+}
+
+/// A duration as a person would say it: `100 ms`, `2 s`.
+fn spoken(duration: Duration) -> String {
+    if duration < Duration::from_secs(1) {
+        format!("{} ms", duration.as_millis())
+    } else {
+        format!("{} s", duration.as_secs())
     }
 }
 
@@ -545,31 +581,32 @@ pub(super) fn explain_interruption(message: &str) -> Option<String> {
         return None;
     }
     let Interruption { phase, budget } = INTERRUPTION.with(Cell::take)?;
-    let limit = if budget < Duration::from_secs(1) {
-        format!("{} ms", budget.as_millis())
-    } else {
-        format!("{} s", budget.as_secs())
-    };
+    let limit = spoken(budget);
     Some(match phase {
         Some(ScopePhase::Render) => format!(
-            "render() ran longer than {limit} and was stopped.\n\
-             Move slow work such as scanning or parsing into a task, and render its result."
+            "render() ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; move slow work such as scanning or \
+             parsing into a task and render its result."
         ),
         Some(ScopePhase::Layout) => format!(
-            "A list item ran longer than {limit} to render and was stopped.\n\
-             Prepare item data ahead of time so rendering one item stays cheap."
+            "A list item ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; prepare item data ahead of time so \
+             rendering one item stays cheap."
         ),
         Some(ScopePhase::Event) => format!(
-            "An event handler ran longer than {limit} and was stopped.\n\
-             Move slow work into a task and await between chunks of it."
+            "An event handler ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; move slow work into a task and await \
+             between chunks of it."
         ),
         Some(ScopePhase::Task) => format!(
-            "A task ran longer than {limit} without awaiting and was stopped.\n\
-             Await between chunks of work so the window stays responsive."
+            "A task ran for {limit} without awaiting and was stopped.\n\
+             Check for a loop that never ends; await between chunks of work so the \
+             window stays responsive."
         ),
         None => format!(
-            "Loading the script took longer than {limit} and was stopped.\n\
-             Defer slow work at module load to init() or a task."
+            "Loading the script ran for {limit} without finishing and was stopped.\n\
+             Check for a loop that never ends; defer slow work at module load to \
+             init() or a task."
         ),
     })
 }
@@ -577,6 +614,7 @@ pub(super) fn explain_interruption(message: &str) -> Option<String> {
 fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
     let mut window = None;
     let mut started = Instant::now();
+    let mut warned = false;
 
     move || {
         let current = match scope::current_generation() {
@@ -586,18 +624,28 @@ fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
         if window != Some(current) {
             window = Some(current);
             started = Instant::now();
+            warned = false;
             // An interrupt nobody reported belongs to a call that is over.
             INTERRUPTION.with(|interruption| interruption.set(None));
         }
 
         let phase = scope::current_phase();
-        let budget = match phase {
-            Some(ScopePhase::Render | ScopePhase::Layout) => budgets.render,
-            Some(ScopePhase::Event | ScopePhase::Task) => budgets.event,
-            None => budgets.detached,
-        };
+        let budget = budgets.limit(phase);
+        let elapsed = started.elapsed();
 
-        let expired = started.elapsed() > budget;
+        // Said while the call is still running, because a call that finishes
+        // leaves no other trace of having been slow.
+        if !warned && elapsed > warn_after(phase) {
+            warned = true;
+            tracing::warn!(
+                "a script {} call has run for over {}; it will be stopped at {}",
+                phase.map_or("module", ScopePhase::as_str),
+                spoken(warn_after(phase)),
+                spoken(budget),
+            );
+        }
+
+        let expired = elapsed > budget;
         if expired {
             INTERRUPTION
                 .with(|interruption| interruption.set(Some(Interruption { phase, budget })));
