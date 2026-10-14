@@ -731,7 +731,17 @@ impl Element for TextView {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             })
             .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
-            .child(state.clone())
+            .map(|this| {
+                if self.scrollable {
+                    this.child(crate::ScrollBounce::new(
+                        ("text-view-bounce", state.entity_id()),
+                        &list_state,
+                        state.clone(),
+                    ))
+                } else {
+                    this.child(state.clone())
+                }
+            })
             // Overlay controls must paint after the document, otherwise rich
             // content and selection backgrounds cover the thumb and hitbox.
             .when(self.scrollable, |this| {

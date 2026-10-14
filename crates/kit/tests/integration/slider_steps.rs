@@ -1,10 +1,11 @@
 use crate::common;
 
+use gpui_kit::base::Slider as BaseSlider;
 use gpui_kit::component::slider::{Slider, SliderEvent, SliderState, SliderValue};
-use gpui_kit::test::{TestEventExt, TestWindowExt};
+use gpui_kit::test::{TestEventExt, TestQueryExt, TestWindowExt};
 use gpui_kit::{
-    AppContext, Context, Entity, MouseButton, Subscription, TestAppContext, Window, div, point,
-    prelude::*, px, size,
+    AppContext, Context, Entity, MouseButton, Role, Subscription, TestAppContext, Window, div,
+    point, prelude::*, px, size,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -152,4 +153,73 @@ fn disabled_slider_gesture_neither_changes_value_nor_emits_events(cx: &mut TestA
     .unwrap();
     cx.run_until_parked();
     assert!(events.borrow().is_empty());
+}
+
+#[gpui_kit::test]
+fn slider_accessibility_labels_follow_the_existing_nodes(cx: &mut TestAppContext) {
+    struct LabeledSliders {
+        base: Entity<SliderState>,
+        component: Entity<SliderState>,
+        labels: Option<(&'static str, &'static str)>,
+    }
+
+    impl Render for LabeledSliders {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .flex()
+                .flex_col()
+                .p_8()
+                .w(px(264.))
+                .child(
+                    BaseSlider::new(&self.base)
+                        .w_full()
+                        .h(px(24.))
+                        .when_some(self.labels, |slider, (label, _)| {
+                            slider.accessibility_label(label)
+                        }),
+                )
+                .child(
+                    Slider::new(&self.component).when_some(self.labels, |slider, (_, label)| {
+                        slider.accessibility_label(label)
+                    }),
+                )
+        }
+    }
+
+    cx.update(gpui_kit::init);
+    let base = cx.new(|_| SliderState::new().default_value(20.));
+    let component = cx.new(|_| SliderState::new().default_value(40.));
+    let (handle, content) = common::open_window(cx, Some(size(px(400.), px(240.))), |_, cx| {
+        cx.new(|_| LabeledSliders {
+            base: base.clone(),
+            component: component.clone(),
+            labels: None,
+        })
+    });
+
+    for labels in [
+        None,
+        Some(("Corner radius", "Padding scale")),
+        Some(("圆角", "内边距")),
+        None,
+    ] {
+        common::update_content(handle, &content, cx, |view, _, cx| {
+            view.labels = labels;
+            cx.notify();
+        })
+        .unwrap();
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            assert_eq!(window.find_all_by_role(Role::Slider).len(), 2);
+            for (state, label) in [
+                (&base, labels.map(|labels| labels.0)),
+                (&component, labels.map(|labels| labels.1)),
+            ] {
+                let slider = window.find(("slider", state.entity_id()));
+                assert_eq!(slider.role(), Some(Role::Slider));
+                assert_eq!(slider.label(), label);
+            }
+        })
+        .unwrap();
+    }
 }

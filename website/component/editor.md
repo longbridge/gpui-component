@@ -105,6 +105,23 @@ The language set via `.language()` selects syntax highlighting. Enable the
 matching Cargo feature, such as `tree-sitter-rust` or `tree-sitter-markdown`;
 use `tree-sitter-languages` to bundle all built-in grammars.
 
+Highlighting comes from one of two engines, chosen with a Cargo feature of
+`gpui-kit`. Neither is enabled by default.
+
+- `tree-sitter` parses a syntax tree, which also drives folding and
+  syntax-aware editing. Each language is a grammar feature as above; all of
+  them together add tens of megabytes to an application.
+- `syntect` highlights about 200 languages with regular expressions for a few
+  megabytes. It builds no syntax tree, so folding follows braces and editing
+  has no syntax context. Use it when an application needs highlighted code
+  rather than a structural editor:
+
+```toml
+gpui-kit = { version = "{{gpui_kit_version}}", features = ["syntect"] }
+```
+
+With both enabled, `tree-sitter` is used.
+
 ## Editor options
 
 ```rust
@@ -114,9 +131,15 @@ let editor = cx.new(|cx| {
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
+        .scroll_bounce(true)
         .default_value(source)
 });
 ```
+
+`scroll_bounce(true)` lets code longer than the editor stretch past its top or
+bottom and spring back with precise trackpad or Magic Mouse scrolling, as in the
+[Textarea](./textarea.md#scroll-bounce). The gutter moves with the code; the
+frame and scrollbar stay put. Ordinary mouse-wheel line scrolling does not bounce.
 
 ## Manual completions
 

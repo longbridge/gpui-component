@@ -2254,8 +2254,7 @@ impl ShellRuntime {
     ) -> Result<ViewType> {
         self.with_jit_suspended(|| {
             self.with_js(|ctx| {
-                let (module, promise) =
-                    rquickjs::Module::declare(ctx.clone(), name, source)?.eval()?;
+                let (module, promise) = declare_app_module(ctx, name, source)?.eval()?;
                 promise.finish::<()>()?;
 
                 let default: Value = module.get("default")?;
@@ -4190,12 +4189,7 @@ impl ShellRuntime {
         };
         let position = event.position;
         let modifiers = event.modifiers;
-        let touch_phase = match event.touch_phase {
-            gpui::TouchPhase::Started => "started",
-            gpui::TouchPhase::Moved => "moved",
-            gpui::TouchPhase::Ended => "ended",
-            gpui::TouchPhase::Cancelled => "cancelled",
-        };
+        let touch_phase = touch_phase_name(event.touch_phase);
         self.dispatch_simple_event(id, "scroll wheel", window, cx, move |ctx| {
             let payload = Object::new(ctx.clone())?;
             let delta = Object::new(ctx.clone())?;
@@ -4212,6 +4206,29 @@ impl ShellRuntime {
                 None => payload.set("delta_lines", rquickjs::Undefined)?,
             }
             payload.set("touch_phase", touch_phase)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one step of a pinch-to-zoom gesture to a script handler.
+    pub(crate) fn dispatch_pinch(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::PinchEvent,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let delta = event.delta;
+        let position = event.position;
+        let modifiers = event.modifiers;
+        let phase = touch_phase_name(event.phase);
+        self.dispatch_simple_event(id, "pinch", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("delta", delta)?;
+            payload.set("phase", phase)?;
             set_pointer_geometry(ctx, &payload, position, bounds)?;
             payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
             Ok(payload)
@@ -5450,8 +5467,55 @@ impl Loader for AppModules {
         let path = Self::untag(name);
         let source = read_module_source(Path::new(path))
             .map_err(|error| Exception::throw_message(ctx, &error.to_string()))?;
-        Module::declare(ctx.clone(), name, source)
+        declare_app_module(ctx, name, source)
     }
+}
+
+/// Declares an application's module with `import.meta.url` naming its file.
+///
+/// A module that finds its own assets or data relative to itself reaches for
+/// `new URL("./data.json", import.meta.url)`, the way it would in a browser or
+/// in Node. The generation tag stays out of the URL: it is how this loader
+/// tells two loads apart, not part of where the file is.
+fn declare_app_module<'js>(
+    ctx: &Ctx<'js>,
+    name: &str,
+    source: impl Into<Vec<u8>>,
+) -> JsResult<Module<'js, Declared>> {
+    let module = Module::declare(ctx.clone(), name, source)?;
+    let path = Path::new(AppModules::untag(name));
+    if path.is_absolute() {
+        module.meta()?.set("url", file_url(path))?;
+    }
+    Ok(module)
+}
+
+/// The `file:` URL for an absolute path, percent-encoding everything a URL
+/// path may not hold as written.
+fn file_url(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    // A canonical Windows path is verbatim (`\\?\C:\…`), which a URL does not
+    // spell, and separated by backslashes, which a URL does not either.
+    let path = if cfg!(windows) {
+        path.strip_prefix(r"\\?\")
+            .unwrap_or(&path)
+            .replace('\\', "/")
+    } else {
+        path.into_owned()
+    };
+    let mut url = String::from("file://");
+    if !path.starts_with('/') {
+        url.push('/');
+    }
+    for byte in path.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => {
+                url.push(byte as char)
+            }
+            _ => url.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    url
 }
 
 fn read_module_source(path: &Path) -> Result<String> {
@@ -7072,6 +7136,7 @@ impl ShellRuntime {
                 "on_mouse_up",
                 "on_mouse_down_out",
                 "on_scroll_wheel",
+                "on_pinch",
                 "on_action",
                 "key_context",
                 "aria_level",
@@ -7699,6 +7764,11 @@ impl ShellRuntime {
                             .map(DataResult).map_err(|e| state_operation_error(&ctx, e))
                     }))?;
                 }
+                entity_api::install_component_state_events(
+                    &component_module,
+                    runtime.clone(),
+                    descriptor.clone(),
+                )?;
                 let state_runtime = runtime.clone();
                 let descriptor = descriptor.clone();
                 component_module.set(
@@ -7812,11 +7882,11 @@ impl ShellRuntime {
                     &format!("`{name}` does not take a function"),
                 ));
             }
-            // Said by the same code that says it for every other bound method,
-            // so a missing argument reads the same wherever it is missed.
+            // `style::apply_param` says it, so a missing argument reads the
+            // same whichever path recorded the call.
             None => {
-                let error = crate::value::arg(&[], 0, name)
-                    .expect_err("argument 0 of an empty list is always missing");
+                let error = style::apply_param(name, &[], Default::default())
+                    .expect_err("a parametric style without its argument is refused");
                 return Err(Exception::throw_type(ctx, error.message()));
             }
         };
@@ -8075,6 +8145,7 @@ impl ShellRuntime {
             | "on_modifiers_changed"
             | "on_mouse_down_out"
             | "on_scroll_wheel"
+            | "on_pinch"
             | "tab_bar"
             | "empty_group"
             | "drop_indicator"
@@ -8646,6 +8717,21 @@ impl ShellRuntime {
                     .ensure_claimable(*id)
                     .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
                 Some(ComponentArgument::Element(*id))
+            }
+            // A `gpui-base` state and a registered one can share a kind name —
+            // `InputState` is both — and a handle into one table, read from the
+            // other, would bind the control to some unrelated state.
+            (ArgumentSchema::Entity(kind), Argument::Entity(_))
+                if self.components.states().any(|state| state.kind() == *kind) =>
+            {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!(
+                        "{api}({name}) expects the {kind} from {module:?}, created with \
+                         {kind}.new(...) imported from {module:?}; this one is gpui-base's",
+                        module = self.components.module_specifier().unwrap_or_default(),
+                    ),
+                ));
             }
             (ArgumentSchema::Entity(kind), Argument::Entity(handle))
                 if self.entities.borrow().kind(*handle) == Some(*kind) =>
@@ -9434,6 +9520,16 @@ fn script_keystroke(keystroke: &gpui::Keystroke) -> String {
     out
 }
 
+/// A gesture phase as the string a script compares against.
+fn touch_phase_name(phase: gpui::TouchPhase) -> &'static str {
+    match phase {
+        gpui::TouchPhase::Started => "started",
+        gpui::TouchPhase::Moved => "moved",
+        gpui::TouchPhase::Ended => "ended",
+        gpui::TouchPhase::Cancelled => "cancelled",
+    }
+}
+
 /// The modifier keys, in the shape every event payload carries them.
 fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult<Object<'js>> {
     let object = Object::new(ctx.clone())?;
@@ -10002,6 +10098,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_modifiers_changed" => "on_modifiers_changed",
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_scroll_wheel" => "on_scroll_wheel",
+        "on_pinch" => "on_pinch",
         "on_item_click" => "on_item_click",
         "on_item_secondary_click" => "on_item_secondary_click",
         "on_resize" => "on_resize",
@@ -10140,21 +10237,124 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
     if !matches!(error, JsError::Exception) {
         return error.to_string();
     }
-    let value = ctx.catch();
-    match value.as_exception() {
-        Some(exception) => match exception.stack() {
-            Some(stack) => format!(
-                "{}\n{stack}",
-                exception.message().unwrap_or_else(|| "error".into())
-            ),
-            None => exception.message().unwrap_or_else(|| "error".into()),
-        },
-        None => format!("{value:?}"),
+    describe_value(ctx, &ctx.catch())
+}
+
+/// Renders a thrown value the way its author would want to read it: one line
+/// that says what happened, then the script stack that produced it.
+///
+/// The first line is what a failure surface shows collapsed, so it must stand
+/// on its own. That rules out a Rust `Debug` dump of a value that is not an
+/// `Error` — `throw null` used to surface as `Null"null"`.
+fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+    if let Some(exception) = value.as_exception() {
+        let message = exception.message().unwrap_or_default();
+        let message = sandbox::explain_interruption(&message).unwrap_or_else(|| {
+            match exception.get::<_, Option<String>>("name").ok().flatten() {
+                Some(name) if message.is_empty() => name,
+                Some(name) if name != "Error" => format!("{name}: {message}"),
+                _ if message.is_empty() => "Error".to_owned(),
+                _ => message,
+            }
+        });
+        return match exception.stack() {
+            Some(stack) if !stack.trim().is_empty() => {
+                format!("{message}\n{}", tidy_stack(&stack))
+            }
+            _ => message,
+        };
     }
+
+    if let Some(text) = value.as_string().and_then(|text| text.to_string().ok()) {
+        return text;
+    }
+
+    if value.is_null() || value.is_undefined() {
+        let thrown = if value.is_null() { "null" } else { "undefined" };
+        return format!(
+            "A script threw {thrown} instead of an Error.\n\
+             Throw an Error with a message so the failure says what went wrong and where."
+        );
+    }
+
+    let text = match ctx.json_stringify(value.clone()) {
+        Ok(Some(text)) => text.to_string().ok(),
+        _ => None,
+    };
+    let text = text.unwrap_or_else(|| value.type_name().to_owned());
+    format!(
+        "A script threw {text} instead of an Error.\n\
+         Throw an Error with a message so the failure says what went wrong and where."
+    )
+}
+
+/// Makes a QuickJS stack readable at a glance.
+///
+/// Module names carry a `?v=<generation>` tag the loader adds so an edited file
+/// re-evaluates; the author never wrote it and it means nothing to them. And
+/// recursion repeats one frame until the stack is mostly the same line, so a
+/// run of identical frames is shown once with its count.
+fn tidy_stack(stack: &str) -> String {
+    let mut frames: Vec<(String, usize)> = Vec::new();
+    for line in stack.lines().filter(|line| !line.trim().is_empty()) {
+        let line = strip_generation_tags(line);
+        match frames.last_mut() {
+            Some((last, count)) if *last == line => *count += 1,
+            _ => frames.push((line, 1)),
+        }
+    }
+    frames
+        .into_iter()
+        .map(|(line, count)| match count {
+            1 => line,
+            count => format!("{line} \u{d7}{count}"),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn strip_generation_tags(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find("?v=") {
+        let digits = rest[at + 3..]
+            .find(|character: char| !character.is_ascii_digit())
+            .unwrap_or(rest.len() - at - 3);
+        output.push_str(&rest[..at]);
+        if digits == 0 {
+            output.push_str("?v=");
+        }
+        rest = &rest[at + 3 + digits..];
+    }
+    output.push_str(rest);
+    output
 }
 
 fn js_setup_error(error: JsError) -> anyhow::Error {
     anyhow!("failed to start the JavaScript runtime: {error}")
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::tidy_stack;
+
+    #[test]
+    fn a_stack_drops_generation_tags_and_folds_recursion() {
+        let stack = "    at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at walk (/app/lib/scan.js?v=1:237:72)\n\
+                     \x20   at render (/app/main.js?v=12:870:21)\n";
+
+        assert_eq!(
+            tidy_stack(stack),
+            "    at walk (/app/lib/scan.js:237:72) \u{d7}3\n    at render (/app/main.js:870:21)"
+        );
+        assert_eq!(
+            tidy_stack("    at f (/app/query.js?v=:1:2)"),
+            "    at f (/app/query.js?v=:1:2)",
+            "only a numeric tag is the loader's"
+        );
+    }
 }
 
 #[cfg(test)]

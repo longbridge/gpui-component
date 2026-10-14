@@ -156,7 +156,7 @@ const PARAM_STYLES: &[(&str, &str)] = &[
     ),
     (
         "line_height",
-        "Sets the line height. A bare number is a multiplier (`1.45`), not pixels; a string is a length.",
+        "Sets the line height. A bare number is a multiplier of the font size, as in CSS (`1.45`); a string is a length (`\"18px\"`).",
     ),
     (
         "opacity",
@@ -414,6 +414,17 @@ pub fn apply_param(
     args: &[Bridged],
     refinement: StyleRefinement,
 ) -> ShellResult<StyleRefinement> {
+    // A script that drops the argument passes `undefined`, which crosses the
+    // bridge as nil; every coercion below would then report a nil with no
+    // method name, so a missing argument is answered here, in one place.
+    if args
+        .first()
+        .is_none_or(|value| matches!(value, Bridged::Nil))
+        && param_style_name(name).is_some()
+    {
+        return Err(missing_argument(name));
+    }
+
     /// Reads argument 0 as a `Length` (`"auto"` allowed).
     macro_rules! length {
         () => {
@@ -543,6 +554,30 @@ pub fn suggest(name: &str) -> Option<&'static str> {
         }
     }
     best.map(|(_, candidate)| candidate)
+}
+
+/// The error for a parametric style called without its argument.
+///
+/// GPUI spells the argument-free forms as separate methods (`flex_shrink_0`,
+/// `flex_grow`, `border_1`, `rounded_md`), so `flex_shrink()` is a natural guess
+/// that does not exist there either. Naming those siblings turns the guess into
+/// the call that was meant.
+fn missing_argument(name: &str) -> ShellError {
+    let prefix = format!("{name}_");
+    let siblings: Vec<String> = known_names()
+        .into_iter()
+        .filter(|candidate| candidate.starts_with(&prefix) && param_style_name(candidate).is_none())
+        .take(4)
+        .map(|candidate| format!("`{candidate}()`"))
+        .collect();
+    let mut message = format!("`{name}` expects 1 argument, got none");
+    if !siblings.is_empty() {
+        message.push_str(&format!(
+            "; the forms without an argument are {}",
+            siblings.join(", ")
+        ));
+    }
+    ShellError::runtime(message)
 }
 
 /// Every known style method name (nullary + parametric), for diagnostics.
@@ -806,7 +841,37 @@ mod tests {
         let error = apply_param("p", &[], StyleRefinement::default())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("`p` expects at least 1 argument"), "{error}");
+        assert!(error.contains("`p` expects 1 argument"), "{error}");
+    }
+
+    #[test]
+    fn a_bare_line_height_is_a_multiplier_as_in_css() {
+        let multiple = apply_param(
+            "line_height",
+            &[Bridged::Number(1.5)],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        assert_eq!(multiple.text.line_height, Some(relative(1.5)));
+        let fixed = apply_param(
+            "line_height",
+            &[Bridged::Str("18px".into())],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        assert_eq!(fixed.text.line_height, Some(px(18.).into()));
+    }
+
+    #[test]
+    fn an_undefined_argument_names_the_method_and_its_argument_free_forms() {
+        let error = apply_param("flex_shrink", &[Bridged::Nil], StyleRefinement::default())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("`flex_shrink` expects 1 argument"),
+            "{error}"
+        );
+        assert!(error.contains("`flex_shrink_0()`"), "{error}");
     }
 
     #[test]

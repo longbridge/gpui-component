@@ -61,6 +61,7 @@ use std::{
 use rquickjs::{
     Ctx, Exception, Function, IntoJs, Object, Promise, Result as JsResult, Value,
     function::{Args, Func, Opt, Rest},
+    object::Accessor,
 };
 
 use crate::{
@@ -387,8 +388,38 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
 
     process.set("platform", std::env::consts::OS)?;
     process.set("arch", std::env::consts::ARCH)?;
+
+    // Getters rather than values: one runtime hosts several applications, and
+    // each sees its own grant and its own directory, decided by the call that
+    // is reading them rather than by whichever application loaded first.
+    process.prop("env", Accessor::new_get(granted_env).enumerable())?;
+    process.prop(
+        "dataDir",
+        Accessor::new_get(|| {
+            scope::policy()
+                .data_dir()
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .enumerable(),
+    )?;
     ctx.globals().set("process", process)?;
     Ok(())
+}
+
+/// `process.env`: the variables that are set and either default or granted,
+/// under the spelling the environment uses.
+fn granted_env<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
+    let env = Object::new(ctx)?;
+    let capabilities = host::capabilities();
+    for (name, value) in std::env::vars_os() {
+        let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
+            continue;
+        };
+        if capabilities.may_show_env_variable(name) {
+            env.set(name, value)?;
+        }
+    }
+    Ok(env)
 }
 
 // ---------------------------------------------------------------------------
@@ -420,14 +451,22 @@ pub fn max_stack_size_bytes() -> usize {
 
 /// How long one host call may keep the interpreter before it is cut off.
 ///
+/// These are a watchdog for a script that will never return — an endless loop,
+/// a recursion that never bottoms out — not a performance target. Cutting off a
+/// call that would have finished is the worst outcome available: the render or
+/// the task is lost, the view shows an error, and the work has to start over.
+/// A slow call that completes only costs frames. So the limits sit well past
+/// anything a working application takes, and a call that is merely slow is
+/// reported in the log at `warn_after` instead, where its author will see it.
+///
 /// Kept private: the numbers are policy, not API, and tests need a version with
 /// a millisecond deadline so they finish quickly.
 #[derive(Clone, Copy)]
 struct Budgets {
-    /// Render and layout run inside GPUI's frame; overrunning here is visible
-    /// as a dropped frame, so the budget is the tight one.
+    /// Render and layout run inside GPUI's frame, so the window is frozen for
+    /// as long as they take; this is the tightest limit.
     render: Duration,
-    /// An event handler may legitimately do real work before it returns.
+    /// An event handler or a resumed task may legitimately do real work.
     event: Duration,
     /// Module evaluation at startup, which happens outside any call scope.
     detached: Duration,
@@ -436,10 +475,38 @@ struct Budgets {
 impl Default for Budgets {
     fn default() -> Self {
         Self {
-            render: Duration::from_millis(50),
-            event: Duration::from_millis(500),
-            detached: Duration::from_secs(5),
+            render: Duration::from_secs(2),
+            event: Duration::from_secs(5),
+            detached: Duration::from_secs(10),
         }
+    }
+}
+
+impl Budgets {
+    fn limit(&self, phase: Option<ScopePhase>) -> Duration {
+        match phase {
+            Some(ScopePhase::Render | ScopePhase::Layout) => self.render,
+            Some(ScopePhase::Event | ScopePhase::Task) => self.event,
+            None => self.detached,
+        }
+    }
+}
+
+/// When a call that is still running is worth a warning: a render past a few
+/// frames, or anything else past a pause a person would notice.
+fn warn_after(phase: Option<ScopePhase>) -> Duration {
+    match phase {
+        Some(ScopePhase::Render | ScopePhase::Layout) => Duration::from_millis(100),
+        Some(ScopePhase::Event | ScopePhase::Task) | None => Duration::from_secs(1),
+    }
+}
+
+/// A duration as a person would say it: `100 ms`, `2 s`.
+fn spoken(duration: Duration) -> String {
+    if duration < Duration::from_secs(1) {
+        format!("{} ms", duration.as_millis())
+    } else {
+        format!("{} s", duration.as_secs())
     }
 }
 
@@ -490,9 +557,64 @@ enum ExecutionWindow {
     Detached(u64),
 }
 
+/// The budget the most recent interrupt enforced.
+///
+/// QuickJS reports a cut-off as a bare `InternalError: interrupted`, which says
+/// neither what ran too long nor how long it was allowed. The handler is the
+/// only place that knows both, so it leaves them here for the error report.
+#[derive(Clone, Copy)]
+struct Interruption {
+    phase: Option<ScopePhase>,
+    budget: Duration,
+}
+
+thread_local! {
+    static INTERRUPTION: Cell<Option<Interruption>> = const { Cell::new(None) };
+}
+
+/// Rewrites QuickJS's `interrupted` into what was stopped and why.
+///
+/// `None` for any other message, and for an `interrupted` the handler did not
+/// cause — a script is free to throw `new Error("interrupted")` itself.
+pub(super) fn explain_interruption(message: &str) -> Option<String> {
+    if message != "interrupted" {
+        return None;
+    }
+    let Interruption { phase, budget } = INTERRUPTION.with(Cell::take)?;
+    let limit = spoken(budget);
+    Some(match phase {
+        Some(ScopePhase::Render) => format!(
+            "render() ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; move slow work such as scanning or \
+             parsing into a task and render its result."
+        ),
+        Some(ScopePhase::Layout) => format!(
+            "A list item ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; prepare item data ahead of time so \
+             rendering one item stays cheap."
+        ),
+        Some(ScopePhase::Event) => format!(
+            "An event handler ran for {limit} without returning and was stopped.\n\
+             Check for a loop that never ends; move slow work into a task and await \
+             between chunks of it."
+        ),
+        Some(ScopePhase::Task) => format!(
+            "A task ran for {limit} without awaiting and was stopped.\n\
+             Check for a loop that never ends; await between chunks of work so the \
+             window stays responsive."
+        ),
+        None => format!(
+            "Loading the script ran for {limit} without finishing and was stopped.\n\
+             Check for a loop that never ends; defer slow work at module load to \
+             init() or a task."
+        ),
+    })
+}
+
 fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
     let mut window = None;
     let mut started = Instant::now();
+    let mut warned = false;
 
     move || {
         let current = match scope::current_generation() {
@@ -502,15 +624,33 @@ fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
         if window != Some(current) {
             window = Some(current);
             started = Instant::now();
+            warned = false;
+            // An interrupt nobody reported belongs to a call that is over.
+            INTERRUPTION.with(|interruption| interruption.set(None));
         }
 
-        let budget = match scope::current_phase() {
-            Some(ScopePhase::Render | ScopePhase::Layout) => budgets.render,
-            Some(ScopePhase::Event | ScopePhase::Task) => budgets.event,
-            None => budgets.detached,
-        };
+        let phase = scope::current_phase();
+        let budget = budgets.limit(phase);
+        let elapsed = started.elapsed();
 
-        started.elapsed() > budget
+        // Said while the call is still running, because a call that finishes
+        // leaves no other trace of having been slow.
+        if !warned && elapsed > warn_after(phase) {
+            warned = true;
+            tracing::warn!(
+                "a script {} call has run for over {}; it will be stopped at {}",
+                phase.map_or("module", ScopePhase::as_str),
+                spoken(warn_after(phase)),
+                spoken(budget),
+            );
+        }
+
+        let expired = elapsed > budget;
+        if expired {
+            INTERRUPTION
+                .with(|interruption| interruption.set(Some(Interruption { phase, budget })));
+        }
+        expired
     }
 }
 
@@ -766,6 +906,29 @@ mod tests {
             detached: budget,
         }))));
         runtime
+    }
+
+    /// QuickJS reports every cut-off as a bare `interrupted`. The report has to
+    /// say what was stopped and the limit it ran past, or the author has nothing
+    /// to act on.
+    #[test]
+    fn an_interrupt_is_explained_with_its_budget() {
+        let runtime = interrupting_runtime(Duration::from_millis(20));
+        let context = JsContext::full(&runtime).unwrap();
+
+        let message = context.with(|ctx| {
+            let _ = ctx.eval::<Value, _>("while (true) {}");
+            let thrown = ctx.catch();
+            let exception = thrown.as_exception().expect("an interrupt is an exception");
+            exception.message().expect("an interrupt has a message")
+        });
+
+        let explained = explain_interruption(&message).expect("the handler caused it");
+        assert!(explained.contains("20 ms"), "{explained}");
+        assert!(
+            explain_interruption("interrupted").is_none(),
+            "an interrupt is explained once; a later `interrupted` is the script's own"
+        );
     }
 
     #[test]

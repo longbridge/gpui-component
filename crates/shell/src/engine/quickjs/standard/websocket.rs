@@ -165,6 +165,10 @@ fn connect<'js>(ctx: Ctx<'js>, url: String, options: Opt<ConnectOptions>) -> Res
             .into_client_request()
             .map_err(|error| format!("WebSocket handshake failed: {error}"))?;
         request.headers_mut().extend(headers);
+        request
+            .headers_mut()
+            .entry(tungstenite::http::header::USER_AGENT)
+            .or_insert(HeaderValue::from_static(super::USER_AGENT));
         let operation = format!("WebSocket host {host_name}:{port}");
         let (stream, deadline) =
             network_connect::connect_tcp(&host_name, port, IO_TIMEOUT, &operation)

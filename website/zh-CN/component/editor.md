@@ -91,6 +91,17 @@ Editor::new(&editor).h(px(320.))
 
 使用 `.language()` 指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
 
+高亮引擎有两种，通过 `gpui-kit` 的 Cargo feature 选择，默认都不启用：
+
+- `tree-sitter`：解析出语法树，折叠和需要语法信息的编辑行为也依赖它。每种语言对应上面提到的一个 grammar feature，全部启用会让应用增加几十 MB。
+- `syntect`：用正则表达式为约 200 种语言提供高亮，只增加几 MB。它不生成语法树，所以折叠按花括号匹配，编辑时也没有语法上下文。适合只需要显示高亮代码、不需要结构化编辑器的应用：
+
+```toml
+gpui-kit = { version = "{{gpui_kit_version}}", features = ["syntect"] }
+```
+
+两者同时启用时使用 `tree-sitter`。
+
 ## 编辑器选项
 
 ```rust
@@ -100,9 +111,12 @@ let editor = cx.new(|cx| {
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
+        .scroll_bounce(true)
         .default_value(source)
 });
 ```
+
+`scroll_bounce(true)` 让超出编辑器高度的代码在触控板或 Magic Mouse 的精细像素滚动到达顶部或底部时越过边缘并弹回，与 [Textarea](./textarea.md#滚动回弹) 相同。行号栏随代码移动，外框和滚动条保持不动；普通鼠标滚轮的按行滚动不触发回弹。
 
 ## 主动补全
 

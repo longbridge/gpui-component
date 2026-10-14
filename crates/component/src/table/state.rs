@@ -266,6 +266,12 @@ pub struct TableState<D: TableDelegate> {
 
     /// The column index that is being resized.
     resizing_col: Option<usize>,
+    /// The column a double-click on its resize handle just fitted.
+    ///
+    /// The double-click's second press also starts a drag on the handle, which
+    /// would move the fitted edge back under the pointer, so resize drags on
+    /// this column are ignored until the next single press.
+    fitted_col: Option<usize>,
 
     /// The insertion gap index (`0..=cols_count`) while dragging a column
     /// header: the dragged column will be inserted between the columns
@@ -300,6 +306,7 @@ where
             selected_col: None,
             selected_cell: None,
             resizing_col: None,
+            fitted_col: None,
             col_drag_gap: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
@@ -1226,11 +1233,68 @@ where
         self.horizontal_scroll_handle.set_offset(offset);
     }
 
+    /// The width column `col_ix` is drawn at now, or `None` past the last
+    /// column.
+    ///
+    /// This is the table's own width, which follows a drag or a fit as it
+    /// happens; the delegate's [`Column::width`] is read again only on
+    /// [`Self::refresh`].
+    pub fn col_width(&self, col_ix: usize) -> Option<Pixels> {
+        self.col_groups.get(col_ix).map(|group| group.width)
+    }
+
+    /// Fits column `col_ix` to its content, as a double-click on its resize
+    /// handle does.
+    ///
+    /// The width is [`TableDelegate::fit_column`] plus the cell padding,
+    /// clamped to the column's `min_width` and `max_width`, and
+    /// [`TableEvent::ColumnWidthsChanged`] is emitted when it changed. Returns
+    /// whether the delegate gave a width: `false` when the column cannot be
+    /// resized or the delegate answered `None`.
+    pub fn fit_col(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.is_col_resizable(col_ix) {
+            return false;
+        }
+        let Some(content) = self.delegate.fit_column(col_ix, window, cx) else {
+            return false;
+        };
+        let padding = self
+            .col_groups
+            .get(col_ix)
+            .and_then(|group| group.column.paddings)
+            .unwrap_or_else(|| self.options.size.table_cell_padding());
+        // Layout rounds a width to the nearest device pixel, and text even a
+        // fraction of a pixel wider than its cell is truncated, so round every
+        // part up to a whole device pixel.
+        let scale_factor = window.scale_factor();
+        let device_pixels = |length: Pixels| (f32::from(length) * scale_factor).ceil();
+        let mut content_pixels = device_pixels(content);
+        // Dividing back can land one ulp below the content at a fractional
+        // scale, and the text is cut for that ulp too.
+        if px(content_pixels / scale_factor) < content {
+            content_pixels += 1.;
+        }
+        let width = content_pixels + device_pixels(padding.left) + device_pixels(padding.right);
+        if self.resize_cols(col_ix, px(width / scale_factor), window, cx) {
+            let new_widths = self.col_groups.iter().map(|g| g.width).collect();
+            cx.emit(TableEvent::ColumnWidthsChanged(new_widths));
+        }
+        true
+    }
+
     /// The `ix`` is the index of the col to resize,
     /// and the `size` is the new size for the col.
-    fn resize_cols(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
+    ///
+    /// Returns whether the width changed.
+    fn resize_cols(
+        &mut self,
+        ix: usize,
+        size: Pixels,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if !self.col_resizable {
-            return;
+            return false;
         }
 
         let mut changed = false;
@@ -1250,6 +1314,7 @@ where
             self.update_header_layout(cx);
             cx.notify();
         }
+        changed
     }
 
     fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -1570,6 +1635,9 @@ where
                             // }
 
                             let ix = *ix;
+                            if view.fitted_col == Some(ix) {
+                                return;
+                            }
                             view.resizing_col = Some(ix);
 
                             let col_group = view
@@ -1595,6 +1663,16 @@ where
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
             })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(
+                    move |view, e: &MouseDownEvent, window, cx| match e.click_count {
+                        1 => view.fitted_col = None,
+                        2 if view.fit_col(ix, window, cx) => view.fitted_col = Some(ix),
+                        _ => {}
+                    },
+                ),
+            )
             .on_mouse_up_out(
                 MouseButton::Left,
                 cx.listener(|view, _, _, cx| {
@@ -2613,6 +2691,16 @@ where
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
                             .track_scroll(&self.vertical_scroll_handle)
+                            .map(|rows| {
+                                gpui_base::ScrollBounce::new(
+                                    "table-scroll-bounce",
+                                    &self.vertical_scroll_handle,
+                                    rows,
+                                )
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
+                            })
                             .into_any_element(),
                         ),
                     )
@@ -2669,11 +2757,104 @@ where
 
 #[cfg(test)]
 mod tests {
-    use gpui::{App, TestAppContext};
+    use gpui::{App, Entity, TestAppContext};
 
     use super::*;
 
     struct WidthsDelegate;
+
+    struct BounceDelegate;
+
+    impl TableDelegate for BounceDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            1
+        }
+        fn rows_count(&self, _: &App) -> usize {
+            40
+        }
+        fn column(&self, _: usize, _: &App) -> Column {
+            Column::new("value", "Value")
+        }
+        fn render_td(
+            &mut self,
+            row: usize,
+            _: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div().child(row.to_string())
+        }
+    }
+
+    struct BounceTable(Entity<TableState<BounceDelegate>>);
+
+    impl Render for BounceTable {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(240.))
+                .h(px(200.))
+                .child(DataTable::new(&self.0).scroll_bounce(true))
+        }
+    }
+
+    #[gpui::test]
+    fn scroll_bounce_table_keeps_headers_fixed_and_accepts_new_wheel_input(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            BounceTable(cx.new(|cx| TableState::new(BounceDelegate, window, cx)))
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let state = view.read_with(cx, |view, _| view.0.clone());
+        let header = state.read_with(cx, |state, _| state.col_groups[0].bounds);
+        let wheel = |cx: &mut gpui::VisualTestContext, dy| {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Lines(gpui::point(0., dy)),
+                ..Default::default()
+            });
+        };
+        for (dy, phase) in [
+            (-10000., gpui::TouchPhase::Started),
+            (0., gpui::TouchPhase::Ended),
+        ] {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(dy))),
+                touch_phase: phase,
+                ..Default::default()
+            });
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let end = state.read_with(cx, |state, _| {
+            state
+                .vertical_scroll_handle
+                .0
+                .borrow()
+                .base_handle
+                .offset()
+                .y
+        });
+        assert!(end < px(0.));
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            state.read_with(cx, |state, _| state.col_groups[0].bounds),
+            header
+        );
+        wheel(cx, 2.);
+        assert!(
+            state.read_with(cx, |state, _| state
+                .vertical_scroll_handle
+                .0
+                .borrow()
+                .base_handle
+                .offset()
+                .y)
+                > end
+        );
+    }
 
     impl TableDelegate for WidthsDelegate {
         fn columns_count(&self, _: &App) -> usize {

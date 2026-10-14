@@ -167,7 +167,7 @@ The following controls expose useful semantics from their actual state:
 | Input | Text input role chosen from its content type, name, non-sensitive value, and an accessible `SetValue` action when not disabled. Masked and password values are withheld. |
 | Select | ComboBox role, name, committed value, expanded state, and an accessible activation path. |
 | Tab, tab list | Tab and TabList roles; tabs report selection and, when supplied, position in the set. |
-| Slider, Progress | Numeric value and range; Slider handles accessible Increment and Decrement. Indeterminate Progress omits its value. |
+| Slider, Progress | Name, numeric value and range; Slider handles accessible Increment and Decrement. Indeterminate Progress omits its value. |
 | Table | Table, row, header and cell roles with indices and optional counts. Name the Table root. |
 
 For a labeled button, the visible label is the accessible name by default. Name an icon-only button explicitly:
