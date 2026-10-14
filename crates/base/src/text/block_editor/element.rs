@@ -599,6 +599,9 @@ impl Element for EditorRoot {
                 window.focus(&focus, cx);
                 state.dragging = true;
                 state.mouse_at(event.position, event.modifiers.shift, cx);
+                if !event.modifiers.shift && event.click_count >= 2 {
+                    state.select_unit(event.click_count >= 3, cx);
+                }
             });
         });
         let entity = self.state.clone();

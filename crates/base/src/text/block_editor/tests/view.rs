@@ -1586,3 +1586,37 @@ fn left_edge_click_node_selects_table_and_code_block(cx: &mut TestAppContext) {
         assert_eq!(source(&editor, cx), "a\n\nb", "{src}");
     }
 }
+
+#[gpui::test]
+fn double_and_triple_click_select_word_and_block(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "hello brave world");
+    let at = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let p = e.frame.borrow().leaf(id).unwrap().caret_point(8);
+        gpui::point(p.x, p.y + px(4.))
+    });
+    cx.simulate_event(gpui::MouseDownEvent {
+        position: at,
+        button: MouseButton::Left,
+        click_count: 2,
+        ..Default::default()
+    });
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    keys(cx, "M-c");
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).unwrap(),
+        "brave"
+    );
+    cx.simulate_event(gpui::MouseDownEvent {
+        position: at,
+        button: MouseButton::Left,
+        click_count: 3,
+        ..Default::default()
+    });
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    keys(cx, "M-c");
+    assert_eq!(
+        cx.read_from_clipboard().and_then(|c| c.text()).unwrap(),
+        "hello brave world"
+    );
+}

@@ -714,6 +714,30 @@ impl BlockEditorState {
         }
     }
 
+    /// Double-click: the word at the caret; triple-click: the whole block.
+    pub(crate) fn select_unit(&mut self, block: bool, cx: &mut Context<Self>) {
+        let Some(caret) = self.model.caret() else {
+            return;
+        };
+        let Some(text) = self.model.doc.leaf_text(caret.block) else {
+            return;
+        };
+        let range = if block {
+            0..text.len()
+        } else {
+            match crate::text::selection::word_range_at(text, caret.offset) {
+                Some(r) => r,
+                None => return,
+            }
+        };
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: BlockPosition::new(caret.block, range.start),
+            head: BlockPosition::new(caret.block, range.end),
+        });
+        self.dragging = false;
+        self.selection_changed(cx);
+    }
+
     /// The table or code block whose left edge (the strip left of its
     /// text, inside the block's padding) is under `at`.
     pub(crate) fn block_handle_at(&self, at: Point<Pixels>) -> Option<BlockId> {
