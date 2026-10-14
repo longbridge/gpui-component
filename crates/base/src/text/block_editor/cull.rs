@@ -35,6 +35,8 @@ pub(crate) struct HeightIndex {
     ids: Vec<BlockId>,
     heights: Vec<Pixels>,
     tree: Vec<f32>,
+    /// Rebuild count (tests: a frame without an edit must not rebuild).
+    pub(crate) rebuilds: usize,
 }
 
 impl HeightIndex {
@@ -54,6 +56,7 @@ impl HeightIndex {
         heights: &HashMap<BlockId, Pixels>,
     ) {
         self.revision = Some(revision);
+        self.rebuilds += 1;
         self.unit_of.clear();
         self.ids.clear();
         self.heights.clear();
@@ -133,9 +136,29 @@ impl HeightIndex {
     }
 }
 
+/// One cull unit, cached per document revision (Phase 5, step 2) so a
+/// frame does not walk every top-level block: a top-level node, or a chunk
+/// of a long top-level list.
+pub(crate) struct UnitDesc {
+    pub(crate) id: BlockId,
+    /// `snapshot.blocks[block].nodes[node]`.
+    pub(crate) block: usize,
+    pub(crate) node: usize,
+    /// Index of the node among all top-level nodes.
+    pub(crate) node_ix: usize,
+    /// For a list chunk: its item range and the list's item ids.
+    pub(crate) items: Option<(std::ops::Range<usize>, Rc<[BlockId]>)>,
+    pub(crate) is_first: bool,
+    pub(crate) prev: crate::text::document::PrevBlock,
+}
+
 #[derive(Default)]
 pub(crate) struct CullState {
     pub(crate) index: HeightIndex,
+    /// The cull units of `index`'s revision.
+    pub(crate) units: Vec<UnitDesc>,
+    /// Top-level node count of that revision.
+    pub(crate) node_count: usize,
     /// Top-to-next-top distance of each measured top-level block.
     pub(crate) heights: HashMap<BlockId, Pixels>,
     /// Visible span of the editor in editor-local y, from the last prepaint.

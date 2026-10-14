@@ -99,7 +99,8 @@ impl RenderOnce for BlockEditor {
                     backgrounds,
                     state.model.doc.extensions.clone(),
                     state.pinned_blocks(),
-                    {
+                    // Only needed to rebuild the cached cull units.
+                    (!state.cull.borrow().index.is_current(state.model.revision())).then(|| {
                         let doc = &state.model.doc;
                         doc.children(doc.root)
                             .iter()
@@ -109,9 +110,9 @@ impl RenderOnce for BlockEditor {
                                     Some(super::kind::BlockKindData::List { .. })
                                 ) && doc.children(**id).len() > LIST_CHUNK
                             })
-                            .map(|id| (*id, doc.children(*id).to_vec()))
+                            .map(|id| (*id, Rc::<[BlockId]>::from(doc.children(*id))))
                             .collect::<HashMap<_, _>>()
-                    },
+                    }),
                 )
             });
 
@@ -122,56 +123,11 @@ impl RenderOnce for BlockEditor {
             body_font_size: window.text_style().font_size.to_pixels(window.rem_size()),
             ..Default::default()
         };
-        let nodes: Vec<&BlockNode> = snapshot
-            .blocks
-            .iter()
-            .flat_map(|b| b.nodes.iter())
-            .collect();
-        // Cull units: each top-level block, except that a long top-level
-        // list is split into chunks of `LIST_CHUNK` items, each rendered as a
-        // list of its own (continuing the numbering, no gap between chunks).
-        struct Unit<'a> {
-            id: BlockId,
-            node: &'a BlockNode,
-            items: Option<(std::ops::Range<usize>, &'a [BlockId])>,
-            /// Index of the unit's node among the top-level nodes.
-            node_ix: usize,
-        }
-        let mut units: Vec<Unit> = Vec::with_capacity(nodes.len());
-        let mut node_ix = 0;
-        for block in snapshot.blocks.iter() {
-            for node in &block.nodes {
-                let this_node = node_ix;
-                node_ix += 1;
-                match (node, list_items.get(&block.id)) {
-                    (BlockNode::List { children, .. }, Some(ids))
-                        if ids.len() == children.len() =>
-                    {
-                        for start in (0..ids.len()).step_by(LIST_CHUNK) {
-                            let range = start..(start + LIST_CHUNK).min(ids.len());
-                            units.push(Unit {
-                                id: ids[start],
-                                node,
-                                items: Some((range, ids)),
-                                node_ix: this_node,
-                            });
-                        }
-                    }
-                    _ => units.push(Unit {
-                        id: block.id,
-                        node,
-                        items: None,
-                        node_ix: this_node,
-                    }),
-                }
-            }
-        }
-        let count = nodes.len();
         let (cull, revision) = {
             let state = self.state.read(cx);
             (state.cull.clone(), state.model.revision())
         };
-        let mut children: Vec<AnyElement> = Vec::with_capacity(units.len().min(256));
+        let mut children: Vec<AnyElement> = Vec::new();
         {
             let mut cull_state = cull.borrow_mut();
             cull_state.measured.clear();
@@ -182,7 +138,44 @@ impl RenderOnce for BlockEditor {
                 (top - margin, bottom + margin)
             });
             let cull_state = &mut *cull_state;
-            if !cull_state.index.is_current(revision) || cull_state.index.len() != units.len() {
+            if let Some(list_items) = list_items {
+                // Cull units: each top-level node, except that a long
+                // top-level list is split into chunks of `LIST_CHUNK` items,
+                // each rendered as a list of its own (continuing the
+                // numbering, no gap between chunks). Rebuilt per revision.
+                let nodes: Vec<&BlockNode> = snapshot
+                    .blocks
+                    .iter()
+                    .flat_map(|b| b.nodes.iter())
+                    .collect();
+                let mut units = Vec::with_capacity(nodes.len());
+                let mut node_ix = 0;
+                for (block_ix, block) in snapshot.blocks.iter().enumerate() {
+                    for (node_in_block, node) in block.nodes.iter().enumerate() {
+                        let (is_first, prev) = prev_block(&nodes, node_ix);
+                        let unit = |id, items| super::cull::UnitDesc {
+                            id,
+                            block: block_ix,
+                            node: node_in_block,
+                            node_ix,
+                            items,
+                            is_first,
+                            prev,
+                        };
+                        match (node, list_items.get(&block.id)) {
+                            (BlockNode::List { children, .. }, Some(ids))
+                                if ids.len() == children.len() =>
+                            {
+                                for start in (0..ids.len()).step_by(LIST_CHUNK) {
+                                    let range = start..(start + LIST_CHUNK).min(ids.len());
+                                    units.push(unit(ids[start], Some((range, ids.clone()))));
+                                }
+                            }
+                            _ => units.push(unit(block.id, None)),
+                        }
+                        node_ix += 1;
+                    }
+                }
                 cull_state.index.rebuild(
                     revision,
                     units.iter().map(|u| {
@@ -194,7 +187,11 @@ impl RenderOnce for BlockEditor {
                     }),
                     &cull_state.heights,
                 );
+                cull_state.units = units;
+                cull_state.node_count = nodes.len();
             }
+            let units = &cull_state.units;
+            let count = cull_state.node_count;
             let index = &cull_state.index;
             let n = units.len();
             // Units to lay out: the visible range (binary search over the
@@ -225,9 +222,10 @@ impl RenderOnce for BlockEditor {
                 }
                 cursor = top + index.height(unit_ix);
                 rendered += 1;
-                let (is_first, prev) = prev_block(&nodes, node_ix);
+                let (is_first, prev) = (unit.is_first, unit.prev);
                 let is_last_node = node_ix + 1 == count;
-                let element = match (&unit.items, unit.node) {
+                let node = &snapshot.blocks[unit.block].nodes[unit.node];
+                let element = match (&unit.items, node) {
                     (
                         Some((range, ids)),
                         BlockNode::List {
@@ -262,7 +260,7 @@ impl RenderOnce for BlockEditor {
                             cx,
                         )
                     }
-                    _ => unit.node.render_block(
+                    _ => node.render_block(
                         NodeRenderOptions {
                             ix: node_ix,
                             is_first,

@@ -1218,3 +1218,25 @@ fn inline_code_keeps_pill_and_caret_geometry(cx: &mut TestAppContext) {
     type_text(cx, "X");
     assert_eq!(source(&editor, cx), "ab `cXd` ef");
 }
+
+/// Phase 5: frames without an edit reuse the cached cull units and height
+/// index (no per-frame walk of every block); an edit rebuilds them once.
+#[gpui::test]
+fn cull_units_are_cached_per_revision(cx: &mut TestAppContext) {
+    let doc: String = (0..2000).map(|i| format!("paragraph {i}\n\n")).collect();
+    let (editor, cx) = open(cx, &doc);
+    draw(cx);
+    draw(cx);
+    let rebuilds =
+        |cx: &mut VisualTestContext| editor.read_with(cx, |e, _| e.cull.borrow().index.rebuilds);
+    let steady = rebuilds(cx);
+    caret_at(&editor, cx, 1, 0);
+    keys(cx, "down down right");
+    draw(cx);
+    assert_eq!(rebuilds(cx), steady, "selection changes do not rebuild");
+    type_text(cx, "x");
+    draw(cx);
+    assert_eq!(rebuilds(cx), steady + 1, "one rebuild per edit");
+    let rendered = editor.read_with(cx, |e, _| e.cull.borrow().rendered);
+    assert!(rendered < 400, "culled: {rendered} of 2000 laid out");
+}
