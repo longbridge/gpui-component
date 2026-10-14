@@ -521,6 +521,59 @@ enum ExecutionWindow {
     Detached(u64),
 }
 
+/// The budget the most recent interrupt enforced.
+///
+/// QuickJS reports a cut-off as a bare `InternalError: interrupted`, which says
+/// neither what ran too long nor how long it was allowed. The handler is the
+/// only place that knows both, so it leaves them here for the error report.
+#[derive(Clone, Copy)]
+struct Interruption {
+    phase: Option<ScopePhase>,
+    budget: Duration,
+}
+
+thread_local! {
+    static INTERRUPTION: Cell<Option<Interruption>> = const { Cell::new(None) };
+}
+
+/// Rewrites QuickJS's `interrupted` into what was stopped and why.
+///
+/// `None` for any other message, and for an `interrupted` the handler did not
+/// cause — a script is free to throw `new Error("interrupted")` itself.
+pub(super) fn explain_interruption(message: &str) -> Option<String> {
+    if message != "interrupted" {
+        return None;
+    }
+    let Interruption { phase, budget } = INTERRUPTION.with(Cell::take)?;
+    let limit = if budget < Duration::from_secs(1) {
+        format!("{} ms", budget.as_millis())
+    } else {
+        format!("{} s", budget.as_secs())
+    };
+    Some(match phase {
+        Some(ScopePhase::Render) => format!(
+            "render() ran longer than {limit} and was stopped.\n\
+             Move slow work such as scanning or parsing into a task, and render its result."
+        ),
+        Some(ScopePhase::Layout) => format!(
+            "A list item ran longer than {limit} to render and was stopped.\n\
+             Prepare item data ahead of time so rendering one item stays cheap."
+        ),
+        Some(ScopePhase::Event) => format!(
+            "An event handler ran longer than {limit} and was stopped.\n\
+             Move slow work into a task and await between chunks of it."
+        ),
+        Some(ScopePhase::Task) => format!(
+            "A task ran longer than {limit} without awaiting and was stopped.\n\
+             Await between chunks of work so the window stays responsive."
+        ),
+        None => format!(
+            "Loading the script took longer than {limit} and was stopped.\n\
+             Defer slow work at module load to init() or a task."
+        ),
+    })
+}
+
 fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
     let mut window = None;
     let mut started = Instant::now();
@@ -533,15 +586,23 @@ fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
         if window != Some(current) {
             window = Some(current);
             started = Instant::now();
+            // An interrupt nobody reported belongs to a call that is over.
+            INTERRUPTION.with(|interruption| interruption.set(None));
         }
 
-        let budget = match scope::current_phase() {
+        let phase = scope::current_phase();
+        let budget = match phase {
             Some(ScopePhase::Render | ScopePhase::Layout) => budgets.render,
             Some(ScopePhase::Event | ScopePhase::Task) => budgets.event,
             None => budgets.detached,
         };
 
-        started.elapsed() > budget
+        let expired = started.elapsed() > budget;
+        if expired {
+            INTERRUPTION
+                .with(|interruption| interruption.set(Some(Interruption { phase, budget })));
+        }
+        expired
     }
 }
 
@@ -797,6 +858,29 @@ mod tests {
             detached: budget,
         }))));
         runtime
+    }
+
+    /// QuickJS reports every cut-off as a bare `interrupted`. The report has to
+    /// say what was stopped and the limit it ran past, or the author has nothing
+    /// to act on.
+    #[test]
+    fn an_interrupt_is_explained_with_its_budget() {
+        let runtime = interrupting_runtime(Duration::from_millis(20));
+        let context = JsContext::full(&runtime).unwrap();
+
+        let message = context.with(|ctx| {
+            let _ = ctx.eval::<Value, _>("while (true) {}");
+            let thrown = ctx.catch();
+            let exception = thrown.as_exception().expect("an interrupt is an exception");
+            exception.message().expect("an interrupt has a message")
+        });
+
+        let explained = explain_interruption(&message).expect("the handler caused it");
+        assert!(explained.contains("20 ms"), "{explained}");
+        assert!(
+            explain_interruption("interrupted").is_none(),
+            "an interrupt is explained once; a later `interrupted` is the script's own"
+        );
     }
 
     #[test]

@@ -9760,6 +9760,32 @@ export default class Toolbar extends View {
     );
 }
 
+/// A thrown value that is not an Error has no message or stack of its own, so
+/// the report has to say what was thrown rather than dump the engine's value.
+#[gpui::test]
+fn a_thrown_non_error_value_is_reported_in_words(cx: &mut TestAppContext) {
+    for (thrown, expected) in [
+        ("null", "A script threw null instead of an Error."),
+        ("undefined", "A script threw undefined instead of an Error."),
+        (
+            "{ code: 7 }",
+            r#"A script threw {"code":7} instead of an Error."#,
+        ),
+        ("\"plain text\"", "plain text"),
+    ] {
+        let source = format!(
+            r#"
+import {{ View }} from "gpui-kit";
+export default class Thrower extends View {{
+  render() {{ throw {thrown}; }}
+}}
+"#,
+        );
+        let message = render_error(cx, "thrower.js", &source);
+        assert_eq!(message.lines().next(), Some(expected), "{message}");
+    }
+}
+
 /// Renders `source` once and returns the message it failed with.
 fn render_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
     cx.update(|cx| crate::init(cx));

@@ -75,7 +75,7 @@ use crate::{
     view::ScriptView,
 };
 
-use super::{ContextBinding, ShellRuntime, context_object, describe};
+use super::{ContextBinding, ShellRuntime, context_object, describe, describe_value};
 
 /// Installs the scheduling surface.
 ///
@@ -1541,27 +1541,6 @@ fn outside_host_call(ctx: &Ctx<'_>, api: &str) -> rquickjs::Error {
              scheduler resumed — not from a bare promise callback."
         ),
     )
-}
-
-/// Renders a thrown value the way its author would want to read it: message
-/// first, then the script stack that produced it.
-fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
-    if let Some(exception) = value.as_exception() {
-        let message = exception.message().unwrap_or_else(|| "error".to_owned());
-        return match exception.stack() {
-            Some(stack) => format!("{message}\n{stack}"),
-            None => message,
-        };
-    }
-
-    if let Some(text) = value.as_string().and_then(|text| text.to_string().ok()) {
-        return text;
-    }
-
-    match ctx.json_stringify(value.clone()) {
-        Ok(Some(text)) => text.to_string().unwrap_or_else(|_| format!("{value:?}")),
-        _ => format!("{value:?}"),
-    }
 }
 
 #[cfg(test)]
