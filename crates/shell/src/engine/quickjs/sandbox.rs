@@ -33,7 +33,6 @@
 //! The engine has to apply them itself, right after `JsRuntime::new()`:
 //!
 //! ```ignore
-//! js_runtime.set_memory_limit(sandbox::memory_limit_bytes());
 //! js_runtime.set_max_stack_size(sandbox::max_stack_size_bytes());
 //! js_runtime.set_interrupt_handler(Some(Box::new(sandbox::interrupt_handler())));
 //! ```
@@ -427,17 +426,74 @@ fn granted_env<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
 // Resource limits
 // ---------------------------------------------------------------------------
 
-/// The heap ceiling for one QuickJS runtime.
+// There is deliberately no heap ceiling. A GPUI application written in Rust
+// never budgets its memory: the operating system does, and an application that
+// needs a large data set simply has it. A ceiling here turned exactly that
+// case — a file tree of a few hundred thousand entries — into a broken
+// application that only a restart could recover, long before the machine was
+// short of anything. A host that embeds untrusted plugins and wants a bound can
+// set one on its own runtime; the report below explains it when it is hit.
+
+/// A heap that has reached this share of its ceiling is the likely reason a
+/// value that is not an error was thrown.
+const NEARLY_FULL: f64 = 0.9;
+
+/// Says that the heap ran out, when that is what a thrown value means.
 ///
-/// Generous enough that an ordinary application never meets it, small enough
-/// that a leak reports as a catchable JavaScript exception on the offending
-/// allocation instead of as an OOM kill of the whole host (§19.3).
-///
-/// The engine owns the `Runtime`, so it has to apply this — see the module
-/// header for the exact lines.
-#[allow(dead_code)]
-pub fn memory_limit_bytes() -> usize {
-    256 * 1024 * 1024
+/// QuickJS reports exhaustion as `InternalError: out of memory` — and when it
+/// cannot even allocate that error, it throws `null` instead. An author who
+/// sees `null` has nothing to go on, so a `null` thrown while the heap is
+/// nearly at its ceiling is reported as what it almost certainly is.
+pub(super) fn explain_out_of_memory(ctx: &Ctx<'_>, message: Option<&str>) -> Option<String> {
+    let advice = "Keep less data in script — derive values instead of storing them on every \
+                  item — or move a large data set into a host module.";
+    let (used, limit) = heap_usage(ctx)?;
+    match (message, limit) {
+        (Some("out of memory"), Some(limit)) => Some(reached(limit, advice)),
+        (None, Some(limit)) if used as f64 >= limit as f64 * NEARLY_FULL => {
+            Some(reached(limit, advice))
+        }
+        (Some("out of memory"), None) => Some(format!(
+            "The script ran out of memory: the system could not allocate more.\n{advice}"
+        )),
+        _ => None,
+    }
+}
+
+fn reached(limit: u64, advice: &str) -> String {
+    format!(
+        "The script ran out of memory: its JavaScript heap reached the {} limit this \
+         host set.\n{advice}",
+        spoken_size(limit)
+    )
+}
+
+/// Bytes allocated and the ceiling, if any, for the runtime this context
+/// belongs to.
+fn heap_usage(ctx: &Ctx<'_>) -> Option<(u64, Option<u64>)> {
+    let mut usage = std::mem::MaybeUninit::<rquickjs::qjs::JSMemoryUsage>::zeroed();
+    // SAFETY: `ctx` is a live context, so its runtime is live for the call, and
+    // `JS_ComputeMemoryUsage` only writes into the struct it is given.
+    let usage = unsafe {
+        let runtime = rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr());
+        rquickjs::qjs::JS_ComputeMemoryUsage(runtime, usage.as_mut_ptr());
+        usage.assume_init()
+    };
+    // An unlimited runtime reports its ceiling as negative, zero, or all of
+    // memory, depending on the build.
+    let limit = u64::try_from(usage.malloc_limit)
+        .ok()
+        .filter(|limit| *limit > 0 && *limit < u64::MAX >> 1);
+    Some((u64::try_from(usage.malloc_size).unwrap_or(0), limit))
+}
+
+/// A byte count as a manifest would write it: `256 MiB`, `1 GiB`.
+fn spoken_size(bytes: u64) -> String {
+    if bytes >= 1 << 30 && bytes % (1 << 30) == 0 {
+        format!("{} GiB", bytes >> 30)
+    } else {
+        format!("{} MiB", bytes >> 20)
+    }
 }
 
 /// The interpreter stack ceiling.
@@ -907,6 +963,58 @@ mod tests {
             detached: budget,
         }))));
         runtime
+    }
+
+    /// Like a GPUI application written in Rust, a shell application's memory
+    /// is the operating system's to manage.
+    #[test]
+    fn the_shell_sets_no_heap_ceiling() {
+        let runtime = super::super::ShellRuntime::new_isolated().expect("runtime");
+        let limit = runtime
+            .with_js(|ctx| Ok(heap_usage(ctx).and_then(|(_, limit)| limit)))
+            .expect("heap usage");
+        assert_eq!(limit, None);
+    }
+
+    /// A heap that runs out is reported as running out, including when QuickJS
+    /// could not even allocate the error and threw `null` in its place. The
+    /// shell sets no ceiling; this is the one an embedding host would set.
+    #[test]
+    fn running_out_of_memory_is_explained_with_the_limit() {
+        let runtime = JsRuntime::new().unwrap();
+        runtime.set_memory_limit(16 << 20);
+        let context = JsContext::full(&runtime).unwrap();
+        context.with(|ctx| {
+            let failed = ctx
+                .eval::<Value, _>(
+                    "globalThis.kept = []; \
+                     while (true) kept.push({ path: 'x'.repeat(64) + kept.length });",
+                )
+                .is_err();
+            assert!(failed, "the loop must run out of heap");
+            let thrown = ctx.catch();
+            let message = super::super::describe_value(&ctx, &thrown);
+            assert!(
+                message.starts_with("The script ran out of memory") && message.contains("16 MiB"),
+                "{thrown:?} was reported as: {message}"
+            );
+
+            // The `null` QuickJS throws when even the error cannot be allocated.
+            let message = super::super::describe_value(&ctx, &Value::new_null(ctx.clone()));
+            assert!(
+                message.starts_with("The script ran out of memory"),
+                "{message}"
+            );
+
+            ctx.globals().remove("kept").unwrap();
+        });
+
+        // And with the heap released, a thrown `null` is only a `null`.
+        runtime.run_gc();
+        context.with(|ctx| {
+            let message = super::super::describe_value(&ctx, &Value::new_null(ctx.clone()));
+            assert!(message.starts_with("A script threw null"), "{message}");
+        });
     }
 
     /// QuickJS reports every cut-off as a bare `interrupted`. The report has to

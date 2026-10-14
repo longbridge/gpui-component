@@ -1698,8 +1698,7 @@ impl ShellRuntime {
         // Resource limits belong to the sandbox policy, but only the engine
         // owns the runtime handle, so the policy hands out values and this is
         // where they are applied. A runaway script must not be able to hold the
-        // UI thread (§19.3).
-        js_runtime.set_memory_limit(sandbox::memory_limit_bytes());
+        // UI thread (§19.3). The heap is deliberately unbounded; see `sandbox`.
         js_runtime.set_max_stack_size(sandbox::max_stack_size_bytes());
         js_runtime.set_interrupt_handler(Some(Box::new(sandbox::interrupt_handler())));
 
@@ -10288,14 +10287,16 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
 fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
     if let Some(exception) = value.as_exception() {
         let message = exception.message().unwrap_or_default();
-        let message = sandbox::explain_interruption(&message).unwrap_or_else(|| {
-            match exception.get::<_, Option<String>>("name").ok().flatten() {
-                Some(name) if message.is_empty() => name,
-                Some(name) if name != "Error" => format!("{name}: {message}"),
-                _ if message.is_empty() => "Error".to_owned(),
-                _ => message,
-            }
-        });
+        let message = sandbox::explain_interruption(&message)
+            .or_else(|| sandbox::explain_out_of_memory(ctx, Some(&message)))
+            .unwrap_or_else(
+                || match exception.get::<_, Option<String>>("name").ok().flatten() {
+                    Some(name) if message.is_empty() => name,
+                    Some(name) if name != "Error" => format!("{name}: {message}"),
+                    _ if message.is_empty() => "Error".to_owned(),
+                    _ => message,
+                },
+            );
         return match exception.stack() {
             Some(stack) if !stack.trim().is_empty() => {
                 format!("{message}\n{}", tidy_stack(&stack))
@@ -10306,6 +10307,12 @@ fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
 
     if let Some(text) = value.as_string().and_then(|text| text.to_string().ok()) {
         return text;
+    }
+
+    if value.is_null()
+        && let Some(explained) = sandbox::explain_out_of_memory(ctx, None)
+    {
+        return explained;
     }
 
     if value.is_null() || value.is_undefined() {
