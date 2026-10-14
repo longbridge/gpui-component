@@ -1,13 +1,41 @@
 ---
 title: Getting Started
-description: Add the runtime to a Rust application, write the script it loads, and check that script without opening a window.
+description: Install the gpui-shell binary, add the runtime to a Rust application, write the script it loads, and check that script without opening a window.
 order: 2
 maturity: [preview]
 ---
 
 # Getting Started
 
-`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script Views where it wants them. Running a script directory on its own — the `gpui-shell` binary below — is the development convenience that comes with that, not the point of it.
+`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script Views where it wants them. Running a script directory on its own is the development convenience that comes with that, not the point of it — but the `gpui-shell` binary that does it is also how either kind of project checks its scripts, so it is installed first.
+
+## Install gpui-shell
+
+Install the `gpui-shell` binary first, whichever way you use the runtime. An application written entirely in JavaScript runs on it; a Rust host that embeds the library still uses it to `check` scripts, generate their TypeScript declarations with `types`, and write instructions for coding agents with `agents`.
+
+### From a release
+
+Each GitHub release carries a prebuilt `gpui-shell` for macOS (Apple silicon and Intel), Linux x86-64 and Windows x86-64. It is built with the [`gpui-component`](./examples.md) catalog, so an application may import styled components from `"gpui-component"` as well as `"gpui-base"`.
+
+```bash
+curl -fsSL https://gpui-kit.com/shell/install.sh | sh
+```
+
+Each release also carries the same script, so `https://github.com/longbridge/gpui-kit/releases/latest/download/install.sh` works too.
+
+The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps`. `GPUI_SHELL_VERSION=v0.7.1` pins a release. `GPUI_SHELL_HOME` moves the `~/.gpui-shell` directory — installed applications and the Git dependency cache; `gpui-shell` reads it as well, so keep it exported. Asset names carry no version (`gpui-shell-aarch64-apple-darwin.tar.gz`, with a `.sha256` beside it), so a Homebrew formula or a mise `ubi` backend can download `releases/latest/download/<asset>` too.
+
+### The latest from Git
+
+To follow `main` ahead of a release — a fix that has landed but not shipped, or a Rust host built against the repository rather than a tagged version — build the binary from Git with Cargo:
+
+```bash
+cargo install --git https://github.com/longbridge/gpui-kit gpui-shell --locked
+```
+
+It installs to `~/.cargo/bin`, with the same `gpui-component` catalog as a release. Run the same command again to update; Cargo rebuilds when `main` has moved. `--branch <name>`, `--tag <tag>` or `--rev <commit>` builds a specific point instead. This needs a Rust toolchain, and on Linux the system libraries GPUI links against — `script/install-linux.sh` in the repository lists them for Ubuntu.
+
+If `~/.local/bin` comes before `~/.cargo/bin` on your `PATH`, a release installed by the script shadows the Git build; `command -v gpui-shell` shows which one runs.
 
 ## Add the runtime to a Rust application
 
@@ -96,7 +124,7 @@ export default class Hello extends View {
 ```
 
 ```bash
-cargo run -p gpui-shell -- run ./hello
+gpui-shell run ./hello
 ```
 
 Four things in that file are worth naming now, because everything else builds on them.
@@ -111,10 +139,10 @@ Four things in that file are worth naming now, because everything else builds on
 
 ## Running a script on its own
 
-A script directory can also be run directly, without writing a host. This is how the bundled example runs, and how a script is usually developed before it is loaded by the application that will own it. `gpui-shell` is not published to crates.io, so clone the repository and run it from the root:
+A script directory can also be run directly, without writing a host. This is how the bundled examples run, and how a script is usually developed before it is loaded by the application that will own it. From a clone of the repository:
 
 ```bash
-cargo run -p gpui-shell -- run examples/js_todolist
+gpui-shell run examples/js_todolist
 ```
 
 That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
@@ -122,18 +150,6 @@ That opens a window with a working todo list: a text field with retained state, 
 The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` by default, takes the class that module default-exports, constructs one instance, and mounts it as the window's root View. If the directory contains `gpui-shell.json`, the binary validates that manifest first and uses its declared `entry` and capabilities.
 
 An argument that contains a path separator — `./hello`, `examples/js_todolist` — is a directory. A bare name is an **installed** application instead, described below; `-d` / `--dir <directory>` always means a directory.
-
-## Install the runtime
-
-Each GitHub release carries a prebuilt `gpui-shell` for macOS (Apple silicon and Intel), Linux x86-64 and Windows x86-64. It is built with the [`gpui-component`](./examples.md) catalog, so an application may import styled components from `"gpui-component"` as well as `"gpui-base"`.
-
-```bash
-curl -fsSL https://gpui-kit.com/shell/install.sh | sh
-```
-
-Each release also carries the same script, so `https://github.com/longbridge/gpui-kit/releases/latest/download/install.sh` works too.
-
-The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps`. `GPUI_SHELL_VERSION=v0.7.1` pins a release. `GPUI_SHELL_HOME` moves the `~/.gpui-shell` directory — installed applications and the Git dependency cache; `gpui-shell` reads it as well, so keep it exported. Asset names carry no version (`gpui-shell-aarch64-apple-darwin.tar.gz`, with a `.sha256` beside it), so a Homebrew formula or a mise `ubi` backend can download `releases/latest/download/<asset>` too.
 
 ## Installed and packaged applications
 
@@ -183,7 +199,7 @@ gpui-shell agents -d ./hello      # write ./hello/AGENTS.md
 JavaScript has no compiler, and this runtime does not add one. What it adds is the thing a compiler would have done for you:
 
 ```bash
-cargo run -p gpui-shell -- check ./hello
+gpui-shell check ./hello
 ```
 
 `check` loads the application and renders one frame into a window that is never shown, then exits `0` on success and `1` on failure. Because the script surface is dynamic — an unknown style method, a wrongly typed argument and a reused element are all runtime facts — building and rendering once is the only honest way to check it. What it catches:
@@ -200,7 +216,7 @@ It opens no window, so it is usable from an editor, from CI, or from an agent lo
 Add `--print-spec` to print the element description that was built:
 
 ```bash
-cargo run -p gpui-shell -- check ./hello --print-spec
+gpui-shell check ./hello --print-spec
 ```
 
 That output is the arena's own debug dump — the tree of components and recorded operations, before anything is materialized. It is useful when the question is "what did my chain actually record?".
@@ -208,7 +224,7 @@ That output is the arena's own debug dump — the tree of components and recorde
 ## Generate TypeScript declarations
 
 ```bash
-cargo run -p gpui-shell -- types ./hello
+gpui-shell types ./hello
 ```
 
 This writes `gpui-kit.d.ts` next to the application. Put `// @ts-check` at the top of a script and an editor will complete the whole API and reject a mistyped style method, a colour token that does not exist, or `.p("auto")` — at the call site, before it runs.
@@ -228,8 +244,8 @@ Regenerate the file after upgrading the runtime; the output is deterministic, so
 ## Hot-reload
 
 ```bash
-cargo run -p gpui-shell -- dev ./hello           # reload, with the debug log
-cargo run -p gpui-shell -- run ./hello --watch    # reload only
+gpui-shell dev ./hello           # reload, with the debug log
+gpui-shell run ./hello --watch    # reload only
 ```
 
 `dev` is the way to work on an application: it reloads on change, as `run --watch` does, and logs at `DEBUG`. Watching polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.

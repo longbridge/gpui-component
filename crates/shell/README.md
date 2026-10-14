@@ -129,6 +129,13 @@ catalog) for macOS, Linux and Windows:
 curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 ```
 
+To follow `main` ahead of a release, build it from Git instead (into
+`~/.cargo/bin`; run it again to update):
+
+```bash
+cargo install --git https://github.com/longbridge/gpui-kit gpui-shell --locked
+```
+
 It runs one application per process and has no interface of its own:
 
 ```bash
