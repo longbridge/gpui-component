@@ -245,7 +245,7 @@ Diff::new(&self.diff)
 
 组件根据每个文件的路径识别语法语言；`DiffFile::with_language` 可以用 `rust` 等高亮语言名覆盖识别结果。
 启用相应的 Cargo grammar feature，例如 `tree-sitter-rust`；`tree-sitter-languages`
-包含全部内置语法。未启用 grammar 时仍显示已有代码和整行变更颜色。
+包含全部内置语法；也可以改用更轻量的 `syntect` feature，见 [Editor](editor.md)。未启用 grammar 时仍显示已有代码和整行变更颜色。
 
 两侧配对的变更行还会强调不同的单词。`with_inline_unit(Some(DiffInlineUnit::Character))`
 改为按字符比较，`None` 只强调整行。几乎没有相同内容的配对行不做行内强调，因为标出几乎每个单词只会增加干扰。
