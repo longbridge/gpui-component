@@ -49,6 +49,60 @@ pub(crate) fn parse_document(
     drop(tx);
     doc.structure_dirty = true;
     doc.refresh_order();
+    // Markdown parsers omit final blank paragraphs. Reconstruct that editable
+    // boundary as real document nodes, never a mutable raw-source shadow.
+    // Primary AST spans distinguish exterior footer trivia from line endings
+    // owned by an unterminated code fence/body.
+    let exterior_start = parsed
+        .blocks
+        .last()
+        .and_then(BlockNode::span)
+        .map_or(0, |span| span.end);
+    let exterior = source.get(exterior_start..).unwrap_or_default();
+    let trimmed_spaces = exterior.trim_end_matches([' ', '\t']);
+    let stripped = trimmed_spaces.trim_end_matches(['\r', '\n']);
+    let line_ends = &trimmed_spaces[stripped.len()..];
+    let ending_count = if line_ends.contains('\n') {
+        line_ends.bytes().filter(|b| *b == b'\n').count()
+    } else {
+        line_ends.len()
+    };
+    for _ in 0..ending_count.div_ceil(2) {
+        let index = doc.children(root).len();
+        doc.attach(
+            root,
+            index,
+            DetachedBlock::leaf(
+                BlockKindData::Paragraph,
+                BlockContent::Inline(InlineText::default()),
+            ),
+        );
+    }
+    doc.refresh_order();
+
+    // CommonMark ignores terminal paragraph spaces, but in a live editing
+    // buffer they separate the next typed/dictated word. Restore that trivia
+    // into the document, not a second mutable source buffer. Code retains its
+    // exact own body and must not inherit trivia after its closing fence.
+    let trimmed = source.trim_end_matches([' ', '\t']);
+    let mut tail = &source[trimmed.len()..];
+    let last = *doc.leaves().last().unwrap();
+    if (matches!(doc.kind(last), Some(BlockKindData::Heading { .. }))
+        || doc.index_in_parent(last).is_some_and(|(parent, _)| {
+            matches!(doc.kind(parent), Some(BlockKindData::ListItem { .. }))
+        }))
+        && doc.inline(last).is_some_and(|inline| inline.is_empty())
+    {
+        // One space is the empty heading's structural marker separator.
+        tail = tail.strip_prefix(' ').unwrap_or(tail);
+    }
+    if !tail.is_empty() {
+        if let Some(entry) = doc.get_mut(last)
+            && let BlockContent::Inline(inline) = &mut entry.content
+        {
+            inline.push(InlineText::plain(tail, TextMark::default()));
+        }
+    }
     doc.revision = 0;
     Ok(doc)
 }
@@ -104,18 +158,28 @@ pub(crate) fn import_block(node: &BlockNode, defs: &Defs, out: &mut Vec<Detached
             spread,
             checked,
             ..
-        } => DetachedBlock::container(
-            BlockKindData::ListItem {
-                checked: *checked,
-                spread: *spread,
-            },
-            import_children(children, defs),
-        ),
+        } => {
+            let mut children = import_children(children, defs);
+            // A parsed bare marker is an editable empty item, not an empty
+            // container to prune during normalization.
+            if children.is_empty() {
+                children.push(DetachedBlock::paragraph(InlineText::new()));
+            }
+            DetachedBlock::container(
+                BlockKindData::ListItem {
+                    checked: *checked,
+                    spread: *spread,
+                },
+                children,
+            )
+        }
         BlockNode::CodeBlock(code) => {
             let text = code.code().to_string();
-            let text = text.strip_suffix('\n').unwrap_or(&text).to_string();
             leaf(
-                BlockKindData::CodeBlock { lang: code.lang() },
+                BlockKindData::CodeBlock {
+                    lang: code.lang(),
+                    meta: code.meta(),
+                },
                 BlockContent::Plain(text),
             )
         }
@@ -272,4 +336,99 @@ fn import_inline_node(node: &InlineNode) -> InlineText {
         out.push(InlineText::plain(&text[lo..hi], mark));
     }
     out
+}
+
+/// Footnotes and unsupported HTML are outside the editable block vocabulary. Keep their original
+/// source in opaque, selectable atoms rather than accepting the display
+/// parser's decorated-prose projection. Uses the same AST/parser pipeline as
+/// every other editor node; no second parser or mutable source mirror.
+pub(crate) fn preserve_source_extensions(extensions: MarkdownExtensions) -> MarkdownExtensions {
+    use crate::text::{MarkdownNode, MarkdownParseContext, MarkdownPlugin};
+    use ::markdown::mdast::Node;
+
+    struct SourceAtom {
+        block: bool,
+    }
+    impl MarkdownPlugin for SourceAtom {
+        fn name(&self) -> &str {
+            if self.block {
+                "editor-source-block"
+            } else {
+                "editor-source-inline"
+            }
+        }
+        fn is_block(&self) -> bool {
+            self.block
+        }
+        fn parse(&self, node: &Node, cx: &MarkdownParseContext<'_>) -> Option<MarkdownNode> {
+            let known_html = if let Node::Html(html) = node {
+                let lower = html.value.to_ascii_lowercase();
+                let tag = lower
+                    .trim_start_matches('<')
+                    .trim_start_matches('/')
+                    .split(|ch: char| !ch.is_ascii_alphabetic())
+                    .next()
+                    .unwrap_or_default();
+                matches!(tag, "u" | "mark" | "em" | "strong" | "s" | "del" | "br")
+            } else {
+                false
+            };
+            let accepts = if self.block {
+                matches!(node, Node::FootnoteDefinition(_))
+                    || (matches!(node, Node::Html(_)) && !known_html)
+            } else {
+                matches!(node, Node::FootnoteReference(_))
+                    || (matches!(node, Node::Html(_)) && !known_html)
+            };
+            if !accepts {
+                return None;
+            }
+            let source = cx.node_source(node)?;
+            // Block spans may include separator line endings. The root owns
+            // those boundaries; retaining them here adds a blank line on every
+            // export/import cycle. Internal content remains verbatim.
+            let source = if self.block {
+                source.trim_end_matches(['\r', '\n'])
+            } else {
+                source
+            };
+            let source = if self.block {
+                // The AST span starts after the first container marker, but
+                // later source lines still include it. Strip only matching
+                // continuation prefixes, preserving body indentation and lazy
+                // lines. The root serializer will add the containers once.
+                let start = node.position()?.start.offset;
+                let line_start = cx.source()[..start].rfind('\n').map_or(0, |ix| ix + 1);
+                let prefix = &cx.source()[line_start..start];
+                let continuation = prefix
+                    .chars()
+                    .map(|ch| if ch == '>' { '>' } else { ' ' })
+                    .collect::<String>();
+                source
+                    .split('\n')
+                    .enumerate()
+                    .map(|(ix, line)| {
+                        if ix == 0 || continuation.is_empty() {
+                            line
+                        } else if line.trim_end() == continuation.trim_end() {
+                            ""
+                        } else {
+                            line.strip_prefix(&continuation).unwrap_or(line)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                source.to_owned()
+            };
+            Some(
+                MarkdownNode::new(self.name(), ())
+                    .text(source.clone())
+                    .markdown(source),
+            )
+        }
+    }
+    extensions
+        .plugin(SourceAtom { block: true })
+        .plugin(SourceAtom { block: false })
 }

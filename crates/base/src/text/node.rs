@@ -878,11 +878,49 @@ pub(crate) fn wrap_with_mark(text: &str, mark: &TextMark) -> String {
     }
     if let Some(link) = &mark.link {
         out = match &link.title {
-            Some(title) => format!("[{}]({} \"{}\")", out, link.url, title),
-            None => format!("[{}]({})", out, link.url),
+            Some(title) => format!(
+                "[{}]({} {})",
+                out,
+                markdown_destination(&link.url),
+                markdown_title(title)
+            ),
+            None => format!("[{}]({})", out, markdown_destination(&link.url)),
         };
     }
     out
+}
+
+/// Delimiter-safe shared writer seam for links, references and images.
+pub(crate) fn markdown_destination(value: &str) -> String {
+    let angled = value
+        .chars()
+        .any(|ch| ch.is_whitespace() || matches!(ch, '(' | ')' | '<' | '>'));
+    let mut escaped = String::new();
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '&' => escaped.push_str("\\&"),
+            '<' => escaped.push_str("\\<"),
+            '>' => escaped.push_str("\\>"),
+            '\n' => escaped.push_str("&#10;"),
+            '\r' => escaped.push_str("&#13;"),
+            _ => escaped.push(ch),
+        }
+    }
+    if angled {
+        format!("<{escaped}>")
+    } else {
+        escaped
+    }
+}
+pub(crate) fn markdown_title(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('&', "\\&")
+        .replace('"', "\\\"")
+        .replace('\n', "&#10;")
+        .replace('\r', "&#13;");
+    format!("\"{escaped}\"")
 }
 
 /// How [`MarkdownSource`] writes its output. `Default` is the behaviour
@@ -956,6 +994,13 @@ impl MarkdownSource {
         }
         let mut escaped = String::with_capacity(text.len());
         for ch in text.chars() {
+            if ch == '\n' {
+                // Hard breaks, including terminal/table/styled breaks, need
+                // an explicit semantic form. Backslash-newline at EOF reparses
+                // as a literal backslash; whitespace hoisting can break marks.
+                escaped.push_str("<br>");
+                continue;
+            }
             if matches!(
                 ch,
                 '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '~' | '$' | '&' | '|'
@@ -1142,6 +1187,26 @@ fn wrap_layer(
     before: Option<char>,
     after: Option<char>,
 ) -> String {
+    if mark.code && options.escape_literals {
+        // Code delimiters must not collide with literal backtick runs. Code
+        // whitespace belongs inside the span, never hoisted into prose.
+        let longest = content
+            .split(|ch| ch != '`')
+            .map(str::len)
+            .max()
+            .unwrap_or(0);
+        let fence = "`".repeat(longest + 1);
+        let pad = content.starts_with('`')
+            || content.ends_with('`')
+            || (content.starts_with(' ')
+                && content.ends_with(' ')
+                && content.chars().any(|ch| ch != ' '));
+        return if pad {
+            format!("{fence} {content} {fence}")
+        } else {
+            format!("{fence}{content}{fence}")
+        };
+    }
     let (lead, core, trail) = if options.hoist_whitespace {
         let core = content.trim_matches(char::is_whitespace);
         if core.is_empty() {
@@ -2199,6 +2264,7 @@ impl Paragraph {
 #[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
+    meta: Option<SharedString>,
     state: Arc<Mutex<InlineState>>,
     highlight_cache: Arc<Mutex<Option<CachedCodeBlockHighlights>>>,
     /// Rendered UTF-8 byte spans of the code paired with their exact Markdown
@@ -2222,7 +2288,10 @@ impl std::fmt::Debug for CachedCodeBlockHighlights {
 
 impl PartialEq for CodeBlock {
     fn eq(&self, other: &Self) -> bool {
-        self.lang == other.lang && self.code() == other.code() && self.span == other.span
+        self.lang == other.lang
+            && self.meta == other.meta
+            && self.code() == other.code()
+            && self.span == other.span
     }
 }
 
@@ -2236,6 +2305,14 @@ impl CodeBlock {
     /// Get the language of the code block.
     pub fn lang(&self) -> Option<SharedString> {
         self.lang.clone()
+    }
+
+    pub(crate) fn meta(&self) -> Option<SharedString> {
+        self.meta.clone()
+    }
+    pub(crate) fn with_meta(mut self, meta: Option<SharedString>) -> Self {
+        self.meta = meta;
+        self
     }
 
     /// Get the code content of the code block.
@@ -2267,6 +2344,7 @@ impl CodeBlock {
 
         Self {
             lang,
+            meta: None,
             state,
             highlight_cache: Arc::new(Mutex::new(None)),
             source_segments: vec![],
@@ -2506,6 +2584,16 @@ impl CodeBlock {
 }
 
 /// A context for rendering nodes, contains link references.
+/// Whether image atoms may load resources during presentation. Placeholder
+/// preserves the atomic document/source/selection but never resolves URLs,
+/// decodes data, reads paths or creates GPUI image elements.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImagePolicy {
+    #[default]
+    Load,
+    Placeholder,
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct NodeContext {
     /// The byte offset of the node in the original markdown text.
@@ -2517,6 +2605,7 @@ pub(crate) struct NodeContext {
     pub(crate) code_block_highlighter: Option<Arc<CodeBlockHighlighterFn>>,
     pub(crate) table_actions: Option<Arc<TableActionsFn>>,
     pub(crate) image_source: Option<Arc<super::text_view::ImageSourceFn>>,
+    pub(crate) image_policy: ImagePolicy,
     pub(crate) link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
     /// This frame's streamed fade-in, when any text is still fading.
@@ -2568,7 +2657,9 @@ impl NodeContext {
 
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
-        self.link_refs == other.link_refs && self.style == other.style
+        self.link_refs == other.link_refs
+            && self.style == other.style
+            && self.image_policy == other.image_policy
         // Note: code_block_actions, table_actions and markdown_extensions are
         // intentionally not compared (closures can't be compared)
     }
@@ -2653,7 +2744,10 @@ impl Paragraph {
         let fades = node_cx.stream_fades(fade_key);
         let backgrounds = node_cx.range_backgrounds(fade_key);
 
-        if self.should_render_inline_flow() {
+        if self.should_render_inline_flow()
+            || (node_cx.image_policy == ImagePolicy::Placeholder
+                && self.children.iter().any(|child| child.image.is_some()))
+        {
             let flow = InlineFlow::new(
                 leaf_element_id(fade_key),
                 self.inline_flow_items(fade_key, fades, backgrounds, node_cx, cx),
@@ -2964,13 +3058,33 @@ impl Paragraph {
                     });
                 }
 
-                items.push(InlineFlowItem::Image {
-                    source: node_cx.image_source(image),
-                    link: image.link.clone(),
-                    title: image.title(),
-                    width: image.width,
-                    height: image.height,
-                });
+                if node_cx.image_policy == ImagePolicy::Placeholder {
+                    let label: SharedString = image
+                        .alt
+                        .clone()
+                        .filter(|alt| !alt.is_empty())
+                        .unwrap_or_else(|| "Image".into());
+                    // The existing object renderer keeps one atomic caret/
+                    // selection unit while its text fallback is visible and
+                    // accessible. Crucially no image source is resolved here.
+                    items.push(InlineFlowItem::Object {
+                        text: label.clone(),
+                        accessibility_label: label,
+                        id: image.span.map_or(items.len(), |span| span.start),
+                        renderer: Arc::new(|_, _, _| None),
+                        selected: inline_node.custom_selection.clone(),
+                        style: HighlightStyle::default(),
+                        link: None,
+                    });
+                } else {
+                    items.push(InlineFlowItem::Image {
+                        source: node_cx.image_source(image),
+                        link: image.link.clone(),
+                        title: image.title(),
+                        width: image.width,
+                        height: image.height,
+                    });
+                }
 
                 consumed += text.len();
                 text.clear();

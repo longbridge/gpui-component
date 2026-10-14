@@ -2169,3 +2169,174 @@ fn d16_checkbox_click_keeps_caret_and_shows_hand(cx: &mut TestAppContext) {
     cx.simulate_mouse_move(l, None, Modifiers::secondary_key());
     assert!(editor.read_with(cx, |e, _| e.pointer_hand));
 }
+
+#[gpui::test]
+fn host_submit_policy_does_not_submit_composition_or_shift_enter(cx: &mut TestAppContext) {
+    use crate::text::block_editor::{BlockEditorEvent, SubmitPolicy};
+    use std::{cell::Cell, rc::Rc};
+    let (editor, cx) = open(cx, "draft");
+    let submits = Rc::new(Cell::new(0));
+    let count = submits.clone();
+    let subscription = cx.update(|_, cx| {
+        cx.subscribe(&editor, move |_, event: &BlockEditorEvent, _| {
+            if matches!(event, BlockEditorEvent::SubmitRequested) {
+                count.set(count.get() + 1);
+            }
+        })
+    });
+    editor.update(cx, |state, _| state.set_submit_policy(SubmitPolicy::Enter));
+    caret_at(&editor, cx, 0, 5);
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 1);
+    assert_eq!(source(&editor, cx), "draft");
+    keys(cx, "M-enter");
+    assert_eq!(submits.get(), 2);
+    assert_eq!(source(&editor, cx), "draft");
+    keys(cx, "shift-enter");
+    assert_eq!(submits.get(), 2);
+    cx.update(|window, cx| {
+        editor.update(cx, |state, cx| {
+            state.replace_and_mark_text_in_range(None, "雪", Some(0..1), window, cx);
+        })
+    });
+    assert!(editor.read_with(cx, |state, _| state.is_composing()));
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 2);
+    cx.update(|window, cx| editor.update(cx, |state, cx| state.unmark_text(window, cx)));
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 3);
+    editor.update(cx, |state, _| {
+        state.set_submit_policy(SubmitPolicy::ModifiedEnter)
+    });
+    keys(cx, "enter");
+    assert_eq!(submits.get(), 3);
+    keys(cx, "M-enter");
+    assert_eq!(submits.get(), 4);
+    drop(subscription);
+}
+
+#[gpui::test]
+fn host_semantic_paste_intercepts_keyboard_and_native_action_once(cx: &mut TestAppContext) {
+    use crate::text::block_editor::{BlockEditorEvent, ClipboardPolicy};
+    use std::{cell::RefCell, rc::Rc};
+    let (editor, cx) = open(cx, "draft");
+    let pending = Rc::new(RefCell::new(Vec::new()));
+    let captured = pending.clone();
+    let subscription = cx.update(|_, cx| {
+        cx.subscribe(&editor, move |_, event: &BlockEditorEvent, _| {
+            if let BlockEditorEvent::PasteRequested { request, item } = event {
+                captured.borrow_mut().push((request.clone(), item.clone()));
+            }
+        })
+    });
+    editor.update(cx, |state, _| {
+        state.set_clipboard_policy(ClipboardPolicy::Host)
+    });
+    caret_at(&editor, cx, 0, 5);
+    // TestAppContext uses its fake platform clipboard, never the OS clipboard.
+    cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(" text".to_string())));
+    keys(cx, "M-v");
+    assert_eq!(source(&editor, cx), "draft");
+    let (request, item) = pending.borrow_mut().pop().unwrap();
+    assert_eq!(item.text().as_deref(), Some(" text"));
+    editor.update(cx, |state, cx| {
+        assert!(state.apply_paste(&request, Some(" text"), cx));
+        assert!(!state.apply_paste(&request, Some(" text"), cx));
+    });
+    assert_eq!(source(&editor, cx), "draft text");
+    cx.update(|window, cx| window.dispatch_action(Box::new(crate::input::Paste), cx));
+    draw(cx);
+    let (request, _) = pending.borrow_mut().pop().unwrap();
+    editor.update(cx, |state, cx| {
+        assert!(state.apply_paste(&request, None, cx));
+        assert!(!state.apply_paste(&request, None, cx));
+    });
+    assert_eq!(source(&editor, cx), "draft text");
+    // OsAction/native menu uses EntityInputHandler::paste, not input::Paste.
+    cx.update(|window, cx| {
+        editor.update(cx, |state, cx| {
+            EntityInputHandler::paste(
+                state,
+                gpui::ClipboardItem::new_string(" native".into()),
+                window,
+                cx,
+            );
+        })
+    });
+    draw(cx);
+    assert_eq!(source(&editor, cx), "draft text");
+    assert_eq!(pending.borrow().len(), 1);
+    let (request, item) = pending.borrow_mut().pop().unwrap();
+    assert_eq!(item.text().as_deref(), Some(" native"));
+    editor.update(cx, |state, cx| {
+        assert!(state.apply_paste(&request, item.text().as_deref(), cx))
+    });
+    assert_eq!(source(&editor, cx), "draft text native");
+    assert!(pending.borrow().is_empty());
+    drop(subscription);
+}
+
+#[gpui::test]
+fn host_image_placeholder_load_and_paste_never_issue_http(cx: &mut TestAppContext) {
+    use crate::text::block_editor::ImagePolicy;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let requests = Arc::new(AtomicUsize::new(0));
+    let count = requests.clone();
+    cx.update(|cx| {
+        cx.set_http_client(gpui::http_client::FakeHttpClient::create(move |_| {
+            count.fetch_add(1, Ordering::SeqCst);
+            async {
+                Err(anyhow::anyhow!(
+                    "fake client: outbound image loading forbidden"
+                ))
+            }
+        }));
+        crate::init(cx);
+    });
+    let initial = "![alt](https://attacker.example/load)\n\n| image |\n| --- |\n| ![cell](https://attacker.example/table) |";
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        Root(cx.new(|cx| {
+            BlockEditorState::new(window, cx)
+                .with_image_policy(ImagePolicy::Placeholder)
+                .with_source(initial)
+        }))
+    });
+    let editor = root.read_with(cx, |root, _| root.0.clone());
+    draw(cx);
+    assert_eq!(source(&editor, cx), initial);
+    caret_at(&editor, cx, 0, '\u{fffc}'.len_utf8());
+    editor.update(cx, |state, cx| {
+        state.paste(
+            gpui::ClipboardItem::new_string("![pasted](https://attacker.example/paste)".into()),
+            false,
+            cx,
+        )
+    });
+    draw(cx);
+    assert!(source(&editor, cx).contains("https://attacker.example/paste"));
+    editor.read_with(cx, |state, _| {
+        let count = state
+            .model()
+            .document()
+            .leaves()
+            .map(|leaf| {
+                state
+                    .model()
+                    .doc()
+                    .inline(leaf.id())
+                    .map_or(0, |text| text.atoms().len())
+            })
+            .sum::<usize>();
+        assert_eq!(count, 3);
+    });
+    editor.update(cx, |state, cx| {
+        let mut range = state.capture_caret().unwrap();
+        state.replace_captured(&mut range, " after", cx).unwrap();
+    });
+    draw(cx);
+    assert!(source(&editor, cx).contains(" after"));
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}

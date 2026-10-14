@@ -9,7 +9,9 @@ use super::{
     inline::{InlineAtom, InlineText},
     kind::BlockKindData,
 };
-use crate::text::node::{ColumnumnAlign, MarkdownSource, MarkdownSourceOptions};
+use crate::text::node::{
+    ColumnumnAlign, MarkdownSource, MarkdownSourceOptions, markdown_destination, markdown_title,
+};
 
 pub(crate) fn editor_source_options() -> MarkdownSourceOptions {
     MarkdownSourceOptions {
@@ -31,16 +33,10 @@ pub(crate) fn join_blocks(doc: &EditorDocument, ids: &[BlockId]) -> String {
         .join("\n\n")
 }
 
-/// Serialize siblings, dropping the ones with no Markdown form (empty
-/// paragraphs). Note: an empty paragraph between two lists of the same type
-/// is therefore lost, and main's parser reads the two lists back as one
-/// (documented lossiness; a `*` vs `-` marker switch does not keep them
-/// apart in this parser).
+/// Empty paragraphs are editing boundaries, especially at the end of a draft.
+/// Preserve their separators so restoring then typing cannot join words.
 fn render_children(doc: &EditorDocument, ids: &[BlockId]) -> Vec<(BlockId, String)> {
-    ids.iter()
-        .map(|id| (*id, block(doc, *id)))
-        .filter(|(_, text)| !text.is_empty())
-        .collect()
+    ids.iter().map(|id| (*id, block(doc, *id))).collect()
 }
 
 fn block(doc: &EditorDocument, id: BlockId) -> String {
@@ -81,30 +77,39 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
             // a paragraph reads as a setext underline); skip it.
             children
                 .iter()
-                .filter(|item| !list_item(doc, **item, "- ").trim().ends_with('-'))
+                .map(|item| (*item, list_item(doc, *item, "- ")))
+                // Bare empty items also retain a caret/editing boundary.
                 .enumerate()
-                .map(|(ix, item)| {
-                    let marker = if *ordered {
-                        format!("{}. ", start.unwrap_or(1) as usize + ix)
+                .map(|(ix, (item, text))| {
+                    if *ordered {
+                        let marker = format!("{}. ", start.unwrap_or(1) as usize + ix);
+                        // Render with the actual marker width so continuation
+                        // indentation remains correct for multi-digit lists.
+                        list_item(doc, item, &marker)
                     } else {
-                        "- ".to_string()
-                    };
-                    list_item(doc, *item, &marker)
+                        text
+                    }
                 })
                 .collect::<Vec<_>>()
                 .join(if loose { "\n\n" } else { "\n" })
         }
         (BlockKindData::ListItem { .. }, _) => list_item(doc, id, "- "),
-        (BlockKindData::CodeBlock { lang }, BlockContent::Plain(code)) => {
-            // Markdown parsers drop a code block's trailing blank lines, so
-            // they are not written either (save is then a fixpoint).
-            let code = code.trim_end_matches('\n');
-            let longest = code.split(|c| c != '`').map(str::len).max().unwrap_or(0);
-            let fence = "`".repeat(longest.max(2) + 1);
-            format!(
-                "{fence}{}\n{code}\n{fence}",
-                lang.as_deref().unwrap_or_default()
-            )
+        (BlockKindData::CodeBlock { lang, meta }, BlockContent::Plain(code)) => {
+            // The final line ending below terminates the fence body. All
+            // line endings already in `code` are semantic content.
+            let mut info = lang.as_deref().unwrap_or_default().to_owned();
+            if let Some(meta) = meta {
+                info.push(' ');
+                info.push_str(meta);
+            }
+            let delimiter = if info.contains('`') { '~' } else { '`' };
+            let longest = code
+                .split(|c| c != delimiter)
+                .map(str::len)
+                .max()
+                .unwrap_or(0);
+            let fence = delimiter.to_string().repeat(longest.max(2) + 1);
+            format!("{fence}{info}\n{code}\n{fence}")
         }
         (BlockKindData::Table { aligns }, _) => {
             let mut lines = Vec::new();
@@ -115,6 +120,7 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
                     .map(|cell| match doc.inline(*cell) {
                         // A soft line break in a cell is `<br>` (D13).
                         Some(inline) => inline_markdown(inline)
+                            .replace("\\\n", "<br>")
                             .replace('\n', "<br>")
                             .trim()
                             .to_string(),
@@ -155,8 +161,12 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
             },
             _,
         ) => match title {
-            Some(title) => format!("[{identifier}]: {url} \"{title}\""),
-            None => format!("[{identifier}]: {url}"),
+            Some(title) => format!(
+                "[{identifier}]: {} {}",
+                markdown_destination(url),
+                markdown_title(title)
+            ),
+            None => format!("[{identifier}]: {}", markdown_destination(url)),
         },
         (BlockKindData::Custom, BlockContent::Atom(AtomData::Custom(node))) => node.to_markdown(),
         // Documented lossiness: `Unknown` has no source to write back.
@@ -172,8 +182,13 @@ fn list_item(doc: &EditorDocument, item: BlockId, marker: &str) -> String {
     };
     let children = doc.children(item);
     let mut body = String::new();
-    // Empty paragraphs have no Markdown form; skip them.
-    let children = render_children(doc, children);
+    // A leading empty subparagraph would terminate a bare list marker and
+    // spill the actual body outside the item. Normalize only that prefix;
+    // trailing edit boundaries and nonempty terminal spaces remain intact.
+    let children = render_children(doc, children)
+        .into_iter()
+        .skip_while(|(_, text)| text.is_empty())
+        .collect::<Vec<_>>();
     for (ix, (child, text)) in children.iter().enumerate() {
         if ix > 0 {
             let prev_is_list = matches!(
@@ -181,12 +196,25 @@ fn list_item(doc: &EditorDocument, item: BlockId, marker: &str) -> String {
                 Some(BlockKindData::List { .. })
             );
             let is_list = matches!(doc.kind(*child), Some(BlockKindData::List { .. }));
+            // A bare nested marker cannot interrupt a paragraph; without a
+            // blank line it becomes literal body text on restore.
+            let bare_nested = is_list
+                && doc.children(*child).first().is_some_and(|item| {
+                    doc.children(*item).iter().all(|leaf| {
+                        matches!(doc.kind(*leaf), Some(BlockKindData::Paragraph))
+                            && doc
+                                .inline(*leaf)
+                                .is_some_and(|inline| inline.text().trim().is_empty())
+                    })
+                });
             // Two paragraphs in a row need a blank line, or they merge.
-            body.push_str(if spread || (!is_list && !prev_is_list) || prev_is_list {
-                "\n\n"
-            } else {
-                "\n"
-            });
+            body.push_str(
+                if spread || bare_nested || (!is_list && !prev_is_list) || prev_is_list {
+                    "\n\n"
+                } else {
+                    "\n"
+                },
+            );
         }
         body.push_str(text);
     }
@@ -209,7 +237,7 @@ fn list_item(doc: &EditorDocument, item: BlockId, marker: &str) -> String {
             }
         }
     }
-    out.trim_end().to_string()
+    out.trim_end_matches('\n').to_string()
 }
 
 // Inline content goes through `MarkdownSource`, then line starts that
@@ -223,8 +251,12 @@ pub(crate) fn inline_markdown(inline: &InlineText) -> String {
             Some(InlineAtom::Image(image)) => {
                 let alt = image.alt.as_deref().unwrap_or_default();
                 let markdown = match &image.title {
-                    Some(title) => format!("![{alt}]({} \"{title}\")", image.url),
-                    None => format!("![{alt}]({})", image.url),
+                    Some(title) => format!(
+                        "![{alt}]({} {})",
+                        markdown_destination(&image.url.to_string()),
+                        markdown_title(title)
+                    ),
+                    None => format!("![{alt}]({})", markdown_destination(&image.url.to_string())),
                 };
                 source.push_marked(&markdown, marks)
             }
@@ -235,7 +267,6 @@ pub(crate) fn inline_markdown(inline: &InlineText) -> String {
     // the content column of a list item.
     source
         .finish()
-        .trim()
         .split('\n')
         .map(escape_line_start)
         .collect::<Vec<_>>()

@@ -565,10 +565,18 @@ impl BlockEditorModel {
     /// Turn the caret's paragraph into a code block holding its text (or
     /// insert an empty code block when the caret is elsewhere).
     fn set_code_block(&mut self, lang: Option<String>) -> Result<bool, CommandError> {
+        self.set_code_block_info(lang, None)
+    }
+    pub(crate) fn set_code_block_info(
+        &mut self,
+        lang: Option<String>,
+        meta: Option<String>,
+    ) -> Result<bool, CommandError> {
         let pos = self
             .caret()
             .ok_or(CommandError::Unsupported("block selection"))?;
         let lang = lang.filter(|l| !l.is_empty()).map(SharedString::from);
+        let meta = meta.filter(|m| !m.is_empty()).map(SharedString::from);
         self.transact(EditOrigin::Command("code_block"), |tx| {
             let doc = &*tx.doc;
             let (parent, index) = doc
@@ -583,15 +591,18 @@ impl BlockEditorModel {
                     tx.remove_block(pos.block)?;
                     (text, index)
                 }
-                Some(BlockKindData::CodeBlock { .. }) => {
-                    tx.set_kind(pos.block, BlockKindData::CodeBlock { lang })?;
+                Some(BlockKindData::CodeBlock { meta: old_meta, .. }) => {
+                    let meta = meta.or_else(|| old_meta.clone());
+                    tx.set_kind(pos.block, BlockKindData::CodeBlock { lang, meta })?;
                     return Ok(caret(pos));
                 }
                 _ => (String::new(), index + 1),
             };
             let offset = pos.offset.min(text.len());
-            let code =
-                DetachedBlock::leaf(BlockKindData::CodeBlock { lang }, BlockContent::Plain(text));
+            let code = DetachedBlock::leaf(
+                BlockKindData::CodeBlock { lang, meta },
+                BlockContent::Plain(text),
+            );
             let id = code.id;
             tx.insert(parent, at, vec![code])?;
             Ok(caret(BlockPosition::new(id, offset)))

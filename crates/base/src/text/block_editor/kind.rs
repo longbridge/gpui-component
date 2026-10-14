@@ -61,6 +61,7 @@ pub(crate) enum BlockKindData {
     },
     CodeBlock {
         lang: Option<SharedString>,
+        meta: Option<SharedString>,
     },
     HorizontalRule,
     Break {

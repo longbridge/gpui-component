@@ -140,6 +140,7 @@ impl RenderOnce for BlockEditor {
             style: Arc::new(text_style),
             code_block_highlighter: highlighter,
             markdown_extensions: extensions,
+            image_policy: self.state.read(cx).image_policy(),
             body_font_size: window.text_style().font_size.to_pixels(window.rem_size()),
             ..Default::default()
         };
@@ -370,6 +371,7 @@ impl RenderOnce for BlockEditor {
             .on_action(window.listener_for(s, BlockEditorState::on_copy))
             .on_action(window.listener_for(s, BlockEditorState::on_cut))
             .on_action(window.listener_for(s, BlockEditorState::on_paste))
+            .on_action(window.listener_for(s, BlockEditorState::on_native_paste))
             .on_action(window.listener_for(s, BlockEditorState::on_paste_plain))
             .child(EditorRoot {
                 state: self.state.clone(),

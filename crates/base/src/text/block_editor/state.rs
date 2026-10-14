@@ -1,6 +1,7 @@
 //! `BlockEditorState`: the entity around [`BlockEditorModel`] (design §6).
 
 use super::input_rule::RuleKind;
+use std::sync::Arc;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
@@ -143,6 +144,43 @@ pub enum BlockEditorEvent {
     },
     Focus,
     Blur,
+    /// Enter requested submission; emitted only outside IME composition. The
+    /// owner applies completion/picker and domain-send policy, in that order.
+    SubmitRequested,
+    /// Semantic paste interception, shared by keyboard and native actions.
+    /// The owner must resolve this request with `apply_paste`; stale requests
+    /// are rejected instead of pasting into a later selection/document.
+    PasteRequested {
+        request: PasteRequest,
+        item: ClipboardItem,
+    },
+}
+
+/// Which Enter action requests submission. Newline is the document-editor default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SubmitPolicy {
+    #[default]
+    Newline,
+    Enter,
+    ModifiedEnter,
+}
+
+/// Whether paste uses editor defaults or is first offered to the host.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ClipboardPolicy {
+    #[default]
+    Editor,
+    Host,
+}
+
+/// An intercepted semantic paste tied to the editor's current document and
+/// selection. Resolve once; no synthetic key events or OS clipboard access is
+/// needed when delivering an explicit `ClipboardItem`.
+#[derive(Clone, Debug)]
+pub struct PasteRequest {
+    range: super::CapturedRange,
+    plain: bool,
+    sequence: u64,
 }
 
 /// IME composition in progress: the marked byte range in one leaf.
@@ -174,7 +212,13 @@ pub struct BlockEditorState {
     goal_x: Option<Pixels>,
     pub(crate) dragging: bool,
     readonly: bool,
+    image_policy: super::ImagePolicy,
+    submit_policy: SubmitPolicy,
+    clipboard_policy: ClipboardPolicy,
+    paste_sequence: u64,
+    pending_paste: Option<u64>,
     input_rules: Vec<super::input_rule::InputRule>,
+    input_rule_filter: Option<Arc<dyn Fn(super::InputRule, &str) -> bool + Send + Sync>>,
     hovered_link: Option<SharedString>,
     /// The mouse is over a task checkbox, or a link with Cmd/Ctrl held.
     pub(crate) pointer_hand: bool,
@@ -224,18 +268,43 @@ impl BlockEditorState {
             frame: Rc::default(),
             cull: Rc::default(),
             a11y_value: RefCell::default(),
-            scroll_handle: None,
+            scroll_handle: Some(gpui::ScrollHandle::new()),
             reveal: Default::default(),
             marked: None,
             composition_open: false,
             goal_x: None,
             dragging: false,
             readonly: false,
+            image_policy: super::ImagePolicy::default(),
+            submit_policy: SubmitPolicy::default(),
+            clipboard_policy: ClipboardPolicy::default(),
+            paste_sequence: 0,
+            pending_paste: None,
             input_rules: super::input_rule::InputRule::markdown_defaults(),
+            input_rule_filter: None,
             hovered_link: None,
             pointer_hand: false,
             _subscriptions: subscriptions,
         }
+    }
+
+    pub fn with_submit_policy(mut self, policy: SubmitPolicy) -> Self {
+        self.submit_policy = policy;
+        self
+    }
+    pub fn set_submit_policy(&mut self, policy: SubmitPolicy) {
+        self.submit_policy = policy;
+    }
+    pub fn with_clipboard_policy(mut self, policy: ClipboardPolicy) -> Self {
+        self.clipboard_policy = policy;
+        self
+    }
+    pub fn set_clipboard_policy(&mut self, policy: ClipboardPolicy) {
+        self.clipboard_policy = policy;
+    }
+    /// The retained scroll owner; content-sized wrappers share this handle.
+    pub fn scroll_handle(&self) -> Option<gpui::ScrollHandle> {
+        self.scroll_handle.clone()
     }
 
     /// Builder: the Markdown input rules to run while typing (D13). The
@@ -246,6 +315,18 @@ impl BlockEditorState {
         rules: impl IntoIterator<Item = super::input_rule::InputRule>,
     ) -> Self {
         self.input_rules = rules.into_iter().collect();
+        self
+    }
+
+    /// Pure policy invoked before an enabled input rule rewrites typed content.
+    /// Return false when a host workflow (e.g. completion) owns the same sigil.
+    /// Receives leaf-native text before the caret, never serialized offsets;
+    /// must not perform I/O or re-enter the editor. Defaults to allowing rules.
+    pub fn with_input_rule_filter(
+        mut self,
+        filter: impl Fn(super::InputRule, &str) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.input_rule_filter = Some(Arc::new(filter));
         self
     }
 
@@ -281,7 +362,13 @@ impl BlockEditorState {
     }
 
     fn rule_on(&self, kind: super::input_rule::RuleKind) -> bool {
-        self.input_rules.iter().any(|r| r.0 == kind)
+        self.input_rules.iter().any(|rule| rule.0 == kind)
+            && self.input_rule_filter.as_ref().is_none_or(|filter| {
+                filter(
+                    super::InputRule(kind),
+                    self.model.caret_prefix().unwrap_or_default(),
+                )
+            })
     }
 
     /// Builder: initial Markdown.
@@ -295,6 +382,8 @@ impl BlockEditorState {
     pub fn set_source(&mut self, source: &str, cx: &mut Context<Self>) -> Result<(), SharedString> {
         self.model.set_source(source)?;
         self.marked = None;
+        self.composition_open = false;
+        self.pending_paste = None;
         self.projection.invalidate();
         cx.notify();
         Ok(())
@@ -303,6 +392,84 @@ impl BlockEditorState {
     /// The document as canonical Markdown.
     pub fn source(&self) -> String {
         self.model.source()
+    }
+
+    /// Shared canonical source, materialized at most once per revision.
+    pub fn source_snapshot(&self) -> super::SourceSnapshot {
+        self.model.source_snapshot()
+    }
+
+    pub fn capture_caret(&self) -> Result<super::CapturedRange, super::CapturedRangeError> {
+        self.model.capture_caret()
+    }
+    pub fn capture_selection(&self) -> Result<super::CapturedRange, super::CapturedRangeError> {
+        self.model.capture_selection()
+    }
+    pub fn capture_suffix(
+        &self,
+        len: usize,
+    ) -> Result<super::CapturedRange, super::CapturedRangeError> {
+        self.model.capture_suffix(len)
+    }
+    pub fn capture_leaf_range(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> Result<super::CapturedRange, super::CapturedRangeError> {
+        self.model.capture_leaf_range(range)
+    }
+    /// Configure presentation/resource admission without mutating the document.
+    pub fn with_image_policy(mut self, policy: super::ImagePolicy) -> Self {
+        self.image_policy = policy;
+        self
+    }
+    pub fn set_image_policy(&mut self, policy: super::ImagePolicy, cx: &mut Context<Self>) {
+        self.image_policy = policy;
+        self.projection.invalidate();
+        cx.notify();
+    }
+    pub fn image_policy(&self) -> super::ImagePolicy {
+        self.image_policy
+    }
+
+    pub fn caret_prefix_snapshot(&self) -> Option<SharedString> {
+        self.model.caret_prefix_snapshot()
+    }
+    pub fn caret_prefix(&self) -> Option<&str> {
+        self.model.caret_prefix()
+    }
+    pub fn is_capture_current(&self, range: &super::CapturedRange) -> bool {
+        self.model.is_capture_current(range)
+    }
+    pub fn replace_captured(
+        &mut self,
+        range: &mut super::CapturedRange,
+        text: &str,
+        cx: &mut Context<Self>,
+    ) -> Result<(), super::CapturedRangeError> {
+        if self.readonly || self.marked.is_some() {
+            return Err(super::CapturedRangeError::Stale);
+        }
+        self.model.replace_captured(range, text)?;
+        self.after_edit(EditOrigin::Api, cx);
+        Ok(())
+    }
+    pub fn select_end(&mut self, cx: &mut Context<Self>) -> Result<(), super::SelectionError> {
+        self.model.select_end()?;
+        self.selection_changed(cx);
+        Ok(())
+    }
+    /// Reveal the current caret after viewport/layout changes without moving it.
+    pub fn reveal_caret(&mut self, cx: &mut Context<Self>) {
+        self.reveal.set(true);
+        cx.notify();
+    }
+    /// Fence host callbacks on external owner changes without reparsing content.
+    pub fn invalidate_captures(&mut self) {
+        self.model.invalidate_captures();
+        self.pending_paste = None;
+    }
+    pub fn is_composing(&self) -> bool {
+        self.marked.is_some()
     }
 
     /// The headless model (document, selection, history).
@@ -394,6 +561,9 @@ impl BlockEditorState {
 
     /// Undo the last transaction (or IME composition) group.
     pub fn undo(&mut self, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
         if self.model.undo() {
             self.after_edit(EditOrigin::Undo, cx);
         }
@@ -401,6 +571,9 @@ impl BlockEditorState {
 
     /// Redo the last undone group.
     pub fn redo(&mut self, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
         if self.model.redo() {
             self.after_edit(EditOrigin::Redo, cx);
         }
@@ -1171,6 +1344,16 @@ impl BlockEditorState {
         self.edit(EditOrigin::DeleteForward, |m| m.delete(true), cx);
     }
     pub(crate) fn on_enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
+        if self.readonly || self.is_composing() {
+            return;
+        }
+        if self.submit_policy == SubmitPolicy::Enter {
+            cx.emit(BlockEditorEvent::SubmitRequested);
+            return;
+        }
+        self.newline(cx);
+    }
+    fn newline(&mut self, cx: &mut Context<Self>) {
         self.end_composition();
         // "```lang" then Enter: a code block.
         if !self.readonly
@@ -1245,16 +1428,11 @@ impl BlockEditorState {
         self.edit(EditOrigin::Command("split_block"), |m| m.split_block(), cx);
     }
     /// Shift+Enter: a soft line break in a table cell; Enter elsewhere.
-    pub(crate) fn on_soft_break(
-        &mut self,
-        _: &SoftBreak,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.end_composition();
-        if self.readonly {
+    pub(crate) fn on_soft_break(&mut self, _: &SoftBreak, _: &mut Window, cx: &mut Context<Self>) {
+        if self.readonly || self.is_composing() {
             return;
         }
+        self.end_composition();
         if self.model.current_cell().is_some() {
             self.model.break_coalescing();
             self.edit(
@@ -1264,12 +1442,22 @@ impl BlockEditorState {
             );
             self.model.break_coalescing();
         } else {
-            self.on_enter(&Enter, window, cx);
+            self.newline(cx);
         }
     }
 
     /// Cmd/Ctrl+Enter: leave a table to the block after it.
     pub(crate) fn on_exit_block(&mut self, _: &ExitBlock, _: &mut Window, cx: &mut Context<Self>) {
+        if self.readonly || self.is_composing() {
+            return;
+        }
+        if matches!(
+            self.submit_policy,
+            SubmitPolicy::Enter | SubmitPolicy::ModifiedEnter
+        ) {
+            cx.emit(BlockEditorEvent::SubmitRequested);
+            return;
+        }
         self.end_composition();
         if self.readonly || self.model.current_cell().is_none() {
             cx.propagate();
@@ -1399,36 +1587,92 @@ impl BlockEditorState {
         );
     }
     pub(crate) fn on_paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.end_composition();
-            self.edit(
-                EditOrigin::Paste,
-                |m| {
-                    if m.paste_blocks(&text)? {
-                        return Ok(());
-                    }
-                    m.insert_text(&text, EditOrigin::Paste)
-                },
-                cx,
-            );
+        if self.readonly {
+            return;
+        }
+        if let Some(item) = cx.read_from_clipboard() {
+            self.paste(item, false, cx);
         }
     }
-
-    /// Cmd/Ctrl+Shift+V: paste as plain text (line breaks still split blocks).
+    pub(crate) fn on_native_paste(
+        &mut self,
+        _: &crate::input::Paste,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.on_paste(&Paste, window, cx);
+    }
     pub(crate) fn on_paste_plain(
         &mut self,
         _: &PastePlain,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.end_composition();
-            self.edit(
-                EditOrigin::Paste,
-                |m| m.insert_text(&text, EditOrigin::Paste),
-                cx,
-            );
+        if self.readonly {
+            return;
         }
+        if let Some(item) = cx.read_from_clipboard() {
+            self.paste(item, true, cx);
+        }
+    }
+
+    /// Deliver semantic clipboard content. `plain` bypasses Markdown import.
+    /// With Host policy this emits one request; there is no fallback insertion
+    /// until the owner resolves it, so mixed image/text entries cannot double
+    /// insert. This method itself never reads the system clipboard.
+    pub fn paste(&mut self, item: ClipboardItem, plain: bool, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
+        self.end_composition();
+        if self.clipboard_policy == ClipboardPolicy::Host {
+            self.paste_sequence += 1;
+            self.pending_paste = Some(self.paste_sequence);
+            let request = PasteRequest {
+                range: self.model.capture(self.model.selection.clone()),
+                plain,
+                sequence: self.paste_sequence,
+            };
+            cx.emit(BlockEditorEvent::PasteRequested { request, item });
+        } else if let Some(text) = item.text() {
+            self.paste_text(&text, plain, cx);
+        }
+    }
+
+    /// Resolve an intercepted paste with text not consumed by the host's other
+    /// admissions (e.g. image attachments). `None` means wholly handled or
+    /// rejected. Returns false when navigation/edits made the request stale.
+    pub fn is_paste_current(&self, request: &PasteRequest) -> bool {
+        !self.readonly
+            && self.pending_paste == Some(request.sequence)
+            && self.model.is_capture_current(&request.range)
+    }
+    pub fn apply_paste(
+        &mut self,
+        request: &PasteRequest,
+        text: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.is_paste_current(request) {
+            return false;
+        }
+        self.pending_paste = None;
+        if let Some(text) = text {
+            self.paste_text(text, request.plain, cx);
+        }
+        true
+    }
+    fn paste_text(&mut self, text: &str, plain: bool, cx: &mut Context<Self>) {
+        self.edit(
+            EditOrigin::Paste,
+            |model| {
+                if !plain && model.paste_blocks(text)? {
+                    return Ok(());
+                }
+                model.insert_text(text, EditOrigin::Paste)
+            },
+            cx,
+        );
     }
 
     /// Markdown input rules (design §5.3): `# `..`###### `, `- `/`* `/`+ `
@@ -1639,9 +1883,12 @@ impl BlockEditorState {
             head: BlockPosition::new(block, len),
         });
         let _ = self.model.delete(false);
-        let _ = self
-            .model
-            .run(EditorCommand::SetCodeBlock { lang: Some(lang) });
+        let (lang, meta) = lang
+            .split_once(char::is_whitespace)
+            .map_or((lang.as_str(), None), |(lang, meta)| {
+                (lang, Some(meta.trim_start().to_owned()))
+            });
+        let _ = self.model.set_code_block_info(Some(lang.to_owned()), meta);
         self.model.history.commit_transaction();
         self.model.break_coalescing();
         self.after_edit(EditOrigin::InputRule("code_block"), cx);
@@ -1772,6 +2019,10 @@ impl EntityInputHandler for BlockEditorState {
 
     fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {
         self.end_composition();
+    }
+
+    fn paste(&mut self, item: ClipboardItem, _: &mut Window, cx: &mut Context<Self>) {
+        BlockEditorState::paste(self, item, false, cx);
     }
 
     fn replace_text_in_range(

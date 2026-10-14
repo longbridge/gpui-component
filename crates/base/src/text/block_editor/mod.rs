@@ -1,8 +1,8 @@
 //! Block-based WYSIWYG Markdown editor (spike for the design in
 //! [longbridge/gpui-kit#3049](https://github.com/longbridge/gpui-kit/pull/3049);
 //! see `docs/design/block-editor.md`). Behind the off-by-default
-//! `block-editor` feature (`gpui-kit` forwards it; nothing is re-exported from
-//! `gpui-component`).
+//! `block-editor` feature (`gpui-kit` forwards it to Base and Component).
+//! Component provides a themed content-sized viewport over this behavior.
 //!
 //! - [`BlockEditorModel`]: the headless model. It has stable [`BlockId`]s,
 //!   validated [`BlockPosition`]s, normalized inline mark runs, invertible
@@ -44,6 +44,7 @@ mod document;
 mod editor;
 mod element;
 mod frame;
+mod host;
 mod id;
 mod import;
 mod inline;
@@ -70,7 +71,7 @@ pub use document::{BlockRef, DocumentRef};
 pub use editor::BlockEditorModel;
 pub use element::BlockEditor;
 pub use input_rule::InputRule;
-pub use state::{BlockEditorEvent, BlockEditorState};
+pub use state::{BlockEditorEvent, BlockEditorState, ClipboardPolicy, PasteRequest, SubmitPolicy};
 pub use style::BlockEditorStyle;
 pub use table::TableEdit;
 
@@ -83,3 +84,7 @@ pub use marks::{MarkChange, MarkKind, MarkSet, MarkState};
 pub use position::{Affinity, BlockPosition, PositionError};
 pub use selection::{BlockSelection, SelectionError};
 pub use transaction::{EditOrigin, Transaction};
+
+pub use host::{CapturedRange, CapturedRangeError, SourceSnapshot};
+
+pub use super::node::ImagePolicy;

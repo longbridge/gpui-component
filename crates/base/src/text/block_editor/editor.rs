@@ -1,4 +1,12 @@
-use std::sync::Arc;
+use std::{
+    cell::RefCell,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
+static NEXT_EDITOR_OWNER: AtomicU64 = AtomicU64::new(1);
 
 use gpui::SharedString;
 
@@ -10,7 +18,6 @@ use super::{
     marks::{MarkKind, MarkSet, MarkState},
     position::BlockPosition,
     selection::{BlockSelection, SelectionError},
-    serialize::serialize,
     transaction::{EditOrigin, Transaction, TransactionBuilder},
     undo::BlockUndoManager,
 };
@@ -20,6 +27,10 @@ use crate::text::{markdown_ext::MarkdownExtensions, node::TextMark};
 /// `BlockEditorState` entity.
 pub struct BlockEditorModel {
     pub(crate) doc: EditorDocument,
+    pub(super) owner: u64,
+    pub(super) selection_epoch: u64,
+    pub(super) source_cache: RefCell<Option<super::SourceSnapshot>>,
+    pub(super) prefix_cache: RefCell<Option<super::host::PrefixSnapshot>>,
     pub(crate) selection: BlockSelection,
     /// Toolbar marks at a collapsed caret; cleared when the caret moves.
     pub(crate) stored_marks: Option<TextMark>,
@@ -32,10 +43,15 @@ impl BlockEditorModel {
         source: &str,
         extensions: MarkdownExtensions,
     ) -> Result<Self, SharedString> {
+        let extensions = super::import::preserve_source_extensions(extensions);
         let doc = parse_document(source, Arc::new(extensions))?;
         let selection = BlockSelection::caret(doc.first_caret());
         Ok(Self {
             doc,
+            owner: NEXT_EDITOR_OWNER.fetch_add(1, Ordering::Relaxed),
+            selection_epoch: 0,
+            source_cache: RefCell::default(),
+            prefix_cache: RefCell::default(),
             selection,
             stored_marks: None,
             history: BlockUndoManager::default(),
@@ -56,7 +72,7 @@ impl BlockEditorModel {
 
     /// The document as canonical Markdown.
     pub fn source(&self) -> String {
-        serialize(&self.doc).trim_end_matches('\n').to_string()
+        self.source_snapshot().text().to_string()
     }
 
     /// Document revision; bumped by every committed transaction.
@@ -78,6 +94,7 @@ impl BlockEditorModel {
     pub fn set_selection(&mut self, selection: BlockSelection) -> Result<(), SelectionError> {
         self.doc.validate_selection(&selection)?;
         if selection != self.selection {
+            self.selection_epoch += 1;
             self.stored_marks = None;
             self.history.break_coalescing();
         }

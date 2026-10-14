@@ -236,10 +236,10 @@ fn exiting_code_block_then_typing_is_two_undo_steps() {
     assert_eq!(m.source(), "```\ncode\n```\n\np");
     assert!(m.undo());
     assert_eq!(m.document().leaves().count(), 2, "typing undone alone");
-    assert_eq!(m.source(), "```\ncode\n```");
+    assert_eq!(m.source(), "```\ncode\n```\n\n");
     assert!(m.undo());
-    // The code's trailing newline is back in the model; save drops
-    // trailing blank lines (parsers do), so check the leaf instead.
+    // Undo the exit too: the newline belongs to the editable code body,
+    // distinct from the exterior empty paragraph restored above.
     let code = m
         .document()
         .leaves()

@@ -9,8 +9,7 @@ use crate::text::{
         import::{Defs, collect_definitions, import_block},
         step::{DetachedBlock, DetachedContent},
     },
-    format::markdown,
-    node::{BlockNode, NodeContext},
+    node::BlockNode,
 };
 
 /// Structure and content without ids.
@@ -195,22 +194,27 @@ fn assert_equivalent(m: &BlockEditorModel) {
         .iter()
         .filter_map(|id| project_block(doc, *id))
         .collect();
-    let mut cx = NodeContext {
-        markdown_extensions: doc.extensions.clone(),
-        ..Default::default()
-    };
     let source = m.source();
-    let parsed = markdown::parse(&source, &mut cx).unwrap();
+    // The editor importer restores caret trivia that a read-only Markdown
+    // renderer intentionally omits. Compare against the primary parser plus
+    // that editor contract, not against lossy read-only whitespace handling.
+    let reparsed = model(&source);
+    let parsed: Vec<BlockNode> = reparsed
+        .doc
+        .children(reparsed.doc.root)
+        .iter()
+        .filter_map(|id| project_block(&reparsed.doc, *id))
+        .collect();
     assert_eq!(
         shapes(&direct),
-        shapes(&parsed.blocks),
+        shapes(&parsed),
         "direct projection differs from parse(serialize) for {source:?}"
     );
     // Also compare the rendered node trees themselves, not only after
     // importing them back into the model.
     assert_eq!(
         node_shapes(&direct),
-        node_shapes(&parsed.blocks),
+        node_shapes(&parsed),
         "BlockNode trees differ for {source:?}"
     );
     let mut got = Vec::new();

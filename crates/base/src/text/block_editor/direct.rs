@@ -162,13 +162,14 @@ impl NodeCache {
                 checked: *checked,
                 span: None,
             },
-            BlockKindData::CodeBlock { lang } => {
+            BlockKindData::CodeBlock { lang, meta } => {
                 let code = match &entry.content {
                     BlockContent::Plain(code) => code.clone(),
                     _ => String::new(),
                 };
                 let code =
-                    CodeBlock::new(code.into(), lang.clone(), None::<crate::text::node::Span>);
+                    CodeBlock::new(code.into(), lang.clone(), None::<crate::text::node::Span>)
+                        .with_meta(meta.clone());
                 keyed(code.inline_state(), id);
                 BlockNode::CodeBlock(code)
             }
