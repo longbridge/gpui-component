@@ -92,6 +92,7 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     globals.set("__clipboard_read_text", Func::from(read_from_clipboard))?;
     globals.set("__clipboard_write_text", Func::from(write_to_clipboard))?;
     globals.set("__open_url", Func::from(open_url))?;
+    globals.set("__open_path", Func::from(open_path))?;
 
     // `localStorage` and `sessionStorage` go on `window`, where a browser puts
     // them. The prelude assembles them from these.
@@ -118,6 +119,29 @@ fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
         ));
     }
     with_app(&ctx, "cx.open_url(url)", move |app| app.open_url(&url))
+}
+
+/// Opens a file or directory with whatever the system opens it with.
+/// `App::open_with_system`.
+///
+/// Unlike a URL, a path names something on this machine, so it carries the
+/// authority reading it would: the path has to be inside a granted
+/// `capabilities.fs.read` directory and exist. GPUI hands it to the platform —
+/// `xdg-open` with the desktop session's environment on Linux, Launch Services
+/// on macOS, the shell on Windows — which is what a script running a process
+/// of its own cannot do: `process.run` starts commands without the session's
+/// environment, so the opener cannot find the user's default application.
+fn open_path(ctx: Ctx<'_>, path: String) -> JsResult<()> {
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let target = grant.system_path().map_err(|error| {
+        js_error::type_error(
+            &ctx,
+            &format!("cx.open_path(path) cannot open `{path}`: {error}"),
+        )
+    })?;
+    with_app(&ctx, "cx.open_path(path)", move |app| {
+        app.open_with_system(&target)
+    })
 }
 
 // -- Filesystem ------------------------------------------------------------
@@ -1415,6 +1439,7 @@ mod tests {
             "log",
             "clipboard",
             "open_url",
+            "open_path",
             "read_from_clipboard",
             "write_to_clipboard",
             "localStorage",
@@ -1426,6 +1451,36 @@ mod tests {
                 "`{name}` no longer lives on a module; an export of it resolves to nothing"
             );
         }
+    }
+
+    /// A path is opened only where it could be read: inside a granted
+    /// directory, and present. Past those checks the call needs a live host
+    /// call, which this harness does not have — so that message is the proof
+    /// both checks passed.
+    #[test]
+    fn open_path_is_confined_to_the_read_grant() {
+        let directory = TempDir::new();
+        std::fs::write(directory.path().join("notes.txt"), "x").unwrap();
+        crate::capability::install(
+            Capabilities::new().read_roots([directory.path().to_path_buf()]),
+        );
+
+        let inside = directory.path().join("notes.txt");
+        let message = with_host(|ctx| error_of(ctx, &format!("__open_path({inside:?})")));
+        assert!(message.contains("needs a live host call"), "{message}");
+        let message =
+            with_host(|ctx| error_of(ctx, &format!("__open_path({:?})", directory.path())));
+        assert!(
+            message.contains("needs a live host call"),
+            "the granted directory itself opens too: {message}"
+        );
+
+        let missing = directory.path().join("missing.txt");
+        let message = with_host(|ctx| error_of(ctx, &format!("__open_path({missing:?})")));
+        assert!(message.contains("cannot open"), "{message}");
+
+        let message = with_host(|ctx| error_of(ctx, "__open_path('/etc/hosts')"));
+        assert!(message.contains("capabilities.fs.read"), "{message}");
     }
 
     #[test]

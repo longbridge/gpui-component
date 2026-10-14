@@ -452,7 +452,11 @@ impl Capabilities {
                 relative
             };
 
-            return Ok(Grant { dir, relative });
+            return Ok(Grant {
+                dir,
+                root: resolved,
+                relative,
+            });
         }
 
         Err(CapabilityError::OutsideRoots {
@@ -546,6 +550,8 @@ pub(crate) fn install(capabilities: Capabilities) {
 #[derive(Debug)]
 pub(crate) struct Grant {
     dir: Dir,
+    /// The root `dir` was opened at, resolved.
+    root: PathBuf,
     relative: PathBuf,
 }
 
@@ -569,6 +575,22 @@ impl Grant {
     /// handle is — but the words a script needs to recognize what it asked for.
     pub fn describe(&self) -> String {
         self.relative.display().to_string()
+    }
+
+    /// The target as a path another program can open, once the granted
+    /// handle has confirmed it exists.
+    ///
+    /// The check goes through the handle rather than the path, so a link that
+    /// leads out of the grant is refused here as a read through it would be.
+    /// What comes back is only for handing to the system — `open_with_system`
+    /// takes a path, not a handle — and nothing in this process opens it.
+    pub(crate) fn system_path(&self) -> std::io::Result<PathBuf> {
+        self.dir.metadata(&self.relative)?;
+        Ok(if self.relative == Path::new(".") {
+            self.root.clone()
+        } else {
+            self.root.join(&self.relative)
+        })
     }
 
     /// Splits into the two halves, for work that moves to another thread.

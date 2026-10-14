@@ -1029,6 +1029,18 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * registered for its scheme.
      */
     open_url(url: string): void;
+    /**
+     * Opens a file or directory with whatever the system opens it with —
+     * the user's default application for its type, or the file manager for
+     * a directory. `App::open_with_system`.
+     *
+     * The path must be inside a directory granted in `capabilities.fs.read`
+     * and must exist; anything else throws. Use this rather than running
+     * `xdg-open` or `open` through `process.run`, which starts commands
+     * without the desktop session's environment, so the opener cannot find
+     * the default application.
+     */
+    open_path(path: string): void;
 
     /** `App::read_from_clipboard`. `undefined` when it holds no text. */
     read_from_clipboard(): string | undefined;

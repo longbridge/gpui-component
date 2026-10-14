@@ -6747,6 +6747,10 @@ globalThis.__gpui = (() => {
       check();
       return __open_url(String(url));
     },
+    open_path: (path) => {
+      check();
+      return __open_path(String(path));
+    },
     read_from_clipboard: () => {
       check();
       return __clipboard_read_text();
