@@ -19,7 +19,7 @@ use gpui::{
     Entity, GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, IntoElement,
     LayoutId, PaintQuad, ParentElement, PathBuilder, Pixels, Point, SharedString,
     StatefulInteractiveElement, Styled, StyledText, WeakEntity, Window, canvas, div, point,
-    prelude::FluentBuilder as _, px, relative, rems, transparent_black,
+    prelude::FluentBuilder as _, relative, rems, transparent_black,
 };
 use gpui_base::{
     Button, ColorTokens, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
@@ -548,7 +548,6 @@ pub fn error_banner(
         .border_b_1()
         .border_color(colors.border)
         .shadow_sm()
-        .child(div().h(px(2.)).w_full().bg(colors.accent))
         .child(
             div()
                 .flex()
@@ -561,8 +560,12 @@ pub fn error_banner(
                 .line_height(relative(1.5))
                 .child(
                     div()
+                        .flex()
                         .flex_none()
+                        .items_center()
+                        .gap(rems(0.5))
                         .text_color(colors.foreground)
+                        .child(status_dot(colors))
                         .child(SharedString::from(failure.label())),
                 )
                 .child(
@@ -740,8 +743,8 @@ impl ViewFailure {
 /// that hardcodes red is unreadable in half the themes it will be seen in. So
 /// this is a normal composed surface: one heading, one line of detail, one
 /// recovery line, on the same tokens every other screen uses. `destructive`
-/// appears once, as a hairline rule, because emphasis is a budget and the
-/// message itself is already the focal point.
+/// appears once, as a status dot beside the heading, because emphasis is a
+/// budget and the message itself is already the focal point.
 ///
 /// The message shows its first line only. A stack trace is long, and whatever
 /// the application looks like, a wall of monospace in the middle of it reads as
@@ -792,7 +795,6 @@ pub fn failure_surface(
                 .bg(colors.surface)
                 .border_1()
                 .border_color(colors.border)
-                .child(div().h(px(2.)).w_full().bg(colors.accent))
                 .child(
                     div()
                         .flex()
@@ -803,9 +805,13 @@ pub fn failure_surface(
                         .pb(rems(0.75))
                         .child(
                             div()
+                                .flex()
+                                .items_center()
+                                .gap(rems(0.5))
                                 .text_size(rems(0.875))
                                 .line_height(relative(1.4))
                                 .text_color(colors.foreground)
+                                .child(status_dot(colors))
                                 .child(SharedString::from(heading.to_owned())),
                         )
                         .child(
@@ -883,6 +889,18 @@ impl FailureColors {
             hover: token("muted", defaults.muted),
         }
     }
+}
+
+/// Marks the surface as a failure. A dot beside the words rather than a rule
+/// across the edge: a colored band reads as the window's own chrome and clashes
+/// with whatever the application drew beneath it, while a dot stays attached
+/// to the message it qualifies.
+fn status_dot(colors: FailureColors) -> impl IntoElement {
+    div()
+        .flex_none()
+        .size(rems(0.375))
+        .rounded_full()
+        .bg(colors.accent)
 }
 
 /// The folded part of a message: selectable monospace in a well of its own,
