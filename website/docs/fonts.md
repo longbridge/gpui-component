@@ -35,8 +35,11 @@ The editor paints its code in `mono_font_family` at `mono_font_size`. See
 [Editor](../component/editor.md) for details.
 
 Both defaults are checked against the installed fonts when the theme is
-applied. A missing monospace default is swapped for an installed alternative,
-and when `.SystemUIFont` resolves to one of GPUI's fallback families rather
+applied. On Linux the monospace default first follows the system's own
+monospace font — what fontconfig's `monospace` alias names, the font the
+terminal uses — so a desktop that sets JetBrains Mono or Adwaita Mono gets it
+in code blocks too. A missing monospace default is swapped for an installed
+alternative, and when `.SystemUIFont` resolves to one of GPUI's fallback families rather
 than the system font itself (Linux desktops without the family GPUI maps it
 to), the theme names that family directly so text lookups stay cached. A
 family you set yourself is used as-is.
