@@ -32,6 +32,7 @@
 //! so `get` and `set` answer from memory; §17.1's requirement that `store.flush`
 //! become awaitable is still open, and is the only synchronous write left.
 
+use crate::engine::quickjs::js_error;
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
@@ -39,8 +40,7 @@ use std::{
 
 use gpui::{App, ClipboardItem};
 use rquickjs::{
-    Ctx, Error as JsError, Exception, FromJs, IntoJs, Object, Promise, Result as JsResult,
-    TypedArray, Value,
+    Ctx, Error as JsError, FromJs, IntoJs, Object, Promise, Result as JsResult, TypedArray, Value,
     function::{Func, Opt, Rest},
 };
 use serde_json::Value as Json;
@@ -112,7 +112,7 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 /// `TextView` default link handler.
 fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
     if !is_openable_url(&url) {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             &ctx,
             "cx.open_url(url) expects an absolute HTTP(S) URL with a host",
         ));
@@ -189,7 +189,7 @@ pub(super) fn write_file<'js>(
         String::from_js(&ctx, contents)?.into_bytes()
     } else {
         let bytes = TypedArray::<u8>::from_js(&ctx, contents).map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 &ctx,
                 "fs.writeFile(path, contents) expects a string or Uint8Array",
             )
@@ -197,7 +197,7 @@ pub(super) fn write_file<'js>(
         bytes
             .as_bytes()
             .ok_or_else(|| {
-                Exception::throw_type(
+                js_error::type_error(
                     &ctx,
                     "fs.writeFile(path, contents) received a detached Uint8Array",
                 )
@@ -207,7 +207,7 @@ pub(super) fn write_file<'js>(
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     if contents.len() > MAX_WRITE_BYTES {
-        return Err(Exception::throw_range(
+        return Err(js_error::range_error(
             &ctx,
             &format!(
                 "`{name}` write is {} bytes, over the {MAX_WRITE_BYTES}-byte fs.writeFile limit",
@@ -262,7 +262,7 @@ impl ReadEncoding {
             for key in options.keys::<String>() {
                 let key = key?;
                 if key != "encoding" {
-                    return Err(Exception::throw_type(
+                    return Err(js_error::type_error(
                         ctx,
                         &format!("unknown fs.readFile option `{key}`; expected encoding"),
                     ));
@@ -270,14 +270,14 @@ impl ReadEncoding {
             }
             options.get::<_, String>("encoding")?
         } else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 "fs.readFile encoding must be \"utf8\" or { encoding: \"utf8\" }",
             ));
         };
         match encoding.to_ascii_lowercase().as_str() {
             "utf8" | "utf-8" => Ok(Self::Utf8),
-            _ => Err(Exception::throw_type(
+            _ => Err(js_error::type_error(
                 ctx,
                 "fs.readFile only supports UTF-8 text decoding",
             )),
@@ -304,7 +304,7 @@ fn readdir_with_file_types<'js>(ctx: &Ctx<'js>, value: Option<Value<'js>>) -> Js
         return Ok(false);
     };
     let Some(options) = value.into_object() else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "fs.readdir options must be { withFileTypes: boolean }",
         ));
@@ -312,7 +312,7 @@ fn readdir_with_file_types<'js>(ctx: &Ctx<'js>, value: Option<Value<'js>>) -> Js
     for key in options.keys::<String>() {
         let key = key?;
         if key != "withFileTypes" {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("unknown fs.readdir option `{key}`; expected withFileTypes"),
             ));
@@ -527,7 +527,7 @@ impl<'js> FromJs<'js> for MakeDirectory {
         }
 
         let Some(object) = value.into_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 "fs.mkdir(path, options) expects an object, such as { recursive: true }",
             ));
@@ -538,7 +538,7 @@ impl<'js> FromJs<'js> for MakeDirectory {
         for key in object.keys::<String>() {
             let key = key?;
             if key != "recursive" {
-                return Err(Exception::throw_type(
+                return Err(js_error::type_error(
                     ctx,
                     &format!(
                         "unknown option `{key}` for fs.mkdir(path, options); \
@@ -647,7 +647,7 @@ fn check_readdir_budget(entries: usize, name_bytes: usize) -> std::io::Result<()
 fn grant(ctx: &Ctx<'_>, path: &str, access: Access) -> JsResult<Grant> {
     capabilities()
         .open(Path::new(path), access)
-        .map_err(|error| Exception::throw_type(ctx, &denial(&error)))
+        .map_err(|error| js_error::type_error(ctx, &denial(&error)))
 }
 
 /// Turns a [`CapabilityError`] into a message that always ends in the manifest
@@ -908,7 +908,7 @@ fn with_local_storage<R>(
     body: impl FnOnce(&mut Storage) -> JsResult<R>,
 ) -> JsResult<R> {
     if !capabilities().has_storage() {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             &CapabilityError::StorageDenied.to_string(),
         ));
@@ -918,7 +918,7 @@ fn with_local_storage<R>(
         Some(result) => result,
         // Not a manifest problem, so it does not name a capability key: the
         // embedder skipped `set_storage_path`.
-        None => Err(Exception::throw_message(
+        None => Err(js_error::error(
             ctx,
             "localStorage has no backing file; the host must call \
              set_storage_path before the application runs",
@@ -927,7 +927,7 @@ fn with_local_storage<R>(
 }
 
 fn fail(ctx: &Ctx<'_>, message: &str) -> JsError {
-    Exception::throw_message(ctx, message)
+    js_error::error(ctx, message)
 }
 
 /// A cycle in a JS object graph would recurse forever, so depth is capped.
@@ -946,7 +946,7 @@ const MAX_EXACT_INTEGER: f64 = 9_007_199_254_740_992.0;
 /// script: a layout is plain data under exactly these rules.
 pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
     if depth > MAX_JSON_DEPTH {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "value nests more than 64 levels deep; the store holds plain data and \
              cannot hold a reference cycle",
@@ -975,7 +975,7 @@ pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResul
         return serde_json::Number::from_f64(number)
             .map(Json::Number)
             .ok_or_else(|| {
-                Exception::throw_type(
+                js_error::type_error(
                     ctx,
                     "NaN and Infinity have no JSON form and cannot be stored",
                 )
@@ -988,7 +988,7 @@ pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResul
         let length = bridge_array_len(ctx, &array)?;
         let mut items = Vec::new();
         items.try_reserve_exact(length).map_err(|_| {
-            Exception::throw_range(
+            js_error::range_error(
                 ctx,
                 &format!(
                     "array could not be reserved within the {MAX_BRIDGE_ARRAY_ITEMS}-item bridge limit"
@@ -1001,7 +1001,7 @@ pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResul
         return Ok(Json::Array(items));
     }
     if value.is_function() {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "a function cannot be stored; the store holds data, not behaviour",
         ));
@@ -1018,7 +1018,7 @@ pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResul
         return Ok(Json::Object(map));
     }
 
-    Err(Exception::throw_type(
+    Err(js_error::type_error(
         ctx,
         "unsupported value; the store holds null, booleans, numbers, strings, \
          arrays and plain objects",
@@ -1029,7 +1029,7 @@ pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResul
 
 fn read_from_clipboard(ctx: Ctx<'_>) -> JsResult<Option<String>> {
     if !capabilities().is_clipboard_readable() {
-        return Err(Exception::throw_type(&ctx, CLIPBOARD_READ_DENIED));
+        return Err(js_error::type_error(&ctx, CLIPBOARD_READ_DENIED));
     }
     with_app(&ctx, "cx.read_from_clipboard()", |app| {
         app.read_from_clipboard().and_then(|item| item.text())
@@ -1038,7 +1038,7 @@ fn read_from_clipboard(ctx: Ctx<'_>) -> JsResult<Option<String>> {
 
 fn write_to_clipboard(ctx: Ctx<'_>, text: String) -> JsResult<()> {
     if !capabilities().is_clipboard_writable() {
-        return Err(Exception::throw_type(&ctx, CLIPBOARD_WRITE_DENIED));
+        return Err(js_error::type_error(&ctx, CLIPBOARD_WRITE_DENIED));
     }
     with_app(&ctx, "cx.write_to_clipboard(text)", move |app| {
         app.write_to_clipboard(ClipboardItem::new_string(text))
@@ -1060,7 +1060,7 @@ const CLIPBOARD_WRITE_DENIED: &str =
 /// call is an application bug, not a host bug (§5.8).
 fn with_app<R>(ctx: &Ctx<'_>, what: &str, body: impl FnOnce(&mut App) -> R) -> JsResult<R> {
     scope::with_current_app(body).ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "{what} needs a live host call; call it from render, an event handler or a task"

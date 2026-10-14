@@ -48,6 +48,7 @@
 //! including for module-top-level work created before a view exists. Explicit
 //! `cancel()` stops work on demand. A cancelled promise is simply never settled.
 
+use crate::engine::quickjs::js_error;
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
@@ -771,7 +772,7 @@ fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
     };
 
     let runtime = scope::current_runtime()
-        .ok_or_else(|| Exception::throw_type(ctx, &format!("{api} has no owning shell runtime")))?;
+        .ok_or_else(|| js_error::type_error(ctx, &format!("{api} has no owning shell runtime")))?;
     scope::with_context(generation, |window, app| Host {
         window: window.window_handle(),
         app: app.to_async(),
@@ -779,7 +780,7 @@ fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
         background: app.background_executor().clone(),
         runtime: Rc::downgrade(&runtime),
     })
-    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))
+    .map_err(|error| js_error::type_error(ctx, &error.to_string()))
 }
 
 /// Re-enters script code in a fresh [`ScopePhase::Task`] scope.
@@ -1400,7 +1401,7 @@ where
 const MAX_OUTSTANDING_TASKS_PER_RUNTIME: usize = 1024;
 
 fn register<'js>(ctx: &Ctx<'js>, task: TaskState) -> JsResult<Rc<TaskState>> {
-    try_register(task).map_err(|message| Exception::throw_range(ctx, &message))
+    try_register(task).map_err(|message| js_error::range_error(ctx, &message))
 }
 
 fn try_register(task: TaskState) -> std::result::Result<Rc<TaskState>, String> {
@@ -1494,7 +1495,7 @@ fn owner_from_options<'js>(
     }
 
     let Some(owner) = owner.as_object() else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "opts.owner must be a view instance, or null for a task that outlives every view",
         ));
@@ -1509,7 +1510,7 @@ fn owner_from_options<'js>(
     if is_current {
         default()
     } else {
-        Err(Exception::throw_type(
+        Err(js_error::type_error(
             ctx,
             "opts.owner must be the view that is running, or null; a task cannot yet be owned \
              by another view",
@@ -1519,13 +1520,13 @@ fn owner_from_options<'js>(
 
 fn duration(ctx: &Ctx<'_>, api: &str, ms: f64) -> JsResult<Duration> {
     if !ms.is_finite() || ms < 0.0 {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             &format!("{api} expects a non-negative number of milliseconds, got {ms}"),
         ));
     }
     Duration::try_from_secs_f64(ms / 1000.0).map_err(|_| {
-        Exception::throw_range(
+        js_error::range_error(
             ctx,
             &format!("{api} milliseconds are outside the supported duration range"),
         )
@@ -1533,7 +1534,7 @@ fn duration(ctx: &Ctx<'_>, api: &str, ms: f64) -> JsResult<Duration> {
 }
 
 fn outside_host_call(ctx: &Ctx<'_>, api: &str) -> rquickjs::Error {
-    Exception::throw_type(
+    js_error::type_error(
         ctx,
         &format!(
             "{api} was called with no host call in progress. It needs the window and app of \

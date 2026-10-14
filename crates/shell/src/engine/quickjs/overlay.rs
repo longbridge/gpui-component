@@ -85,12 +85,13 @@
 //! and an overlay built from a script rebuilds with it rather than
 //! re-materializing the description it was opened with.
 
+use crate::engine::quickjs::js_error;
 use std::time::Duration;
 
 use gpui::{AnyView, App, AppContext as _, Context, Window};
 use gpui_base::Placement;
 use rquickjs::{
-    Ctx, Exception, FromJs, Object, Persistent, Result as JsResult, Value,
+    Ctx, FromJs, Object, Persistent, Result as JsResult, Value,
     function::{Func, Opt},
 };
 
@@ -313,7 +314,7 @@ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
         return Ok(());
     }
 
-    Err(Exception::throw_type(
+    Err(js_error::type_error(
         ctx,
         &format!(
             "{api} is not allowed during the `{}` phase; overlays may only be opened or \
@@ -345,7 +346,7 @@ fn with_root<R>(
 ) -> JsResult<R> {
     let Some(reached) = scope::with_current(|window, app| ShellRoot::update(window, app, body))
     else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             &format!(
                 "{api} needs a live host call; call it from init(), an event handler or a task"
@@ -354,7 +355,7 @@ fn with_root<R>(
     };
 
     reached.unwrap_or_else(|| {
-        Err(Exception::throw_type(
+        Err(js_error::type_error(
             ctx,
             &format!(
                 "{api} found no ShellRoot in this window. A view's init() runs before \
@@ -368,7 +369,7 @@ fn with_root<R>(
 /// Wraps a freshly constructed script instance as a view the root can mount.
 fn mount(ctx: &Ctx<'_>, object: ViewObject, cx: &mut App) -> JsResult<AnyView> {
     let Some(runtime) = scope::current_runtime().or_else(|| ShellRuntime::global(cx)) else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "the shell runtime is not installed on this application",
         ));
@@ -394,7 +395,7 @@ impl<'js> FromJs<'js> for ViewInstance {
         // means the wrapper was bypassed, which is worth saying plainly rather
         // than failing later on a missing `render`.
         let Some(object) = value.into_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 "expected a function returning an element; open_dialog and open_sheet take \
                  a function, not an element and not a view class",
@@ -447,7 +448,7 @@ impl<'js> FromJs<'js> for FpsHudArgument {
             return Ok(Self(FpsHudRequest::default()));
         }
         let Some(object) = value.as_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!(
                     "{SHOW_FPS_MONITOR} expects an object, such as {{ anchor: \"bottom_left\" }}"
@@ -459,7 +460,7 @@ impl<'js> FromJs<'js> for FpsHudArgument {
         let mut request = FpsHudRequest::default();
         if let Some(anchor) = object.get::<_, Option<String>>("anchor")? {
             request.anchor = anchor_from_name(&anchor).ok_or_else(|| {
-                Exception::throw_type(
+                js_error::type_error(
                     ctx,
                     &format!(
                         "{SHOW_FPS_MONITOR}: unknown anchor `{anchor}`; expected one of {}",
@@ -470,7 +471,7 @@ impl<'js> FromJs<'js> for FpsHudArgument {
         }
         if let Some(millis) = object.get::<_, Option<f64>>("frame_budget")? {
             if !(millis.is_finite() && millis > 0.) {
-                return Err(Exception::throw_type(
+                return Err(js_error::type_error(
                     ctx,
                     &format!(
                         "{SHOW_FPS_MONITOR}: frame_budget must be a positive number of milliseconds"
@@ -491,7 +492,7 @@ const TOAST_KEYS: &[&str] = &["title", "description", "level", "timeout", "id"];
 impl<'js> FromJs<'js> for ToastArgument {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
         let Some(object) = value.as_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("{PUSH_TOAST} expects an object, such as {{ title: \"Saved\" }}"),
             ));
@@ -499,7 +500,7 @@ impl<'js> FromJs<'js> for ToastArgument {
         reject_unknown_keys(ctx, object, TOAST_KEYS, PUSH_TOAST)?;
 
         let Some(title) = object.get::<_, Option<String>>("title")? else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("{PUSH_TOAST} requires a `title`; it is the sentence the user reads"),
             ));
@@ -543,7 +544,7 @@ fn options_object<'a, 'js>(
     }
     match value.as_object() {
         Some(object) => Ok(Some(object)),
-        None => Err(Exception::throw_type(
+        None => Err(js_error::type_error(
             ctx,
             &format!("{api} expects an options object"),
         )),
@@ -575,7 +576,7 @@ fn parse_placement(ctx: &Ctx<'_>, name: &str) -> JsResult<Placement> {
         _ => None,
     };
     placement.ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "unknown sheet placement `{name}`; expected {}",
@@ -596,7 +597,7 @@ fn placement_name(placement: Placement) -> &'static str {
 
 fn parse_level(ctx: &Ctx<'_>, name: &str) -> JsResult<ToastLevel> {
     ToastLevel::from_name(name).ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "unknown toast level `{name}`; expected {}",
@@ -618,7 +619,7 @@ fn reject_unknown_keys(
     for key in object.keys::<String>() {
         let key = key?;
         if !known.contains(&key.as_str()) {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!(
                     "unknown option `{key}` for {api}; expected {}",
@@ -637,7 +638,7 @@ fn parse_timeout(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Option<Duration>>
     }
 
     let refused = || {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "{PUSH_TOAST} expects `timeout` to be a number of milliseconds, or null to keep \

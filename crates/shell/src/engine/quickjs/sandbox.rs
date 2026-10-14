@@ -52,6 +52,7 @@
 //! precompiled bytecode first. Until that happens [`WITHHOLD_DYNAMIC_CODE`] is
 //! the layer that is actually in force.
 
+use crate::engine::quickjs::js_error;
 use std::{
     cell::Cell,
     sync::atomic::{AtomicBool, Ordering},
@@ -59,7 +60,7 @@ use std::{
 };
 
 use rquickjs::{
-    Ctx, Exception, Function, IntoJs, Object, Promise, Result as JsResult, Value,
+    Ctx, Function, IntoJs, Object, Promise, Result as JsResult, Value,
     function::{Args, Func, Opt, Rest},
     object::Accessor,
 };
@@ -254,7 +255,7 @@ fn install_absent_globals(ctx: &Ctx<'_>) -> JsResult<()> {
         globals.set(
             *name,
             Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
-                Err(Exception::throw_type(&ctx, &message))
+                Err(js_error::type_error(&ctx, &message))
             }),
         )?;
     }
@@ -296,7 +297,7 @@ fn install_absent_globals(ctx: &Ctx<'_>) -> JsResult<()> {
 /// writing to the host's stdout is writing to nowhere a user will look.
 fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<Promise<'js>> {
     if !host::capabilities().may_run(&command) {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             &ctx,
             &CapabilityError::ExecuteDenied(command).to_string(),
         ));
@@ -354,7 +355,7 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
         Func::from(|ctx: Ctx<'_>, code: Opt<i32>| -> JsResult<()> {
             let capabilities = host::capabilities();
             if !capabilities.may_exit() {
-                return Err(Exception::throw_type(
+                return Err(js_error::type_error(
                     &ctx,
                     "process.exit() is not granted; set capabilities.process.exit to true in the manifest",
                 ));
@@ -366,7 +367,7 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
             // granted the capability without deciding is told here, rather than
             // handing the script a success while nothing happens.
             let Some(handler) = crate::runtime::exit_handler() else {
-                return Err(Exception::throw_message(
+                return Err(js_error::error(
                     &ctx,
                     "process.exit() is granted but this host installed no handler for it; \
                      a host that grants exit has to say what exit means \
@@ -377,7 +378,7 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
             let request =
                 crate::runtime::ExitRequest::new(code.0.unwrap_or(0), crate::scope::current_view());
             crate::scope::with_current(|window, cx| handler(request, window, cx)).ok_or_else(|| {
-                Exception::throw_type(
+                js_error::type_error(
                     &ctx,
                     "process.exit() needs a live host call; call it from init(), an event \
                      handler or a task",
