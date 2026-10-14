@@ -575,8 +575,20 @@ Block rules fire only at the start of a paragraph. An empty list turns them all 
 - *Story:* has Task and Link toolbar buttons and an inline link bar (input plus Apply / Remove / Cancel).
 - *Not done:* the popover is a bar, not anchored at the link, and there is no in-editor tooltip.
 
+**D16. Leaving containers works like leaving an empty list item. Each step is one undo step.**
+- *Blockquote, Enter on an empty paragraph:*
+  - When it is the last child, it moves after the quote, so Enter twice leaves a quote.
+  - In the middle, the quote splits in two around it.
+  - A list inside a quote is left first, then the quote on the next Enter.
+- *Blockquote, Backspace* at the start of the quote's first paragraph moves that paragraph out before the quote. The quote is removed if it is left empty.
+- *List item with an empty last paragraph, after its first child:* this is where the caret lands after leaving a code block in an item. Enter, Shift+Tab, or Backspace at its start turns it into an empty item of its own after that item. From there the usual empty-item rules apply: up one level, then out of the list. The original item becomes tight again when only one child remains.
+- *Task checkboxes:* a mouse-down on the checkbox toggles it and stops propagation, so the caret, the selection and drag-select are untouched. `set_task_checked` keeps the selection.
+- *Cursor:* `CursorStyle::PointingHand` over a checkbox, and over a link while Cmd/Ctrl is held. The cursor updates on mouse move, so pressing Cmd/Ctrl without moving the mouse does not change it.
+*Heading keyboard shortcuts are deferred.*
+
 **D15. Markdown the model does not represent stays literal text and is escaped on save, so a load/save cycle is lossless in meaning. For example, `> [x]` stays a quote with literal text, and HTML and footnote text stay as text.**
 *Rationale:* Silent rewrites are worse than visible literals. Escaping ensures that typed `*` or `[` don't become syntax on reload.
+*Code blocks:* trailing blank lines are not written on save. Parsers drop them, so writing them would make save drift on every round trip; the model keeps them until reload.
 *Future work:* A raw-source fallback block that keeps unmodelled constructs byte-for-byte.
 **Decisions taken during the UI spike (answered by Richard, 14 Oct 2026):**
 - **Scroll handle:** the owner passes its scroll container's `ScrollHandle` (`set_scroll_handle`); the editor does not own a scroll container.

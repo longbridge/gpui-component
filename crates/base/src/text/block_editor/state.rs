@@ -176,6 +176,8 @@ pub struct BlockEditorState {
     readonly: bool,
     input_rules: Vec<super::input_rule::InputRule>,
     hovered_link: Option<SharedString>,
+    /// The mouse is over a task checkbox, or a link with Cmd/Ctrl held.
+    pub(crate) pointer_hand: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -231,6 +233,7 @@ impl BlockEditorState {
             readonly: false,
             input_rules: super::input_rule::InputRule::markdown_defaults(),
             hovered_link: None,
+            pointer_hand: false,
             _subscriptions: subscriptions,
         }
     }
@@ -255,7 +258,7 @@ impl BlockEditorState {
     }
 
     /// Check or uncheck the task item holding `block` (a list item or its
-    /// text leaf); one undo step (D14). The caret moves into the item.
+    /// text leaf); one undo step (D14). The selection is kept.
     pub fn set_task_checked(&mut self, block: BlockId, checked: bool, cx: &mut Context<Self>) {
         if self.readonly {
             return;
@@ -268,13 +271,10 @@ impl BlockEditorState {
                 None => return,
             }
         };
-        let _ = self
-            .model
-            .set_selection(BlockSelection::caret(BlockPosition::new(leaf, 0)));
         self.model.break_coalescing();
         self.edit(
             EditOrigin::Command("set_task_checked"),
-            |m| m.run(EditorCommand::SetTaskChecked(checked)).map(|_| ()),
+            |m| m.set_item_checked(leaf, checked).map(|_| ()),
             cx,
         );
         self.model.break_coalescing();
@@ -886,8 +886,13 @@ impl BlockEditorState {
         self.hovered_link.as_ref()
     }
 
-    pub(crate) fn hover_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+    pub(crate) fn hover_at(&mut self, at: Point<Pixels>, secondary: bool, cx: &mut Context<Self>) {
         let url = self.link_at(at).map(|(_, _, url)| url);
+        let hand = self.task_checkbox_at(at).is_some() || (secondary && url.is_some());
+        if hand != self.pointer_hand {
+            self.pointer_hand = hand;
+            cx.notify();
+        }
         if url != self.hovered_link {
             self.hovered_link = url.clone();
             cx.emit(BlockEditorEvent::LinkHovered { url });
@@ -983,6 +988,20 @@ impl BlockEditorState {
 
     /// The task checkbox drawn left of a task item's first line under
     /// `at`: the item's text leaf and whether it is checked.
+    /// Mouse-down on a task checkbox: toggle it, leaving the caret and
+    /// selection alone. Returns whether it was one.
+    pub(crate) fn click_checkbox(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) -> bool {
+        match self.task_checkbox_at(at) {
+            Some((leaf, checked)) if !self.readonly => {
+                self.end_composition();
+                self.dragging = false;
+                self.set_task_checked(leaf, !checked, cx);
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub(crate) fn task_checkbox_at(&self, at: Point<Pixels>) -> Option<(BlockId, bool)> {
         use super::kind::BlockKindData;
         use gpui::px;
@@ -1010,13 +1029,6 @@ impl BlockEditorState {
 
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
-        // A click on a task checkbox toggles it (one undo step).
-        if !extend && let Some((leaf, checked)) = self.task_checkbox_at(at) {
-            self.end_composition();
-            self.dragging = false;
-            self.set_task_checked(leaf, !checked, cx);
-            return;
-        }
         // Block handle: a click in the left edge beside a table or code
         // block (left of its text) selects the block as a node.
         if !extend && let Some(block) = self.block_handle_at(at) {

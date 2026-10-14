@@ -238,7 +238,13 @@ fn exiting_code_block_then_typing_is_two_undo_steps() {
     assert_eq!(m.document().leaves().count(), 2, "typing undone alone");
     assert_eq!(m.source(), "```\ncode\n```");
     assert!(m.undo());
-    assert_eq!(m.source(), "```\ncode\n\n```", "then the exit");
+    // The code's trailing newline is back in the model; save drops
+    // trailing blank lines (parsers do), so check the leaf instead.
+    let code = m
+        .document()
+        .leaves()
+        .find_map(|l| m.doc().plain(l.id()).map(str::to_string));
+    assert_eq!(code.as_deref(), Some("code\n"), "then the exit");
 }
 
 #[test]

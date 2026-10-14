@@ -2060,3 +2060,112 @@ fn d13_leave_table_with_down_or_secondary_enter(cx: &mut TestAppContext) {
         Some((1, 0)).or(caret_cell(&editor, cx))
     );
 }
+
+fn src_after(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    ks: &str,
+    typed: &str,
+) -> String {
+    if !ks.is_empty() {
+        keys(cx, ks);
+    }
+    ime_type(editor, cx, typed);
+    source(editor, cx).trim_end().to_string()
+}
+
+#[gpui::test]
+fn d16_blockquote_exit(cx: &mut TestAppContext) {
+    // Enter twice at the end leaves the quote; one undo step back.
+    let (editor, cx) = open(cx, "> a");
+    caret_at(&editor, cx, 0, 1);
+    assert_eq!(src_after(&editor, cx, "enter enter", "x"), "> a\n\nx");
+    keys(cx, &format!("{M}-z"));
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(src_after(&editor, cx, "", "y"), "> a\n>\n> y");
+    // In the middle: split around a new paragraph.
+    let (editor, cx) = open(cx, "> a\n>\n> b");
+    caret_at(&editor, cx, 0, 1);
+    assert_eq!(
+        src_after(&editor, cx, "enter enter", "x"),
+        "> a\n\nx\n\n> b"
+    );
+    // A list in a quote: the list first, then the quote.
+    let (editor, cx) = open(cx, "> - a");
+    caret_at(&editor, cx, 0, 1);
+    keys(cx, "enter enter");
+    assert_eq!(src_after(&editor, cx, "", "q"), "> - a\n>\n> q");
+    keys(cx, "backspace");
+    assert_eq!(src_after(&editor, cx, "enter", "x"), "> - a\n\nx");
+    // Backspace at the start of the first paragraph lifts it out.
+    let (editor, cx) = open(cx, "> a\n>\n> b");
+    caret_at(&editor, cx, 0, 0);
+    assert_eq!(src_after(&editor, cx, "backspace", ""), "a\n\n> b");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), "> a\n>\n> b");
+    let (editor, cx) = open(cx, "> only");
+    caret_at(&editor, cx, 0, 0);
+    assert_eq!(src_after(&editor, cx, "backspace", ""), "only");
+}
+
+#[gpui::test]
+fn d16_list_item_trailing_empty_paragraph(cx: &mut TestAppContext) {
+    // Enter: up one level (an empty item of its own), then out.
+    let (editor, cx) = open(cx, "- a\n  - b\n\n    c");
+    caret_at(&editor, cx, 2, 1);
+    keys(cx, "backspace");
+    assert_eq!(src_after(&editor, cx, "enter", "x"), "- a\n  - b\n  - x");
+    keys(cx, &format!("{M}-z"));
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(
+        source(&editor, cx).trim_end(),
+        "- a\n  - b\n\n    c".replace("c", "").trim_end()
+    );
+    keys(cx, "enter enter");
+    assert_eq!(src_after(&editor, cx, "", "y"), "- a\n  - b\n- y");
+    // After leaving a code block in an item.
+    let (editor, cx) = open(cx, "- a\n\n  ```\n  code\n  ```");
+    caret_at(&editor, cx, 1, 4);
+    keys(cx, "enter enter");
+    assert_eq!(
+        src_after(&editor, cx, "enter", "x"),
+        "- a\n\n  ```\n  code\n  ```\n\n- x"
+    );
+    // Shift+Tab and Backspace lift it too, one undo step each.
+    for k in ["shift-tab", "backspace"] {
+        let (editor, cx) = open(cx, "- a\n\n  b");
+        caret_at(&editor, cx, 1, 1);
+        keys(cx, "backspace");
+        let before = source(&editor, cx);
+        assert_eq!(src_after(&editor, cx, k, "x"), "- a\n- x", "{k}");
+        keys(cx, &format!("{M}-z"));
+        keys(cx, &format!("{M}-z"));
+        assert_eq!(source(&editor, cx), before, "{k}");
+    }
+}
+
+#[gpui::test]
+fn d16_checkbox_click_keeps_caret_and_shows_hand(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "- [ ] a\n- [ ] bc\n\n[l](u)");
+    caret_at(&editor, cx, 1, 1);
+    let before = editor.read_with(cx, |e, _| e.model.selection.clone());
+    let p = first_line_point(&editor, cx, 0, px(-10.));
+    cx.simulate_mouse_move(p, None, Modifiers::none());
+    assert!(editor.read_with(cx, |e, _| e.pointer_hand));
+    cx.simulate_mouse_down(p, MouseButton::Left, Modifiers::none());
+    let q = first_line_point(&editor, cx, 1, px(200.));
+    cx.simulate_mouse_move(q, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(q, MouseButton::Left, Modifiers::none());
+    draw(cx);
+    assert!(source(&editor, cx).starts_with("- [x] a\n- [ ] bc"));
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model.selection.clone()),
+        before
+    );
+    // Text over a link: I-beam, hand only with Cmd/Ctrl held.
+    let l = first_line_point(&editor, cx, 2, px(2.));
+    cx.simulate_mouse_move(l, None, Modifiers::none());
+    assert!(!editor.read_with(cx, |e, _| e.pointer_hand));
+    cx.simulate_mouse_move(l, None, Modifiers::secondary_key());
+    assert!(editor.read_with(cx, |e, _| e.pointer_hand));
+}

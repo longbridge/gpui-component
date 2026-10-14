@@ -96,6 +96,9 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
         }
         (BlockKindData::ListItem { .. }, _) => list_item(doc, id, "- "),
         (BlockKindData::CodeBlock { lang }, BlockContent::Plain(code)) => {
+            // Markdown parsers drop a code block's trailing blank lines, so
+            // they are not written either (save is then a fixpoint).
+            let code = code.trim_end_matches('\n');
             let longest = code.split(|c| c != '`').map(str::len).max().unwrap_or(0);
             let fence = "`".repeat(longest.max(2) + 1);
             format!(

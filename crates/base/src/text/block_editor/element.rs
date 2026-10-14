@@ -331,7 +331,11 @@ impl RenderOnce for BlockEditor {
             })
             .key_context(CONTEXT)
             .track_focus(&focus)
-            .cursor(CursorStyle::IBeam)
+            .cursor(if self.state.read(cx).pointer_hand {
+                CursorStyle::PointingHand
+            } else {
+                CursorStyle::IBeam
+            })
             .w_full()
             .on_action(window.listener_for(s, BlockEditorState::on_backspace))
             .on_action(window.listener_for(s, BlockEditorState::on_delete))
@@ -601,6 +605,14 @@ impl Element for EditorRoot {
             {
                 return;
             }
+            // A task checkbox toggles without moving the caret or starting
+            // a drag; nothing else handles this mouse-down.
+            if !event.modifiers.shift
+                && entity.update(cx, |state, cx| state.click_checkbox(event.position, cx))
+            {
+                cx.stop_propagation();
+                return;
+            }
             entity.update(cx, |state, cx| {
                 let focus = state.focus_handle.clone();
                 window.focus(&focus, cx);
@@ -620,7 +632,9 @@ impl Element for EditorRoot {
                 return;
             }
             if event.pressed_button.is_none() {
-                entity.update(cx, |state, cx| state.hover_at(event.position, cx));
+                entity.update(cx, |state, cx| {
+                    state.hover_at(event.position, event.modifiers.secondary(), cx)
+                });
                 return;
             }
             if event.pressed_button != Some(MouseButton::Left) {

@@ -364,6 +364,16 @@ impl BlockEditorModel {
         if range.is_collapsed() && self.select_adjacent_table(range.start, forward)? {
             return Ok(());
         }
+        // Backspace at the start of a quote's first paragraph, or of a list
+        // item's trailing empty paragraph: lift it (one undo step).
+        if !forward
+            && range.is_collapsed()
+            && range.start.offset == 0
+            && (self.lift_first_in_quote(range.start)?
+                || self.lift_item_trailing(range.start, false)?)
+        {
+            return Ok(());
+        }
         // Backspace at the start (Delete at the end) of a non-empty code
         // block: never merge text into or out of code; step the caret to the
         // neighbouring leaf instead.
@@ -499,6 +509,9 @@ impl BlockEditorModel {
         if range.is_collapsed() && self.exit_empty_item(range.start)? {
             return Ok(());
         }
+        if range.is_collapsed() && self.lift_empty_trailing(range.start)? {
+            return Ok(());
+        }
         if self.doc.plain(range.start.block).is_some() {
             return self.code_enter(range).map(|_| ());
         }
@@ -617,6 +630,170 @@ impl BlockEditorModel {
     /// paragraph: a nested item outdents one level, a top-level item becomes
     /// a paragraph after the list (splitting it when mid-list). One
     /// transaction, so one undo step. Returns `false` when it does not apply.
+    /// Enter on an empty paragraph that is a trailing child of a list item
+    /// or any child of a blockquote (D16): lift it out, like an empty item.
+    fn lift_empty_trailing(&mut self, pos: BlockPosition) -> Result<bool, CommandError> {
+        if self.lift_item_trailing(pos, true)? {
+            return Ok(true);
+        }
+        self.exit_quote(pos)
+    }
+
+    fn empty_paragraph_at(&self, pos: BlockPosition) -> bool {
+        self.doc.kind(pos.block) == Some(&BlockKindData::Paragraph)
+            && self.doc.inline(pos.block).is_some_and(|i| i.len() == 0)
+    }
+
+    /// An (empty, when `empty`) paragraph that is the last, not the first,
+    /// child of a list item becomes an empty item of its own after that
+    /// item. From there Enter / Shift+Tab outdent and leave the list as
+    /// for any empty item.
+    fn lift_item_trailing(
+        &mut self,
+        pos: BlockPosition,
+        empty: bool,
+    ) -> Result<bool, CommandError> {
+        let doc = &self.doc;
+        if doc.kind(pos.block) != Some(&BlockKindData::Paragraph)
+            || (empty && !self.empty_paragraph_at(pos))
+        {
+            return Ok(false);
+        }
+        let Some((item, index)) = doc.index_in_parent(pos.block) else {
+            return Ok(false);
+        };
+        if index == 0
+            || !doc.kind(item).is_some_and(is_list_item)
+            || index + 1 != doc.children(item).len()
+            || !self.empty_paragraph_at(pos)
+        {
+            return Ok(false);
+        }
+        let Some((list, item_index)) = doc.index_in_parent(item) else {
+            return Ok(false);
+        };
+        let checked = match doc.kind(item) {
+            Some(BlockKindData::ListItem { checked, .. }) => checked.map(|_| false),
+            _ => None,
+        };
+        let leaf = pos.block;
+        self.transact(EditOrigin::Command("lift_paragraph"), |tx| {
+            let para = tx.remove_block(leaf)?;
+            // The item was loose only because of the trailing paragraph.
+            if tx.doc.children(item).len() == 1
+                && let Some(BlockKindData::ListItem { checked, .. }) = tx.doc.kind(item).cloned()
+            {
+                tx.set_kind(
+                    item,
+                    BlockKindData::ListItem {
+                        checked,
+                        spread: false,
+                    },
+                )?;
+            }
+            let new_item = DetachedBlock::container(
+                BlockKindData::ListItem {
+                    checked,
+                    spread: false,
+                },
+                vec![para],
+            );
+            tx.insert(list, item_index + 1, vec![new_item])?;
+            Ok(caret(BlockPosition::new(leaf, 0)))
+        })?;
+        Ok(true)
+    }
+
+    /// Enter on an empty paragraph in a blockquote: the last child moves
+    /// after the quote; one in the middle splits the quote around it.
+    fn exit_quote(&mut self, pos: BlockPosition) -> Result<bool, CommandError> {
+        if !self.empty_paragraph_at(pos) {
+            return Ok(false);
+        }
+        let doc = &self.doc;
+        let Some((quote, index)) = doc.index_in_parent(pos.block) else {
+            return Ok(false);
+        };
+        if doc.kind(quote) != Some(&BlockKindData::Blockquote) {
+            return Ok(false);
+        }
+        let Some((outer, quote_index)) = doc.index_in_parent(quote) else {
+            return Ok(false);
+        };
+        let count = doc.children(quote).len();
+        let leaf = pos.block;
+        self.transact(EditOrigin::Command("exit_quote"), |tx| {
+            let rest = tx.remove(quote, index + 1..count)?;
+            let para = tx.remove_block(leaf)?;
+            let mut at = quote_index + 1;
+            if index == 0 {
+                tx.remove(outer, quote_index..quote_index + 1)?;
+                at = quote_index;
+            }
+            tx.insert(outer, at, vec![para])?;
+            if !rest.is_empty() {
+                let tail = DetachedBlock::container(BlockKindData::Blockquote, rest);
+                tx.insert(outer, at + 1, vec![tail])?;
+            }
+            Ok(caret(BlockPosition::new(leaf, 0)))
+        })?;
+        Ok(true)
+    }
+
+    /// Backspace at the start of a blockquote's first paragraph: move it
+    /// out before the quote (the quote goes when it empties).
+    fn lift_first_in_quote(&mut self, pos: BlockPosition) -> Result<bool, CommandError> {
+        let doc = &self.doc;
+        if doc.kind(pos.block) != Some(&BlockKindData::Paragraph) {
+            return Ok(false);
+        }
+        let Some((quote, 0)) = doc.index_in_parent(pos.block) else {
+            return Ok(false);
+        };
+        if doc.kind(quote) != Some(&BlockKindData::Blockquote) {
+            return Ok(false);
+        }
+        let Some((outer, quote_index)) = doc.index_in_parent(quote) else {
+            return Ok(false);
+        };
+        let only = doc.children(quote).len() == 1;
+        let leaf = pos.block;
+        self.transact(EditOrigin::Command("lift_quote"), |tx| {
+            let para = tx.remove_block(leaf)?;
+            if only {
+                tx.remove(outer, quote_index..quote_index + 1)?;
+            }
+            tx.insert(outer, quote_index, vec![para])?;
+            Ok(caret(BlockPosition::new(leaf, 0)))
+        })?;
+        Ok(true)
+    }
+
+    /// Check or uncheck the task item whose first leaf is `leaf`, keeping
+    /// the selection. One undo step.
+    pub(crate) fn set_item_checked(
+        &mut self,
+        leaf: BlockId,
+        on: bool,
+    ) -> Result<bool, CommandError> {
+        let Some((item, _)) = self.doc.index_in_parent(leaf) else {
+            return Ok(false);
+        };
+        let Some(BlockKindData::ListItem { spread, .. }) = self.doc.kind(item).cloned() else {
+            return Ok(false);
+        };
+        self.transact(EditOrigin::Command("set_task_checked"), |tx| {
+            tx.set_kind(
+                item,
+                BlockKindData::ListItem {
+                    checked: Some(on),
+                    spread,
+                },
+            )?;
+            Ok(None)
+        })
+    }
+
     fn exit_empty_item(&mut self, pos: BlockPosition) -> Result<bool, CommandError> {
         let doc = &self.doc;
         if doc.kind(pos.block) != Some(&BlockKindData::Paragraph)
@@ -1197,6 +1374,13 @@ impl BlockEditorModel {
     }
 
     fn outdent(&mut self) -> Result<bool, CommandError> {
+        // Shift+Tab on a list item's trailing empty paragraph lifts it.
+        if let Ok(range) = self.resolved()
+            && range.is_collapsed()
+            && self.lift_item_trailing(range.start, true)?
+        {
+            return Ok(true);
+        }
         let resolved = self.caret_resolved()?;
         let Some(item) = resolved.nearest(&self.doc, is_list_item) else {
             return Ok(false);
