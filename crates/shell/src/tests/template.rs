@@ -500,9 +500,9 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 
 const label = (value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color(`#111111`).child(value);
+  div().text_size("0.6875rem").line_height("140%").text_color(`#111111`).child(value);
 const muted = (value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color(`#6b7280`).child(value);
+  div().text_size("0.6875rem").line_height("140%").text_color(`#6b7280`).child(value);
 const cell = (width, right) => {
   const box = div().w(width).flex_none();
   return right ? box.text_right() : box;
@@ -554,9 +554,9 @@ import { v_flex, h_flex, Button } from "gpui-base";
 const template = globalThis.__template;
 
 const label = template((value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color(`#111111`).child(value));
+  div().text_size("0.6875rem").line_height("140%").text_color(`#111111`).child(value));
 const muted = template((value) =>
-  div().text_size("0.6875rem").line_height(1.4).text_color(`#6b7280`).child(value));
+  div().text_size("0.6875rem").line_height("140%").text_color(`#6b7280`).child(value));
 // Not templated: `right` decides structure, so a sentinel would be read and
 // never land — the case a wrapper has to detect and fall back on.
 const cell = (width, right) => {

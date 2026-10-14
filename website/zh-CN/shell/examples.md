@@ -49,7 +49,7 @@ gpui-kit.d.ts              自动生成；jsconfig.json 与 types.d.ts 把类型
 
 ```js
 export const label = (value, cx) =>
-  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
+  div().text_size(12).line_height("100%").text_color(cx.theme().colors.foreground).child(value);
 
 export const surface = (cx) =>
   v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();

@@ -86,16 +86,24 @@ pub(crate) fn path_identity(root: &Path) -> String {
     format!("{name}-{:016x}", path_digest(root))
 }
 
+/// The user's home directory: `HOME`, or `USERPROFILE` on Windows. `None` when
+/// neither names an absolute directory, rather than a relative path that would
+/// quietly resolve against wherever the process happened to start.
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    ["HOME", "USERPROFILE"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .find(|home| home.is_absolute())
+}
+
 /// The platform's per-user data directory, honouring the usual overrides.
 pub(crate) fn data_home() -> PathBuf {
     if let Some(explicit) = std::env::var_os("XDG_DATA_HOME").filter(|it| !it.is_empty()) {
         return PathBuf::from(explicit);
     }
 
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
+    let home = home_dir().unwrap_or_else(std::env::temp_dir);
 
     if cfg!(target_os = "macos") {
         home.join("Library").join("Application Support")

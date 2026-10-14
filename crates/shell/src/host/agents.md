@@ -104,7 +104,11 @@ source of truth over this guide.
 
 - **Host methods are snake_case** (`items_center`, `on_click`, `text_sm`,
   `Button.new("id")`), exactly as in Rust. Your own code is camelCase.
-- **Construct with `Type.new(...)`**, never `new Type(...)`.
+- **Construct with `Type.new(...)`** in every module — `Button.new("save")`
+  from `"gpui-base"` and from `"gpui-component"` alike — never `new Type(...)`.
+  The arguments differ by module: `gpui-base`'s `InputState.new({ placeholder })`
+  takes options, `gpui-component`'s `InputState.new(placeholder, value)` takes
+  them in order. `gpui-kit.d.ts` has each signature.
 - **Assign state in `init`, not as class fields.** `View`'s constructor calls
   `init` from inside `super()`; a class field declaration runs afterwards and
   overwrites it with `undefined`.
@@ -118,6 +122,16 @@ source of truth over this guide.
   `Button.new("save")`, `Checkbox.new(`todo-${item.id}`)`.
 - **Controls are controlled.** `Checkbox`/`Switch` take `.checked(value)` and
   report `.on_change((checked, cx) => …)`; store the new value and notify.
+- **Text state reports its own events.** Create an `InputState` in `init`,
+  pass it to `Input.new(state)` from the same module, and subscribe with
+  `state.on("change" | "submit" | "focus" | "blur", (event, cx) => …)`;
+  `submit` is Enter, and `event.shift` says whether Shift was held. Both
+  modules' `InputState` and `TextareaState` answer `on` the same way, but each
+  module's `Input` takes only its own module's state.
+- **Overlays are window calls made from an event handler or a task:**
+  `window.open_dialog(() => element)`, `window.open_sheet(...)`,
+  `window.push_toast({ title })`. `init` runs before the window can show one,
+  so they throw there.
 - **Base controls draw nothing by themselves.** `Button.new("x")` has no
   padding, colour or radius; every visual decision is written in the script.
 - **Use theme tokens for colour**: `cx.theme().colors.surface`,
@@ -136,6 +150,7 @@ source of truth over this guide.
   thread. There is no background thread for script.
 - `localStorage` / `sessionStorage` persist per application (needs
   `"storage": true`).
+- `TextEncoder` / `TextDecoder` (UTF-8) are globals and need no grant.
 - `fetch` (HTTP), `WebSocket` from `"websocket"`, `fs/promises`, clipboard and
   `process.run` exist but are **denied unless the manifest grants them**. Ask
   for the narrowest grant that works:
@@ -151,6 +166,16 @@ source of truth over this guide.
 }
 ```
 
+- `fs` roots may name the user's files with `${homeDir}`, as in
+  `"read": ["${homeDir}/.config/my-app"]`, or be absolute paths.
+- `os.homedir()`, `process.dataDir` (the `${dataDir}` directory) and
+  `import.meta.url` (a `file:` URL) tell an application where things are.
+  `process.env` holds common variables (`HOME`, `USER`, `HOSTNAME`, `LANG`,
+  `TZ`, `PATH`, `EDITOR`, `DISPLAY`, `HTTP_PROXY`, the XDG directories…) by
+  default, matched regardless of case; any other variable
+  must be listed in `"process": { "env": ["MY_APP_MODE"] }`.
+- An application with a manifest keeps its data under its `id`, whether run
+  with `-d`, installed or packaged.
 - `console.log` / `console.error` go to the terminal running `{name}`.
 - Heavy or rarely used code belongs in modules loaded with dynamic
   `import()` from the handler that needs it; keep the entry module light.

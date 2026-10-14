@@ -29,11 +29,11 @@ export const panelBorder = (element, cx) =>
 
 /** @param {string} value @param {Context} cx */
 export const label = (value, cx) =>
-  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
+  div().text_size(12).line_height("100%").text_color(cx.theme().colors.foreground).child(value);
 
 /** @param {string} value @param {Context} cx */
 export const muted = (value, cx) =>
-  div().text_size(11).line_height(1).text_color(cx.theme().colors.muted_foreground).child(value);
+  div().text_size(11).line_height("100%").text_color(cx.theme().colors.muted_foreground).child(value);
 
 /**
  * One tab.

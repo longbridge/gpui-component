@@ -101,7 +101,7 @@ cargo run -p gpui-shell -- run ./hello
 
 Four things in that file are worth naming now, because everything else builds on them.
 
-**One module per crate that provides it.** `"gpui-kit"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui"` is a compatibility alias for the same module, so `import { div } from "gpui"` is also supported. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
+**One module per crate that provides it.** `"gpui-kit"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui"` is a compatibility alias for the same module, so `import { div } from "gpui"` is also supported. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and the globals `fetch`, `TextEncoder` and `TextDecoder`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
 **`main.js` must `export default` a class extending `View`.** `init` runs once when the View is created; `render` returns one element, retained `Entity` or string, and runs when the View is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
@@ -145,7 +145,7 @@ The script installs the binary to `~/.local/bin` and creates `~/.gpui-shell/apps
 | `gpui-shell run -d ~/dev/clock` | that directory                                              |
 | `gpui-shell`                 | the application packaged beside the executable; without one, the help |
 
-To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An installed application keeps its data under its manifest `id`, so moving or reinstalling it does not lose it; a directory run with `--dir` is keyed by its path, which is right while it is being edited.
+To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An application keeps its data under its manifest `id` however it is run — installed, packaged, or with `--dir` — so moving or reinstalling it does not lose it, and the copy you are editing shares its data with the installed one. Only a directory without a manifest is keyed by its path.
 
 With no argument, the executable looks for an application next to itself, and prints its help when it finds none — so a freshly installed `gpui-shell` typed at a prompt explains itself: `Contents/Resources/app` when it is `Contents/MacOS/gpui-shell` inside a macOS bundle, or `app` in the executable's own directory. A standalone desktop application can therefore be the `gpui-shell` binary plus a directory of scripts, with no launcher script to pass a path:
 
@@ -267,7 +267,7 @@ gpui-shell --help | --version
 | `types`                | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
 | `agents`               | Print, or write as `AGENTS.md`, the instructions for coding agents       |
 | `bundle`               | Make a desktop application in `dist/`; see [Packaging](./packaging.md)   |
-| `--packaged`           | With `run`, run a directory as a bundle's launcher does: data under the `id`, no editor files |
+| `--packaged`           | With `run`, run a directory as a bundle's launcher does: manifest required, no editor files |
 | `--watch`              | With `run`, reload when the sources change; `dev` always does            |
 | `--dev`                | With `run` or `dev`, development mode: relax the sandbox                 |
 | `--print-spec`         | With `check`, also print the element description that was built          |

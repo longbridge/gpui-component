@@ -306,8 +306,12 @@ mod tests {
         let runtime = super::new_isolated_runtime().unwrap();
 
         let declarations = runtime.type_declarations();
-        assert!(declarations.contains("export const Spinner: { new(): SpinnerElement };"));
-        assert!(declarations.contains("export const Skeleton: { new(): SkeletonElement };"));
+        assert!(declarations.contains(
+            "export const Spinner: { new(): SpinnerElement; new: () => SpinnerElement };"
+        ));
+        assert!(declarations.contains(
+            "export const Skeleton: { new(): SkeletonElement; new: () => SkeletonElement };"
+        ));
     }
 
     #[test]
@@ -481,9 +485,9 @@ mod tests {
 
         let declarations = runtime.type_declarations();
         for expected in [
-            "export const Spinner: { new(): SpinnerElement };",
+            "export const Spinner: { new(): SpinnerElement; new: () => SpinnerElement };",
             "size(size: \"xsmall\" | \"small\" | \"medium\" | \"large\"): SpinnerElement;",
-            "export const VerticalDashedSeparator: { new(): SeparatorElement };",
+            "export const VerticalDashedSeparator: { new(): SeparatorElement; new: () => SeparatorElement };",
             "label(label: string): SeparatorElement;",
             "secondary(): SkeletonElement;",
         ] {

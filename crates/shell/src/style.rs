@@ -156,7 +156,7 @@ const PARAM_STYLES: &[(&str, &str)] = &[
     ),
     (
         "line_height",
-        "Sets the line height. A bare number is a multiplier (`1.45`), not pixels; a string is a length.",
+        "Sets the line height. A number is pixels; `\"145%\"` is a multiple of the font size.",
     ),
     (
         "opacity",
@@ -414,6 +414,17 @@ pub fn apply_param(
     args: &[Bridged],
     refinement: StyleRefinement,
 ) -> ShellResult<StyleRefinement> {
+    // A script that drops the argument passes `undefined`, which crosses the
+    // bridge as nil; every coercion below would then report a nil with no
+    // method name, so a missing argument is answered here, in one place.
+    if args
+        .first()
+        .is_none_or(|value| matches!(value, Bridged::Nil))
+        && param_style_name(name).is_some()
+    {
+        return Err(missing_argument(name));
+    }
+
     /// Reads argument 0 as a `Length` (`"auto"` allowed).
     macro_rules! length {
         () => {
@@ -491,11 +502,10 @@ pub fn apply_param(
         "text_size" => refinement.text_size(absolute!()),
         "font_family" => refinement.font_family(arg(args, 0, name)?.as_str()?.to_owned()),
         "font_weight" => refinement.font_weight(font_weight(number!(), name)?),
-        // Line height is the one length whose bare number is a multiplier, not
-        // pixels: `line_height(1.45)` means 1.45x the font size everywhere else
-        // in the industry, and 1.45px is never what anyone meant. A string
-        // (`"18px"`, `"120%"`) still goes through the ordinary grammar.
-        "line_height" => refinement.line_height(line_height(&arg(args, 0, name)?, name)?),
+        // GPUI's `line_height` takes a `DefiniteLength` with no bare-number
+        // form, so it follows the same grammar as every other length here:
+        // `18` is pixels and `"145%"` is `relative(1.45)`, a font-size multiple.
+        "line_height" => refinement.line_height(definite!()),
         "opacity" => refinement.opacity(number!()),
 
         "border" => refinement.border(absolute!()),
@@ -543,6 +553,30 @@ pub fn suggest(name: &str) -> Option<&'static str> {
         }
     }
     best.map(|(_, candidate)| candidate)
+}
+
+/// The error for a parametric style called without its argument.
+///
+/// GPUI spells the argument-free forms as separate methods (`flex_shrink_0`,
+/// `flex_grow`, `border_1`, `rounded_md`), so `flex_shrink()` is a natural guess
+/// that does not exist there either. Naming those siblings turns the guess into
+/// the call that was meant.
+fn missing_argument(name: &str) -> ShellError {
+    let prefix = format!("{name}_");
+    let siblings: Vec<String> = known_names()
+        .into_iter()
+        .filter(|candidate| candidate.starts_with(&prefix) && param_style_name(candidate).is_none())
+        .take(4)
+        .map(|candidate| format!("`{candidate}()`"))
+        .collect();
+    let mut message = format!("`{name}` expects 1 argument, got none");
+    if !siblings.is_empty() {
+        message.push_str(&format!(
+            "; the forms without an argument are {}",
+            siblings.join(", ")
+        ));
+    }
+    ShellError::runtime(message)
 }
 
 /// Every known style method name (nullary + parametric), for diagnostics.
@@ -625,14 +659,6 @@ fn length(value: &Bridged, method: &str) -> ShellResult<Length> {
         LengthLiteral::Fraction(fraction) => Length::Definite(relative(fraction)),
         LengthLiteral::Auto => Length::Auto,
     })
-}
-
-/// A bare number is a multiplier; anything else follows the length grammar.
-fn line_height(value: &Bridged, method: &str) -> ShellResult<DefiniteLength> {
-    match value {
-        Bridged::Number(multiplier) => Ok(relative(*multiplier as f32)),
-        other => definite_length(other, method),
-    }
 }
 
 fn font_weight(value: f32, method: &str) -> ShellResult<FontWeight> {
@@ -806,7 +832,37 @@ mod tests {
         let error = apply_param("p", &[], StyleRefinement::default())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("`p` expects at least 1 argument"), "{error}");
+        assert!(error.contains("`p` expects 1 argument"), "{error}");
+    }
+
+    #[test]
+    fn a_line_height_number_is_pixels_like_every_other_length() {
+        let fixed = apply_param(
+            "line_height",
+            &[Bridged::Number(18.)],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        assert_eq!(fixed.text.line_height, Some(px(18.).into()));
+        let multiple = apply_param(
+            "line_height",
+            &[Bridged::Str("150%".into())],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        assert_eq!(multiple.text.line_height, Some(relative(1.5)));
+    }
+
+    #[test]
+    fn an_undefined_argument_names_the_method_and_its_argument_free_forms() {
+        let error = apply_param("flex_shrink", &[Bridged::Nil], StyleRefinement::default())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("`flex_shrink` expects 1 argument"),
+            "{error}"
+        );
+        assert!(error.contains("`flex_shrink_0()`"), "{error}");
     }
 
     #[test]

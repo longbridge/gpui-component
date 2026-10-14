@@ -100,7 +100,7 @@ cargo run -p gpui-shell -- run ./hello
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
 
-**能力由哪个包提供，就从哪个模块导入。** `"gpui-kit"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
+**能力由哪个包提供，就从哪个模块导入。** `"gpui-kit"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局的 `fetch`、`TextEncoder` 与 `TextDecoder`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
 **`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在 View 创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在 View 失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
@@ -144,7 +144,7 @@ curl -fsSL https://gpui-kit.com/shell/install.sh | sh
 | `gpui-shell run -d ~/dev/clock` | 指定的那个目录                                     |
 | `gpui-shell`                 | 与可执行文件一起打包的应用；没有则显示 help        |
 
-安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。已安装的应用按 manifest 的 `id` 保存数据，移动或重装都不会丢；用 `--dir` 运行的目录则按路径区分，这正适合正在编辑的源码。
+安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。无论以哪种方式运行——已安装、打包，还是用 `--dir`——应用都按 manifest 的 `id` 保存数据，移动或重装都不会丢，正在编辑的副本也和已安装的副本共用数据。只有没有 manifest 的目录才按路径区分。
 
 不带参数时，可执行文件会在自己旁边找应用：如果它是 macOS bundle 里的 `Contents/MacOS/gpui-shell`，就找 `Contents/Resources/app`；否则找可执行文件所在目录下的 `app`。找不到时就显示 help，所以刚安装好的 `gpui-shell` 在终端里直接运行会先介绍自己的用法。于是一个独立的桌面应用可以就是 `gpui-shell` 二进制加一个脚本目录，不需要额外的启动脚本来传路径：
 
@@ -266,7 +266,7 @@ gpui-shell --help | --version
 | `types`              | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
 | `agents`             | 打印给 coding agent 的开发说明，或写成 `AGENTS.md` |
 | `bundle`             | 在 `dist/` 中生成桌面应用，见 [Packaging](./packaging.md) |
-| `--packaged`         | 配合 `run`，像包的启动脚本那样运行目录：数据按 `id` 保存，不写编辑器文件 |
+| `--packaged`         | 配合 `run`，像包的启动脚本那样运行目录：必须有 manifest，不写编辑器文件 |
 | `--watch`            | 配合 `run`，源码变化时重载；`dev` 总会重载         |
 | `--dev`              | 配合 `run` 或 `dev`，开启开发模式：放宽沙箱        |
 | `--print-spec`       | 配合 `check`，额外打印构建出的元素描述             |

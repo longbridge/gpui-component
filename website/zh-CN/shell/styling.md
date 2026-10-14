@@ -81,7 +81,7 @@ percentages and "auto" are not allowed here
 | 字体   | `font_family`                                                              | 字符串           |
 | 绘制   | `opacity`                                                                  | 数字             |
 
-`line_height` 是唯一值得专门记住的例外：**裸数字是倍数，不是像素**。`line_height(1.45)` 表示字号的 1.45 倍，因为业界其他地方都是这个含义，而 1.45px 从来不是任何人的意思。字符串仍然走普通的长度语法。
+`line_height` 和其他长度一样遵循同一套语法，与 GPUI 的 `line_height` 一致：`line_height(18)` 表示 18 像素。要按字号的倍数设置时用百分比，`line_height("145%")` 就是 Rust 中的 `line_height(relative(1.45))`。
 
 ### 刻意没有绑定的
 
