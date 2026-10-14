@@ -20,13 +20,6 @@ use super::id::BlockId;
 /// Estimated height of a never-measured top-level block.
 pub(crate) const ESTIMATE: Pixels = px(28.);
 
-/// The lowest set bit of `i` (Fenwick step). Spelled out rather than
-/// `usize::isolate_lowest_one`, which needs a newer toolchain.
-#[allow(unknown_lints, clippy::manual_isolate_lowest_one)]
-fn lowest_set_bit(i: usize) -> usize {
-    i & i.wrapping_neg()
-}
-
 /// Prefix sums of the cull units' heights (a Fenwick tree), so a frame
 /// finds the visible units and sizes the spacers in `O(log n)` instead of
 /// summing every unit (Phase 5, step 1). Rebuilt when the unit list changes
@@ -81,7 +74,7 @@ impl HeightIndex {
         self.tree = vec![0.; n + 1];
         for i in 1..=n {
             self.tree[i] += f32::from(self.heights[i - 1]);
-            let parent = i + lowest_set_bit(i);
+            let parent = i + (i.isolate_lowest_one());
             if parent <= n {
                 let value = self.tree[i];
                 self.tree[parent] += value;
@@ -106,7 +99,7 @@ impl HeightIndex {
         let mut i = ix + 1;
         while i < self.tree.len() {
             self.tree[i] += delta;
-            i += lowest_set_bit(i);
+            i += i.isolate_lowest_one();
         }
     }
 
@@ -116,7 +109,7 @@ impl HeightIndex {
         let mut sum = 0.;
         while i > 0 {
             sum += self.tree[i];
-            i -= lowest_set_bit(i);
+            i -= i.isolate_lowest_one();
         }
         px(sum)
     }
@@ -284,19 +277,6 @@ impl Element for Measured {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn lowest_set_bit_isolates_the_lowest_one() {
-        assert_eq!(lowest_set_bit(0), 0);
-        assert_eq!(lowest_set_bit(1), 1);
-        assert_eq!(lowest_set_bit(12), 4);
-        assert_eq!(lowest_set_bit(0b1010_0000), 0b10_0000);
-        assert_eq!(lowest_set_bit(usize::MAX), 1);
-        assert_eq!(
-            lowest_set_bit(1 << (usize::BITS - 1)),
-            1 << (usize::BITS - 1)
-        );
-    }
 
     #[test]
     fn height_index_prefix_find_and_update() {
