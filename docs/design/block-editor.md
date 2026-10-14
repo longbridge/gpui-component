@@ -472,7 +472,9 @@ impl BlockEditorStyle { pub fn resolved(&self, tokens: &SemanticThemeTokens) -> 
 
 **Phase 4: non-text blocks.** 4a node selection, delete, move, and copy for atoms, code blocks, and tables. 4b code-block text editing (*landed on the UI spike*). 4c table cells and `BlockSelection::Cells` (*landed on the UI spike*). 4d inline atoms with #3113 semantics (*landed on the UI spike; see Appendix B*).
 
-**Phase 5: scale.** Virtualization and per-block accessibility.
+**Phase 5: scale.** Virtualization and per-block accessibility. *(Partial on the UI spike, then stopped by decision: prefix-sum height index, cull units cached per revision, O(selected) selection backgrounds, layout reuse for scrolled-back blocks, root `MultilineTextInput` plus per-top-level-block roles. Not done: chunking long tables and nested long lists, accessibility nodes for nested list items and table rows/cells.)*
+
+**Status on `block-editor-ui-spike` (14 Oct 2026).** Phase 0 seam work exists only inside the spike (feature-gated), not as separate PRs against main. Phases 1–2: done (model spike, #3463). Phase 3: done. Phase 4a–4d: done. Phase 5: partial, stopped. Scope is frozen pending review.
 
 #3049 stays open as the tracking PR. Its description links to each phase, and it is closed when Phase 3 lands.
 
@@ -486,6 +488,7 @@ Each item is a proposed decision you can accept or push back on.
 
 **D2. The editor lands in `gpui-base` behind an off-by-default `block-editor` cargo feature and isn't re-exported from `gpui-component` until Phase 3 is accepted.**
 *Rationale:* The model needs `pub(crate)` text internals (`BlockNode`, `Paragraph`, `InlineNode`, `TextMark` storage, `MarkdownSource`). A separate crate would force those to be widened.
+*Status (decided):* `gpui-kit` forwarding a `block-editor` feature to `gpui-base/block-editor` (so the story can reach the editor) is acceptable under D2; there is still no `gpui-component` re-export.
 *Alternative considered:* A separate `gpui-block-editor` crate over a widened text API.
 
 **D3. Phase 0a re-implements the seam on current main and adds a crate-internal `editor_key: Option<u64>` to `Paragraph`, `CodeBlock`, table cells, and the image/custom wrappers. `TextView` never sets it.**
@@ -507,10 +510,12 @@ Each item is a proposed decision you can accept or push back on.
 
 **D7. Code-block text editing (Phase 4b) uses the block editor's own text path with `BlockContent::Plain`. It doesn't embed `TextareaState` / `EditorState`.**
 *Rationale:* One model means one undo history and selections that can span a code block. An embedded `InputBaseState` would bring its own `UndoManager`, focus handle, and selection.
+*Status (Phase 4b, done):* as decided; code text is `BlockContent::Plain` edited through `Step::ReplacePlain` (Appendix B).
 *Alternative considered:* Embedding the input engine in the focused code block and syncing through `ReplaceText` steps.
 
 **D8. The editor root uses `Role::MultilineTextInput` with an `aria_value` that is built only when `window.is_a11y_active()` (or with `test-support`) and is cached per revision. Per-block roles are deferred to Phase 5.**
 *Rationale:* This is exactly what `gpui-component`'s `Input` does on main for multi-line inputs (`accessibility_role` → `MultilineTextInput`; `aria_value` gated on `is_a11y_active`). It removes the PR's per-frame full-document `aria_value` (R4). *(Unverified: how screen readers on each platform present a long rich document through a single text-input node. That needs runtime testing, not source reading.)*
+*Status:* root implemented as described; Phase 5 added roles for laid-out top-level blocks. Nested list items and table rows/cells are not exposed (stopped with Phase 5).
 *Alternative considered:* A per-block accessibility tree from Phase 3.
 
 **D9. CI gets deterministic `cfg(test)` counters (zero full-tree walks per steady-state frame, one re-projection per keystroke) and no timing benchmark. Timing numbers on the generated fixture go in PR descriptions.**
@@ -528,6 +533,21 @@ Each item is a proposed decision you can accept or push back on.
 **D12. The public mark API uses `MarkKind`, `MarkSet` (read-only, private fields), and `MarkChange` (builder). `TextMark` stays crate-internal storage.**
 *Rationale:* `TextMark` / `LinkMark` aren't exported from `gpui_base` on main and have `pub` fields. Exporting them as they are would break ARCHITECTURE.md invariant 12 and freeze their shape. The API is still keyed on exactly `TextMark`'s attributes, as R6 asks.
 *Alternative considered:* Exporting `TextMark` as-is and returning it from `active_marks()` (the previous draft).
+
+**Decisions taken during the UI spike (answered by Richard, 14 Oct 2026):**
+- **Scroll handle:** the owner passes its scroll container's `ScrollHandle` (`set_scroll_handle`); the editor does not own a scroll container.
+- **Culling / Phase 5:** light culling first (top-level units, chunked long top-level lists, overscan, pinned selection/IME units), then Phase 5 taken partway (prefix-sum index, cached units, layout reuse, top-level a11y roles) and stopped; remaining Phase 5 items stay open.
+- **Paste:** Cmd/Ctrl+V pastes multi-block Markdown as blocks in one undo step; single-line text is plain unless it holds an image (`![`) or an inline code span (`` ` ``). Cmd/Ctrl+Shift+V always pastes plain text.
+- **Arc sharing of cached nodes:** deferred; reused subtrees are cloned with `Arc`-shared `InlineState`. Sharing whole nodes needs `Arc` children in the shared `BlockNode` and touches `TextView`.
+- **Feature forwarding:** `gpui-kit/block-editor` → `gpui-base/block-editor` is OK under D2.
+- **Projection:** direct model→`BlockNode` with a per-node revision cache (§7.3), equivalence-tested against `parse(serialize(doc))` on `BlockNode` trees.
+- **List exit:** Enter in an empty item exits the list (top-level item → paragraph after the list, splitting it mid-list; nested item outdents), one undo step.
+- **Code blocks (4b):** D7 as written; fence input rules, Backspace at the start of a non-empty code block moves the caret to the previous block without merging.
+- **Table cells (4c):** cells are caret leaves, `BlockSelection::Cells` by ids; no block handle, so whole-table selection is via Backspace/Delete beside the table or a selection across its edge.
+- **Unspecified alignment:** `---` columns stay `---` (`ColumnumnAlign::None`, rendered left), so tables round-trip losslessly.
+- **Inline atoms (4d):** #3113 semantics (one unit, copy as Markdown), rendered through `InlineFlow` with piece reporting.
+- **Inline mark input rules:** `` `x` ``, `**x**`, `*x*`, `~~x~~` convert on the closing delimiter as their own undo step; other marks never apply inside inline code.
+- **Toolchain:** no MSRV pin; `usize::isolate_lowest_one` is used and needs a current stable rustc.
 
 ---
 
@@ -611,13 +631,13 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 | Home / End | Visual line start/end | Visual line start/end via `FrameLayout::line_edge`; End at a soft wrap stays before the wrap point (the shared index would draw on the next line) | `Affinity` still unused (not needed for this) |
 | IME (§2) | Port #3049's handler over `BlockPosition` | The IME document is the caret leaf. An undo group opens only when marked text is actually inserted (fixes the leaked group from empty or cancelled marks); a cancel removes the marked text; composing over a cross-block selection deletes the selection first; Cut ends a composition first | Accessibility text ranges need the full document (D8) |
 | Tables | Block frame, node selection; cell editing Phase 4 | Phase 4c: cells are caret leaves. Click places the caret in a cell; typing, marks and IME work; Enter in a cell does nothing. Tab/Shift+Tab move to the next/previous cell selecting its text, Tab in the last cell adds a row; Left/Right cross cells in document order, Up/Down go to the cell above/below (frame hit-testing and vertical motion pick the horizontally nearest leaf among side-by-side cells). Dragging or Shift+arrows from one cell into another selects `BlockSelection::Cells` (painted per cell; copy writes a Markdown table of the rectangle, first selected row as header; Backspace/Delete/typing clear the cells). Whole-table node selection: Backspace/Delete next to a table, or a text selection across its edge; there is no block handle yet, so a click never selects the table. Commands: `InsertTable { rows, cols }`, `EditTable(TableEdit::{AddRowAbove, AddRowBelow, RemoveRow, AddColumnLeft, AddColumnRight, RemoveColumn})` (removing the last row/column removes the table; removing the header row promotes the next); story toolbar buttons. Alignment round-trips, including unspecified (`---` stays `---`; `ColumnumnAlign::None`) | Done |
-| Atoms / custom nodes | Block frame with own renderer | Images and custom inline nodes render, but get no caret geometry | Deferred |
+| Atoms / custom nodes | Block frame with own renderer | Superseded by Phase 4d (inline atoms row below): images and custom inline nodes get caret geometry and click-to-select | Done |
 | Lists | — | Enter in an empty list item exits the list: a top-level item becomes a paragraph after the list (splitting it when mid-list, `exit_list`), a nested item outdents one level. One transaction, one undo step (`tests/commands.rs`) | Done |
 | Feature plumbing (D2) | No `gpui-component` re-export until Phase 3 | `gpui-kit` gained a `block-editor` feature forwarding to `gpui-base/block-editor` so the story can reach it | Decision for review |
 | Inline atoms (Phase 4d, #3113) | Atomic caret, selection, deletion; clipboard holds the token's text | Model: an atom is one U+FFFC (3 bytes) with its own run, so Left/Right, Shift+arrows and Backspace treat it as one unit and offsets inside it are invalid; typing beside it never merges into it; undo restores it. Copy writes an atom as its Markdown (`![alt](url)`, marks dropped), and a single-line paste holding `![` re-parses, so cut + paste round-trips. Rendering: the seam now covers `InlineFlow` too. A flow rendering an editor leaf reports *pieces* (`EditorSink::begin_pieces` / `report_text_piece` / `report_box_piece`): each single-line text fragment's `TextLayout` with its leaf byte start, and each image / custom node's box over its U+FFFC; the fragments take their slice of the selection backgrounds. `frame.rs` hit-tests pieces (line band, then nearest piece; an atom's left/right half gives its start/end), so mixed paragraphs, image-only paragraphs (forced onto the flow in the editor) and inline-code paragraphs get carets, clicks and up/down, and a click on an image selects it whole. Inline code keeps its pill padding (visual parity with `TextView`) with caret geometry from the padded fragment | Done (no `ActivateToken` / on-click hook for atoms) |
 | Virtualization | Phase 5 | Phase 5 started. Cull units (top-level blocks, 32-item chunks of long top-level lists) are cached per document revision, and their heights live in a Fenwick prefix-sum index (`cull.rs` `HeightIndex`): a frame binary-searches the visible range, lays out only it plus the pinned units (selection ends, IME), and sizes the two or more spacers from prefix sums, so a steady frame no longer walks every block (counter-tested: no rebuild on selection changes, one per edit). Measurements update one index entry. Selection backgrounds now cost O(selected leaves): leaf lookups go through the order index's ranks and atom checks through the document, with no scans of the leaf list. Element state for scrolled-back blocks: culled blocks keep their cached node (with its `InlineState`) and their shaped text in the retained-layout table, so scrolling back reshapes and rebuilds nothing (counter-tested for plain paragraphs; `InlineFlow` paragraphs keep their fragment states in GPUI element state, which is dropped while culled, so they reshape). Remaining: chunking long tables (a chunk would need the full table's column widths and must not restyle its first row as a header) and long lists nested in other blocks; accessibility nodes for nested list items and table rows/cells (they need roles inside the shared `TextView` renderers) | Partial |
 
-**Story.** Toolbar for Text / H1–H3 / Bullets / Numbered, a sample document and a 1200-block generator. The Markdown preview is cached and refreshed only on `Changed` or load (it was re-serialized every frame).
+**Story.** Toolbar for B / I / S / `code`, Text / H1–H3 / Bullets / Numbered, Code, Table / ±Row / ±Col, a sample document and a 1200-block generator. The Markdown preview is cached and refreshed only on `Changed` or load (it was re-serialized every frame).
 
 **Perf note (UI spike).** Headless test platform. "Frame" is one forced full redraw. "Keystroke" is one typed character plus redraws; the harness draws three frames per keystroke.
 
@@ -632,7 +652,7 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 
 *Profile before culling (release, 1200 blocks, per frame):* element creation 4–10 ms, `request_layout` 4–6 ms, prepaint 4–6 ms, paint 3–4 ms; the model edit took 0.8 ms and the snapshot 0.4 ms. Shaping was already reused (GPUI's line-layout cache) and projection is O(changed path), so the cost was per-element work for off-screen blocks.
 
-*Culling (`block_editor/cull.rs`).* This is light virtualization, not Phase 5. The cull units are the top-level blocks, and long top-level lists are split into 32-item chunks. Each chunk renders as its own list that continues the numbering, with no gap between chunks. Units outside one viewport of the visible area (the content mask at prepaint) are replaced by spacers. The spacers are sized from measured top-to-next-top distances, or a 28 px estimate before a unit has been measured. Units holding the selection ends or the IME composition are always laid out. When the visible area leaves the laid-out span, another frame is requested.
+*Culling (`block_editor/cull.rs`).* This started as light virtualization before Phase 5 (Phase 5 additions are in the Virtualization row above). The cull units are the top-level blocks, and long top-level lists are split into 32-item chunks. Each chunk renders as its own list that continues the numbering, with no gap between chunks. Units outside one viewport of the visible area (the content mask at prepaint) are replaced by spacers. The spacers are sized from measured top-to-next-top distances, or a 28 px estimate before a unit has been measured. Units holding the selection ends or the IME composition are always laid out. When the visible area leaves the laid-out span, another frame is requested.
 - Up/down into a culled leaf falls back to the model: the adjacent caret leaf at offset 0 or at its end.
 - With `BlockEditorState::set_scroll_handle`, the caret is scrolled into view once its block is laid out.
 - Overscan is two viewports each way (at least 600 px), so ordinary fast scrolling stays inside laid-out blocks while the next frame catches up. A fling of more than two viewports in one frame can still show a blank spacer for one frame.
@@ -641,4 +661,4 @@ The UI spike (branch `block-editor-ui-spike` on `wabzqem/gpui-component`, on top
 - Nested long lists are not chunked.
 - *Virtualization (Phase 5):* cull units are cached per document revision and the visible range is found through a prefix-sum height index (O(log n) per frame); nested lists and long tables are not chunked yet.
 
-*Paste (decision).* Cmd/Ctrl+V: single-line text, or text that parses to a single paragraph, is inserted as plain text inline. Multi-block Markdown becomes blocks in one undo step: a leading paragraph merges into the text before the caret, a trailing one into the text after it, and the blocks between go between the two halves. Cmd/Ctrl+Shift+V: plain text (lines become paragraphs).
+*Paste (decision).* Cmd/Ctrl+V: single-line text, or text that parses to a single plain paragraph, is inserted as plain text inline (a single line holding `![` or a `` `code` `` span is parsed, so images and inline code paste back). Multi-block Markdown becomes blocks in one undo step: a leading paragraph merges into the text before the caret, a trailing one into the text after it, and the blocks between go between the two halves. Cmd/Ctrl+Shift+V: plain text (lines become paragraphs).
