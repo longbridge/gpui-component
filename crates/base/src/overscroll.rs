@@ -19,22 +19,33 @@ use web_time::Instant;
 /// `ScrollBounce` waits the same time for the same reason.
 const GESTURE_GAP: Duration = Duration::from_millis(250);
 
-/// How far a fling or a precise flick that runs into the edge throws it, per
-/// pixel it had left to scroll, and how far at most.
-///
-/// Those packets measure speed rather than a finger's travel: a fast fling
-/// steps hundreds of pixels at once. So they throw the edge, and the spring
-/// carries it out and back, instead of moving it there in one frame.
-const KICK_PER_PIXEL: f32 = 0.3;
-const MAX_KICK: f32 = 30.;
+/// The fraction of the text's speed the edge carries when the text runs into
+/// it or a finger lets go of it. Measured on `NSScrollView`, and the same as
+/// WebKit's rubber-band amplitude: a fling arriving at 5000 px/s throws the
+/// edge about 45 px out, 80 ms before it turns back.
+const CARRY: f32 = 0.31;
+
+/// A finger that sends nothing for this long before lifting has stopped:
+/// it lets go of the edge with no speed.
+const STILL: Duration = Duration::from_millis(50);
+
+/// The interval assumed for the first packet of a stream, and the shortest
+/// one trusted, so that coalesced packets do not read as a huge speed.
+const FRAME: f32 = 1. / 60.;
+const MIN_INTERVAL: f32 = 1. / 240.;
 
 #[derive(Default)]
 pub(crate) struct Overscroll {
     physics: Physics,
     sampled_at: Option<Instant>,
     last_packet_at: Option<Instant>,
-    /// The edge already answered the rest of this gesture: the momentum after
-    /// a stretched release. The spring plays; the text stays where it is.
+    /// When the stream last moved, and how fast, in pixels per second.
+    moved_at: Option<Instant>,
+    velocity: f32,
+    /// The edge already answered the rest of this gesture: a fling ran into
+    /// it, or a finger let go of it stretched. The momentum that follows
+    /// still scrolls the text back from the edge, but no longer moves the
+    /// edge.
     spent: bool,
 }
 
@@ -49,10 +60,24 @@ impl Overscroll {
 
     /// A new gesture starts: it may stretch the edge again.
     fn start_gesture(&mut self) {
-        if self.physics.is_dragging() {
-            self.physics.release();
-        }
         self.spent = false;
+        self.velocity = 0.;
+    }
+
+    /// Track the stream's speed from packets that moved.
+    fn sample(&mut self, dy: f32, gap: Option<Duration>, now: Instant) {
+        if dy == 0. {
+            return;
+        }
+        let seconds = gap.map_or(FRAME, |gap| gap.as_secs_f32().max(MIN_INTERVAL));
+        let velocity = dy / seconds;
+        // Finger packets are uneven; average the last few.
+        self.velocity = if self.moved_at.is_some() && self.velocity * velocity > 0. {
+            (self.velocity + velocity) / 2.
+        } else {
+            velocity
+        };
+        self.moved_at = Some(now);
     }
 
     /// Handle one vertical packet of `dy` over a viewport `extent` tall.
@@ -67,19 +92,20 @@ impl Overscroll {
         mut scroll: impl FnMut(f32) -> f32,
     ) -> bool {
         let before = self.offset();
-        // Phaseless devices can reverse without sending Started. A deliberate
-        // reversal takes over from the returning edge immediately.
-        if dy * before < 0. && !self.physics.is_dragging() {
-            self.reset();
-        }
-        let mut kicked = false;
-        let paused = self
+        let mut thrown = false;
+        let gap = self
             .last_packet_at
             .replace(now)
-            .is_none_or(|at| now.saturating_duration_since(at) >= GESTURE_GAP);
-        if paused {
+            .map(|at| now.saturating_duration_since(at))
+            .filter(|gap| *gap < GESTURE_GAP);
+        // A finger resting on the trackpad sends nothing, however long it
+        // holds the edge; only its own `Ended` lets go. A pause ends the
+        // other streams.
+        if gap.is_none() && !self.physics.is_dragging() {
             self.start_gesture();
+            self.moved_at = None;
         }
+        self.sample(dy, gap, now);
         if phase == TouchPhase::Started {
             // Grab the edge, a returning one included, where it is.
             self.physics.begin(extent);
@@ -100,20 +126,34 @@ impl Overscroll {
                 }
             }
             if matches!(phase, TouchPhase::Ended | TouchPhase::Cancelled) {
-                self.physics.release();
+                let moving = self
+                    .moved_at
+                    .is_some_and(|at| now.saturating_duration_since(at) < STILL);
+                let velocity = if moving { self.velocity } else { 0. };
+                self.physics.let_go(velocity * CARRY);
+                thrown = true;
                 self.spent = self.offset() != 0.;
             }
-        } else if !self.spent {
-            // Momentum or phaseless precise scrolling: it scrolls the
-            // text, and a fling or a flick that runs into the edge throws it,
-            // harder the faster it arrives, until the edge turns back.
+        } else if self.spent {
+            // Momentum after the edge answered: back into the text it
+            // scrolls; against the edge it has nothing left to move.
+            scroll(dy);
+        } else {
+            // Momentum or phaseless precise scrolling: it scrolls the text,
+            // and when the text runs into the edge it throws the edge as
+            // fast as it arrived, once.
             let unused = dy - scroll(dy);
-            kicked = self.physics.kick(unused * KICK_PER_PIXEL, MAX_KICK);
+            if unused != 0. {
+                self.physics.let_go(self.velocity * CARRY);
+                thrown = true;
+                self.spent = true;
+            }
         }
-        let changed = kicked || self.offset() != before;
-        // Start the clock when the edge starts moving; a packet that arrives
-        // while it moves must not lose the time since the last frame.
-        if changed && self.sampled_at.is_none() {
+        let changed = (thrown && self.physics.is_moving()) || self.offset() != before;
+        // Start the clock when the edge starts moving, and again when it is
+        // let go, however long it was held; a packet that arrives while it
+        // moves must not lose the time since the last frame.
+        if thrown || (changed && self.sampled_at.is_none()) {
             self.sampled_at = Some(now);
         }
         changed
@@ -198,50 +238,86 @@ mod tests {
         assert_eq!(scrolled, 20.);
     }
 
-    #[test]
-    fn a_flick_into_the_edge_throws_it_out_and_back_smoothly() {
+    /// A momentum stream of `speed` px/s decaying as AppKit's does, against
+    /// text already at its end. Returns the edge's offset at each frame.
+    fn fling(speed: f32) -> Vec<f32> {
         let start = Instant::now();
-        let frame = Duration::from_millis(16);
+        let frame = Duration::from_micros(16_667);
         let mut overscroll = Overscroll::default();
         let mut room = 0.;
-        // A precise flick at the end: a small packet, then larger ones, one a
-        // frame; and one more after the edge has turned back.
-        let packets = [
-            (0, -2.),
-            (1, -20.),
-            (2, -80.),
-            (3, -110.),
-            (4, -130.),
-            (12, -100.),
-        ];
+        let mut dy = -speed / 60.;
         let mut path = Vec::new();
-        for n in 0..60 {
+        for n in 0..120 {
             let at = start + frame * n;
-            if let Some((_, dy)) = packets.iter().find(|(at_frame, _)| *at_frame == n) {
-                overscroll.packet(*dy, TouchPhase::Moved, 400., at, text(&mut room));
+            // Momentum keeps arriving well after the edge has settled.
+            if n < 100 {
+                overscroll.packet(dy, TouchPhase::Moved, 300., at, text(&mut room));
+                dy *= 0.95;
             }
             overscroll.step(at);
             path.push(overscroll.offset());
         }
-        assert_eq!(path[0], 0., "the edge starts where it is");
+        path
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[test]
+    fn a_fling_throws_the_edge_as_far_as_nsscrollview_does() {
+        // Measured on NSScrollView: a fling arriving at 5000 px/s peaks about
+        // 45 px out, roughly 80 ms after impact, and settles within 0.65 s.
+        let path = fling(5000.);
         let peak = path.iter().copied().fold(0., f32::min);
-        assert!(peak < -10. && peak >= -MAX_KICK, "peak {peak}");
-        let largest_step = path
-            .windows(2)
-            .map(|pair| (pair[1] - pair[0]).abs())
-            .fold(0., f32::max);
-        // It glides: no frame covers half of the throw.
-        assert!(
-            largest_step < MAX_KICK / 2.,
-            "a frame moved the edge {largest_step}px"
-        );
+        assert!((-49. ..=-40.).contains(&peak), "peak {peak}");
         let turned = path.iter().position(|&offset| offset == peak).unwrap();
-        assert!(turned < 12, "the edge turned back before the late packet");
+        assert!((4..=6).contains(&turned), "turned at frame {turned}");
+        assert_eq!(path[50], 0., "the edge settles");
+        // The momentum still arriving after impact never throws it again.
+        assert!(path[turned..].windows(2).all(|pair| pair[1] >= pair[0]));
+        assert!(path[50..].iter().all(|&offset| offset == 0.));
+        // And twice the speed throws it about twice as far.
+        let faster = fling(10_000.).iter().copied().fold(0., f32::min);
+        assert!((faster / peak - 2.).abs() < 0.15, "{faster} vs {peak}");
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[test]
+    fn a_stretch_follows_the_travel_as_nsscrollview_does() {
+        // Measured on a 300 px NSScrollView: 764 px of travel past the end
+        // stretches it 46 px, 2400 px stretches it 112 px.
+        let stretch = |travel: f32| {
+            let start = Instant::now();
+            let mut overscroll = Overscroll::default();
+            let mut room = 0.;
+            overscroll.packet(0., TouchPhase::Started, 300., start, text(&mut room));
+            overscroll.packet(-travel, TouchPhase::Moved, 300., start, text(&mut room));
+            -overscroll.offset()
+        };
+        assert!((43. ..=50.).contains(&stretch(764.)), "{}", stretch(764.));
         assert!(
-            path[turned..].windows(2).all(|pair| pair[1] >= pair[0]),
-            "a packet after the edge turned back does not throw it again"
+            (106. ..=118.).contains(&stretch(2400.)),
+            "{}",
+            stretch(2400.)
         );
-        assert_eq!(*path.last().unwrap(), 0., "the edge settles");
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[test]
+    fn a_still_release_returns_at_full_speed() {
+        // NSScrollView lets go of a stretch held still and halves it in
+        // 55 ms, starting at once rather than easing out.
+        let start = Instant::now();
+        let mut overscroll = Overscroll::default();
+        let mut room = 0.;
+        overscroll.packet(0., TouchPhase::Started, 300., start, text(&mut room));
+        overscroll.packet(-800., TouchPhase::Moved, 300., start, text(&mut room));
+        let held = overscroll.offset();
+        let lifted = start + Duration::from_millis(200);
+        overscroll.packet(0., TouchPhase::Ended, 300., lifted, text(&mut room));
+        overscroll.step(lifted + Duration::from_millis(8));
+        assert!(overscroll.offset() / held < 0.92, "starts at once");
+        overscroll.step(lifted + Duration::from_millis(55));
+        let half = overscroll.offset() / held;
+        assert!((0.45..=0.55).contains(&half), "{half}");
     }
 
     #[test]
@@ -259,19 +335,23 @@ mod tests {
     }
 
     #[test]
-    fn a_reverse_packet_takes_over_the_return_immediately() {
+    fn momentum_back_into_the_text_scrolls_while_the_edge_returns() {
         let start = Instant::now();
         let mut overscroll = Overscroll::default();
         let mut room = 0.;
         overscroll.packet(0., TouchPhase::Started, 400., start, text(&mut room));
-        overscroll.packet(-80., TouchPhase::Moved, 400., start, text(&mut room));
-        overscroll.packet(0., TouchPhase::Ended, 400., start, text(&mut room));
-        let later = start + Duration::from_millis(16);
+        overscroll.packet(-800., TouchPhase::Moved, 400., start, text(&mut room));
+        let lifted = start + Duration::from_millis(100);
+        overscroll.packet(0., TouchPhase::Ended, 400., lifted, text(&mut room));
+        let later = lifted + Duration::from_millis(16);
         overscroll.step(later);
-        assert!(overscroll.offset() < 0.);
+        let before = overscroll.offset();
+        assert!(before < 0.);
         overscroll.packet(20., TouchPhase::Moved, 400., later, text(&mut room));
         assert_eq!(room, 20.);
-        assert_eq!(overscroll.offset(), 0.);
+        assert_eq!(overscroll.offset(), before, "the edge does not jump");
+        overscroll.step(later + Duration::from_millis(16));
+        assert!(overscroll.offset() > before && overscroll.offset() < 0.);
     }
 
     #[test]

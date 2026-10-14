@@ -17,7 +17,8 @@ use web_time::Instant;
 /// past an edge, and how quickly a released edge returns.
 ///
 /// Base plays the stretch and the return; the feel belongs to the caller.
-/// The default is tuned to feel like a `UIScrollView` bounce.
+/// The default is tuned to feel like a `UIScrollView` bounce on iOS and
+/// Android, and like an `NSScrollView` bounce elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollBounceMotion {
     tracking: f32,
@@ -25,11 +26,23 @@ pub struct ScrollBounceMotion {
 }
 
 impl Default for ScrollBounceMotion {
-    /// Tuned to feel like a `UIScrollView` bounce; these are not UIKit constants.
+    /// Tuned to feel like a `UIScrollView` bounce on touch platforms; these
+    /// are not UIKit constants. Elsewhere the input is a trackpad, whose
+    /// accelerated deltas run far past a finger's travel, so the default is
+    /// fitted to an `NSScrollView` measured on macOS: the stretch follows
+    /// about 0.075 of the travel, and the return decays at 12.5 per second.
     fn default() -> Self {
-        Self {
-            tracking: 0.55,
-            response: Duration::from_millis(524),
+        if cfg!(any(target_os = "ios", target_os = "android")) {
+            Self {
+                tracking: 0.55,
+                response: Duration::from_millis(524),
+            }
+        } else {
+            Self {
+                tracking: 0.075,
+                // 2π / 12.5
+                response: Duration::from_micros(502_655),
+            }
         }
     }
 }
@@ -538,6 +551,11 @@ impl Physics {
         self.dragging
     }
 
+    /// Whether a released edge is still on its way.
+    pub(crate) fn is_moving(&self) -> bool {
+        !self.dragging && (self.position != 0. || self.velocity != 0.)
+    }
+
     pub(crate) fn offset(&self) -> f32 {
         if self.dragging {
             let d = self.extent.max(1.);
@@ -586,47 +604,26 @@ impl Physics {
         }
     }
 
-    /// Throw the edge outward, as a fling that runs into it does: about
-    /// `distance` farther at its peak, and never past `max`. Only an edge at
-    /// rest or still moving outward takes it. Returns whether it did.
-    pub(crate) fn kick(&mut self, distance: f32, max: f32) -> bool {
+    /// Let go of the edge the way AppKit does: from wherever it is, it
+    /// returns at full speed, and it carries `velocity` outward on the way.
+    /// Its path is `(x + velocity * t) * e^(-ωt)`, so an edge at rest is
+    /// thrown out and back, and an edge let go while still being pushed
+    /// returns a little later. It never crosses the boundary: velocity
+    /// pointing back inward is dropped.
+    pub(crate) fn let_go(&mut self, velocity: f32) {
+        self.position = self.offset();
+        self.dragging = false;
         let Some(omega) = self.motion.omega() else {
-            return false;
+            self.position = 0.;
+            self.velocity = 0.;
+            return;
         };
-        let sign = distance.signum();
-        let (position, velocity) = (self.position * sign, self.velocity * sign);
-        if self.dragging || distance == 0. || position < 0. || velocity < 0. {
-            return false;
-        }
-        let current = Self::peak(position, velocity, omega);
-        let target = (current + distance.abs()).min(max.abs());
-        if target <= current {
-            return false;
-        }
-        // The peak grows with the velocity: find the one that reaches the
-        // target from where the edge is now.
-        let (mut low, mut high) = (velocity, target * omega * std::f32::consts::E);
-        for _ in 0..24 {
-            let mid = (low + high) / 2.;
-            if Self::peak(position, mid, omega) < target {
-                low = mid;
-            } else {
-                high = mid;
-            }
-        }
-        self.velocity = high * sign;
-        true
-    }
-
-    /// How far an edge at `position`, moving outward at `velocity`, gets
-    /// before the critically damped spring turns it back.
-    fn peak(position: f32, velocity: f32, omega: f32) -> f32 {
-        let c = velocity + omega * position;
-        if c <= 0. {
-            return position;
-        }
-        let t = velocity / (omega * c);
-        (position + c * t) * (-omega * t).exp()
+        let outward = if self.position * velocity >= 0. {
+            velocity
+        } else {
+            0.
+        };
+        self.velocity = outward - omega * self.position;
     }
 
     /// Exact critically damped spring integration, independent of refresh rate.

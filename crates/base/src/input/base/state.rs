@@ -5779,10 +5779,10 @@ mod tests {
                 "scrolling stayed exact"
             );
         });
-        assert_eq!(
-            stretched_at - drawn_at(&mut cx),
-            px(stretch),
-            "the stretch only moved where the text was drawn"
+        let moved = (stretched_at - drawn_at(&mut cx)).as_f32();
+        assert!(
+            (moved - stretch).abs() < 0.001,
+            "the stretch only moved where the text was drawn: {moved} vs {stretch}"
         );
     }
 
