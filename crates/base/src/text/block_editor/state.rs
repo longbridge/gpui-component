@@ -1,5 +1,6 @@
 //! `BlockEditorState`: the entity around [`BlockEditorModel`] (design §6).
 
+use super::input_rule::RuleKind;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
@@ -153,6 +154,7 @@ pub struct BlockEditorState {
     goal_x: Option<Pixels>,
     pub(crate) dragging: bool,
     readonly: bool,
+    input_rules: Vec<super::input_rule::InputRule>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -206,8 +208,58 @@ impl BlockEditorState {
             goal_x: None,
             dragging: false,
             readonly: false,
+            input_rules: super::input_rule::InputRule::markdown_defaults(),
             _subscriptions: subscriptions,
         }
+    }
+
+    /// Builder: the Markdown input rules to run while typing (D13). The
+    /// default is [`InputRule::markdown_defaults`](super::InputRule); pass an
+    /// empty list to type Markdown literally.
+    pub fn with_input_rules(
+        mut self,
+        rules: impl IntoIterator<Item = super::input_rule::InputRule>,
+    ) -> Self {
+        self.input_rules = rules.into_iter().collect();
+        self
+    }
+
+    /// Replace the input rules (see [`Self::with_input_rules`]).
+    pub fn set_input_rules(
+        &mut self,
+        rules: impl IntoIterator<Item = super::input_rule::InputRule>,
+    ) {
+        self.input_rules = rules.into_iter().collect();
+    }
+
+    /// Check or uncheck the task item holding `block` (a list item or its
+    /// text leaf); one undo step (D14). The caret moves into the item.
+    pub fn set_task_checked(&mut self, block: BlockId, checked: bool, cx: &mut Context<Self>) {
+        if self.readonly {
+            return;
+        }
+        let leaf = if self.model.doc.inline(block).is_some() {
+            block
+        } else {
+            match self.model.doc.children(block).first() {
+                Some(child) => *child,
+                None => return,
+            }
+        };
+        let _ = self
+            .model
+            .set_selection(BlockSelection::caret(BlockPosition::new(leaf, 0)));
+        self.model.break_coalescing();
+        self.edit(
+            EditOrigin::Command("set_task_checked"),
+            |m| m.run(EditorCommand::SetTaskChecked(checked)).map(|_| ()),
+            cx,
+        );
+        self.model.break_coalescing();
+    }
+
+    fn rule_on(&self, kind: super::input_rule::RuleKind) -> bool {
+        self.input_rules.iter().any(|r| r.0 == kind)
     }
 
     /// Builder: initial Markdown.
@@ -927,6 +979,7 @@ impl BlockEditorState {
         self.end_composition();
         // "```lang" then Enter: a code block.
         if !self.readonly
+            && self.rule_on(RuleKind::CodeFence)
             && let Some(caret) = self.model.caret()
             && self.model.doc.kind(caret.block) == Some(&super::kind::BlockKindData::Paragraph)
             && caret.offset == self.model.doc.leaf_len(caret.block).unwrap_or(0)
@@ -937,6 +990,29 @@ impl BlockEditorState {
                 .and_then(|i| code_fence(i.text()))
         {
             self.fence_to_code_block(caret.block, lang, cx);
+            return;
+        }
+        // "---" then Enter in an otherwise empty paragraph: a rule.
+        if !self.readonly
+            && self.rule_on(RuleKind::HorizontalRule)
+            && let Some(caret) = self.model.caret()
+            && self.model.doc.kind(caret.block) == Some(&super::kind::BlockKindData::Paragraph)
+            && self.model.doc.inline(caret.block).map(|i| i.text()) == Some("---")
+        {
+            let block = caret.block;
+            self.model.break_coalescing();
+            self.model.history.begin_transaction();
+            let _ = self.model.set_selection(BlockSelection::Text {
+                anchor: BlockPosition::new(block, 0),
+                head: BlockPosition::new(block, 3),
+            });
+            let _ = self.model.delete(false);
+            let _ = self
+                .model
+                .run(EditorCommand::InsertBlock(BlockKind::HorizontalRule));
+            self.model.history.commit_transaction();
+            self.model.break_coalescing();
+            self.after_edit(EditOrigin::InputRule("horizontal_rule"), cx);
             return;
         }
         self.edit(EditOrigin::Command("split_block"), |m| m.split_block(), cx);
@@ -1102,10 +1178,11 @@ impl BlockEditorState {
             return;
         }
         // "```lang " typed into an otherwise empty paragraph.
-        if let Some(lang) = doc
-            .inline(caret.block)
-            .and_then(|i| code_fence(i.text().strip_suffix(' ')?))
-            .filter(|_| caret.offset == doc.leaf_len(caret.block).unwrap_or(0))
+        if self.rule_on(RuleKind::CodeFence)
+            && let Some(lang) = doc
+                .inline(caret.block)
+                .and_then(|i| code_fence(i.text().strip_suffix(' ')?))
+                .filter(|_| caret.offset == doc.leaf_len(caret.block).unwrap_or(0))
         {
             self.fence_to_code_block(caret.block, lang, cx);
             return;
@@ -1121,26 +1198,55 @@ impl BlockEditorState {
         let Some(marker) = prefix.strip_suffix(' ') else {
             return;
         };
-        let (command, rule) =
-            if !marker.is_empty() && marker.len() <= 6 && marker.bytes().all(|b| b == b'#') {
-                let level = marker.len() as u8;
-                (
-                    EditorCommand::SetBlockKind(BlockKind::Heading { level }),
-                    "heading",
-                )
-            } else if !in_list && matches!(marker, "-" | "*" | "+") {
-                (EditorCommand::ToggleList { ordered: false }, "bullet_list")
-            } else if !in_list
-                && marker.len() >= 2
-                && marker.ends_with('.')
-                && marker[..marker.len() - 1]
-                    .bytes()
-                    .all(|b| b.is_ascii_digit())
-            {
-                (EditorCommand::ToggleList { ordered: true }, "ordered_list")
-            } else {
-                return;
-            };
+        let task = match marker {
+            "[ ]" => Some(false),
+            "[x]" | "[X]" => Some(true),
+            _ => None,
+        };
+        let (commands, rule) = if self.rule_on(RuleKind::Heading)
+            && !marker.is_empty()
+            && marker.len() <= 6
+            && marker.bytes().all(|b| b == b'#')
+        {
+            let level = marker.len() as u8;
+            (
+                vec![EditorCommand::SetBlockKind(BlockKind::Heading { level })],
+                "heading",
+            )
+        } else if self.rule_on(RuleKind::BulletList)
+            && !in_list
+            && matches!(marker, "-" | "*" | "+")
+        {
+            (
+                vec![EditorCommand::ToggleList { ordered: false }],
+                "bullet_list",
+            )
+        } else if self.rule_on(RuleKind::OrderedList)
+            && !in_list
+            && marker.len() >= 2
+            && marker.ends_with('.')
+            && marker[..marker.len() - 1]
+                .bytes()
+                .all(|b| b.is_ascii_digit())
+        {
+            (
+                vec![EditorCommand::ToggleList { ordered: true }],
+                "ordered_list",
+            )
+        } else if self.rule_on(RuleKind::TaskItem)
+            && let Some(checked) = task
+        {
+            let mut commands = Vec::new();
+            if !in_list {
+                commands.push(EditorCommand::ToggleList { ordered: false });
+            }
+            commands.push(EditorCommand::SetTaskChecked(checked));
+            (commands, "task_item")
+        } else if self.rule_on(RuleKind::Blockquote) && marker == ">" {
+            (Vec::new(), "blockquote")
+        } else {
+            return;
+        };
         let block = caret.block;
         let len = prefix.len();
         self.model.break_coalescing();
@@ -1150,10 +1256,61 @@ impl BlockEditorState {
             head: BlockPosition::new(block, len),
         });
         let _ = self.model.delete(false);
-        let _ = self.model.run(command);
+        if commands.is_empty() {
+            let _ = self.model.wrap_in_blockquote();
+        }
+        for command in commands {
+            let _ = self.model.run(command);
+        }
         self.model.history.commit_transaction();
         self.model.break_coalescing();
         self.after_edit(EditOrigin::InputRule(rule), cx);
+    }
+
+    /// Link input rule: `[text](url)` typed, on the closing `)`, becomes
+    /// `text` with a link mark. One undo group: undo restores the source.
+    fn apply_link_rule(&mut self, cx: &mut Context<Self>) {
+        let Some(caret) = self.model.caret() else {
+            return;
+        };
+        let Some(inline) = self.model.doc.inline(caret.block) else {
+            return;
+        };
+        let Some((start, text, url)) = link_rule(inline.text(), caret.offset) else {
+            return;
+        };
+        let block = caret.block;
+        let pos = |offset| BlockPosition::new(block, offset);
+        let text_end = start + 1 + text.len();
+        self.model.break_coalescing();
+        self.model.history.begin_transaction();
+        // Drop "](url)" then "[".
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(text_end),
+            head: pos(caret.offset),
+        });
+        let _ = self.model.delete(false);
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(start),
+            head: pos(start + 1),
+        });
+        let _ = self.model.delete(false);
+        let end = start + text.len();
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(start),
+            head: pos(end),
+        });
+        let _ = self.model.run(EditorCommand::ApplyMark(
+            super::marks::MarkChange::new().with_link(url, None),
+        ));
+        let _ = self.model.set_selection(BlockSelection::caret(pos(end)));
+        let after = super::marks::MarkChange::new()
+            .clear(super::marks::MarkKind::Link)
+            .apply(&self.model.active_marks().0);
+        self.model.history.commit_transaction();
+        self.model.break_coalescing();
+        self.model.stored_marks = Some(after);
+        self.after_edit(EditOrigin::InputRule("link"), cx);
     }
 
     /// Inline-mark input rules: a closing `` ` ``, `*`, `**` or `~~` typed
@@ -1271,6 +1428,7 @@ fn command_name(command: &EditorCommand) -> &'static str {
         EditorCommand::SetBlockKind(_) => "set_block_kind",
         EditorCommand::ToggleList { .. } => "toggle_list",
         EditorCommand::ToggleTask => "toggle_task",
+        EditorCommand::SetTaskChecked(_) => "set_task_checked",
         EditorCommand::Indent => "indent",
         EditorCommand::Outdent => "outdent",
         EditorCommand::MoveBlocks { .. } => "move_blocks",
@@ -1370,8 +1528,10 @@ impl EntityInputHandler for BlockEditorState {
         self.end_composition();
         if text == " " {
             self.apply_input_rule(cx);
-        } else if text.ends_with(['`', '*', '~']) {
+        } else if text.ends_with(['`', '*', '~']) && self.rule_on(RuleKind::InlineMarks) {
             self.apply_mark_rule(cx);
+        } else if text.ends_with(')') && self.rule_on(RuleKind::Link) {
+            self.apply_link_rule(cx);
         }
     }
 
@@ -1477,6 +1637,23 @@ impl EntityInputHandler for BlockEditorState {
         }
         Some(byte_to_utf16(self.ime_text(), pos.offset))
     }
+}
+
+/// `[text](url)` ending at `caret`: the `[` offset, the text and the url.
+fn link_rule(text: &str, caret: usize) -> Option<(usize, String, String)> {
+    let before = text.get(..caret)?.strip_suffix(')')?;
+    let open_paren = before.rfind("](")?;
+    let url = &before[open_paren + 2..];
+    if url.is_empty() || url.contains(char::is_whitespace) {
+        return None;
+    }
+    let head = &before[..open_paren];
+    let open = head.rfind('[')?;
+    let label = &head[open + 1..];
+    if label.is_empty() || label.contains(['[', ']']) {
+        return None;
+    }
+    Some((open, label.to_string(), url.to_string()))
 }
 
 /// The language of a typed code fence (```` ``` ```` plus an optional word).

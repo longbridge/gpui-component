@@ -1643,3 +1643,146 @@ fn word_motion_and_word_selection(cx: &mut TestAppContext) {
         12
     );
 }
+
+/// QA bold report: typing `**bold** and `code` and *it* end` one character
+/// at a time through the platform input path (`replace_text_in_range` with
+/// the range the platform read back), after a paragraph, after a heading,
+/// and into an emptied heading.
+#[gpui::test]
+fn inline_rules_through_the_platform_input_path(cx: &mut TestAppContext) {
+    let typed = "**bold** and `code` and *it* end";
+    let want = "**bold** and `code` and *it* end";
+    for (src, leaf, off, prep, expected) in [
+        (
+            "Type here.\n\n## Lists\n\n- Bullet one",
+            0,
+            10,
+            "end enter",
+            format!("Type here.\n\n{want}\n\n## Lists\n\n- Bullet one"),
+        ),
+        (
+            "Type here.\n\n## Lists\n\n- Bullet one",
+            1,
+            5,
+            "end enter",
+            format!("Type here.\n\n## Lists\n\n{want}\n\n- Bullet one"),
+        ),
+        (
+            "# Title\n\n## x\n\nUndo",
+            1,
+            1,
+            "backspace",
+            format!("# Title\n\n## {want}\n\nUndo"),
+        ),
+    ] {
+        let (editor, cx) = open(cx, src);
+        caret_at(&editor, cx, leaf, off);
+        keys(cx, prep);
+        for ch in typed.chars() {
+            cx.update(|window, cx| {
+                editor.update(cx, |e, cx| {
+                    let r = e.selected_text_range(false, window, cx).map(|s| s.range);
+                    e.replace_text_in_range(r, &ch.to_string(), window, cx)
+                })
+            });
+            draw(cx);
+        }
+        assert_eq!(source(&editor, cx), expected);
+    }
+}
+
+fn ime_type(editor: &Entity<BlockEditorState>, cx: &mut VisualTestContext, typed: &str) {
+    for ch in typed.chars() {
+        cx.update(|window, cx| {
+            editor.update(cx, |e, cx| {
+                let r = e.selected_text_range(false, window, cx).map(|s| s.range);
+                e.replace_text_in_range(r, &ch.to_string(), window, cx)
+            })
+        });
+        draw(cx);
+    }
+}
+
+#[gpui::test]
+fn d13_default_block_and_link_rules(cx: &mut TestAppContext) {
+    for (typed, then, expected) in [
+        ("[ ] todo", "", "Start\n\n- [ ] todo"),
+        ("[x] done", "", "Start\n\n- [x] done"),
+        ("- [ ] dash", "", "Start\n\n- [ ] dash"),
+        ("> quoted", "", "Start\n\n> quoted"),
+        ("---", "enter", "Start\n\n---"),
+        (
+            "see [docs](https://x.dev) now",
+            "",
+            "Start\n\nsee [docs](https://x.dev) now",
+        ),
+    ] {
+        let (editor, cx) = open(cx, "Start");
+        caret_at(&editor, cx, 0, 5);
+        keys(cx, "end enter");
+        ime_type(&editor, cx, typed);
+        if !then.is_empty() {
+            keys(cx, then);
+        }
+        assert_eq!(source(&editor, cx).trim_end(), expected, "typing {typed:?}");
+    }
+}
+
+#[gpui::test]
+fn d13_each_rule_is_one_undo_step(cx: &mut TestAppContext) {
+    for (typed, literal) in [("[x] ", "\\[x\\]"), ("> ", "\\>"), ("[a](u)", "\\[a\\](u)")] {
+        let (editor, cx) = open(cx, "Start");
+        caret_at(&editor, cx, 0, 5);
+        keys(cx, "end enter");
+        ime_type(&editor, cx, typed);
+        keys(cx, &format!("{M}-z"));
+        let got = source(&editor, cx);
+        assert_eq!(
+            got.trim_end(),
+            format!("Start\n\n{literal}"),
+            "undo {typed:?}"
+        );
+    }
+}
+
+#[gpui::test]
+fn d13_rules_can_be_disabled(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "Start");
+    editor.update(cx, |e, _| e.set_input_rules([]));
+    caret_at(&editor, cx, 0, 5);
+    keys(cx, "end enter");
+    ime_type(&editor, cx, "# **b** ");
+    let got = source(&editor, cx);
+    assert!(!got.contains("\n# "), "{got:?}");
+    assert!(
+        got.contains("\\*\\*b\\*\\*") || got.contains("\\*\\*b"),
+        "{got:?}"
+    );
+}
+
+#[gpui::test]
+fn d14_set_task_checked_is_one_undo_step(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "- [ ] a");
+    caret_at(&editor, cx, 0, 1);
+    let leaf = editor.read_with(cx, |e, _| e.model.caret().unwrap().block);
+    editor.update(cx, |e, cx| e.set_task_checked(leaf, true, cx));
+    assert_eq!(source(&editor, cx).trim_end(), "- [x] a");
+    keys(cx, &format!("{M}-z"));
+    assert_eq!(source(&editor, cx).trim_end(), "- [ ] a");
+}
+
+#[gpui::test]
+fn d14_task_and_link_round_trip(cx: &mut TestAppContext) {
+    for src in [
+        "- [ ] open\n- [x] done\n  - [ ] nested",
+        "1. [x] first\n2. [ ] second",
+        "see [docs](https://x.dev) and [t](https://u \"Title\")",
+    ] {
+        let (editor, cx) = open(cx, src);
+        assert_eq!(source(&editor, cx).trim_end(), src, "round trip");
+    }
+    // D15: an unmodelled construct stays literal text and is escaped on save.
+    let (editor, cx) = open(cx, "> [x] not a task");
+    assert_eq!(source(&editor, cx).trim_end(), "> \\[x\\] not a task");
+    {}
+}

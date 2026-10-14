@@ -534,6 +534,30 @@ Each item is a proposed decision you can accept or push back on.
 *Rationale:* `TextMark` / `LinkMark` aren't exported from `gpui_base` on main and have `pub` fields. Exporting them as they are would break ARCHITECTURE.md invariant 12 and freeze their shape. The API is still keyed on exactly `TextMark`'s attributes, as R6 asks.
 *Alternative considered:* Exporting `TextMark` as-is and returning it from `active_marks()` (the previous draft).
 
+
+**D13. Markdown input rules are a registry: `InputRule` values, with `InputRule::markdown_defaults()` as the default set and `BlockEditorState::with_input_rules` / `set_input_rules` to change it. Each firing is its own undo step, so one undo brings back the literal Markdown.**
+The default rules:
+- *Heading:* `# `…`###### `.
+- *Lists:* `- ` / `* ` / `+ ` and `1. `.
+- *Task item:* `[ ] ` / `[x] `, also inside a list item, so `- [ ] ` works.
+- *Blockquote:* `> `.
+- *Code fence:* ```` ```lang ```` then space or Enter.
+- *Horizontal rule:* `---` then Enter.
+- *Inline marks:* `` `x` ``, `**x**`, `*x*`, `~~x~~` on the closing delimiter.
+- *Link:* `[text](url)` on the closing `)`.
+
+Block rules fire only at the start of a paragraph. An empty list turns them all off.
+*Rationale:* The rules in TipTap/ProseMirror are composable, but the spike's rules run against our own model and caret. For now the API is a closed set of built-ins, a newtype over a private enum, so custom closure rules can be added later without breaking anything.
+*Alternative considered:* Closure-based rules (`Fn(&str) -> Option<Edit>`) now. That is deferred until there is a consumer.
+*Status:* The rules are implemented and tested: typing through `replace_text_in_range` (the platform input path), one undo step each, and disabling.
+
+**D14. Links and tasks UI: Cmd/Ctrl+K opens a popover to add, edit or remove a link. Hovering a link shows its URL. Cmd/Ctrl+click on a link emits a `BlockEditorEvent` (the editor never opens a browser). Task checkboxes are clickable through `BlockEditorState::set_task_checked` (one undo step), and the toolbar has a Task toggle (`EditorCommand::ToggleTask`).**
+*Rationale:* The host owns navigation and policy, and the popover is the one in-editor affordance needed for marks that carry data.
+*Status:* `EditorCommand::SetTaskChecked` and `set_task_checked` are implemented and tested, and task/link round-trip tests are in. Still to do: the hit-test from a checkbox click to `set_task_checked`, the popover, hover, the Ctrl+click event and the story's toolbar button.
+
+**D15. Markdown the model does not represent stays literal text and is escaped on save, so a load/save cycle is lossless in meaning. For example, `> [x]` stays a quote with literal text, and HTML and footnote text stay as text.**
+*Rationale:* Silent rewrites are worse than visible literals. Escaping ensures that typed `*` or `[` don't become syntax on reload.
+*Future work:* A raw-source fallback block that keeps unmodelled constructs byte-for-byte.
 **Decisions taken during the UI spike (answered by Richard, 14 Oct 2026):**
 - **Scroll handle:** the owner passes its scroll container's `ScrollHandle` (`set_scroll_handle`); the editor does not own a scroll container.
 - **Culling / Phase 5:** light culling first (top-level units, chunked long top-level lists, overscan, pinned selection/IME units), then Phase 5 taken partway (prefix-sum index, cached units, layout reuse, top-level a11y roles) and stopped; remaining Phase 5 items stay open.

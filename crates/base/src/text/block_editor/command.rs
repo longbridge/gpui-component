@@ -24,6 +24,8 @@ pub enum EditorCommand {
         ordered: bool,
     },
     ToggleTask,
+    /// Make the caret's list item a task item, checked or not (D14).
+    SetTaskChecked(bool),
     Indent,
     Outdent,
     MoveBlocks {
@@ -930,6 +932,18 @@ impl BlockEditorModel {
                 }
                 Ok(())
             }),
+            EditorCommand::SetTaskChecked(on) => self.with_item("set_task_checked", |tx, item| {
+                if let Some(BlockKindData::ListItem { spread, .. }) = tx.doc.kind(item).cloned() {
+                    tx.set_kind(
+                        item,
+                        BlockKindData::ListItem {
+                            checked: Some(on),
+                            spread,
+                        },
+                    )?;
+                }
+                Ok(())
+            }),
             EditorCommand::Indent | EditorCommand::Outdent
                 if self
                     .caret()
@@ -1118,6 +1132,21 @@ impl BlockEditorModel {
                     tx.insert(parent, index, vec![list])?;
                 }
             }
+            Ok(None)
+        })
+    }
+
+    /// Wrap the caret's leaf in a blockquote (the `> ` input rule).
+    pub(crate) fn wrap_in_blockquote(&mut self) -> Result<bool, CommandError> {
+        let leaf = self.caret_resolved()?.pos.block;
+        self.transact(EditOrigin::Command("blockquote"), |tx| {
+            let (parent, index) = tx
+                .doc
+                .index_in_parent(leaf)
+                .ok_or(StepError::UnknownBlock(leaf))?;
+            let block = tx.remove_block(leaf)?;
+            let quote = DetachedBlock::container(BlockKindData::Blockquote, vec![block]);
+            tx.insert(parent, index, vec![quote])?;
             Ok(None)
         })
     }
