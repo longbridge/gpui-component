@@ -162,7 +162,7 @@ curl -fsSLO https://github.com/longbridge/gpui-kit/releases/latest/download/gpui
 tar -xzf gpui-shell-aarch64-apple-darwin.tar.gz
 ```
 
-Pin a version in a build script by replacing `latest/download` with `download/v0.7.3`. To build it yourself instead, run `cargo build -p gpui-shell --release` in the repository; the binary is `target/release/gpui-shell`.
+Pin a version in a build script by replacing `latest/download` with `download/v0.7.3`. To build it yourself instead, run `cargo build -p gpui-shell --release` in the repository; the binary is `target/release/gpui-shell`. The published binaries use `--profile dist` instead, which adds link-time optimization and strips symbols; it links more slowly and yields a smaller binary at `target/dist/gpui-shell`.
 
 ### macOS
 

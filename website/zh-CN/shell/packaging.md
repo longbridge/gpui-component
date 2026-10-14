@@ -162,7 +162,7 @@ curl -fsSLO https://github.com/longbridge/gpui-kit/releases/latest/download/gpui
 tar -xzf gpui-shell-aarch64-apple-darwin.tar.gz
 ```
 
-在构建脚本里固定版本时，把 `latest/download` 换成 `download/v0.7.3`。也可以自己构建：在仓库里运行 `cargo build -p gpui-shell --release`，二进制位于 `target/release/gpui-shell`。
+在构建脚本里固定版本时，把 `latest/download` 换成 `download/v0.7.3`。也可以自己构建：在仓库里运行 `cargo build -p gpui-shell --release`，二进制位于 `target/release/gpui-shell`。发布的二进制改用 `--profile dist` 构建，它开启链接时优化并去掉符号表，链接更慢，产物更小，位于 `target/dist/gpui-shell`。
 
 ### macOS
 

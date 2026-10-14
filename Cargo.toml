@@ -179,6 +179,16 @@ quickjs-jit-sys = { opt-level = 3 }
 quickjs-jit-core = { opt-level = 3 }
 cap-std = { opt-level = 3 }
 
+# The profile the published `gpui-shell` binaries are built with (see
+# `.github/workflows/release-shell.yml`). It is separate from `release` so that
+# local release builds keep their link time. `panic` stays `unwind`: the shell
+# turns a panic in a binding into a script error with `catch_unwind`.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
 [patch.crates-io]
 # LLRT's public modules still name their compatible binding dependency
 # `rquickjs`. Route those dependencies through a source-compatible facade so
