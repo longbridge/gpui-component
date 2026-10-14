@@ -866,10 +866,24 @@ fn run(
             //
             // Deferred to the next turn of the loop: asked for while the
             // application is still finishing its launch, the request is dropped.
-            cx.defer(move |cx| {
-                cx.activate(true);
-                let _ = window.update(cx, |_, window, _| window.activate_window());
-            });
+            //
+            // A spawned task rather than `cx.defer`: a deferred effect runs at
+            // the end of whatever update flushes next, and on Wayland that can
+            // be a platform callback. The desktop portal's button-layout and
+            // appearance events call into the window while GPUI still holds the
+            // Wayland client state borrowed, so activating from inside one
+            // panics on that borrow, and the window dropped while unwinding
+            // panics again and aborts. Whether the portal answers before the
+            // first flush is a race, which is why only some launches crashed.
+            // A task is polled from the executor's own event source, outside
+            // every platform callback.
+            cx.spawn(async move |cx| {
+                cx.update(|cx| {
+                    cx.activate(true);
+                    let _ = window.update(cx, |_, window, _| window.activate_window());
+                });
+            })
+            .detach();
 
             let loaded = built.borrow_mut().take().ok_or(());
 
