@@ -118,6 +118,8 @@ fn compose_decoration_collections<'a>(
 struct EditorScrollbarLayout {
     bounds: Bounds<Pixels>,
     scroll_size: Size<Pixels>,
+    // Excludes editor padding from scroll range while the track still includes it.
+    scroll_viewport_size: Size<Pixels>,
 }
 
 /// What the unwrapped width of the longest line depends on. While it holds,
@@ -174,21 +176,24 @@ impl EditorScrollbarLayout {
             paddings.left + line_number_width - LINE_NUMBER_RIGHT_MARGIN
         };
 
-        Self {
-            bounds: Bounds::new(
-                point(
-                    input_bounds.origin.x + left,
-                    input_bounds.origin.y - paddings.top,
-                ),
-                size(
-                    input_bounds.size.width - left + paddings.right,
-                    input_bounds.size.height + paddings.top + paddings.bottom,
-                ),
+        let bounds = Bounds::new(
+            point(
+                input_bounds.origin.x + left,
+                input_bounds.origin.y - paddings.top,
             ),
+            size(
+                input_bounds.size.width - left + paddings.right,
+                input_bounds.size.height + paddings.top + paddings.bottom,
+            ),
+        );
+
+        Self {
+            bounds,
             scroll_size: size(
                 scroll_size.width - left + paddings.right + RIGHT_MARGIN,
                 scroll_size.height,
             ),
+            scroll_viewport_size: size(bounds.size.width, input_bounds.size.height),
         }
     }
 }
@@ -263,6 +268,7 @@ impl<M: InputModeKind> Element for EditorScrollbar<M> {
             Scrollbar::vertical(&scroll_handle)
         }
         .viewport_bounds(snapshot.layout.bounds)
+        .scroll_viewport_size(snapshot.layout.scroll_viewport_size)
         .scroll_size(snapshot.layout.scroll_size)
         .into_any_element();
 
@@ -4554,6 +4560,7 @@ mod tests {
             Bounds::new(point(px(51.), px(18.)), size(px(262.), px(87.)))
         );
         assert_eq!(layout.scroll_size, size(px(972.), px(200.)));
+        assert_eq!(layout.scroll_viewport_size, size(px(262.), px(80.)));
 
         let layout_without_gutter =
             EditorScrollbarLayout::new(input_bounds, px(0.), size(px(500.), px(120.)), paddings);
@@ -4563,6 +4570,10 @@ mod tests {
             Bounds::new(point(px(10.), px(18.)), size(px(303.), px(87.)))
         );
         assert_eq!(layout_without_gutter.scroll_size, size(px(513.), px(120.)));
+        assert_eq!(
+            layout_without_gutter.scroll_viewport_size,
+            size(px(303.), px(80.))
+        );
     }
 
     #[test]
