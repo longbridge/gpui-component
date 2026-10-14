@@ -271,6 +271,7 @@ impl Render for TreeStory {
                                         .separator()
                                         .menu("Delete", Box::new(Delete))
                                 })
+                                .scroll_bounce(true)
                                 .p_1()
                                 .border_1()
                                 .border_color(cx.theme().border)

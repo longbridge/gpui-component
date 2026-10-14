@@ -1614,6 +1614,7 @@ impl Render for DataTableStory {
                     .flex_1()
                     .child(
                         DataTable::new(&self.table)
+                            .scroll_bounce(true)
                             .with_size(self.size)
                             .when_some(self.header_row_height, |this, height| {
                                 this.header_row_height(height)

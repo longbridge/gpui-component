@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, StyleRefinement, Styled, Window, div,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -35,6 +35,7 @@ pub struct Tree {
     style: StyleRefinement,
     render_item: Rc<RenderItem>,
     context_menu_builder: Option<Rc<ContextMenuBuilder>>,
+    scroll_bounce: bool,
 }
 
 impl Tree {
@@ -48,6 +49,7 @@ impl Tree {
             style: StyleRefinement::default(),
             render_item: Rc::new(render_item),
             context_menu_builder: None,
+            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
         }
     }
 
@@ -58,6 +60,13 @@ impl Tree {
             + 'static,
     {
         self.context_menu_builder = Some(Rc::new(f));
+        self
+    }
+
+    /// Bounce at the vertical boundaries. On by default on iOS and Android,
+    /// off elsewhere; reduced motion disables displacement.
+    pub fn scroll_bounce(mut self, enabled: bool) -> Self {
+        self.scroll_bounce = enabled;
         self
     }
 }
@@ -113,7 +122,12 @@ impl RenderOnce for Tree {
                     })
                     .list_style(StyleRefinement::default().flex_grow_1().size_full())
                     .relative()
-                    .size_full(),
+                    .size_full()
+                    .map(|tree| {
+                        gpui_base::ScrollBounce::new("tree-scroll-bounce", &scroll_handle, tree)
+                            .enabled(self.scroll_bounce)
+                            .scroll_wheel(true)
+                    }),
             )
             .refine_style(&self.style)
             .vertical_scrollbar(&scroll_handle)

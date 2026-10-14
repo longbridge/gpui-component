@@ -68,6 +68,7 @@ pub struct Scrollable<E: InteractiveElement + Styled + ParentElement + Element> 
     id: ElementId,
     element: E,
     axis: ScrollbarAxis,
+    scroll_bounce: bool,
 }
 
 impl<E> Scrollable<E>
@@ -80,6 +81,7 @@ where
             id: caller_id(),
             element,
             axis: axis.into(),
+            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
         }
     }
 
@@ -89,6 +91,13 @@ where
     /// otherwise share a single scroll position.
     pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = id.into();
+        self
+    }
+
+    /// Bounce at the vertical boundaries. On by default on iOS and Android,
+    /// off elsewhere; horizontal-only areas do not bounce.
+    pub fn scroll_bounce(mut self, enabled: bool) -> Self {
+        self.scroll_bounce = enabled;
         self
     }
 }
@@ -175,7 +184,15 @@ where
             .size_full()
             .refine_style(&root_style)
             .relative()
-            .child(scroll_area)
+            .child(
+                gpui_base::ScrollBounce::new(
+                    (self.id.clone(), "bounce"),
+                    &scroll_handle,
+                    scroll_area,
+                )
+                .enabled(self.scroll_bounce && self.axis.has_vertical())
+                .scroll_wheel(true),
+            )
             .child(render_scrollbar(
                 scrollbar_id,
                 &scroll_handle,

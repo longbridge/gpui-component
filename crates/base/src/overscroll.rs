@@ -1,10 +1,8 @@
-//! The text's stretch past its top or bottom edge, and its return.
+//! Boundary displacement shared by inputs and scroll viewports.
 //!
-//! The input scrolls itself, so it cannot sit inside `ScrollBounce`: that
-//! wrapper would move the input's frame with the text, and it learns about a
-//! packet only after the input has handled it. The input drives the same
-//! spring instead. Scrolling the text stays exact; the stretch only moves
-//! where the text is drawn, inside the frame that clips it.
+//! Viewport owners keep their logical scroll position clamped and apply this
+//! displacement only to content geometry. Inputs drive it directly, while
+//! `ScrollBounce` can own a list or scroll area's vertical wheel handling.
 
 use crate::scroll_bounce::Physics;
 use gpui::TouchPhase;
@@ -16,15 +14,15 @@ use web_time::Instant;
 
 /// A pause without packets that ends a gesture.
 ///
-/// Momentum arrives once per frame with no phase of its own, and a wheel sends
-/// no phases at all, so a pause is the only sign that either has ended.
+/// Momentum arrives once per frame with no phase of its own, and some precise
+/// scrolling devices send no phases, so a pause marks the end of their stream.
 /// `ScrollBounce` waits the same time for the same reason.
 const GESTURE_GAP: Duration = Duration::from_millis(250);
 
-/// How far a fling or a wheel flick that runs into the edge throws it, per
+/// How far a fling or a precise flick that runs into the edge throws it, per
 /// pixel it had left to scroll, and how far at most.
 ///
-/// Those packets measure speed rather than a finger's travel: a wheel flick
+/// Those packets measure speed rather than a finger's travel: a fast fling
 /// steps hundreds of pixels at once. So they throw the edge, and the spring
 /// carries it out and back, instead of moving it there in one frame.
 const KICK_PER_PIXEL: f32 = 0.3;
@@ -41,6 +39,9 @@ pub(crate) struct Overscroll {
 }
 
 impl Overscroll {
+    pub(crate) fn set_motion(&mut self, motion: crate::ScrollBounceMotion) {
+        self.physics.set_motion(motion);
+    }
     /// How far the text is drawn from where it scrolled to.
     pub(crate) fn offset(&self) -> f32 {
         self.physics.offset()
@@ -66,6 +67,11 @@ impl Overscroll {
         mut scroll: impl FnMut(f32) -> f32,
     ) -> bool {
         let before = self.offset();
+        // Phaseless devices can reverse without sending Started. A deliberate
+        // reversal takes over from the returning edge immediately.
+        if dy * before < 0. && !self.physics.is_dragging() {
+            self.reset();
+        }
         let mut kicked = false;
         let paused = self
             .last_packet_at
@@ -98,7 +104,7 @@ impl Overscroll {
                 self.spent = self.offset() != 0.;
             }
         } else if !self.spent {
-            // Momentum or a wheel with no gesture of its own: it scrolls the
+            // Momentum or phaseless precise scrolling: it scrolls the
             // text, and a fling or a flick that runs into the edge throws it,
             // harder the faster it arrives, until the edge turns back.
             let unused = dy - scroll(dy);
@@ -128,7 +134,12 @@ impl Overscroll {
 
     /// Drop any stretch at once, as when bouncing is turned off.
     pub(crate) fn reset(&mut self) {
-        *self = Self::default();
+        let mut physics = std::mem::take(&mut self.physics);
+        physics.reset();
+        *self = Self {
+            physics,
+            ..Self::default()
+        };
     }
 }
 
@@ -193,7 +204,7 @@ mod tests {
         let frame = Duration::from_millis(16);
         let mut overscroll = Overscroll::default();
         let mut room = 0.;
-        // A wheel flick at the end: a small packet, then larger ones, one a
+        // A precise flick at the end: a small packet, then larger ones, one a
         // frame; and one more after the edge has turned back.
         let packets = [
             (0, -2.),
@@ -245,5 +256,45 @@ mod tests {
         }
         let later = at + GESTURE_GAP;
         assert!(overscroll.packet(-40., TouchPhase::Moved, 400., later, text(&mut room)));
+    }
+
+    #[test]
+    fn a_reverse_packet_takes_over_the_return_immediately() {
+        let start = Instant::now();
+        let mut overscroll = Overscroll::default();
+        let mut room = 0.;
+        overscroll.packet(0., TouchPhase::Started, 400., start, text(&mut room));
+        overscroll.packet(-80., TouchPhase::Moved, 400., start, text(&mut room));
+        overscroll.packet(0., TouchPhase::Ended, 400., start, text(&mut room));
+        let later = start + Duration::from_millis(16);
+        overscroll.step(later);
+        assert!(overscroll.offset() < 0.);
+        overscroll.packet(20., TouchPhase::Moved, 400., later, text(&mut room));
+        assert_eq!(room, 20.);
+        assert_eq!(overscroll.offset(), 0.);
+    }
+
+    #[test]
+    fn a_new_precise_gesture_takes_over_without_jumping() {
+        let start = Instant::now();
+        let mut overscroll = Overscroll::default();
+        let mut room = 0.;
+        overscroll.packet(-80., TouchPhase::Moved, 400., start, text(&mut room));
+        overscroll.step(start + Duration::from_millis(16));
+        let later = start + Duration::from_millis(200);
+        overscroll.step(later);
+        assert!(overscroll.offset() < 0.);
+        let before = overscroll.offset();
+        overscroll.packet(0., TouchPhase::Started, 400., later, text(&mut room));
+        assert!(
+            (overscroll.offset() - before).abs() < 0.001,
+            "interruption does not jump"
+        );
+        assert!(overscroll.packet(-40., TouchPhase::Moved, 400., later, text(&mut room)));
+        overscroll.step(later + Duration::from_millis(16));
+        assert!(
+            overscroll.offset() < before,
+            "the new input pushes outward again"
+        );
     }
 }

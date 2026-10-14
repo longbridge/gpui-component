@@ -58,8 +58,9 @@ let notes = cx.new(|cx| {
 ```
 
 With `scroll_bounce(true)`, text taller than the textarea stretches past its
-top or bottom when a trackpad swipe, a fling or a mouse wheel runs into the
-end, then springs back. The frame stays put. It is on by default on iOS and
+top or bottom when precise scrolling from a trackpad or Magic Mouse, or its
+momentum, runs into the end, then springs back. Ordinary mouse wheels scroll
+by lines and do not bounce. The frame stays put. It is on by default on iOS and
 Android and off elsewhere. When the system asks for reduced motion, the text
 stops at its ends without stretching.
 

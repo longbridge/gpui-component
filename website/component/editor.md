@@ -120,9 +120,9 @@ let editor = cx.new(|cx| {
 ```
 
 `scroll_bounce(true)` lets code longer than the editor stretch past its top or
-bottom and spring back when a swipe or a mouse wheel runs into the end, as in the
+bottom and spring back with precise trackpad or Magic Mouse scrolling, as in the
 [Textarea](./textarea.md#scroll-bounce). The gutter moves with the code; the
-frame and scrollbar stay put.
+frame and scrollbar stay put. Ordinary mouse-wheel line scrolling does not bounce.
 
 ## Manual completions
 

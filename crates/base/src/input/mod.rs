@@ -61,8 +61,6 @@ mod mode;
 mod movement;
 #[path = "base/native.rs"]
 mod native;
-#[path = "base/overscroll.rs"]
-mod overscroll;
 #[path = "base/rope_ext.rs"]
 mod rope_ext;
 #[path = "editor/search.rs"]

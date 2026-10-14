@@ -325,3 +325,25 @@ impl Render for DataTable {
     }
 }
 ```
+
+## Scroll bounce
+
+```rust
+div()
+    .child(content)
+    .overflow_y_scrollbar()
+    .scroll_bounce(true)
+```
+
+`scroll_bounce(true)` lets overflowing vertical content stretch at its ends and
+spring back with precise pixel scrolling, such as a trackpad or Magic Mouse
+on macOS. Ordinary mouse wheels use line scrolling and do not bounce. A new
+precise gesture or reversed precise scroll takes over the return; ordinary
+wheel input cancels it and scrolls normally. The logical scroll position remains clamped,
+and scrollbars stay fixed. Content that fits does not bounce. It is enabled by default on iOS and Android
+and disabled elsewhere. Reduced motion disables displacement.
+
+For a custom viewport, use `gpui_kit::base::ScrollBounce::new(id, &handle, child)`
+with `.enabled(true).scroll_wheel(true)`. Keep fixed chrome outside the wrapper.
+Without `scroll_wheel(true)`, the existing precise-scroll, child-owned scrolling
+mode is preserved. Horizontal-only Scrollable containers do not bounce.

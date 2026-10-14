@@ -46,6 +46,7 @@ mod nav_stack;
 mod number_input;
 mod observe;
 mod otp_input;
+mod overscroll;
 mod pagination;
 pub mod plot;
 mod popover;

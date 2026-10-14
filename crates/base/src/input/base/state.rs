@@ -32,7 +32,6 @@ use super::{
     kind::InputModeKind,
     mask_pattern::normalize_number_input,
     mode::LayoutMode,
-    overscroll::Overscroll,
     undo_manager::{EditIntent, UndoManager},
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -41,6 +40,7 @@ use crate::input::movement::MoveDirection;
 use crate::input::{
     InputExtras as _, Position, RopeExt as _, element::RIGHT_MARGIN, layout::LastLayout,
 };
+use crate::overscroll::Overscroll;
 use crate::{AutoScroll, StepAction};
 
 /// Vertical clearance to retain when revealing a text position.
@@ -2596,7 +2596,16 @@ impl<M: InputModeKind> InputBaseState<M> {
         let delta = event.delta.pixel_delta(line_height);
 
         let old_offset = self.scroll_handle.offset();
+        let precise = matches!(event.delta, gpui::ScrollDelta::Pixels(_));
+        if !precise || !self.scroll_bounce || cx.reduce_motion() || !self.overflows_vertically() {
+            let displaced = self.overscroll.offset() != 0.;
+            self.overscroll.reset();
+            if displaced {
+                cx.notify();
+            }
+        }
         let bounces = self.scroll_bounce
+            && precise
             && !cx.reduce_motion()
             && delta.y.abs() >= delta.x.abs()
             && self.overflows_vertically();
@@ -2621,6 +2630,21 @@ impl<M: InputModeKind> InputBaseState<M> {
                 cx.notify();
             }
         } else {
+            // Axis drift must not drop the end of a vertical drag.
+            if matches!(
+                event.touch_phase,
+                gpui::TouchPhase::Ended | gpui::TouchPhase::Cancelled
+            ) && self.overscroll.offset() != 0.
+            {
+                self.overscroll.packet(
+                    0.,
+                    event.touch_phase,
+                    self.input_bounds.size.height.as_f32(),
+                    cx.background_executor().now(),
+                    |_| 0.,
+                );
+                cx.notify();
+            }
             self.update_scroll_offset(Some(old_offset + delta), cx);
         }
 
@@ -5808,6 +5832,112 @@ mod tests {
         let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
         let (end, stretch) = swipe_past_the_end(&view, &mut cx);
         assert_eq!((end, stretch), (px(0.), 0.));
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_resets_when_replacement_text_fits(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (_, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(stretch < 0.);
+        cx.update(|window, cx| {
+            view.input
+                .update(cx, |state, cx| state.set_value("short", window, cx));
+            window.draw(cx).clear(cx);
+        });
+        swipe(&view, &mut cx, 0., gpui::TouchPhase::Ended);
+        view.input.read_with(&cx, |state, _| {
+            assert_eq!(state.overscroll.offset(), 0.);
+            assert_eq!(state.scroll_handle.offset().y, px(0.));
+        });
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_releases_when_the_end_packet_is_horizontal(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (_, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(stretch < 0.);
+        cx.update(|window, cx| {
+            view.input.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Pixels(point(px(1.), px(0.))),
+                        touch_phase: gpui::TouchPhase::Ended,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+        for _ in 0..120 {
+            cx.executor()
+                .advance_clock(std::time::Duration::from_millis(16));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+        assert_eq!(
+            view.input
+                .read_with(&cx, |state, _| state.overscroll.offset()),
+            0.
+        );
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_ordinary_mouse_wheel_does_not_stretch(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            view.input.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Lines(point(0., -100_000.)),
+                        touch_phase: gpui::TouchPhase::Moved,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+                assert!(state.scroll_handle.offset().y < px(0.));
+                assert_eq!(state.overscroll.offset(), 0.);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_scroll_bounce_new_wheel_input_interrupts_the_return(cx: &mut TestAppContext) {
+        let view = InputView::build_textarea(cx, |state| {
+            state.scroll_bounce(true).default_value(long_text())
+        });
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let (end, stretch) = swipe_past_the_end(&view, &mut cx);
+        assert!(stretch < 0.);
+        swipe(&view, &mut cx, 0., gpui::TouchPhase::Ended);
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(16));
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            view.input.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Lines(point(0., 2.)),
+                        touch_phase: gpui::TouchPhase::Moved,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+                assert!(state.scroll_handle.offset().y > end);
+                assert_eq!(state.overscroll.offset(), 0.);
+            });
+        });
     }
 
     #[gpui::test]
@@ -11372,8 +11502,9 @@ impl InputBaseState<crate::input::InputMode> {
 /// single-line input nor anything else.
 impl<M: crate::input::MultiLineMode> InputBaseState<M> {
     /// Set whether text taller than the input stretches past its top and
-    /// bottom and springs back when a trackpad swipe, a fling or a mouse
-    /// wheel runs into an end. The default follows [`crate::ScrollBounce`]:
+    /// bottom and springs back when precise trackpad or Magic Mouse scrolling
+    /// or its momentum runs into an end. Ordinary line-wheel scrolling does
+    /// not bounce. The default follows [`crate::ScrollBounce`]:
     /// on on iOS and Android, off elsewhere. Under reduced motion the text
     /// stops at its ends without stretching.
     pub fn scroll_bounce(mut self, scroll_bounce: bool) -> Self {

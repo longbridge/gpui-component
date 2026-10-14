@@ -1,5 +1,6 @@
 //! Boundary displacement only: the list keeps its clamped logical position.
 
+use crate::overscroll::Overscroll;
 use crate::{OngoingScrollExt as _, ScrollbarHandle};
 use gpui::{
     AnyElement, App, Bounds, ContentMask, DispatchPhase, Element, ElementId, GlobalElementId,
@@ -97,6 +98,7 @@ pub struct ScrollBounce {
     handle: Rc<dyn ScrollbarHandle>,
     child: AnyElement,
     enabled: bool,
+    scroll_wheel: bool,
     motion: ScrollBounceMotion,
     on_scroll: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
 }
@@ -112,6 +114,7 @@ impl ScrollBounce {
             handle: Rc::new(handle.clone()),
             child: child.into_any_element(),
             enabled: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_wheel: false,
             motion: ScrollBounceMotion::default(),
             on_scroll: None,
         }
@@ -120,6 +123,15 @@ impl ScrollBounce {
     /// Opt in on a platform with compatible touch phase semantics.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Own vertical scrolling using the shared input overscroll engine.
+    /// Precise pixel input can bounce; ordinary line-wheel input only scrolls
+    /// and cancels any existing displacement. Keep fixed chrome outside it.
+    /// Off by default, preserving the child-owned scrolling mode.
+    pub fn scroll_wheel(mut self, enabled: bool) -> Self {
+        self.scroll_wheel = enabled;
         self
     }
 
@@ -141,6 +153,7 @@ impl ScrollBounce {
 #[derive(Default)]
 struct State {
     physics: Physics,
+    overscroll: Overscroll,
     sampled_at: Option<Instant>,
     ongoing_scroll: OngoingScroll,
     short_drag_distance: Option<f32>,
@@ -235,16 +248,27 @@ impl Element for ScrollBounce {
             if !self.enabled || cx.reduce_motion() {
                 *state = State::default();
             }
-            state.physics.motion = self.motion;
-            let now = Instant::now();
-            let elapsed = state
-                .sampled_at
-                .replace(now)
-                .map_or(0., |at| now.duration_since(at).as_secs_f32());
-            if state.physics.step(elapsed) {
-                window.request_animation_frame();
+            if self.scroll_wheel {
+                state.overscroll.set_motion(self.motion);
+                if max_scroll_extent(self.handle.as_ref()) <= px(0.) {
+                    state.overscroll.reset();
+                }
+                if state.overscroll.step(cx.background_executor().now()) {
+                    window.request_animation_frame();
+                }
+                state.overscroll.offset()
+            } else {
+                state.physics.motion = self.motion;
+                let now = Instant::now();
+                let elapsed = state
+                    .sampled_at
+                    .replace(now)
+                    .map_or(0., |at| now.duration_since(at).as_secs_f32());
+                if state.physics.step(elapsed) {
+                    window.request_animation_frame();
+                }
+                state.physics.offset()
             }
-            state.physics.offset()
         };
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
@@ -252,6 +276,16 @@ impl Element for ScrollBounce {
                 self.child.prepaint(window, cx);
             });
         });
+        // The child's fresh metrics can remove overflow during a drag.
+        // Reset against those metrics as well, and repaint any displaced frame.
+        if self.scroll_wheel && max_scroll_extent(self.handle.as_ref()) <= px(0.) {
+            let mut state = state.borrow_mut();
+            let displaced = state.overscroll.offset() != 0.;
+            state.overscroll.reset();
+            if displaced {
+                window.request_animation_frame();
+            }
+        }
         ScrollBouncePrepaintState { state, hitbox }
     }
 
@@ -265,7 +299,64 @@ impl Element for ScrollBounce {
         window: &mut Window,
         cx: &mut App,
     ) {
-        if self.enabled && !cx.reduce_motion() {
+        if self.enabled && self.scroll_wheel && !cx.reduce_motion() {
+            let state = prepaint.state.clone();
+            let hitbox = prepaint.hitbox.id;
+            let handle = self.handle.clone();
+            let view = window.current_view();
+            let on_scroll = self.on_scroll.clone();
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if phase != DispatchPhase::Capture || !hitbox.should_handle_scroll(window) {
+                    return;
+                }
+                let mut delta = event.delta.pixel_delta(window.line_height());
+                let mut state = state.borrow_mut();
+                state
+                    .ongoing_scroll
+                    .lock_axis(&mut delta, event.touch_phase);
+                let max = max_scroll_extent(handle.as_ref());
+                if max <= px(0.) {
+                    state.overscroll.reset();
+                    return;
+                }
+                if delta.x.abs() > delta.y.abs() {
+                    return;
+                }
+                let before = handle.offset();
+                let changed = if matches!(event.delta, ScrollDelta::Lines(_)) {
+                    let displaced = state.overscroll.offset() != 0.;
+                    state.overscroll.reset();
+                    let mut offset = before;
+                    offset.y = (before.y + delta.y).clamp(-max, px(0.));
+                    handle.set_offset(offset);
+                    displaced
+                } else {
+                    state.overscroll.packet(
+                        delta.y.as_f32(),
+                        event.touch_phase,
+                        bounds.size.height.as_f32(),
+                        cx.background_executor().now(),
+                        |dy| {
+                            let before = handle.offset();
+                            let mut offset = before;
+                            offset.y = (before.y + px(dy)).clamp(-max, px(0.));
+                            handle.set_offset(offset);
+                            (offset.y - before.y).as_f32()
+                        },
+                    )
+                };
+                let scrolled = handle.offset() != before;
+                drop(state);
+                cx.stop_propagation();
+                if changed || scrolled {
+                    cx.notify(view);
+                }
+                if scrolled && let Some(handler) = &on_scroll {
+                    handler(window, cx);
+                }
+            });
+        }
+        if self.enabled && !self.scroll_wheel && !cx.reduce_motion() {
             let state = prepaint.state.clone();
             let hitbox = prepaint.hitbox.id;
             let handle = self.handle.clone();
@@ -275,6 +366,15 @@ impl Element for ScrollBounce {
             let mut allow_end_bounce = false;
             window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
                 let ScrollDelta::Pixels(mut delta) = event.delta else {
+                    if phase == DispatchPhase::Capture && hitbox.should_handle_scroll(window) {
+                        let mut state = state.borrow_mut();
+                        let displaced = state.physics.offset() != 0.;
+                        *state = State::default();
+                        drop(state);
+                        if displaced {
+                            cx.notify(view);
+                        }
+                    }
                     return;
                 };
                 if !hitbox.should_handle_scroll(window) {
@@ -424,6 +524,16 @@ pub(crate) struct Physics {
 }
 
 impl Physics {
+    pub(crate) fn set_motion(&mut self, motion: ScrollBounceMotion) {
+        self.motion = motion;
+    }
+
+    pub(crate) fn reset(&mut self) {
+        *self = Self {
+            motion: self.motion,
+            ..Self::default()
+        };
+    }
     pub(crate) fn is_dragging(&self) -> bool {
         self.dragging
     }
@@ -444,7 +554,7 @@ impl Physics {
         // rubber-band curve saturates at the extent, so re-reading a viewport
         // that shrank mid-return (rotation, keyboard) could not place the
         // finger where the edge is: it would snap, then need a long pull back.
-        if offset == 0. {
+        if offset == 0. || self.extent <= 0. {
             self.extent = extent.max(1.);
         }
         // Invert the rubber-band curve so grabbing a returning edge is continuous.
@@ -586,6 +696,77 @@ mod tests {
             touch_phase: phase,
             ..Default::default()
         });
+    }
+
+    struct WheelViewport(ScrollHandle);
+
+    impl Render for WheelViewport {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            ScrollBounce::new(
+                "wheel-bounce",
+                &self.0,
+                div()
+                    .id("wheel-viewport")
+                    .w(px(200.))
+                    .h(px(200.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.0)
+                    .child(div().h(px(600.)).w_full()),
+            )
+            .enabled(true)
+            .scroll_wheel(true)
+        }
+    }
+
+    #[gpui::test]
+    fn ordinary_mouse_wheel_keeps_the_shared_viewport_undisplaced(cx: &mut TestAppContext) {
+        let handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| WheelViewport(handle)
+        });
+        draw(cx);
+        let origin = handle.bounds().origin;
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(100.), px(100.)),
+            delta: ScrollDelta::Lines(point(0., -100.)),
+            ..Default::default()
+        });
+        draw(cx);
+        cx.executor().advance_clock(Duration::from_millis(16));
+        draw(cx);
+        assert_eq!(handle.offset().y, -handle.max_offset().y);
+        assert_eq!(handle.bounds().origin, origin);
+    }
+
+    #[gpui::test]
+    fn wheel_scrolling_interrupts_the_shared_return(cx: &mut TestAppContext) {
+        let handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| WheelViewport(handle)
+        });
+        draw(cx);
+        let wheel = |cx: &mut VisualTestContext, dy| {
+            cx.simulate_event(ScrollWheelEvent {
+                position: point(px(100.), px(100.)),
+                delta: ScrollDelta::Lines(point(0., dy)),
+                ..Default::default()
+            });
+        };
+        scroll(cx, -1000., TouchPhase::Started);
+        scroll(cx, 0., TouchPhase::Ended);
+        draw(cx);
+        assert_eq!(handle.offset().y, -handle.max_offset().y);
+        cx.executor().advance_clock(Duration::from_millis(200));
+        draw(cx);
+        let end = handle.offset().y;
+        wheel(cx, 2.);
+        assert!(
+            handle.offset().y > end,
+            "the new wheel input scrolls before the next frame"
+        );
+        draw(cx);
     }
 
     struct ListTest(gpui::ListState);
