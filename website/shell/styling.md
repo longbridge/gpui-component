@@ -81,7 +81,7 @@ percentages and "auto" are not allowed here
 | Typography | `font_family`                                                              | string           |
 | Paint      | `opacity`                                                                  | number           |
 
-`line_height` follows the same grammar as every other length, as GPUI's `line_height` does: `line_height(18)` is 18 pixels. A multiple of the font size is a percentage, so `line_height("145%")` is Rust's `line_height(relative(1.45))`.
+`line_height` is the one exception worth memorizing: a **bare number is a multiplier**, not pixels. `line_height(1.45)` means 1.45× the font size, the same as CSS's unitless `line-height: 1.45` and Rust's `line_height(relative(1.45))`, because 1.45px is never what anyone meant. A string still follows the ordinary grammar, so `line_height("18px")` is a fixed height.
 
 ### What is deliberately not bound
 

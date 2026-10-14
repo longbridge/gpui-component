@@ -785,10 +785,11 @@ so `style.rs` parses once and narrows afterwards, which lets the error say
 _which_ form was rejected. `.p("auto")` reports that padding needs a definite
 length; `.rounded("50%")` reports that radius needs an absolute one.
 
-`line_height` has no exception in the grammar. GPUI's `line_height` takes a
-`DefiniteLength` with no bare-number form, so a number is pixels here as it is
-for every other length, and a multiple of the font size is a percentage:
-`line_height("145%")` is Rust's `line_height(relative(1.45))`.
+`line_height` is the single exception in the grammar: a bare number is a
+multiplier, not pixels, because `line_height(1.45)` means 1.45× the font size
+everywhere else in the industry — CSS's unitless `line-height: 1.45`, Rust's
+`line_height(relative(1.45))` — and 1.45px is never what anyone meant. A string
+still goes through the ordinary grammar, so `line_height("18px")` is fixed.
 
 ### 7.2 Descriptions
 

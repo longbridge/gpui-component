@@ -20,15 +20,15 @@ export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 /// size that keeps a row scannable.
 /** @param {string} value @param {import("gpui-kit").Context} cx */
 export const label = (value, cx) =>
-  div().text_size(12).line_height("100%").text_color(cx.theme().colors.foreground).child(value);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
 
 /** @param {string} value @param {import("gpui-kit").Context} cx */
 export const muted = (value, cx) =>
-  div().text_size(12).line_height("100%").text_color(cx.theme().colors.muted_foreground).child(value);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.muted_foreground).child(value);
 
 /** @param {string} value @param {import("gpui-kit").Context} cx */
 export const title = (value, cx) =>
-  div().text_size(16).line_height("100%").font_semibold().text_color(cx.theme().colors.foreground).child(value);
+  div().text_size(16).line_height(1).font_semibold().text_color(cx.theme().colors.foreground).child(value);
 
 /** @param {import("gpui-kit").Context} cx */
 export const rule = (cx) => div().h(1).w_full().bg(cx.theme().colors.border);
@@ -83,7 +83,7 @@ export const button = (id, caption, onClick, cx, options = {}) => {
     .border_color(selected ? cx.theme().colors.foreground : palette.border)
     .bg(selected ? cx.theme().colors.muted : palette.bg)
     .text_size(12)
-    .line_height("100%")
+    .line_height(1)
     .text_color(selected ? cx.theme().colors.foreground : palette.fg)
     .when(!disabled, (el) => el.hover((style) => style.bg(palette.hover)))
     .when(disabled, (el) => el.opacity(0.4))

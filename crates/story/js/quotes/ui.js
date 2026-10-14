@@ -8,7 +8,7 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-/** @import { AbsoluteLength, ClickEvent, Context, DefiniteLength } from "gpui-kit" */
+/** @import { AbsoluteLength, ClickEvent, Context } from "gpui-kit" */
 /** @import { Quote } from "market" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's
@@ -46,8 +46,8 @@ export const ROW = {
   halfMarker: "0.1875rem",
 };
 
-/** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: DefiniteLength }} */
-export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: "140%" };
+/** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
+export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
 /// Down is `destructive`, flat is ordinary text — both semantic roles. Up is a
 /// literal, and deliberately: the semantic set is shadcn's, which has a
@@ -74,7 +74,7 @@ export const directionColor = (direction, cx) => {
 export const title = (value, cx) =>
   div()
     .text_size(TYPE.title)
-    .line_height("130%")
+    .line_height(1.3)
     .font_semibold()
     .text_color(cx.theme().colors.foreground)
     .child(value);
@@ -205,7 +205,7 @@ export const action = (id, caption, onClick, cx, options = {}) => {
     .child(
       div()
         .text_size(TYPE.body)
-        .line_height("100%")
+        .line_height(1)
         .text_color(cx.theme().colors.foreground)
         .child(caption),
     );

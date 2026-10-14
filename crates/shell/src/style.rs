@@ -156,7 +156,7 @@ const PARAM_STYLES: &[(&str, &str)] = &[
     ),
     (
         "line_height",
-        "Sets the line height. A number is pixels; `\"145%\"` is a multiple of the font size.",
+        "Sets the line height. A bare number is a multiplier of the font size, as in CSS (`1.45`); a string is a length (`\"18px\"`).",
     ),
     (
         "opacity",
@@ -502,10 +502,11 @@ pub fn apply_param(
         "text_size" => refinement.text_size(absolute!()),
         "font_family" => refinement.font_family(arg(args, 0, name)?.as_str()?.to_owned()),
         "font_weight" => refinement.font_weight(font_weight(number!(), name)?),
-        // GPUI's `line_height` takes a `DefiniteLength` with no bare-number
-        // form, so it follows the same grammar as every other length here:
-        // `18` is pixels and `"145%"` is `relative(1.45)`, a font-size multiple.
-        "line_height" => refinement.line_height(definite!()),
+        // Line height is the one length whose bare number is a multiplier, not
+        // pixels: `line_height(1.45)` means 1.45x the font size everywhere else
+        // in the industry, and 1.45px is never what anyone meant. A string
+        // (`"18px"`, `"120%"`) still goes through the ordinary grammar.
+        "line_height" => refinement.line_height(line_height(&arg(args, 0, name)?, name)?),
         "opacity" => refinement.opacity(number!()),
 
         "border" => refinement.border(absolute!()),
@@ -659,6 +660,14 @@ fn length(value: &Bridged, method: &str) -> ShellResult<Length> {
         LengthLiteral::Fraction(fraction) => Length::Definite(relative(fraction)),
         LengthLiteral::Auto => Length::Auto,
     })
+}
+
+/// A bare number is a multiplier; anything else follows the length grammar.
+fn line_height(value: &Bridged, method: &str) -> ShellResult<DefiniteLength> {
+    match value {
+        Bridged::Number(multiplier) => Ok(relative(*multiplier as f32)),
+        other => definite_length(other, method),
+    }
 }
 
 fn font_weight(value: f32, method: &str) -> ShellResult<FontWeight> {
@@ -836,21 +845,21 @@ mod tests {
     }
 
     #[test]
-    fn a_line_height_number_is_pixels_like_every_other_length() {
-        let fixed = apply_param(
-            "line_height",
-            &[Bridged::Number(18.)],
-            StyleRefinement::default(),
-        )
-        .unwrap();
-        assert_eq!(fixed.text.line_height, Some(px(18.).into()));
+    fn a_bare_line_height_is_a_multiplier_as_in_css() {
         let multiple = apply_param(
             "line_height",
-            &[Bridged::Str("150%".into())],
+            &[Bridged::Number(1.5)],
             StyleRefinement::default(),
         )
         .unwrap();
         assert_eq!(multiple.text.line_height, Some(relative(1.5)));
+        let fixed = apply_param(
+            "line_height",
+            &[Bridged::Str("18px".into())],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        assert_eq!(fixed.text.line_height, Some(px(18.).into()));
     }
 
     #[test]

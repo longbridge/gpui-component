@@ -732,6 +732,9 @@ impl Argument {
 /// the only argument that takes `#rrggbb`, `Length` the only one that takes
 /// `"auto"`, `DefiniteLength` the only remaining one that takes a percentage,
 /// and `AbsoluteLength` the only remaining one that takes any string at all.
+/// `line_height` classifies as a definite length, which is the right *type*;
+/// its bare number means a multiplier rather than pixels, and that is a
+/// documentation matter rather than a typing one.
 fn argument_of(name: &str) -> Argument {
     if name == "font_family" {
         return Argument::String;
