@@ -82,7 +82,9 @@ impl BlockEditorStory {
         let mut this = Self {
             editor,
             scroll,
-            status: "".into(),
+            // Never empty, so the toolbar row keeps its height and the
+            // editor does not jump when the first status arrives.
+            status: "revision 0".into(),
             revision: 0,
             markdown: "".into(),
             _subscriptions: vec![subscription],
