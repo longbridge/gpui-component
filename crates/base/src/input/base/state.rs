@@ -2427,6 +2427,13 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
         self.undo_manager.break_transaction_coalescing();
+        // Treat every press like a cursor move: take focus now rather than
+        // after GPUI's focus observer runs, show the caret at once and restart
+        // the idle delay, whatever phase the blink was in.
+        if !self.disabled {
+            self.focus(window, cx);
+            self.pause_blink_cursor(cx);
+        }
         // Input has its own text selection; suppress the window-level text
         // selection (Root) so it does not start a drag from here.
         crate::global_state::GlobalState::suppress_text_selection(cx);
@@ -9166,6 +9173,48 @@ mod tests {
                 assert!(state.blink_cursor.read(cx).visible());
             });
         }
+    }
+
+    #[gpui::test]
+    fn test_mouse_down_shows_cursor_like_a_cursor_move(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let view = InputView::<EditorMode>::new(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        setup_cursors(&mut cx, &view.input, "abcd|efgh");
+        let position = |offset: Pixels, cx: &mut VisualTestContext| {
+            view.input.read_with(cx, |state, _| {
+                let layout = state.last_layout.as_ref().unwrap();
+                state.last_bounds.unwrap().origin
+                    + point(layout.line_number_width + offset, layout.line_height * 0.5)
+            })
+        };
+        let visible = |cx: &mut VisualTestContext| {
+            view.input
+                .read_with(cx, |state, cx| state.blink_cursor.read(cx).visible())
+        };
+
+        // The press itself shows the caret, without waiting for the focus
+        // observer, and the idle delay holds it there like a cursor move.
+        let first = position(px(2.), &mut cx);
+        cx.simulate_mouse_down(first, MouseButton::Left, Default::default());
+        assert!(visible(&mut cx));
+        cx.simulate_mouse_up(first, MouseButton::Left, Default::default());
+        cx.run_until_parked();
+
+        // Pressing elsewhere in the focused input, in the hidden phase of the
+        // blink, shows the caret again at the press.
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(400));
+        cx.run_until_parked();
+        assert!(!visible(&mut cx));
+        let second = position(px(30.), &mut cx);
+        cx.simulate_mouse_down(second, MouseButton::Left, Default::default());
+        assert!(visible(&mut cx));
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(250));
+        cx.run_until_parked();
+        assert!(visible(&mut cx));
+        cx.simulate_mouse_up(second, MouseButton::Left, Default::default());
     }
 
     #[gpui::test]
