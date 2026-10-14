@@ -127,7 +127,7 @@ impl Render for Example {
                             div().p_4().border_b_1().border_color(border).bg(surface)
                                 .child(format!("Message {} — swipe, hold, release, reverse", ix + 1))
                                 .into_any_element()
-                        }).flex_1()).enabled(self.enabled))))
+                        }).flex_1()).enabled(self.enabled).scroll_wheel(false))))
                 .child(div().flex().flex_col().flex_1().min_w_0().min_h_0().gap_2()
                     .child("Short content · both edges")
                     .child(ScrollBounce::new(("short", generation), &self.short,
@@ -137,7 +137,7 @@ impl Render for Example {
                                 .child("This content fits inside the viewport. Pull down or up.")
                                 .child(div().id("horizontal").overflow_x_scroll().h_16()
                                     .child(div().w(gpui::rems(48.)).child("← Horizontal content — drag sideways across this row to verify nested scrolling →")))))
-                        .enabled(self.enabled))))
+                        .enabled(self.enabled).scroll_wheel(false))))
     }
 }
 

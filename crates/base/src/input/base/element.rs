@@ -452,6 +452,23 @@ impl<M: InputModeKind> TextElement<M> {
     }
 
     fn paint_mouse_listeners(&mut self, hitbox: &Hitbox, window: &mut Window, _: &mut App) {
+        // Text with room to scroll keeps the wheel from the scroll areas
+        // around it; its own listener scrolls it in the bubble phase.
+        window.on_mouse_event({
+            let state = self.state.clone();
+            let hitbox = hitbox.id;
+            move |event: &gpui::ScrollWheelEvent, phase, window, cx| {
+                if phase.capture()
+                    && hitbox.should_handle_scroll(window)
+                    && state
+                        .read(cx)
+                        .takes_scroll(event.delta.pixel_delta(window.line_height()))
+                {
+                    crate::scroll_bounce::claim_scroll(hitbox, cx);
+                }
+            }
+        });
+
         // Every touch is offered as a drag first; that is how a tap's mouse
         // events are later told apart from a mouse's.
         window.on_mouse_event(move |event: &TouchDragEvent, phase, _, cx| {
@@ -2521,9 +2538,18 @@ impl<M: InputModeKind> Element for TextElement<M> {
             window.text_system().layout_width(font_id, text_size, ' ')
         };
 
-        self.state.update(cx, |state, cx| {
+        // Text stretched past an end is drawn that far from where it scrolled
+        // to, inside the frame that clips it, and springs back over the next
+        // frames. Scrolling and everything measured from it stay exact.
+        let mut stretch = self.state.update(cx, |state, cx| {
             state.display_map.set_font(font, text_size, cx);
             state.display_map.ensure_text_prepared(&state.text, cx);
+            if cx.reduce_motion() {
+                state.overscroll.reset();
+            } else if state.overscroll.step(cx.background_executor().now()) {
+                window.request_animation_frame();
+            }
+            state.overscroll.offset()
         });
 
         let state = self.state.read(cx);
@@ -2849,6 +2875,16 @@ impl<M: InputModeKind> Element for TextElement<M> {
         // regardless of horizontal scroll position.
         let input_bounds = bounds;
         let original_x = bounds.origin.x;
+        // Resolved content and viewport sizes can change during a gesture.
+        // A non-scrolling input must not retain a drag that will no longer
+        // receive its Ended packet through the overscroll path.
+        if scroll_size.height <= input_bounds.size.height {
+            self.state.update(cx, |state, _| state.overscroll.reset());
+            stretch = 0.;
+        }
+        // Keep viewport geometry for scrollbars and hitboxes fixed; only
+        // text, its carets, selections, and gutter contents are displaced.
+        bounds.origin.y += px(stretch);
 
         let (cursor_infos, cursor_scroll_offset, current_row) =
             self.layout_cursors(&last_layout, &mut bounds, scroll_size, window, cx);
@@ -3643,10 +3679,113 @@ mod tests {
 
     struct TextareaHarness(Entity<crate::input::TextareaState>);
 
+    #[gpui::test]
+    fn scroll_bounce_keeps_the_scrollbar_viewport_fixed(cx: &mut TestAppContext) {
+        let text = (0..60)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (editor, window) = decoration_editor(cx, &text, false);
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            let viewport = editor
+                .read(cx)
+                .editor_scrollbar_snapshot
+                .get()
+                .unwrap()
+                .layout
+                .bounds;
+            let text_origin = editor.read(cx).last_bounds.unwrap().origin;
+            editor.update(cx, |state, cx| {
+                state.set_scroll_bounce(true, cx);
+                state.on_scroll_wheel(
+                    &gpui::ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Pixels(point(px(0.), px(60.))),
+                        touch_phase: gpui::TouchPhase::Started,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+            let state = editor.read(cx);
+            let stretch = state.overscroll.offset();
+            assert!(stretch > 0.);
+            assert_eq!(
+                state.editor_scrollbar_snapshot.get().unwrap().layout.bounds,
+                viewport
+            );
+            assert_eq!(
+                state.last_bounds.unwrap().origin.y,
+                text_origin.y + px(stretch)
+            );
+        });
+    }
+
     impl Render for TextareaHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div().size_full().child(self.0.clone())
         }
+    }
+
+    /// A textarea 100 px down a taller bouncing scroll area.
+    struct NestedTextarea(Entity<crate::input::TextareaState>, gpui::ScrollHandle);
+    use gpui::StatefulInteractiveElement as _;
+
+    impl Render for NestedTextarea {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::ScrollBounce::new(
+                "outer",
+                &self.1,
+                div()
+                    .id("outer-viewport")
+                    .w(px(240.))
+                    .h(px(300.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.1)
+                    .child(div().h(px(100.)))
+                    .child(div().h(px(120.)).child(self.0.clone()))
+                    .child(div().h(px(600.))),
+            )
+            .enabled(true)
+        }
+    }
+
+    #[gpui::test]
+    fn a_textarea_keeps_its_scroll_from_the_area_around_it(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let text = (1..=40)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let outer = gpui::ScrollHandle::new();
+        let mut textarea = None;
+        let window = cx.open_window(size(px(240.), px(400.)), |window, cx| {
+            let state =
+                cx.new(|cx| crate::input::TextareaState::new(window, cx).default_value(text));
+            textarea = Some(state.clone());
+            NestedTextarea(state, outer.clone())
+        });
+        let textarea = textarea.unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let swipe = |cx: &mut VisualTestContext, y: f32| {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: point(px(100.), px(y)),
+                delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-40.))),
+                touch_phase: gpui::TouchPhase::Moved,
+                ..Default::default()
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        };
+        swipe(&mut cx, 160.);
+        let scrolled = cx.update(|_, cx| textarea.read(cx).scroll_handle.offset().y);
+        assert!(scrolled < px(0.), "the textarea scrolls");
+        assert_eq!(outer.offset().y, px(0.), "the area around it does not");
+        swipe(&mut cx, 40.);
+        assert_eq!(outer.offset().y, px(-40.), "outside the textarea it does");
     }
 
     #[gpui::test]

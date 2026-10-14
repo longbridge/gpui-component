@@ -45,6 +45,7 @@ pub enum ListEvent {
 }
 
 struct ListOptions {
+    scroll_bounce: Option<bool>,
     size: Size,
     scrollbar_visible: bool,
     search_placeholder: Option<SharedString>,
@@ -55,6 +56,7 @@ struct ListOptions {
 impl Default for ListOptions {
     fn default() -> Self {
         Self {
+            scroll_bounce: None,
             size: Size::default(),
             scrollbar_visible: true,
             max_height: None,
@@ -595,12 +597,18 @@ where
                             this.with_sizing_behavior(ListSizingBehavior::Infer)
                         })
                         .track_scroll(&scroll_handle)
+                        .map(|list| {
+                            gpui_base::ScrollBounce::new("list-scroll-bounce", &scroll_handle, list)
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
+                        })
                         .into_any_element(),
                     )
                 }
             })
             .when(scrollbar_visible, |this| {
-                this.child(Scrollbar::vertical(&scroll_handle))
+                this.child(Scrollbar::vertical(&scroll_handle).viewport_from_layout())
             })
     }
 }
@@ -744,6 +752,13 @@ where
         self
     }
 
+    /// Bounce at the vertical boundaries. On by default on iOS, Android and
+    /// macOS, off elsewhere; reduced motion disables displacement.
+    pub fn scroll_bounce(mut self, enabled: bool) -> Self {
+        self.options.scroll_bounce = Some(enabled);
+        self
+    }
+
     /// Sets the placeholder text for the search input.
     pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.options.search_placeholder = Some(placeholder.into());
@@ -828,6 +843,53 @@ mod measurement_tests {
             (index.row < *self.counts.get(index.section)?)
                 .then(|| ListItem::new(index.row).h(px(if index.row == 0 { 36. } else { 48. })))
         }
+    }
+
+    struct BounceList(Entity<ListState<Delegate>>);
+
+    impl Render for BounceList {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(240.))
+                .h(px(200.))
+                .child(List::new(&self.0).scroll_bounce(true).size_full())
+        }
+    }
+
+    #[gpui::test]
+    fn scroll_bounce_list_accepts_a_reverse_wheel_during_return(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            BounceList(cx.new(|cx| ListState::new(Delegate { counts: vec![40] }, window, cx)))
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let state = view.read_with(cx, |view, _| view.0.clone());
+        let wheel = |cx: &mut gpui::VisualTestContext, dy| {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Lines(gpui::point(0., dy)),
+                ..Default::default()
+            });
+        };
+        for (dy, phase) in [
+            (-10000., gpui::TouchPhase::Started),
+            (0., gpui::TouchPhase::Ended),
+        ] {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(dy))),
+                touch_phase: phase,
+                ..Default::default()
+            });
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let end = state.read_with(cx, |state, _| state.scroll_handle.offset().y);
+        assert!(end < px(0.));
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        wheel(cx, 2.);
+        assert!(state.read_with(cx, |state, _| state.scroll_handle.offset().y) > end);
     }
 
     #[gpui::test]

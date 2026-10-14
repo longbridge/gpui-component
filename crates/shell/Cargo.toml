@@ -48,7 +48,7 @@ gpui_platform.workspace = true
 gpui-fast-platform = { workspace = true, optional = true }
 gpui-base = { workspace = true, features = ["inspector"] }
 gpui-fps.workspace = true
-gpui-component = { workspace = true, features = ["tree-sitter-rust"], optional = true }
+gpui-component = { workspace = true, features = ["syntect"], optional = true }
 
 # Keep the bindings, runtime, and LLRT compatibility facade on the same release.
 rquickjs = { package = "quickjs-jit", version = "0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = [

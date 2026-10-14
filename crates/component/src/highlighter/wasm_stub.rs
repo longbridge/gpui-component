@@ -1,5 +1,7 @@
-//! WASM stub implementation for highlighter module.
-//! Provides empty/no-op implementations since tree-sitter is not available in WASM.
+//! The highlighter module without tree-sitter: for WASM, or a native build
+//! that chose `syntect` or no highlighter at all. Syntax highlighting itself
+//! comes from `syntect_backend` when that feature is on; the theme types here
+//! are shared either way.
 //!
 //! Note: diagnostics.rs is available in WASM, only syntax highlighting requires stubs.
 
@@ -7,12 +9,18 @@ use gpui::{HighlightStyle, SharedString};
 use std::ops::Range;
 use std::time::Duration;
 
-// Syntax highlighter stub
-pub struct SyntaxHighlighter;
+// Syntax highlighter stub. With `syntect` it names highlights for the
+// presentations that resolve styles themselves, such as a diff.
+pub struct SyntaxHighlighter {
+    #[cfg_attr(not(feature = "syntect"), allow(dead_code))]
+    language: SharedString,
+}
 
 impl SyntaxHighlighter {
-    pub fn new(_language: impl AsRef<str>) -> Self {
-        Self
+    pub fn new(language: impl AsRef<str>) -> Self {
+        Self {
+            language: language.as_ref().to_owned().into(),
+        }
     }
 
     pub fn highlight(&self, _text: &ropey::Rope) -> Vec<(Range<usize>, HighlightStyle)> {
@@ -42,6 +50,9 @@ impl SyntaxHighlighter {
         &mut self,
         _text: &ropey::Rope,
     ) -> Vec<(Range<usize>, SharedString)> {
+        #[cfg(feature = "syntect")]
+        return super::syntect_backend::capture_names(&self.language, &_text.to_string());
+        #[cfg(not(feature = "syntect"))]
         Vec::new()
     }
 

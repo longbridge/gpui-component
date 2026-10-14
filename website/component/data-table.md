@@ -754,3 +754,16 @@ impl TableDelegate for MyTableDelegate {
 [TableSelection]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.TableSelection.html
 [ColumnSort]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.ColumnSort.html
 [ColumnFixed]: https://docs.rs/gpui-component/latest/gpui_component/table/enum.ColumnFixed.html
+
+## Scroll bounce
+
+```rust
+DataTable::new(&state).scroll_bounce(true)
+```
+
+`scroll_bounce(true)` lets overflowing vertical content stretch at its ends and
+spring back with precise pixel scrolling, such as a trackpad or Magic Mouse
+on macOS. Ordinary mouse wheels use line scrolling and do not bounce. A new
+precise gesture or reversed precise scroll takes over the return; ordinary
+wheel input cancels it and scrolls normally. The logical scroll position remains clamped,
+and scrollbars stay fixed, as do the table headers. Content that fits does not bounce. It is enabled by default on iOS, Android and macOS, whose own scroll views bounce, and disabled elsewhere. Reduced motion disables displacement.
