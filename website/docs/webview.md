@@ -43,11 +43,11 @@ This excerpt shows the macOS and Windows child-view path. Create the native view
 
 ## Own the view and its layout
 
-`WebView::new` initially sets the native bounds to an empty rectangle. Rendering the entity installs a GPUI layout element; during `prepaint`, that element sends its resolved bounds to Wry in **logical coordinates** and inserts a GPUI hitbox. Give the containing region a real size. The example uses `div().flex_1().h(px(400.)).child(self.webview.clone())`. The browser pixels themselves are painted by the operating system, so GPUI clipping, hitboxes, and content masks do not put GPUI UI above the child view.
+`WebView::new` initially sets the native bounds to an empty rectangle. Rendering the entity installs a GPUI layout element; during `prepaint`, that element sends its resolved bounds in **logical coordinates** and inserts a GPUI hitbox. Give the containing region a real size. The example uses `div().flex_1().h(px(400.)).child(self.webview.clone())`. On macOS with `gpui-fast`, the constructor registers a native composition surface and attaches the existing WKWebView to it, so GPUI's deferred overlays can render above the page. Other backends and platforms keep the original native child-view path. A GPUI content mask alone does not clip the native browser pixels.
 
 Keep one `Entity<WebView>` for each native view. Do not build a new Wry view on each `render`. The wrapper's `visible()` and `bounds()` report its stored visibility and last layout bounds; `show()` and `hide()` change native visibility. If a page or tab no longer renders the entity, explicitly call `hide()` when it should disappear, and `show()` when it returns. `prepaint` skips bounds updates while hidden.
 
-Call wrapper methods through `webview.update(cx, |view, _| ...)` on the GPUI UI context. `load_url(&str)` requests navigation but discards Wry's `Result`; it does not report load completion. `back()` runs JavaScript `history.back()` and returns a `Result` for script submission, not a history or navigation result. Use `view.raw()` for Wry methods such as `reload()`, `url()`, or `evaluate_script()` when their return values matter. `view.handle().raw()` gives an owned, UI-thread-local Wry handle when a short-lived callback needs one. Avoid keeping a handle merely to avoid updating the entity.
+Call wrapper methods through `webview.update(cx, |view, _| ...)` on the GPUI UI context. Use `view.set_bounds(rect)` and `view.set_visible(visible)` rather than their raw Wry equivalents so the composition surface stays synchronized. `load_url(&str)` requests navigation but discards Wry's `Result`; it does not report load completion. `back()` runs JavaScript `history.back()` and returns a `Result` for script submission, not a history or navigation result. Use `view.raw()` for Wry methods such as `reload()`, `url()`, or `evaluate_script()` when their return values matter. `view.handle().raw()` gives an owned, UI-thread-local Wry handle when a short-lived callback needs one. Avoid keeping a handle merely to avoid updating the entity.
 
 ## Loading, navigation, and page messages
 
@@ -103,16 +103,17 @@ For an application smoke test on each supported OS, exercise initial load, links
 | Area | Current behavior |
 | --- | --- |
 | Platforms | Experimental macOS and Windows support. The Linux example contains an unfinished GTK hosting path; do not treat it as supported. |
-| Overlay order | The native WebView sits above the GPUI surface and covers GPUI content in the same rectangle, including popovers, dialogs, menus, and tooltips. A GPUI overlay cannot reliably appear on top of it. |
+| Overlay order | On macOS with `gpui-fast`, native composition places the WebView above GPUI's base content and below deferred overlays. Otherwise the native child covers GPUI content in its rectangle. If composition initialization fails, a warning is logged and the original path is used. |
+| Clipping | The native container follows the WebView's full layout bounds. Inherited GPUI content masks do not clip the native page; composition does not promote ordinary base-scene siblings into overlays. |
 | Windows renderer | The repository example sets `GPUI_DISABLE_DIRECT_COMPOSITION=true` before starting GPUI so this child-view approach renders. This is an example-specific requirement, not a general GPUI setting recommendation. |
 
-When an overlay must be visible, place the WebView in a separate window or arrange the screen so the overlay does not cross its bounds. Do not present a normal GPUI overlay over the WebView as a supported interaction in the current implementation.
+Where composition is unavailable, place the WebView in a separate window or arrange the screen so overlays do not cross its bounds. The macOS GPUI Fast adapter is backported from [GPUI Kit #3389](https://github.com/longbridge/gpui-kit/pull/3389); it does not add Windows composition or Linux hosting.
 
 ## Unmerged composition experiments
 
-The following PRs explore overlay composition. **None is part of the current `gpui-wry` behavior described above.** Check their status and implementation before using a branch in an application:
+The following PRs explore alternative composition paths. They are not dependencies of the macOS GPUI Fast adapter described above. Check their status and implementation before using a branch in an application:
 
 - [GPUI Kit #2626](https://github.com/longbridge/gpui-kit/pull/2626) explores drawing GPUI overlays above the native WebView. Its current branch depends on [Zed/GPUI #61945](https://github.com/zed-industries/zed/pull/61945), an opt-in layered scene for deferred GPUI overlays. The GPUI Kit PR validates the macOS path; Windows composition and Linux hosting remain follow-up work in that PR.
 - [Zed/GPUI #62379](https://github.com/zed-industries/zed/pull/62379) proposes a separate, broader opt-in `CompositionTree` for ordering GPUI and native surfaces, with macOS and Windows examples. It is an alternative to #61945, **not** the dependency of GPUI Kit #2626. Its Linux composition path is outside that PR's scope.
 
-These experiments may change before merge. They explain the intended direction; they do not remove today's platform, overlay, or focus limitations.
+These experiments may change before merge and do not extend this integration's platform or focus guarantees.

@@ -43,11 +43,11 @@ div().flex_1().child(webview.clone())
 
 ## 视图归属与布局
 
-`WebView::new` 起初把原生 bounds 设为空矩形。渲染 Entity 会安装 GPUI layout element；在 `prepaint` 阶段，该 element 把算出的 bounds 以**逻辑坐标**传给 Wry，并插入 GPUI hitbox。容器必须有实际尺寸。示例使用 `div().flex_1().h(px(400.)).child(self.webview.clone())`。浏览器像素由操作系统绘制，所以 GPUI clipping、hitbox 和 content mask 都不能让 GPUI 内容盖过这个子视图。
+`WebView::new` 起初把原生 bounds 设为空矩形。渲染 Entity 会安装 GPUI layout element；在 `prepaint` 阶段，该 element 以**逻辑坐标**同步算出的 bounds，并插入 GPUI hitbox。容器必须有实际尺寸。示例使用 `div().flex_1().h(px(400.)).child(self.webview.clone())`。在启用 `gpui-fast` 的 macOS 上，构造函数会注册原生 composition surface，并把现有 WKWebView 挂到该 surface，让 GPUI 的 deferred overlay 能显示在页面上方。其他 backend 和平台保留原来的原生子视图路径。单靠 GPUI content mask 不会裁剪原生浏览器像素。
 
 每个原生视图保存一个 `Entity<WebView>`，不要在每次 `render` 时重新构建 Wry 视图。包装层的 `visible()` 和 `bounds()` 分别返回保存的可见状态及上次 layout 的 bounds；`show()` 和 `hide()` 改变原生可见性。如果页面或标签不再渲染该 Entity，应在需要消失时明确调用 `hide()`，恢复时调用 `show()`。隐藏期间 `prepaint` 不更新 bounds。
 
-在 GPUI UI context 中通过 `webview.update(cx, |view, _| ...)` 调用包装层方法。`load_url(&str)` 请求导航，但丢弃 Wry 的 `Result`，也不表示加载完成。`back()` 执行 JavaScript `history.back()`，其 `Result` 只反映脚本提交，不表示历史导航成功。需要返回值时，通过 `view.raw()` 使用 Wry 的 `reload()`、`url()` 或 `evaluate_script()` 等方法。短期回调需要持有 Wry 对象时可使用 `view.handle().raw()`，但这只适用于 UI 线程；不要仅为了避免更新 Entity 而长期保留 handle。
+在 GPUI UI context 中通过 `webview.update(cx, |view, _| ...)` 调用包装层方法。使用 `view.set_bounds(rect)` 和 `view.set_visible(visible)`，不要直接调用原始 Wry 的同名方法，以便同步 composition surface。`load_url(&str)` 请求导航，但丢弃 Wry 的 `Result`，也不表示加载完成。`back()` 执行 JavaScript `history.back()`，其 `Result` 只反映脚本提交，不表示历史导航成功。需要返回值时，通过 `view.raw()` 使用 Wry 的 `reload()`、`url()` 或 `evaluate_script()` 等方法。短期回调需要持有 Wry 对象时可使用 `view.handle().raw()`，但这只适用于 UI 线程；不要仅为了避免更新 Entity 而长期保留 handle。
 
 ## 加载、导航与页面消息
 
@@ -103,16 +103,17 @@ WebView 及其 handle 应在父窗口销毁前结束生命周期。销毁所属 
 | 范围 | 当前行为 |
 | --- | --- |
 | 平台 | macOS 和 Windows 实验性支持。Linux 示例的 GTK hosting 路径尚未完成，不能视为已支持。 |
-| Overlay 层级 | 原生 WebView 位于 GPUI surface 上方，会遮住同一矩形范围内的 GPUI 内容，包括 popover、dialog、menu 和 tooltip。GPUI overlay 无法可靠地显示在它上方。 |
+| Overlay 层级 | 在启用 `gpui-fast` 的 macOS 上，native composition 将 WebView 放在 GPUI base content 上方、deferred overlay 下方。其他情况下，原生子视图仍覆盖同一矩形内的 GPUI 内容。若 composition 初始化失败，会记录警告并沿用原来的路径。 |
+| Clipping | 原生容器跟随 WebView 的完整 layout bounds。继承的 GPUI content mask 不会裁剪原生页面；composition 也不会将普通 base-scene sibling 自动提升为 overlay。 |
 | Windows renderer | 仓库示例在启动 GPUI 前设置 `GPUI_DISABLE_DIRECT_COMPOSITION=true`，以便当前子视图方案正常渲染。这是此示例的要求，不是 GPUI 的通用设置建议。 |
 
-需要显示 overlay 时，可以将 WebView 放在单独窗口，或安排布局使 overlay 不跨过 WebView 的 bounds。当前实现不支持把普通 GPUI overlay 作为可依赖的交互显示在 WebView 上方。
+无法使用 composition 时，可以将 WebView 放在单独窗口，或安排布局使 overlay 不跨过 WebView 的 bounds。macOS GPUI Fast adapter 回移自 [GPUI Kit #3389](https://github.com/longbridge/gpui-kit/pull/3389)；这项改动不增加 Windows composition 或 Linux hosting。
 
 ## 尚未合并的 Composition 尝试
 
-以下 PR 探索 overlay composition。**它们都不属于上文所述的当前 `gpui-wry` 行为。**应用采用实验分支前，应重新核对 PR 状态和实现：
+以下 PR 探索其他 composition 路径，并不是上文 macOS GPUI Fast adapter 的依赖。应用采用实验分支前，应重新核对 PR 状态和实现：
 
 - [GPUI Kit #2626](https://github.com/longbridge/gpui-kit/pull/2626) 尝试将 GPUI overlay 绘制在原生 WebView 上方。当前分支依赖 [Zed/GPUI #61945](https://github.com/zed-industries/zed/pull/61945)，后者为 deferred GPUI overlay 提供可选的分层 scene。GPUI Kit 这项 PR 验证了 macOS 路径；Windows composition 和 Linux hosting 在该 PR 中仍属于后续工作。
 - [Zed/GPUI #62379](https://github.com/zed-industries/zed/pull/62379) 提出另一套范围更广、可选启用的 `CompositionTree`，用于编排 GPUI 与原生 surface，并带有 macOS 和 Windows 示例。它是 #61945 的替代方案，**不是** GPUI Kit #2626 的依赖。Linux composition 不在这项 PR 的范围内。
 
-这些实验在合并前仍可能变化。它们说明了探索方向，并未消除当前的平台、overlay 和 Focus 限制。
+这些实验在合并前仍可能变化，不会扩展当前集成的平台或 Focus 保证。
