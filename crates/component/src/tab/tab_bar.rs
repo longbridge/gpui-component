@@ -499,9 +499,12 @@ impl RenderOnce for TabBar {
                     tab
                 });
             // The wrapper below is the flex item the bar lays out, so a tab's
-            // own `flex_grow` / `flex_basis` (e.g. `flex_1()`) must size it.
+            // own flex and minimum-size styles must size it. Preserve the
+            // non-shrinking default unless the caller explicitly allows shrink.
             let flex_grow = tab.style().flex_grow;
             let flex_basis = tab.style().flex_basis;
+            let flex_shrink = tab.style().flex_shrink;
+            let min_size = tab.style().min_size.clone();
 
             rendered_tabs.push(if let Some(ref rc) = bounds_rc {
                 let rc = rc.clone();
@@ -513,6 +516,10 @@ impl RenderOnce for TabBar {
                     .map(|mut this| {
                         this.style().flex_grow = flex_grow;
                         this.style().flex_basis = flex_basis;
+                        if let Some(flex_shrink) = flex_shrink {
+                            this.style().flex_shrink = Some(flex_shrink);
+                        }
+                        this.style().min_size = min_size;
                         this
                     })
                     .on_prepaint(move |bounds, _, _| {
@@ -1268,6 +1275,106 @@ mod tests {
                 bar.right()
             );
         }
+    }
+
+    struct ConstrainedFlexHarness {
+        scroll_handle: ScrollHandle,
+        minimum: Pixels,
+        basis: Option<Pixels>,
+        selected_index: usize,
+    }
+
+    impl Render for ConstrainedFlexHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(300.)).child(
+                TabBar::new("constrained-flex-tabs")
+                    .w_full()
+                    .segmented()
+                    .track_scroll(&self.scroll_handle)
+                    .selected_index(self.selected_index)
+                    .children(
+                        [
+                            "A long transport label that exceeds the available width",
+                            "HTTP",
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(ix, label)| {
+                            Tab::new()
+                                .flex_1()
+                                .min_w(if ix == 0 { self.minimum } else { px(0.) })
+                                .when_some(self.basis, |tab, basis| tab.flex_basis(basis))
+                                .label(label)
+                                .debug_selector(move || format!("constrained-tab-{ix}"))
+                        }),
+                    )
+                    .on_click(cx.listener(|this, ix, _, cx| {
+                        this.selected_index = *ix;
+                        cx.notify();
+                    })),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn long_labels_share_available_width(cx: &mut TestAppContext) {
+        cx.update(crate::theme::init);
+        let scroll_handle = ScrollHandle::new();
+        let (view, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            move |_, _| ConstrainedFlexHarness {
+                scroll_handle,
+                minimum: px(0.),
+                basis: None,
+                selected_index: 0,
+            }
+        });
+        draw(cx);
+        draw(cx);
+
+        let first = scroll_handle.bounds_for_item(0).unwrap();
+        let second = scroll_handle.bounds_for_item(1).unwrap();
+        let viewport = scroll_handle.bounds();
+        assert_eq!(first.size.width, second.size.width);
+        assert!(first.size.width > px(0.));
+        assert!(first.left() >= viewport.left());
+        assert!(second.right() <= viewport.right());
+        assert!(viewport.right() - second.right() <= px(1.));
+
+        let target = cx.debug_bounds("constrained-tab-1").unwrap();
+        assert!(target.left() >= second.left());
+        assert!(target.right() <= second.right());
+        cx.simulate_click(target.center(), Modifiers::default());
+        draw(cx);
+        assert_eq!(cx.read(|cx| view.read(cx).selected_index), 1);
+    }
+
+    #[gpui::test]
+    fn explicit_minimum_allows_remaining_tabs_to_shrink(cx: &mut TestAppContext) {
+        cx.update(crate::theme::init);
+        let scroll_handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            move |_, _| ConstrainedFlexHarness {
+                scroll_handle,
+                minimum: px(200.),
+                basis: Some(px(200.)),
+                selected_index: 0,
+            }
+        });
+        draw(cx);
+        draw(cx);
+
+        let first = scroll_handle.bounds_for_item(0).unwrap();
+        let second = scroll_handle.bounds_for_item(1).unwrap();
+        let viewport = scroll_handle.bounds();
+        assert_eq!(first.size.width, px(200.));
+        assert!(second.size.width > px(0.));
+        assert!(second.size.width < px(200.));
+        assert!(first.left() >= viewport.left());
+        assert!(second.right() <= viewport.right());
+        assert!(viewport.right() - second.right() <= px(1.));
+        assert_eq!(scroll_handle.offset().x, px(0.));
     }
 
     struct ClickRevealHarness {
