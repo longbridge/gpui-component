@@ -1590,7 +1590,6 @@ impl Element for Scrollbar {
                         radius = px(0.);
                     }
                     radius = clamp_thumb_radius(radius, state.thumb_fill_bounds);
-                    let bounds = state.bounds;
                     let thumb_bounds = state.thumb_bounds;
                     let geometry = state.geometry;
                     let active_geometry = state.active_geometry;
@@ -1710,11 +1709,15 @@ impl Element for Scrollbar {
 
                     if is_visible {
                         window.on_mouse_event({
+                            // The hitbox rather than the bounds, so that an
+                            // element above the bar (a menu, a dialog) keeps
+                            // the press.
+                            let bar_hitbox = state.bar_hitbox.clone();
                             let state = scrollbar_state.clone();
                             let scroll_handle = self.scroll_handle.clone();
 
-                            move |event: &MouseDownEvent, phase, _, cx| {
-                                if phase.bubble() && bounds.contains(&event.position) {
+                            move |event: &MouseDownEvent, phase, window, cx| {
+                                if phase.bubble() && bar_hitbox.is_hovered(window) {
                                     cx.stop_propagation();
 
                                     if thumb_bounds.contains(&event.position) {
@@ -1751,6 +1754,7 @@ impl Element for Scrollbar {
                     }
 
                     window.on_mouse_event({
+                        let bar_hitbox = state.bar_hitbox.clone();
                         let scroll_handle = self.scroll_handle.clone();
                         let state = scrollbar_state.clone();
                         let max_fps_duration = Duration::from_secs_f64(1. / self.max_fps as f64);
@@ -1761,7 +1765,8 @@ impl Element for Scrollbar {
                             // we need to update the hovered state and increase the last_scroll_time.
                             let need_hover_to_update = is_hover_to_show || is_visible;
                             // Update hovered state for scrollbar
-                            if bounds.contains(&event.position) && need_hover_to_update {
+                            let bar_hovered = bar_hitbox.is_hovered(window);
+                            if bar_hovered && need_hover_to_update {
                                 let hover_changed = state.get().hovered_axis != Some(axis);
                                 state.set(state.get().with_hovered(Some(axis), Instant::now()));
                                 notify |= hover_changed;
@@ -1772,6 +1777,7 @@ impl Element for Scrollbar {
 
                             // Update hovered state for scrollbar thumb
                             if tracks_thumb_hover(mode, is_visible)
+                                && bar_hovered
                                 && thumb_bounds.contains(&event.position)
                             {
                                 if state.get().hovered_on_thumb != Some(axis) {
@@ -1850,8 +1856,8 @@ mod tests {
     use std::cell::{Cell, RefCell};
 
     use gpui::{
-        Context, Modifiers, MouseButton, ParentElement as _, Render, Styled as _, TestAppContext,
-        VisualTestContext, div,
+        Context, InteractiveElement as _, Modifiers, MouseButton, ParentElement as _, Render,
+        Styled as _, TestAppContext, VisualTestContext, div,
     };
 
     #[test]
@@ -2512,6 +2518,78 @@ mod tests {
 
         assert_eq!(handle.drag_starts.get(), 0);
         assert_eq!(handle.drag_ends.get(), 0);
+        assert_eq!(handle.offset(), Point::default());
+    }
+
+    /// A vertical scrollbar with an occluding element over part of it, as a
+    /// menu or dialog would be.
+    struct CoveredHarness {
+        handle: TestHandle,
+        mode: ScrollbarMode,
+        cover: Bounds<Pixels>,
+    }
+
+    impl Render for CoveredHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .relative()
+                .size(px(100.))
+                .child(
+                    Scrollbar::new(&self.handle)
+                        .axis(ScrollbarAxis::Vertical)
+                        .mode(self.mode),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(self.cover.left())
+                        .top(self.cover.top())
+                        .w(self.cover.size.width)
+                        .h(self.cover.size.height)
+                        .occlude(),
+                )
+        }
+    }
+
+    fn covered_harness(
+        cx: &mut TestAppContext,
+        mode: ScrollbarMode,
+        cover: Bounds<Pixels>,
+    ) -> (&mut VisualTestContext, TestHandle) {
+        let handle = TestHandle::new(size(px(100.), px(500.)));
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| CoveredHarness {
+                handle,
+                mode,
+                cover,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, handle)
+    }
+
+    #[gpui::test]
+    fn a_press_on_an_element_over_the_track_is_left_to_it(cx: &mut TestAppContext) {
+        let cover = Bounds::new(point(px(50.), px(60.)), size(px(50.), px(40.)));
+        let (cx, handle) = covered_harness(cx, ScrollbarMode::Always, cover);
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert_eq!(handle.offset(), Point::default());
+
+        // The track left uncovered still takes a press.
+        cx.simulate_click(point(px(95.), px(50.)), Modifiers::default());
+        assert!(handle.offset().y < px(0.));
+    }
+
+    #[gpui::test]
+    fn hovering_an_element_over_a_hover_scrollbar_does_not_reveal_it(cx: &mut TestAppContext) {
+        let cover = Bounds::new(point(px(50.), px(0.)), size(px(50.), px(50.)));
+        let (cx, handle) = covered_harness(cx, ScrollbarMode::Hover, cover);
+        cx.simulate_mouse_move(point(px(95.), px(20.)), None, Modifiers::default());
+        cx.run_until_parked();
+
+        // Uncovered, but the bar never showed, so it takes no press.
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
         assert_eq!(handle.offset(), Point::default());
     }
 
