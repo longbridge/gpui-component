@@ -313,12 +313,13 @@ impl ProcessTree {
 
 #[cfg(windows)]
 struct ProcessTree {
-    job: Option<windows::Win32::Foundation::HANDLE>,
+    job: Option<std::os::windows::io::OwnedHandle>,
 }
 
 #[cfg(windows)]
 impl ProcessTree {
     fn new() -> Result<Self, String> {
+        use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
         use windows::{
             Win32::System::JobObjects::{
                 CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -330,19 +331,18 @@ impl ProcessTree {
 
         let job = unsafe { CreateJobObjectW(None, PCWSTR::null()) }
             .map_err(|error| format!("creating Windows Job Object failed: {error}"))?;
+        // SAFETY: CreateJobObjectW returned a valid, uniquely owned handle.
+        let job = unsafe { OwnedHandle::from_raw_handle(job.0) };
         let mut information = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         if let Err(error) = unsafe {
             SetInformationJobObject(
-                job,
+                windows::Win32::Foundation::HANDLE(job.as_raw_handle()),
                 JobObjectExtendedLimitInformation,
                 std::ptr::from_ref(&information).cast(),
                 std::mem::size_of_val(&information) as u32,
             )
         } {
-            unsafe {
-                let _ = windows::Win32::Foundation::CloseHandle(job);
-            }
             return Err(format!("configuring Windows Job Object failed: {error}"));
         }
         Ok(Self { job: Some(job) })
@@ -352,9 +352,9 @@ impl ProcessTree {
         use std::os::windows::io::AsRawHandle as _;
         use windows::Win32::{Foundation::HANDLE, System::JobObjects::AssignProcessToJobObject};
 
-        let job = self.job.expect("a live process tree owns its job");
+        let job = self.job.as_ref().expect("a live process tree owns its job");
         let process = HANDLE(child.as_raw_handle());
-        unsafe { AssignProcessToJobObject(job, process) }
+        unsafe { AssignProcessToJobObject(HANDLE(job.as_raw_handle()), process) }
             .map_err(|error| format!("assigning child to Windows Job Object failed: {error}"))?;
         resume_suspended_process(child.id())
     }
@@ -372,11 +372,7 @@ impl ProcessTree {
     }
 
     fn close(&mut self) {
-        if let Some(job) = self.job.take() {
-            unsafe {
-                let _ = windows::Win32::Foundation::CloseHandle(job);
-            }
-        }
+        self.job.take();
     }
 }
 
