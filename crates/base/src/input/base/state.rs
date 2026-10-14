@@ -858,7 +858,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             column_select_start: None,
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
-            scroll_bounce: cfg!(any(target_os = "ios", target_os = "android")),
+            scroll_bounce: crate::ScrollBounce::enabled_by_default(),
             overscroll: Overscroll::default(),
             scroll_size: gpui::size(px(0.), px(0.)),
             editor_scrollbar_snapshot: Cell::new(None),
@@ -2661,6 +2661,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         // The handles follow the text; the menu would sit over whatever
         // scrolls underneath it, so it steps aside until the finger lifts.
         self.edit_menu_on_scroll(event.touch_phase, cx);
+    }
+
+    /// Whether the text takes a wheel event moving by `delta` from the
+    /// scroll areas around it: it has room to scroll along the axis the
+    /// event mostly moves on. Unlike [`Self::overflows_along`], an event that
+    /// moves on neither axis, such as a gesture's start or end, goes to text
+    /// that can scroll vertically.
+    pub(super) fn takes_scroll(&self, delta: Point<Pixels>) -> bool {
+        if delta.y.abs() >= delta.x.abs() {
+            self.overflows_vertically()
+        } else {
+            self.scroll_size.width > self.input_bounds.size.width
+        }
     }
 
     /// Whether the text has room to scroll along the axis `delta` mostly
@@ -5814,14 +5827,17 @@ mod tests {
         assert_eq!(stretch, 0., "the edge does not stretch");
     }
 
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     #[gpui::test]
-    fn test_scroll_bounce_is_off_by_default_on_the_desktop(cx: &mut TestAppContext) {
+    fn test_scroll_bounce_follows_the_platform_by_default(cx: &mut TestAppContext) {
         let view = InputView::build_textarea(cx, |state| state.default_value(long_text()));
         let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
         let (end, stretch) = swipe_past_the_end(&view, &mut cx);
         assert!(end < px(0.), "the text scrolls");
-        assert_eq!(stretch, 0., "the edge does not stretch");
+        assert_eq!(
+            stretch != 0.,
+            crate::ScrollBounce::enabled_by_default(),
+            "the edge stretches where the platform's scroll views do"
+        );
     }
 
     #[gpui::test]
@@ -11504,9 +11520,10 @@ impl<M: crate::input::MultiLineMode> InputBaseState<M> {
     /// Set whether text taller than the input stretches past its top and
     /// bottom and springs back when precise trackpad or Magic Mouse scrolling
     /// or its momentum runs into an end. Ordinary line-wheel scrolling does
-    /// not bounce. The default follows [`crate::ScrollBounce`]:
-    /// on on iOS and Android, off elsewhere. Under reduced motion the text
-    /// stops at its ends without stretching.
+    /// not bounce. The default follows
+    /// [`crate::ScrollBounce::enabled_by_default`]: on on iOS, Android and
+    /// macOS, off elsewhere. Under reduced motion the text stops at its ends
+    /// without stretching.
     pub fn scroll_bounce(mut self, scroll_bounce: bool) -> Self {
         self.scroll_bounce = scroll_bounce;
         self

@@ -3,9 +3,9 @@
 use crate::overscroll::Overscroll;
 use crate::{OngoingScrollExt as _, ScrollbarHandle};
 use gpui::{
-    AnyElement, App, Bounds, ContentMask, DispatchPhase, Element, ElementId, GlobalElementId,
-    Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId, OngoingScroll, Pixels,
-    ScrollDelta, ScrollWheelEvent, TouchPhase, Window, point, px,
+    AnyElement, App, Bounds, ContentMask, DispatchPhase, Element, ElementId, Global,
+    GlobalElementId, Hitbox, HitboxBehavior, HitboxId, InspectorElementId, IntoElement, LayoutId,
+    OngoingScroll, Pixels, ScrollDelta, ScrollWheelEvent, TouchPhase, Window, point, px,
 };
 #[cfg(not(target_family = "wasm"))]
 use std::time::Instant;
@@ -130,10 +130,16 @@ impl ScrollBounceMotion {
 /// The stable `id` owns gesture and spring state. Change it when replacing the
 /// document. Put fixed chrome (scrollbars, toolbars) outside this wrapper.
 ///
-/// Enabled by default on iOS and Android. Other platforms pass through unless
-/// explicitly enabled; their input must emit `Ended` at finger release, before momentum.
-/// Reduced motion disables displacement. Keyboard, focus, and line-wheel input
-/// remain owned by the child. No colors, padding, or dimensions are imposed.
+/// Enabled by default where the platform's own scroll views bounce: iOS,
+/// Android and macOS. Reduced motion disables displacement. Keyboard and
+/// focus remain owned by the child. No colors, padding, or dimensions are
+/// imposed.
+///
+/// Nested scroll areas follow the platform: the innermost one under the
+/// pointer takes the whole gesture, at its ends too, and bounces there
+/// rather than handing the rest to the area around it. A disabled
+/// `ScrollBounce` still scrolls its child and keeps the gesture from the
+/// areas around it; it only stops at the ends instead of stretching.
 pub struct ScrollBounce {
     id: ElementId,
     handle: Rc<dyn ScrollbarHandle>,
@@ -154,14 +160,24 @@ impl ScrollBounce {
             id: id.into(),
             handle: Rc::new(handle.clone()),
             child: child.into_any_element(),
-            enabled: cfg!(any(target_os = "ios", target_os = "android")),
-            scroll_wheel: false,
+            enabled: Self::enabled_by_default(),
+            scroll_wheel: true,
             motion: ScrollBounceMotion::default(),
             on_scroll: None,
         }
     }
 
-    /// Opt in on a platform with compatible touch phase semantics.
+    /// Whether scroll areas bounce on this platform unless told otherwise:
+    /// on iOS, Android and macOS, whose own scroll views do.
+    pub const fn enabled_by_default() -> bool {
+        cfg!(any(
+            target_os = "ios",
+            target_os = "android",
+            target_os = "macos"
+        ))
+    }
+
+    /// Turn the bounce on or off. Defaults to [`Self::enabled_by_default`].
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -170,7 +186,10 @@ impl ScrollBounce {
     /// Own vertical scrolling using the shared input overscroll engine.
     /// Precise pixel input can bounce; ordinary line-wheel input only scrolls
     /// and cancels any existing displacement. Keep fixed chrome outside it.
-    /// Off by default, preserving the child-owned scrolling mode.
+    ///
+    /// On by default. Turned off, the child scrolls itself and only its
+    /// unused deltas stretch the edge; that needs input that emits `Ended`
+    /// at finger release, before momentum, as touch does.
     pub fn scroll_wheel(mut self, enabled: bool) -> Self {
         self.scroll_wheel = enabled;
         self
@@ -226,6 +245,29 @@ const CATCH_DRAG_SLOP: f32 = 8.;
 // send precise deltas with no phase: they never send the `Started` that
 // otherwise ends suppression, and would stay locked after one bounce.
 const MOMENTUM_GAP: Duration = Duration::from_millis(250);
+
+/// Which scroll area under the pointer takes the current wheel event.
+///
+/// Capture runs from the outside in, so every area that could scroll writes
+/// itself here before its child paints, and the innermost one is the last
+/// to write. Each then acts, from the inside out, only if it is still the
+/// one written.
+#[derive(Default)]
+struct ScrollOwner(Option<HitboxId>);
+
+impl Global for ScrollOwner {}
+
+/// Take the current wheel event from the scroll areas around `hitbox`.
+/// Call it in the capture phase, from a listener registered before the
+/// children paint, whenever the area would scroll for the event.
+pub(crate) fn claim_scroll(hitbox: HitboxId, cx: &mut App) {
+    cx.default_global::<ScrollOwner>().0 = Some(hitbox);
+}
+
+fn owns_scroll(hitbox: HitboxId, cx: &App) -> bool {
+    cx.try_global::<ScrollOwner>()
+        .is_some_and(|owner| owner.0 == Some(hitbox))
+}
 
 /// `ScrollbarHandle` has no `max_offset`; recover it from the definition
 /// `content_size = viewport + max_offset`. Both dispatch phases clamp against
@@ -340,60 +382,15 @@ impl Element for ScrollBounce {
         window: &mut Window,
         cx: &mut App,
     ) {
-        if self.enabled && self.scroll_wheel && !cx.reduce_motion() {
-            let state = prepaint.state.clone();
+        if self.scroll_wheel {
             let hitbox = prepaint.hitbox.id;
             let handle = self.handle.clone();
-            let view = window.current_view();
-            let on_scroll = self.on_scroll.clone();
-            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
-                if phase != DispatchPhase::Capture || !hitbox.should_handle_scroll(window) {
-                    return;
-                }
-                let mut delta = event.delta.pixel_delta(window.line_height());
-                let mut state = state.borrow_mut();
-                state
-                    .ongoing_scroll
-                    .lock_axis(&mut delta, event.touch_phase);
-                let max = max_scroll_extent(handle.as_ref());
-                if max <= px(0.) {
-                    state.overscroll.reset();
-                    return;
-                }
-                if delta.x.abs() > delta.y.abs() {
-                    return;
-                }
-                let before = handle.offset();
-                let changed = if matches!(event.delta, ScrollDelta::Lines(_)) {
-                    let displaced = state.overscroll.offset() != 0.;
-                    state.overscroll.reset();
-                    let mut offset = before;
-                    offset.y = (before.y + delta.y).clamp(-max, px(0.));
-                    handle.set_offset(offset);
-                    displaced
-                } else {
-                    state.overscroll.packet(
-                        delta.y.as_f32(),
-                        event.touch_phase,
-                        bounds.size.height.as_f32(),
-                        cx.background_executor().now(),
-                        |dy| {
-                            let before = handle.offset();
-                            let mut offset = before;
-                            offset.y = (before.y + px(dy)).clamp(-max, px(0.));
-                            handle.set_offset(offset);
-                            (offset.y - before.y).as_f32()
-                        },
-                    )
-                };
-                let scrolled = handle.offset() != before;
-                drop(state);
-                cx.stop_propagation();
-                if changed || scrolled {
-                    cx.notify(view);
-                }
-                if scrolled && let Some(handler) = &on_scroll {
-                    handler(window, cx);
+            window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
+                if phase == DispatchPhase::Capture
+                    && hitbox.should_handle_scroll(window)
+                    && max_scroll_extent(handle.as_ref()) > px(0.)
+                {
+                    claim_scroll(hitbox, cx);
                 }
             });
         }
@@ -549,6 +546,68 @@ impl Element for ScrollBounce {
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             self.child.paint(window, cx)
         });
+        // After the children, so that the areas inside act first.
+        if self.scroll_wheel {
+            let bounces = self.enabled && !cx.reduce_motion();
+            let state = prepaint.state.clone();
+            let hitbox = prepaint.hitbox.id;
+            let handle = self.handle.clone();
+            let view = window.current_view();
+            let on_scroll = self.on_scroll.clone();
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if phase != DispatchPhase::Capture
+                    || !hitbox.should_handle_scroll(window)
+                    || !owns_scroll(hitbox, cx)
+                {
+                    return;
+                }
+                let mut delta = event.delta.pixel_delta(window.line_height());
+                let mut state = state.borrow_mut();
+                state
+                    .ongoing_scroll
+                    .lock_axis(&mut delta, event.touch_phase);
+                let max = max_scroll_extent(handle.as_ref());
+                if max <= px(0.) {
+                    state.overscroll.reset();
+                    return;
+                }
+                if delta.x.abs() > delta.y.abs() {
+                    return;
+                }
+                let before = handle.offset();
+                let changed = if !bounces || matches!(event.delta, ScrollDelta::Lines(_)) {
+                    let displaced = state.overscroll.offset() != 0.;
+                    state.overscroll.reset();
+                    let mut offset = before;
+                    offset.y = (before.y + delta.y).clamp(-max, px(0.));
+                    handle.set_offset(offset);
+                    displaced
+                } else {
+                    state.overscroll.packet(
+                        delta.y.as_f32(),
+                        event.touch_phase,
+                        bounds.size.height.as_f32(),
+                        cx.background_executor().now(),
+                        |dy| {
+                            let before = handle.offset();
+                            let mut offset = before;
+                            offset.y = (before.y + px(dy)).clamp(-max, px(0.));
+                            handle.set_offset(offset);
+                            (offset.y - before.y).as_f32()
+                        },
+                    )
+                };
+                let scrolled = handle.offset() != before;
+                drop(state);
+                cx.stop_propagation();
+                if changed || scrolled {
+                    cx.notify(view);
+                }
+                if scrolled && let Some(handler) = &on_scroll {
+                    handler(window, cx);
+                }
+            });
+        }
     }
 }
 
@@ -747,7 +806,8 @@ mod tests {
                         .track_scroll(&self.handle)
                         .child(div().h(px(600.)).w_full()),
                 )
-                .enabled(self.enabled),
+                .enabled(self.enabled)
+                .scroll_wheel(false),
             )
         }
     }
@@ -836,6 +896,109 @@ mod tests {
         draw(cx);
     }
 
+    /// A scroll area with a shorter one inside it, 100 px down.
+    struct Nested {
+        outer: ScrollHandle,
+        inner: ScrollHandle,
+        inner_enabled: bool,
+    }
+
+    impl Render for Nested {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            ScrollBounce::new(
+                "outer",
+                &self.outer,
+                div()
+                    .id("outer-viewport")
+                    .w(px(200.))
+                    .h(px(300.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.outer)
+                    .child(div().h(px(100.)).w_full())
+                    .child(
+                        ScrollBounce::new(
+                            "inner",
+                            &self.inner,
+                            div()
+                                .id("inner-viewport")
+                                .w(px(200.))
+                                .h(px(100.))
+                                .overflow_y_scroll()
+                                .track_scroll(&self.inner)
+                                .child(div().h(px(400.)).w_full()),
+                        )
+                        .enabled(self.inner_enabled),
+                    )
+                    .child(div().h(px(600.)).w_full()),
+            )
+            .enabled(true)
+        }
+    }
+
+    fn nested(cx: &mut TestAppContext, inner_enabled: bool) -> (Nested, &mut VisualTestContext) {
+        let (outer, inner) = (ScrollHandle::new(), ScrollHandle::new());
+        let (_, cx) = cx.add_window_view({
+            let (outer, inner) = (outer.clone(), inner.clone());
+            move |_, _| Nested {
+                outer,
+                inner,
+                inner_enabled,
+            }
+        });
+        draw(cx);
+        (
+            Nested {
+                outer,
+                inner,
+                inner_enabled,
+            },
+            cx,
+        )
+    }
+
+    fn scroll_at(cx: &mut VisualTestContext, y: f32, delta: f32, phase: TouchPhase) {
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(100.), px(y)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(delta))),
+            touch_phase: phase,
+            ..Default::default()
+        });
+        draw(cx);
+    }
+
+    #[gpui::test]
+    fn the_innermost_area_takes_the_whole_gesture(cx: &mut TestAppContext) {
+        let (areas, cx) = nested(cx, true);
+        let inner_origin = areas.inner.bounds().origin.y;
+        scroll_at(cx, 150., 0., TouchPhase::Started);
+        scroll_at(cx, 150., -200., TouchPhase::Moved);
+        assert_eq!(areas.inner.offset().y, px(-200.), "the inner area scrolls");
+        assert_eq!(areas.outer.offset().y, px(0.), "the outer one does not");
+        // At its end the inner area stretches instead of handing over.
+        scroll_at(cx, 150., -200., TouchPhase::Moved);
+        assert_eq!(areas.inner.offset().y, px(-300.));
+        assert_eq!(areas.outer.offset().y, px(0.));
+        assert!(areas.inner.bounds().origin.y < inner_origin);
+        // Outside the inner area, the outer one scrolls.
+        scroll_at(cx, 150., 0., TouchPhase::Ended);
+        scroll_at(cx, 20., -50., TouchPhase::Moved);
+        assert_eq!(areas.outer.offset().y, px(-50.));
+    }
+
+    #[gpui::test]
+    fn a_disabled_inner_area_still_keeps_its_scroll(cx: &mut TestAppContext) {
+        let (areas, cx) = nested(cx, false);
+        let inner_origin = areas.inner.bounds().origin.y;
+        scroll_at(cx, 150., -50., TouchPhase::Moved);
+        assert_eq!(areas.inner.offset().y, px(-50.), "the inner area scrolls");
+        assert_eq!(areas.outer.offset().y, px(0.), "the outer one does not");
+        // At its end it stops without stretching.
+        scroll_at(cx, 150., -500., TouchPhase::Moved);
+        assert_eq!(areas.inner.offset().y, px(-300.));
+        assert_eq!(areas.inner.bounds().origin.y, inner_origin);
+        assert_eq!(areas.outer.offset().y, px(0.));
+    }
+
     struct ListTest(gpui::ListState);
 
     impl Render for ListTest {
@@ -850,6 +1013,7 @@ mod tests {
                 .h(px(200.)),
             )
             .enabled(true)
+            .scroll_wheel(false)
         }
     }
 
