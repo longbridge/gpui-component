@@ -1620,3 +1620,26 @@ fn double_and_triple_click_select_word_and_block(cx: &mut TestAppContext) {
         "hello brave world"
     );
 }
+
+#[gpui::test]
+fn word_motion_and_word_selection(cx: &mut TestAppContext) {
+    let w = if cfg!(target_os = "macos") {
+        "alt"
+    } else {
+        "ctrl"
+    };
+    let (editor, cx) = open(cx, "hello brave world");
+    caret_at(&editor, cx, 0, 0);
+    keys(cx, &format!("{w}-right"));
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        5
+    );
+    keys(cx, &format!("{w}-shift-right M-b"));
+    assert_eq!(source(&editor, cx), "hello **brave** world");
+    keys(cx, &format!("end {w}-left"));
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().unwrap().offset),
+        12
+    );
+}

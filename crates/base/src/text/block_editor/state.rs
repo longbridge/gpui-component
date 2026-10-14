@@ -44,6 +44,10 @@ actions!(
         SelectHome,
         SelectEnd,
         SelectAll,
+        MoveWordLeft,
+        MoveWordRight,
+        SelectWordLeft,
+        SelectWordRight,
         Undo,
         Redo,
         ToggleBold,
@@ -64,6 +68,11 @@ pub(crate) fn init(cx: &mut App) {
     let m = "cmd";
     #[cfg(not(target_os = "macos"))]
     let m = "ctrl";
+    // Word motion: Option on macOS, Ctrl elsewhere.
+    #[cfg(target_os = "macos")]
+    let w = "alt";
+    #[cfg(not(target_os = "macos"))]
+    let w = "ctrl";
     cx.bind_keys(vec![
         KeyBinding::new("backspace", Backspace, ctx),
         KeyBinding::new("delete", Delete, ctx),
@@ -74,6 +83,10 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("down", MoveDown, ctx),
         KeyBinding::new("home", MoveHome, ctx),
         KeyBinding::new("end", MoveEnd, ctx),
+        KeyBinding::new(&format!("{w}-left"), MoveWordLeft, ctx),
+        KeyBinding::new(&format!("{w}-right"), MoveWordRight, ctx),
+        KeyBinding::new(&format!("{w}-shift-left"), SelectWordLeft, ctx),
+        KeyBinding::new(&format!("{w}-shift-right"), SelectWordRight, ctx),
         KeyBinding::new("shift-left", SelectLeft, ctx),
         KeyBinding::new("shift-right", SelectRight, ctx),
         KeyBinding::new("shift-up", SelectUp, ctx),
@@ -547,6 +560,96 @@ impl BlockEditorState {
             Some(id) => BlockPosition::new(*id, doc.leaf_len(*id).unwrap_or(0)),
             None => BlockPosition::new(pos.block, if forward { len } else { 0 }),
         }
+    }
+
+    /// The next word boundary from `pos` (skip spaces, then a word); at a
+    /// leaf edge, one step into the neighbouring leaf.
+    fn step_word(&self, pos: BlockPosition, forward: bool) -> BlockPosition {
+        let Some(text) = self.model.doc.leaf_text(pos.block) else {
+            return self.step_horizontal(pos, forward);
+        };
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut offset = pos.offset;
+        if forward {
+            let rest = &text[offset..];
+            let mut it = rest.char_indices().peekable();
+            while let Some((_, c)) = it.peek().copied()
+                && !is_word(c)
+            {
+                it.next();
+            }
+            while let Some((_, c)) = it.peek().copied()
+                && is_word(c)
+            {
+                it.next();
+            }
+            offset += it.peek().map(|(i, _)| *i).unwrap_or(rest.len());
+        } else {
+            let before = &text[..offset];
+            let mut it = before.char_indices().rev().peekable();
+            while let Some((_, c)) = it.peek().copied()
+                && !is_word(c)
+            {
+                it.next();
+            }
+            let mut start = it.peek().map(|(i, c)| i + c.len_utf8()).unwrap_or(0);
+            while let Some((i, c)) = it.peek().copied()
+                && is_word(c)
+            {
+                start = i;
+                it.next();
+            }
+            offset = if start < offset { start } else { 0 };
+        }
+        if offset == pos.offset {
+            return self.step_horizontal(pos, forward);
+        }
+        self.model.doc.clamp(BlockPosition::new(pos.block, offset))
+    }
+
+    fn word(&mut self, forward: bool, extend: bool, cx: &mut Context<Self>) {
+        if self.collapse_blocks(forward, cx) {
+            return;
+        }
+        let Some((_, head)) = self.head_anchor() else {
+            return;
+        };
+        self.goal_x = None;
+        let next = self.step_word(head, forward);
+        self.move_to(next, extend, cx);
+    }
+
+    pub(crate) fn on_move_word_left(
+        &mut self,
+        _: &MoveWordLeft,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.word(false, false, cx);
+    }
+    pub(crate) fn on_move_word_right(
+        &mut self,
+        _: &MoveWordRight,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.word(true, false, cx);
+    }
+    pub(crate) fn on_select_word_left(
+        &mut self,
+        _: &SelectWordLeft,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.word(false, true, cx);
+    }
+    pub(crate) fn on_select_word_right(
+        &mut self,
+        _: &SelectWordRight,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.word(true, true, cx);
     }
 
     fn horizontal(&mut self, forward: bool, extend: bool, cx: &mut Context<Self>) {
