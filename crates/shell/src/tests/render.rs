@@ -797,7 +797,7 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
         declarations
             .contains("import { ClickEvent, Context, Element, NativeElement } from \"gpui-kit\";")
     );
-    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
+    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement; new: (id: string) => TestBoxElement }"));
     assert!(declarations.contains("tone(value: string): TestBoxElement;"));
     assert!(declarations.contains("A test component."));
     assert!(declarations.contains("Sets the visual tone."));
@@ -8314,6 +8314,73 @@ export default class Surface extends View {
         tree.contains("log=down:left:1 up:left outside"),
         "a press and release inside, then a press outside, and no right-button \
          handler firing for a left press: {tree}"
+    );
+}
+
+/// A pinch reaches the element under it with GPUI's zoom delta and phase, so a
+/// script can zoom a viewport the way it would with the wheel.
+#[gpui::test]
+fn a_script_hears_a_pinch_over_its_element(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+
+export default class Map extends View {
+  init(_props, _cx) {
+    this.zoom = 1;
+    this.phase = "none";
+  }
+
+  render(_cx) {
+    return div()
+      .id("map")
+      .w(300)
+      .h(200)
+      .on_pinch((event, cx) => {
+        this.zoom *= 1 + event.delta;
+        this.phase = `${event.phase}@${event.local_position.x}`;
+        cx.notify();
+      })
+      .child(`zoom=${this.zoom.toFixed(2)} ${this.phase}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("pinch", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    context.simulate_event(gpui::PinchEvent {
+        position: point(px(40.), px(30.)),
+        delta: 0.5,
+        phase: gpui::TouchPhase::Moved,
+        ..Default::default()
+    });
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("zoom=1.50 moved@40"),
+        "a pinch must reach the handler with its delta, phase and local position: {tree}"
     );
 }
 

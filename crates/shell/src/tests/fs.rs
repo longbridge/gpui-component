@@ -228,6 +228,117 @@ fn fs_module_cannot_follow_a_symlink_out_of_a_granted_root(cx: &mut TestAppConte
     let _ = std::fs::remove_dir_all(&base);
 }
 
+const METADATA_PROBE: &str = r#"
+import { div, View } from "gpui-kit";
+import { v_flex } from "gpui-base";
+import * as fs from "fs/promises";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.state = "pending";
+    cx.spawn(async (cx) => {
+      try {
+        await fs.writeFile("draft.txt", "hello");
+        const file = await fs.stat("draft.txt");
+        const root = await fs.stat(".");
+        const fresh = Date.now() - file.mtimeMs < 60000 && file.mtime instanceof Date;
+        await fs.rename("draft.txt", "final.txt");
+        const moved = !(await fs.exists("draft.txt")) && await fs.readFile("final.txt", "utf8");
+        const link = await fs.lstat("link.txt");
+        const target = await fs.readlink("link.txt");
+        const followed = await fs.stat("link.txt");
+        this.state = [
+          `${file.isFile()}:${file.isDirectory()}:${file.size}:${fresh}`,
+          `${root.isDirectory()}`,
+          moved,
+          `${link.isSymbolicLink()}:${target}:${followed.isFile()}:${followed.isSymbolicLink()}`,
+        ].join("|");
+      } catch (error) {
+        this.state = `failed: ${error.message}`;
+      }
+      cx.notify();
+    });
+  }
+  render() { return v_flex().child(this.state); }
+}
+"#;
+
+#[cfg(unix)]
+#[gpui::test]
+fn stat_rename_and_readlink_settle_through_promises(cx: &mut TestAppContext) {
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-fs-metadata-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a granted root");
+    std::fs::write(directory.join("target.txt"), "linked").expect("link target");
+    std::os::unix::fs::symlink("target.txt", directory.join("link.txt")).expect("symlink");
+
+    let rendered = metadata_probe(
+        cx,
+        Capabilities::new()
+            .read_roots([directory.clone()])
+            .write_roots([directory.clone()]),
+        METADATA_PROBE,
+    );
+    assert!(
+        rendered.contains("true:false:5:true|true|hello|true:target.txt:true:false"),
+        "{rendered}"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// `rename` needs write access at both ends, so it cannot carry a file out of
+/// a root the application may only read.
+#[gpui::test]
+fn rename_needs_write_access_at_both_ends(cx: &mut TestAppContext) {
+    let base = std::env::temp_dir().join(format!("gpui-shell-fs-rename-{}", std::process::id()));
+    let readable = base.join("readable");
+    let writable = base.join("writable");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&readable).expect("read root");
+    std::fs::create_dir_all(&writable).expect("write root");
+    std::fs::write(readable.join("kept.txt"), "kept").expect("source file");
+
+    let source = METADATA_PROBE.replace(
+        r#"await fs.writeFile("draft.txt", "hello");"#,
+        &format!(
+            r#"await fs.rename({:?}, {:?});"#,
+            readable.join("kept.txt"),
+            writable.join("taken.txt")
+        ),
+    );
+    let rendered = metadata_probe(
+        cx,
+        Capabilities::new()
+            .read_roots([readable.clone(), writable.clone()])
+            .write_roots([writable.clone()]),
+        &source,
+    );
+    assert!(
+        rendered.contains("failed:") && rendered.contains("capabilities.fs.write"),
+        "{rendered}"
+    );
+    assert!(readable.join("kept.txt").exists());
+    assert!(!writable.join("taken.txt").exists());
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+fn metadata_probe(cx: &mut TestAppContext, capabilities: Capabilities, source: &str) -> String {
+    cx.update(crate::init);
+    crate::set_capabilities(capabilities);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime.load_source("fs-metadata.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    context.run_until_parked();
+    draw(&mut context, &view);
+    snapshot_text(&mut context, &view)
+}
+
 fn denial_probe(cx: &mut TestAppContext, capabilities: Capabilities, path: &str) -> String {
     cx.update(crate::init);
     crate::set_capabilities(capabilities);

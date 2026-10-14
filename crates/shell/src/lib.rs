@@ -215,7 +215,8 @@ pub fn set_capabilities(capabilities: Capabilities) {
 ///
 /// Returns the directory it chose, because a host that grants filesystem access
 /// needs to name it. The store is one file inside, which leaves room for other
-/// per-application state later.
+/// per-application state later. Script reads the same directory as
+/// `process.dataDir`.
 ///
 /// The id also becomes the namespace this application's dock panels persist
 /// under — `shell:<id>/<panel>` — for the same reason it places storage: a
@@ -240,7 +241,7 @@ pub fn set_bundle_id(id: &str) -> anyhow::Result<PathBuf> {
     // The same name namespaces the application's dock panels. Storage and a
     // persisted layout are the two things that have to survive a restart under
     // a name rather than a path, so they take the name from one place.
-    policy::update_default(|policy| policy.with_application(id));
+    policy::update_default(|policy| policy.with_application(id).with_data_dir(directory.clone()));
     Ok(directory)
 }
 

@@ -47,7 +47,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, bail};
-use gpui::{AnyWindowHandle, App, Entity, Task, Window};
+use gpui::{App, Entity, Task, Window};
 
 use crate::{
     engine::ShellRuntime,
@@ -353,7 +353,7 @@ impl Watcher {
                         let message = format!("source watch stopped: {error:#}");
                         tracing::error!("{message}");
                         let _ = handle.update(cx, |_, window, cx| {
-                            report_failure(handle, &message, window, cx);
+                            report_failure(&message, window, cx);
                         });
                         break;
                     }
@@ -367,14 +367,14 @@ impl Watcher {
                     match reload(&runtime, &view, &directory, &entry, window, cx) {
                         Ok(()) => {
                             tracing::info!("reloaded {}", directory.display());
-                            retract_failure(handle, window, cx);
+                            retract_failure(window, cx);
                         }
                         // `{error:#}` keeps the `anyhow` context chain, which is what
                         // names the file and the stage that failed.
                         Err(error) => {
                             let message = format!("{error:#}");
                             tracing::error!("reload failed: {message}");
-                            report_failure(handle, &message, window, cx);
+                            report_failure(&message, window, cx);
                         }
                     }
                 });
@@ -458,11 +458,8 @@ const RELOAD_TOAST: &str = "shell-reload";
 /// and this used to be something only the `gpui-shell` binary did — so an
 /// embedded panel silently kept rendering its old view and the reason was in a
 /// terminal nobody had open.
-fn report_failure(handle: AnyWindowHandle, message: &str, window: &mut Window, cx: &mut App) {
-    let Some(root) = handle.downcast::<ShellRoot>() else {
-        return;
-    };
-    let _ = root.update(cx, |root, _, cx| {
+fn report_failure(message: &str, window: &mut Window, cx: &mut App) {
+    ShellRoot::update(window, cx, |root, window, cx| {
         root.push_toast(
             ToastRequest::new("Reload failed")
                 .with_description(message.to_owned())
@@ -475,14 +472,10 @@ fn report_failure(handle: AnyWindowHandle, message: &str, window: &mut Window, c
     });
 }
 
-fn retract_failure(handle: AnyWindowHandle, window: &mut Window, cx: &mut App) {
-    let Some(root) = handle.downcast::<ShellRoot>() else {
-        return;
-    };
-    let _ = root.update(cx, |root, _, cx| {
+fn retract_failure(window: &mut Window, cx: &mut App) {
+    ShellRoot::update(window, cx, |root, _, cx| {
         root.remove_toast(RELOAD_TOAST, cx);
     });
-    let _ = window;
 }
 
 pub(crate) fn reload(

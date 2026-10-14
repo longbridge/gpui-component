@@ -110,7 +110,7 @@ export default class Probe extends View {
         typeof process.kill,
         typeof process.setuid,
         typeof process.setgid,
-        typeof process.env,
+        String(process.env.CARGO_MANIFEST_DIR),
       ].join("|");
       process.nextTick((suffix) => {
         this.state += suffix;
@@ -199,6 +199,88 @@ fn process_is_denied_and_ambient_authority_is_absent_on_every_platform(cx: &mut 
             && rendered.contains("|tick"),
         "{rendered}"
     );
+}
+
+#[gpui::test]
+fn an_application_learns_where_it_is_and_only_the_environment_it_was_granted(
+    cx: &mut TestAppContext,
+) {
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-process-paths-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(directory.join("lib")).expect("application directory");
+    std::fs::write(
+        directory.join("lib").join("helper.js"),
+        "export const helperUrl = import.meta.url;\n",
+    )
+    .expect("helper module");
+    std::fs::write(
+        directory.join("main.js"),
+        r#"
+import { View } from "gpui-kit";
+import { v_flex } from "gpui-base";
+import os from "os";
+import process from "process";
+import { helperUrl } from "./lib/helper.js";
+
+export default class Probe extends View {
+  render(cx) {
+    return v_flex().child([
+      import.meta.url,
+      helperUrl,
+      process.dataDir,
+      Object.keys(process.env).join(","),
+      os.homedir(),
+    ].join("|"));
+  }
+}
+"#,
+    )
+    .expect("entry module");
+
+    cx.update(crate::init);
+    // `HOME` is a default, `CARGO_PKG_NAME` is granted, and `CARGO_MANIFEST_DIR`
+    // is set by cargo and neither, so it stays out.
+    crate::set_capabilities(Capabilities::new().env_variables(["CARGO_PKG_NAME".to_owned()]));
+    let data = directory.join("data");
+    crate::policy::update_default(|policy| policy.with_data_dir(data.clone()));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    runtime.set_editor_files(false);
+    let view_type = runtime.load_app(&directory, "main.js").expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate script view");
+    draw(&mut context, &view);
+    let rendered = snapshot_text(&mut context, &view);
+
+    let home = crate::runtime::home_dir().expect("a test machine has a home directory");
+    let fields: Vec<&str> = rendered
+        .lines()
+        .find(|line| line.contains("file://"))
+        .and_then(|line| line.split_once("file://").map(|(_, rest)| rest))
+        .map(|line| line.split('|').collect())
+        .unwrap_or_default();
+    assert_eq!(fields.len(), 5, "{rendered}");
+    assert!(fields[0].ends_with("/main.js"), "{rendered}");
+    assert!(
+        fields[1].starts_with("file://") && fields[1].ends_with("/lib/helper.js"),
+        "{rendered}"
+    );
+    assert_eq!(fields[2], data.to_string_lossy(), "{rendered}");
+    let names: Vec<&str> = fields[3].split(',').collect();
+    assert!(names.contains(&"HOME"), "{rendered}");
+    assert!(names.contains(&"CARGO_PKG_NAME"), "{rendered}");
+    assert!(!names.contains(&"CARGO_MANIFEST_DIR"), "{rendered}");
+    assert!(
+        fields[4].starts_with(&*home.to_string_lossy()),
+        "{rendered}"
+    );
+
+    crate::policy::update_default(|policy| policy.with_capabilities(Capabilities::new()));
+    let _ = std::fs::remove_dir_all(&directory);
 }
 
 #[cfg(unix)]
