@@ -276,6 +276,12 @@ struct RetainedLayout {
     text_style: TextStyle,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// `(reused, shaped)` layouts at `Inline` layout time (tests).
+    pub(crate) static LAYOUT_REUSE: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 thread_local! {
     static RETAINED_LAYOUTS: RefCell<HashMap<usize, RetainedLayout>> = RefCell::new(HashMap::new());
 }
@@ -942,6 +948,15 @@ impl Element for Inline {
         // layout, so they are handed over again either way.
         let retained = take_retained_layout(&self.state).filter(|retained| {
             retained.text == self.text && retained.runs == runs && retained.text_style == text_style
+        });
+        #[cfg(test)]
+        LAYOUT_REUSE.with(|c| {
+            let (hit, miss) = c.get();
+            c.set(if retained.is_some() {
+                (hit + 1, miss)
+            } else {
+                (hit, miss + 1)
+            });
         });
         self.styled_text = match retained {
             Some(retained) => retained.styled_text.with_runs(runs.clone()),

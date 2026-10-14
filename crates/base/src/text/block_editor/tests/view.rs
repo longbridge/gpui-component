@@ -823,6 +823,52 @@ fn caret_is_scrolled_into_view(cx: &mut TestAppContext) {
     assert!(handle.offset().y < px(0.));
 }
 
+/// Phase 5 element-state reuse: a block culled while scrolled away keeps
+/// its projected node and its shaped text, so scrolling back reshapes
+/// nothing and rebuilds no node.
+#[gpui::test]
+fn scrolled_back_blocks_reuse_nodes_and_layouts(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let doc: String = (0..400).map(|i| format!("paragraph {i}\n\n")).collect();
+    let handle = gpui::ScrollHandle::new();
+    let scroll = handle.clone();
+    let (root, cx) = cx.add_window_view(move |window, cx| {
+        let editor = cx.new(|cx| {
+            let mut state = BlockEditorState::new(window, cx).with_source(&doc);
+            state.set_scroll_handle(scroll.clone());
+            state
+        });
+        Scrolled(editor, scroll)
+    });
+    let editor = root.read_with(cx, |root, _| root.0.clone());
+    for _ in 0..3 {
+        draw(cx);
+    }
+    let built = editor.read_with(cx, |e, _| e.projection.built());
+    // Scroll far down (the top blocks get culled), then back to the top.
+    handle.set_offset(gpui::point(px(0.), px(-6000.)));
+    for _ in 0..3 {
+        draw(cx);
+    }
+    let culled_top = editor.read_with(cx, |e, _| {
+        // Block 1 (block 0 holds the caret and stays pinned).
+        let second = e.model().document().leaves().nth(1).unwrap().id();
+        e.frame.borrow().leaf(second).is_none()
+    });
+    assert!(culled_top, "the top blocks are culled while scrolled away");
+    handle.set_offset(gpui::point(px(0.), px(0.)));
+    crate::text::inline::LAYOUT_REUSE.with(|c| c.set((0, 0)));
+    draw(cx);
+    let (reused, shaped) = crate::text::inline::LAYOUT_REUSE.with(|c| c.get());
+    assert!(reused > 0, "scrolled-back blocks were laid out");
+    assert_eq!(shaped, 0, "no block was shaped again ({reused} reused)");
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.projection.built()),
+        built,
+        "no node rebuilt"
+    );
+}
+
 #[gpui::test]
 fn copied_table_pastes_back_as_a_table(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, TABLE_DOC);
