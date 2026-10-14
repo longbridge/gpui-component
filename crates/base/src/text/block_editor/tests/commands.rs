@@ -208,6 +208,40 @@ fn backspace_in_empty_code_block_makes_a_paragraph() {
 }
 
 #[test]
+fn backspace_at_start_of_code_block_moves_to_previous_block() {
+    let source = "x\n\n```\ncode\n```";
+    let mut m = model(source);
+    let x = m.document().leaves().next().unwrap().id();
+    caret_in(&mut m, 1, 0);
+    m.delete(false).unwrap();
+    assert_eq!(m.source(), source, "no merge");
+    assert_eq!(m.caret(), Some(BlockPosition::new(x, 1)));
+    // Delete at the end of the code block steps into the next block.
+    let source = "```\ncode\n```\n\ny";
+    let mut m = model(source);
+    let y = m.document().leaves().nth(1).unwrap().id();
+    caret_in(&mut m, 0, 4);
+    m.delete(true).unwrap();
+    assert_eq!(m.source(), source);
+    assert_eq!(m.caret(), Some(BlockPosition::new(y, 0)));
+}
+
+#[test]
+fn exiting_code_block_then_typing_is_two_undo_steps() {
+    let mut m = model("```\ncode\n```");
+    caret_in(&mut m, 0, 4);
+    m.split_block().unwrap(); // newline
+    m.split_block().unwrap(); // exit on the trailing empty line
+    m.insert_text("p", EditOrigin::Typing).unwrap();
+    assert_eq!(m.source(), "```\ncode\n```\n\np");
+    assert!(m.undo());
+    assert_eq!(m.document().leaves().count(), 2, "typing undone alone");
+    assert_eq!(m.source(), "```\ncode\n```");
+    assert!(m.undo());
+    assert_eq!(m.source(), "```\ncode\n\n```", "then the exit");
+}
+
+#[test]
 fn set_code_block_converts_paragraph() {
     let mut m = model("let x = 1;");
     caret_in(&mut m, 0, 3);
@@ -336,7 +370,7 @@ fn table_alignment_round_trips() {
     for source in [
         GRID,
         "| l | c | r |\n| :-- | :-: | --: |\n| 1 | **2** | `3` |",
-        "x\n\n| a |\n| :-- |\n|  |\n\ny",
+        "x\n\n| a |\n| --- |\n|  |\n\ny",
     ] {
         assert_eq!(model(source).source(), source);
     }
@@ -410,10 +444,10 @@ fn cell_selection_marks_clears_and_rejects_other_tables() {
     m.run(EditorCommand::ToggleMark(MarkKind::Bold)).unwrap();
     assert_eq!(
         m.source(),
-        "| a | **b** | **c** |\n| :-- | :-- | :-- |\n| 1 | **2** | **3** |"
+        "| a | **b** | **c** |\n| --- | --- | --- |\n| 1 | **2** | **3** |"
     );
     m.delete(false).unwrap();
-    assert_eq!(m.source(), "| a |  |  |\n| :-- | :-- | :-- |\n| 1 |  |  |");
+    assert_eq!(m.source(), "| a |  |  |\n| --- | --- | --- |\n| 1 |  |  |");
     assert_eq!(m.caret(), Some(BlockPosition::new(ids[1], 0)));
     // Typing over a cell selection clears it, then types into the first cell.
     m.set_selection(BlockSelection::Cells {
@@ -422,7 +456,7 @@ fn cell_selection_marks_clears_and_rejects_other_tables() {
     })
     .unwrap();
     m.insert_text("q", EditOrigin::Typing).unwrap();
-    assert_eq!(m.source(), "| q |  |  |\n| :-- | :-- | :-- |\n|  |  |  |");
+    assert_eq!(m.source(), "| q |  |  |\n| --- | --- | --- |\n|  |  |  |");
     // A cell selection cannot leave its table.
     let mut two = model("| a |\n| --- |\n| 1 |\n\n| b |\n| --- |\n| 2 |");
     let ids = table_ids(&two);
@@ -440,9 +474,9 @@ fn insert_table_and_row_column_commands() {
     let mut m = model("");
     m.run(EditorCommand::InsertTable { rows: 2, cols: 2 })
         .unwrap();
-    assert_eq!(m.source(), "|  |  |\n| :-- | :-- |\n|  |  |");
+    assert_eq!(m.source(), "|  |  |\n| --- | --- |\n|  |  |");
     m.insert_text("h", EditOrigin::Typing).unwrap();
-    assert_eq!(m.source(), "| h |  |\n| :-- | :-- |\n|  |  |");
+    assert_eq!(m.source(), "| h |  |\n| --- | --- |\n|  |  |");
 
     let mut m = model(GRID);
     caret_in(&mut m, 1, 0); // "b", right-aligned column
@@ -450,12 +484,12 @@ fn insert_table_and_row_column_commands() {
         .unwrap();
     assert_eq!(
         m.source(),
-        "| a |  | b |\n| :-: | :-- | --: |\n| 1 |  | 2 |"
+        "| a |  | b |\n| :-: | --- | --: |\n| 1 |  | 2 |"
     );
     m.insert_text("n", EditOrigin::Typing).unwrap();
     assert_eq!(
         m.source(),
-        "| a | n | b |\n| :-: | :-- | --: |\n| 1 |  | 2 |"
+        "| a | n | b |\n| :-: | --- | --: |\n| 1 |  | 2 |"
     );
     m.run(EditorCommand::EditTable(TableEdit::RemoveColumn))
         .unwrap();
@@ -464,7 +498,7 @@ fn insert_table_and_row_column_commands() {
         .unwrap();
     assert_eq!(
         m.source(),
-        "| a | b |  |\n| :-: | --: | :-- |\n| 1 | 2 |  |"
+        "| a | b |  |\n| :-: | --: | --- |\n| 1 | 2 |  |"
     );
     assert!(m.undo());
     assert_eq!(m.source(), GRID);

@@ -122,6 +122,7 @@ fn block(doc: &EditorDocument, id: BlockId) -> String {
                 if row_ix == 0 {
                     let delimiters: Vec<&str> = (0..width)
                         .map(|ix| match aligns.get(ix).copied().unwrap_or_default() {
+                            ColumnumnAlign::None => "---",
                             ColumnumnAlign::Left => ":--",
                             ColumnumnAlign::Center => ":-:",
                             ColumnumnAlign::Right => "--:",

@@ -1311,6 +1311,7 @@ fn table_selected_source(table: &Table) -> String {
             let aligns: Vec<String> = (0..row.children.len())
                 .map(|ix| {
                     match table.column_align(ix) {
+                        ColumnumnAlign::None => "---",
                         ColumnumnAlign::Left => ":--",
                         ColumnumnAlign::Center => ":-:",
                         ColumnumnAlign::Right => "--:",
@@ -2045,6 +2046,7 @@ impl Table {
                 let aligns: Vec<String> = (0..row.children.len())
                     .map(|ix| {
                         match self.column_align(ix) {
+                            ColumnumnAlign::None => "---",
                             ColumnumnAlign::Left => ":--",
                             ColumnumnAlign::Center => ":-:",
                             ColumnumnAlign::Right => "--:",
@@ -2098,7 +2100,9 @@ impl Table {
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub(crate) enum ColumnumnAlign {
+    /// No alignment in the delimiter row (`---`); renders like `Left`.
     #[default]
+    None,
     Left,
     Center,
     Right,
@@ -2107,7 +2111,7 @@ pub(crate) enum ColumnumnAlign {
 impl From<mdast::AlignKind> for ColumnumnAlign {
     fn from(value: mdast::AlignKind) -> Self {
         match value {
-            mdast::AlignKind::None => ColumnumnAlign::Left,
+            mdast::AlignKind::None => ColumnumnAlign::None,
             mdast::AlignKind::Left => ColumnumnAlign::Left,
             mdast::AlignKind::Center => ColumnumnAlign::Center,
             mdast::AlignKind::Right => ColumnumnAlign::Right,
@@ -3960,7 +3964,7 @@ impl BlockNode {
 
                 let grow = SLACK_GROW * column.max / total_w;
                 let (lead, trail) = match align {
-                    ColumnumnAlign::Left => (0., grow),
+                    ColumnumnAlign::None | ColumnumnAlign::Left => (0., grow),
                     ColumnumnAlign::Center => (grow / 2., grow / 2.),
                     ColumnumnAlign::Right => (grow, 0.),
                 };

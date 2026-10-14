@@ -601,21 +601,6 @@ fn table_cells_click_type_tab_and_cell_selection(cx: &mut TestAppContext) {
         e.model().selection(),
         BlockSelection::Cells { .. }
     )));
-    eprintln!(
-        "LEAVES {:?} CELLS {:?}",
-        editor.read_with(cx, |e, _| e
-            .model()
-            .document()
-            .leaves()
-            .map(|b| b.id())
-            .collect::<Vec<_>>()),
-        editor.read_with(cx, |e, _| e.model().selected_cells())
-    );
-    eprintln!(
-        "SEL {:?} from {from:?} to {to:?} src {:?}",
-        editor.read_with(cx, |e, _| e.model().selection().clone()),
-        source(&editor, cx)
-    );
     assert_eq!(editor.update(cx, |e, _| e.selection_ranges().len()), 4);
     keys(cx, "M-c");
     let copied = cx.read_from_clipboard().and_then(|c| c.text()).unwrap();
@@ -624,7 +609,7 @@ fn table_cells_click_type_tab_and_cell_selection(cx: &mut TestAppContext) {
     keys(cx, "backspace");
     assert_eq!(
         source(&editor, cx),
-        "a\n\n|  |  |\n| :-- | :-- |\n|  |  |\n\nb"
+        "a\n\n|  |  |\n| --- | --- |\n|  |  |\n\nb"
     );
     keys(cx, "M-z");
     assert_eq!(source(&editor, cx), original);
@@ -885,7 +870,7 @@ fn copied_table_pastes_back_as_a_table(cx: &mut TestAppContext) {
     caret_at(&editor, cx, last, 1);
     keys(cx, "M-v");
     assert!(
-        source(&editor, cx).ends_with("\n\nb\n\n| x | y |\n| :-- | :-- |\n| 1 | 2 |"),
+        source(&editor, cx).ends_with("\n\nb\n\n| x | y |\n| --- | --- |\n| 1 | 2 |"),
         "{}",
         source(&editor, cx)
     );
@@ -1055,6 +1040,81 @@ fn code_fence_input_rule_and_code_editing(cx: &mut TestAppContext) {
         source(&editor, cx),
         "```rust\nfn a() {\n    x\n}\n```\n\nafter"
     );
+}
+
+#[gpui::test]
+fn exiting_code_block_then_typing_is_two_undo_steps(cx: &mut TestAppContext) {
+    for exit in ["enter enter", "down"] {
+        let (editor, cx) = open(cx, "```\ncode\n```");
+        let id = editor.read_with(cx, |e, _| {
+            e.model().document().leaves().next().unwrap().id()
+        });
+        editor.update(cx, |e, _| {
+            e.model
+                .set_selection(BlockSelection::caret(BlockPosition::new(id, 4)))
+                .unwrap()
+        });
+        keys(cx, exit);
+        type_text(cx, "after");
+        assert_eq!(source(&editor, cx), "```\ncode\n```\n\nafter", "{exit}");
+        keys(cx, "M-z");
+        assert!(
+            !source(&editor, cx).contains("after"),
+            "{exit}: typing undone first"
+        );
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.model().document().leaves().count()),
+            2,
+            "{exit}"
+        );
+        keys(cx, "M-z");
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.model().document().leaves().count()),
+            1,
+            "{exit}"
+        );
+    }
+}
+
+#[gpui::test]
+fn code_block_highlighter_is_applied(cx: &mut TestAppContext) {
+    use std::sync::{Arc, Mutex};
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let (editor, cx) = open(cx, "```rust\nfn a\n```");
+    let log = seen.clone();
+    cx.update(|_, cx| {
+        crate::TextViewDefaults::new()
+            .with_code_block_highlighter(move |block| {
+                log.lock().unwrap().push(block.code().to_string());
+                vec![(
+                    0..2,
+                    gpui::HighlightStyle {
+                        color: Some(gpui::red()),
+                        ..Default::default()
+                    },
+                )]
+            })
+            .install(cx)
+    });
+    editor.update(cx, |_, cx| cx.notify());
+    draw(cx);
+    assert!(
+        seen.lock().unwrap().iter().any(|c| c == "fn a"),
+        "the editor's code block is highlighted: {:?}",
+        seen.lock().unwrap()
+    );
+    // Editing re-highlights the new code.
+    let id = editor.read_with(cx, |e, _| {
+        e.model().document().leaves().next().unwrap().id()
+    });
+    editor.update(cx, |e, _| {
+        e.model
+            .set_selection(BlockSelection::caret(BlockPosition::new(id, 4)))
+            .unwrap()
+    });
+    type_text(cx, "()");
+    draw(cx);
+    assert!(seen.lock().unwrap().iter().any(|c| c == "fn a()"));
 }
 
 #[gpui::test]

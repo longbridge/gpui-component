@@ -362,6 +362,31 @@ impl BlockEditorModel {
         if range.is_collapsed() && self.select_adjacent_table(range.start, forward)? {
             return Ok(());
         }
+        // Backspace at the start (Delete at the end) of a non-empty code
+        // block: never merge text into or out of code; step the caret to the
+        // neighbouring leaf instead.
+        if range.is_collapsed()
+            && let Some(code) = self.doc.plain(range.start.block)
+            && !code.is_empty()
+            && ((!forward && range.start.offset == 0)
+                || (forward && range.start.offset == code.len()))
+        {
+            let leaves = self.doc.walk_leaves();
+            let ix = leaves.iter().position(|id| *id == range.start.block);
+            let target = ix.and_then(|ix| {
+                if forward {
+                    leaves.get(ix + 1).map(|id| (*id, 0))
+                } else {
+                    ix.checked_sub(1)
+                        .and_then(|i| leaves.get(i))
+                        .map(|id| (*id, self.doc.leaf_len(*id).unwrap_or(0)))
+                }
+            });
+            if let Some((block, offset)) = target {
+                self.set_selection(BlockSelection::caret(BlockPosition::new(block, offset)))?;
+            }
+            return Ok(());
+        }
         let origin = if forward {
             EditOrigin::DeleteForward
         } else {

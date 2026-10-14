@@ -38,12 +38,47 @@ thread_local! {
 
 /// Run `f` with `sink` installed; restores the previous sink afterwards.
 pub(crate) fn with_sink<R>(sink: Rc<dyn EditorSink>, f: impl FnOnce() -> R) -> R {
-    let previous = SINK.with(|s| s.replace(Some(sink)));
-    let result = f();
-    SINK.with(|s| *s.borrow_mut() = previous);
-    result
+    /// Restores the previous sink on drop, so a panic inside `f` cannot leave
+    /// a stale sink installed for later frames.
+    struct Restore(Option<Rc<dyn EditorSink>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            SINK.with(|s| *s.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(SINK.with(|s| s.replace(Some(sink))));
+    f()
 }
 
 pub(crate) fn current() -> Option<Rc<dyn EditorSink>> {
     SINK.with(|s| s.borrow().clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Nop;
+    impl EditorSink for Nop {
+        fn report(&self, _: u64, _: &TextLayout) {}
+        fn begin_pieces(&self, _: u64) {}
+        fn report_text_piece(&self, _: u64, _: usize, _: &TextLayout) {}
+        fn report_box_piece(&self, _: u64, _: Range<usize>, _: Bounds<Pixels>) {}
+        fn backgrounds(&self, _: u64) -> Vec<(Range<usize>, Hsla)> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn with_sink_restores_on_panic() {
+        let result = std::panic::catch_unwind(|| {
+            with_sink(Rc::new(Nop), || {
+                assert!(current().is_some());
+                panic!("boom");
+            })
+        });
+        assert!(result.is_err());
+        assert!(current().is_none(), "sink is cleared after a panic");
+    }
 }
