@@ -266,7 +266,7 @@ let item = CompletionItem {
     label: "host".into(),
     text_edit: Some(CompletionTextEdit::Edit(TextEdit {
         range: Range::new(Position::new(0, 0), Position::new(0, 4)),
-        new_text: "{{host}}".into(),
+        new_text: format!("{{{{{}}}}}", "host"),
     })),
     ..Default::default()
 };
@@ -276,7 +276,7 @@ input.update(cx, |state, cx| {
 });
 ```
 
-在 `InputEvent::Change` 的订阅中调用 `present_completion_items`，用 `dismiss_completion_overlay` 关闭菜单；传入空列表同样会关闭。没有 `text_edit` 的候选项会在光标处插入其 `insert_text`（或 label）。
+在 `InputEvent::Change` 的订阅中调用 `present_completion_items`，用 `dismiss_completion_overlay` 关闭菜单；传入空列表同样会关闭。候选项有 `insert_text` 但没有 `text_edit` 时，会在光标处插入该文本；两者都没有时，则用 label 替换从 `trigger_start_offset` 到光标的文本。
 
 ## 示例
 

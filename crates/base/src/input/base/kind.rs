@@ -337,9 +337,9 @@ impl InputModeKind for InputMode {
     /// A single-line field needs almost nothing beyond the shared engine.
     /// Masking, validation and number stepping live there: together they are
     /// ~120 bytes and their access sites sit inside the shared edit path, so
-    /// separating them would cost more in dispatch than it saves. The one
-    /// addition is the host-driven completion menu.
-    type Extras = FieldExtras;
+    /// separating them would cost more in dispatch than it saves. The
+    /// completion menu is stored separately and allocated only when requested.
+    type Extras = ();
 
     fn hide_context_menu(
         state: &mut InputBaseState<Self>,

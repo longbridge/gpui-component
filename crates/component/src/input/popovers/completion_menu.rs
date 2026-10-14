@@ -107,7 +107,7 @@ impl CompletionHost for InputMode {
 
 struct ContextMenuDelegate<M: CompletionHost> {
     query: SharedString,
-    menu: Entity<CompletionMenu<M>>,
+    menu: WeakEntity<CompletionMenu<M>>,
     items: Vec<Rc<CompletionItem>>,
     selected_ix: usize,
 }
@@ -244,7 +244,7 @@ impl<M: CompletionHost> ListDelegate for ContextMenuDelegate<M> {
             return;
         };
 
-        self.menu.update(cx, |this, cx| {
+        let _ = self.menu.update(cx, |this, cx| {
             this.select_item(&item, window, cx);
         });
     }
@@ -276,7 +276,7 @@ impl<M: CompletionHost> CompletionMenu<M> {
             let view = cx.entity();
             let menu = ContextMenuDelegate {
                 query: SharedString::default(),
-                menu: view,
+                menu: view.downgrade(),
                 items: vec![],
                 selected_ix: 0,
             };
@@ -334,7 +334,6 @@ impl<M: CompletionHost> CompletionMenu<M> {
             return false;
         }
 
-        cx.propagate();
         if input::Enter::is_primary(&*action) {
             self.on_action_enter(window, cx);
         } else if action.partial_eq(&input::Escape) {
@@ -347,6 +346,7 @@ impl<M: CompletionHost> CompletionMenu<M> {
             return false;
         }
 
+        cx.stop_propagation();
         true
     }
 
@@ -512,6 +512,21 @@ impl<M: CompletionHost> Render for CompletionMenu<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn dropping_a_completion_menu_releases_its_list(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let window = cx.add_empty_window();
+        let (menu, list) = window.update(|window, cx| {
+            let input = cx.new(|cx| crate::input::InputState::new(window, cx));
+            let menu = CompletionMenu::new(input, window, cx);
+            let list = menu.read(cx).list.downgrade();
+            (menu.downgrade(), list)
+        });
+        cx.run_until_parked();
+        assert!(menu.upgrade().is_none());
+        assert!(list.upgrade().is_none());
+    }
 
     #[gpui::test]
     fn hiding_an_old_menu_does_not_dismiss_a_new_completion_response(

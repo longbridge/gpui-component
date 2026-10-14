@@ -42,7 +42,7 @@ impl InputState {
     pub fn set_overlay_action_handler(&mut self, handler: impl Fn(InputOverlayKind, Box<dyn Action>, &mut Window, &mut Context<InputState>) -> bool + 'static)
     pub fn has_overlay_action_handler(&self) -> bool
 }
-pub struct FieldExtras // gpui_base::input: the single-line field's extra state
+pub struct FieldExtras // gpui_base::input: lazily allocated internal completion state
 ```
 
 A single-line input can now show the caret-anchored completion menu that only

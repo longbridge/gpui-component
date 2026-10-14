@@ -403,6 +403,8 @@ impl PrepaintCaretGeometry {
 pub struct InputBaseState<M: InputModeKind> {
     /// State only this mode needs. See [`InputModeKind::Extras`].
     pub(crate) extras: M::Extras,
+    /// Optional field completion state; keeps `InputMode::Extras` compatible.
+    pub(crate) field_extras: Option<Box<crate::input::FieldExtras>>,
     pub(super) focus_handle: FocusHandle,
     selection_focus: Option<WeakFocusHandle>,
     pub(super) mode: LayoutMode,
@@ -801,6 +803,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         Self {
             extras: M::Extras::default(),
+            field_extras: None,
             focus_handle: focus_handle.clone(),
             selection_focus: None,
             text: "".into(),

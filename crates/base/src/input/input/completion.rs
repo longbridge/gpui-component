@@ -19,7 +19,13 @@ impl InputBaseState<InputMode> {
         items: Vec<CompletionItem>,
         cx: &mut Context<Self>,
     ) {
-        let completion = &mut self.extras.completion;
+        if items.is_empty() && self.field_extras.is_none() {
+            return;
+        }
+        let completion = &mut self
+            .field_extras
+            .get_or_insert_with(Default::default)
+            .completion;
         completion.trigger_start_offset = Some(trigger_start_offset);
         completion.query = query.into();
         completion.items = items;
@@ -29,10 +35,7 @@ impl InputBaseState<InputMode> {
     }
 
     pub fn dismiss_completion_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.extras.completion.open {
-            self.extras.completion.open = false;
-            cx.notify();
-        }
+        self.hide_context_menu(cx);
     }
 
     pub fn insert_completion(
@@ -47,7 +50,12 @@ impl InputBaseState<InputMode> {
 
     #[doc(hidden)]
     pub fn completion_menu_state(&self) -> &CompletionMenuState {
-        &self.extras.completion
+        static EMPTY: std::sync::LazyLock<CompletionMenuState> =
+            std::sync::LazyLock::new(CompletionMenuState::default);
+        self.field_extras
+            .as_deref()
+            .map(|extras| &extras.completion)
+            .unwrap_or(&EMPTY)
     }
 
     #[doc(hidden)]
@@ -80,14 +88,18 @@ impl InputBaseState<InputMode> {
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
         // Runs on every edit and caret move of every plain input; stay quiet
         // unless there is a menu to close.
-        if self.extras.completion.open {
-            self.extras.completion.open = false;
-            cx.notify();
+        if let Some(extras) = self.field_extras.as_mut() {
+            if extras.completion.open {
+                extras.completion.open = false;
+                cx.notify();
+            }
         }
     }
 
     pub(crate) fn is_context_menu_open(&self) -> bool {
-        self.extras.completion.open
+        self.field_extras
+            .as_ref()
+            .is_some_and(|extras| extras.completion.open)
     }
 
     pub(crate) fn handle_action_for_context_menu(
@@ -96,7 +108,7 @@ impl InputBaseState<InputMode> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if !self.extras.completion.open {
+        if !self.is_context_menu_open() {
             return false;
         }
         let Some(handler) = self.overlay_action_handler.clone() else {
@@ -109,5 +121,17 @@ impl InputBaseState<InputMode> {
             self.hide_context_menu(cx);
         }
         handled
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::input::InputModeKind;
+
+    #[test]
+    fn single_line_mode_keeps_its_unit_extras_contract() {
+        fn accepts_unit_extras<M: InputModeKind<Extras = ()>>() {}
+        accepts_unit_extras::<InputMode>();
     }
 }

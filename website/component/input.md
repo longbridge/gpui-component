@@ -304,7 +304,7 @@ let item = CompletionItem {
     label: "host".into(),
     text_edit: Some(CompletionTextEdit::Edit(TextEdit {
         range: Range::new(Position::new(0, 0), Position::new(0, 4)),
-        new_text: "{{host}}".into(),
+        new_text: format!("{{{{{}}}}}", "host"),
     })),
     ..Default::default()
 };
@@ -316,7 +316,9 @@ input.update(cx, |state, cx| {
 
 Call `present_completion_items` from an `InputEvent::Change` subscription, and
 `dismiss_completion_overlay` to close the menu. An empty list closes it. An
-item without a `text_edit` inserts its `insert_text` (or label) at the caret.
+item with `insert_text` but no `text_edit` inserts that text at the caret.
+If neither is provided, its label replaces the span from `trigger_start_offset`
+to the caret.
 
 ## Examples
 

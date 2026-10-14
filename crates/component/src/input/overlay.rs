@@ -554,7 +554,9 @@ pub(super) fn render_overlays<M: OverlayMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{AppContext as _, Render, SharedString, div};
+    use gpui::{
+        AppContext as _, InteractiveElement as _, ParentElement as _, Render, SharedString, div,
+    };
     use gpui_base::input::CodeActionItem;
     use gpui_base::input::DiagnosticEntry;
     use lsp_types::{CodeAction, CompletionItem, Hover, HoverContents, MarkedString};
@@ -828,6 +830,69 @@ mod tests {
         });
         cx.run_until_parked();
         assert!(dropped_owner.upgrade().is_none());
+    }
+
+    #[gpui::test]
+    fn single_line_completion_consumes_enter_before_the_host(cx: &mut gpui::TestAppContext) {
+        struct Probe {
+            state: Entity<crate::input::InputState>,
+            submissions: usize,
+        }
+        impl Render for Probe {
+            fn render(&mut self, _: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+                div()
+                    .on_action(cx.listener(|this, _: &super::super::Enter, _, _| {
+                        this.submissions += 1;
+                    }))
+                    .child(crate::input::Input::new(&self.state))
+            }
+        }
+
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|window, cx| Probe {
+            state: cx.new(|cx| crate::input::InputState::new(window, cx)),
+            submissions: 0,
+        });
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_value("ho", window, cx);
+                state.focus(window, cx);
+                state.present_completion_items(
+                    0,
+                    "ho",
+                    vec![CompletionItem {
+                        label: "host".into(),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+            window.dispatch_action(
+                Box::new(super::super::Enter {
+                    secondary: false,
+                    shift: false,
+                }),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "host");
+        assert_eq!(probe.read_with(cx, |probe, _| probe.submissions), 0);
+
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.dispatch_action(
+                Box::new(super::super::Enter {
+                    secondary: false,
+                    shift: false,
+                }),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(probe.read_with(cx, |probe, _| probe.submissions), 1);
     }
 
     #[gpui::test]
