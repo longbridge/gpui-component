@@ -1269,6 +1269,12 @@
     },
     {
       "source": "story",
+      "name": "block_editor",
+      "classification": "infrastructure",
+      "explanation": "Experimental block editor story for the in-progress block editing model; it is not exposed to gpui-shell until the model and UI settle."
+    },
+    {
+      "source": "story",
       "name": "breadcrumb",
       "classification": "component",
       "registration": {
