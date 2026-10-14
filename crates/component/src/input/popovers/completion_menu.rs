@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
-    Half as _, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render,
+    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render,
     RenderOnce, SharedString, Styled, StyledText, Subscription, WeakEntity, Window, deferred, div,
-    prelude::FluentBuilder, px, relative,
+    prelude::FluentBuilder, px,
 };
 use gpui_base::TestSupportExt as _;
 use gpui_base::input::CompletionHighlighter;
@@ -33,13 +33,14 @@ fn retained_highlight_ranges(
 }
 
 use crate::{
-    ActiveTheme, IndexPath, Selectable, actions, h_flex,
+    ActiveTheme, IndexPath, Selectable, ThemeStyled as _, actions, h_flex,
     input::{
         self, EditorState,
         popovers::{CaretAnchoredPopup, editor_popover, render_markdown},
     },
     label::Label,
     list::{List, ListDelegate, ListEvent, ListState},
+    menu::MenuItemElement,
 };
 
 struct ContextMenuDelegate {
@@ -125,28 +126,31 @@ impl RenderOnce for CompletionMenuItem {
         })
         .collect::<Vec<_>>();
 
-        h_flex()
-            .id(self.ix)
-            .gap_2()
-            .p_1()
-            .text_xs()
-            .line_height(relative(1.))
-            .rounded(cx.theme().radius.half())
+        MenuItemElement::new(self.ix)
+            .aria_label(item.label.clone())
+            .selected(self.selected)
+            .text_sm()
+            .py_0()
+            .px_2()
+            .h(px(26.))
+            .mb_0p5()
+            .rounded(cx.theme().radius.min(px(8.)))
             .when(item.deprecated.unwrap_or(false), |this| this.line_through())
-            .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
-            .when(self.selected, |this| {
-                this.bg(cx.theme().tokens.accent)
-                    .text_color(cx.theme().accent_foreground)
-            })
-            .child(div().child(StyledText::new(item.label.clone()).with_highlights(highlights)))
-            .when(item.detail.is_some(), |this| {
-                this.child(
-                    Label::new(item.detail.as_deref().unwrap_or("").to_string())
-                        .text_color(cx.theme().muted_foreground)
-                        .when(deprecated, |this| this.line_through())
-                        .italic(),
-                )
-            })
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap_3()
+                    .justify_between()
+                    .child(StyledText::new(item.label.clone()).with_highlights(highlights))
+                    .when_some(item.detail.as_ref(), |this, detail| {
+                        this.child(
+                            Label::new(detail.clone())
+                                .text_color(cx.theme().muted_foreground)
+                                .when(deprecated, |this| this.line_through())
+                                .italic(),
+                        )
+                    }),
+            )
             .children(self.children)
     }
 }
@@ -433,6 +437,10 @@ impl Render for CompletionMenu {
                     .when(vertical_layout, |this| this.flex_col())
                     .child(
                         editor_popover("completion-menu", cx)
+                            .popover_style(cx)
+                            .text_sm()
+                            // Each virtual row includes the menu's inter-item gap.
+                            .pb_0p5()
                             .test_support()
                             .max_w(max_width)
                             .min_w(px(120.))
@@ -450,6 +458,8 @@ impl Render for CompletionMenu {
                         this.child(
                             div().child(
                                 editor_popover("completion-menu", cx)
+                                    .popover_style(cx)
+                                    .text_sm()
                                     .w(configured_max)
                                     .px_2()
                                     .child(render_markdown("doc", doc, window, cx)),
