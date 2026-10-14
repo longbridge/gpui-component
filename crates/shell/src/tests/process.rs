@@ -480,6 +480,7 @@ fn reloading_the_application_kills_the_children_it_spawned(cx: &mut TestAppConte
     std::fs::remove_dir_all(&directory).ok();
 }
 
+#[cfg(unix)]
 fn probe(
     cx: &mut TestAppContext,
     command: &str,
