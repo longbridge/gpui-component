@@ -3294,6 +3294,33 @@ impl ShellRuntime {
         // and every helper would need a second, list-only plumbing.
         scope::adopt(entry.registered_in);
 
+        // The rows' own handlers go into a callback generation of their own.
+        // A render's generation lives as long as its snapshot, which outlasts
+        // thousands of frames of scrolling; a batch is rebuilt on every one of
+        // them, so its handlers have to be retired with the frame instead.
+        // Only one generation can be open at a time, and a list described
+        // while one already is keeps refusing row handlers.
+        let recording = !self.callbacks.borrow().is_building();
+        let callback_generation = recording.then(|| self.callbacks.borrow_mut().begin());
+        struct Recording<'a> {
+            runtime: &'a ShellRuntime,
+            previous: bool,
+            open: bool,
+        }
+        impl Drop for Recording<'_> {
+            fn drop(&mut self) {
+                self.runtime.interactive_inline_layout.set(self.previous);
+                if self.open {
+                    self.runtime.callbacks.borrow_mut().abort();
+                }
+            }
+        }
+        let mut recording = Recording {
+            runtime: self,
+            previous: self.interactive_inline_layout.replace(recording),
+            open: recording,
+        };
+
         let outer = std::mem::take(&mut *self.arena.borrow_mut());
         let described = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
@@ -3333,7 +3360,22 @@ impl ShellRuntime {
         let arena = std::mem::replace(&mut *self.arena.borrow_mut(), outer);
 
         match described {
-            Ok((roots, keys)) => Some(crate::spec::ItemSpecs::new(arena, roots, keys)),
+            Ok((roots, keys)) => match callback_generation {
+                Some(generation) if self.callbacks.borrow().has_staged() => {
+                    self.callbacks.borrow_mut().commit();
+                    recording.open = false;
+                    let snapshot = RenderSnapshot::new(
+                        self,
+                        generation,
+                        roots.first().copied().unwrap_or_default(),
+                        arena,
+                        entry.application.clone(),
+                        entry.view.clone(),
+                    );
+                    Some(crate::spec::ItemSpecs::recorded(snapshot, roots, keys))
+                }
+                _ => Some(crate::spec::ItemSpecs::new(arena, roots, keys)),
+            },
             Err(error) => {
                 tracing::error!("error in virtual list item renderer: {error}");
                 None
@@ -8150,29 +8192,27 @@ impl ShellRuntime {
             | "empty_group"
             | "drop_indicator"
             | "dock" => {
-                // A handler registered from inside a virtual list's item
-                // renderer has nowhere to live. Callbacks belong to the
-                // snapshot that registered them and are retired with it; the
-                // snapshot outlives thousands of frames, while the rows are
-                // rebuilt on every one — so twenty handlers a frame would
-                // accumulate, unreachable and unreleased, for as long as the
-                // description stood. Refused where it was written rather than
-                // leaked quietly. `on_item_click` on the list is the one
-                // handler that covers the rows, and it is registered from
-                // `render()` like every other.
+                // Layout code with no handler lifetime of its own — a dock's
+                // chrome, or a list batch reached while another generation is
+                // being recorded — has nowhere to put a handler. Callbacks
+                // belong to the snapshot that registered them; a render's
+                // snapshot outlives thousands of frames while layout code runs
+                // on every one, so they would accumulate, unreachable and
+                // unreleased. Refused where it was written rather than leaked
+                // quietly. A list's item renderer normally records into a
+                // generation of its own batch and does not reach this.
                 if scope::current_phase() == Some(ScopePhase::Layout)
                     && !self.interactive_inline_layout.get()
                 {
                     return Err(Exception::throw_type(
                         ctx,
                         &format!(
-                            "`{method}` cannot be registered from a virtual list's item \
-                             renderer: the rows are rebuilt every frame, so a handler \
-                             registered there would pile up for as long as the view stood. \
-                             Use `on_item_click((key, cx) => ...)` or \
-                             `on_item_secondary_click((key, event, cx) => ...)` on the list \
-                             itself, and read the row out of your own data with the stable key \
-                             it gives you"
+                            "`{method}` cannot be registered here: this renderer runs during \
+                             layout with no handler lifetime of its own, so a handler \
+                             registered from it would pile up for as long as the view stood. \
+                             Register it from render(), or on a virtual list use \
+                             `on_item_click((key, cx) => ...)` and read the row out of your \
+                             own data with the key it gives you"
                         ),
                     ));
                 }

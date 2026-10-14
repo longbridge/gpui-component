@@ -10227,25 +10227,39 @@ fn a_virtual_lists_handlers_do_not_accumulate_while_it_is_scrolled(cx: &mut Test
     );
 }
 
+/// `row.on_click(...)` is the way anyone writes a clickable row, so a row may
+/// register its own handler. It lives in a callback generation of the batch
+/// that described it, released when the frame that drew the row is replaced —
+/// so scrolling, which describes new rows on every frame, holds the count to
+/// one screenful rather than letting it grow with every frame drawn.
 #[gpui::test]
-fn a_row_cannot_register_a_handler_of_its_own(cx: &mut TestAppContext) {
-    let (_runtime, _window, view, mut context) = mount_virtual_list(
+fn a_row_registers_its_own_handler_without_accumulating(cx: &mut TestAppContext) {
+    let (runtime, _window, view, mut context) = mount_virtual_list(
         cx,
-        "try { row.on_click(() => {}); } catch (error) { this.refused = String(error.message); }",
+        "const at = index; row.on_click((_event, cx) => { this.refused = `row${at}`; cx.notify(); });",
     );
 
+    context.simulate_click(point(px(150.), px(50.)), Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
     let tree = redraw_and_read(&mut context, &view);
     assert!(
-        tree.contains("refused"),
-        "the view reports what the row was told: {tree}"
+        tree.contains("refused row2"),
+        "the click must reach the handler the third row registered: {tree}"
     );
-    let refused = tree
-        .split("refused ")
-        .nth(1)
-        .unwrap_or_else(|| panic!("no refusal in: {tree}"));
     assert!(
-        refused.contains("on_item_click"),
-        "the refusal must name what to use instead: {refused}"
+        tree.contains("clicked 2"),
+        "and the list's own on_item_click still fires: {tree}"
+    );
+
+    let settled = runtime.live_callbacks();
+    for step in 0..20 {
+        scroll_by(&mut context, if step % 2 == 0 { -60. } else { 40. });
+    }
+    let scrolled = runtime.live_callbacks();
+    assert!(
+        scrolled <= settled + 2,
+        "row handlers must be released with the frame that drew them: {settled} before \
+         scrolling, {scrolled} after"
     );
 }
 

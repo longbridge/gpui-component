@@ -351,6 +351,13 @@ impl<T: Clone> CallbackArena<T> {
         }
     }
 
+    /// Whether the open generation has registered any handler yet.
+    pub(crate) fn has_staged(&self) -> bool {
+        self.building
+            .as_ref()
+            .is_some_and(|(_, entries)| !entries.is_empty())
+    }
+
     /// Drops the open generation. A failed script render must not leave
     /// callable handlers behind.
     pub(crate) fn abort(&mut self) {
