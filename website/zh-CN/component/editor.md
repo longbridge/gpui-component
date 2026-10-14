@@ -100,9 +100,12 @@ let editor = cx.new(|cx| {
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
+        .scroll_bounce(true)
         .default_value(source)
 });
 ```
+
+`scroll_bounce(true)` 让超出编辑器高度的代码在触控板或 Magic Mouse 的精细像素滚动到达顶部或底部时越过边缘并弹回，与 [Textarea](./textarea.md#滚动回弹) 相同。行号栏随代码移动，外框和滚动条保持不动；普通鼠标滚轮的按行滚动不触发回弹。
 
 ## 主动补全
 

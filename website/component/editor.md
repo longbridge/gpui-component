@@ -114,9 +114,15 @@ let editor = cx.new(|cx| {
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
+        .scroll_bounce(true)
         .default_value(source)
 });
 ```
+
+`scroll_bounce(true)` lets code longer than the editor stretch past its top or
+bottom and spring back with precise trackpad or Magic Mouse scrolling, as in the
+[Textarea](./textarea.md#scroll-bounce). The gutter moves with the code; the
+frame and scrollbar stay put. Ordinary mouse-wheel line scrolling does not bounce.
 
 ## Manual completions
 

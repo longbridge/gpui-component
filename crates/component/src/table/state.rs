@@ -2691,6 +2691,16 @@ where
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
                             .track_scroll(&self.vertical_scroll_handle)
+                            .map(|rows| {
+                                gpui_base::ScrollBounce::new(
+                                    "table-scroll-bounce",
+                                    &self.vertical_scroll_handle,
+                                    rows,
+                                )
+                                .when_some(self.options.scroll_bounce, |bounce, on| {
+                                    bounce.enabled(on)
+                                })
+                            })
                             .into_any_element(),
                         ),
                     )
@@ -2747,11 +2757,104 @@ where
 
 #[cfg(test)]
 mod tests {
-    use gpui::{App, TestAppContext};
+    use gpui::{App, Entity, TestAppContext};
 
     use super::*;
 
     struct WidthsDelegate;
+
+    struct BounceDelegate;
+
+    impl TableDelegate for BounceDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            1
+        }
+        fn rows_count(&self, _: &App) -> usize {
+            40
+        }
+        fn column(&self, _: usize, _: &App) -> Column {
+            Column::new("value", "Value")
+        }
+        fn render_td(
+            &mut self,
+            row: usize,
+            _: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div().child(row.to_string())
+        }
+    }
+
+    struct BounceTable(Entity<TableState<BounceDelegate>>);
+
+    impl Render for BounceTable {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(240.))
+                .h(px(200.))
+                .child(DataTable::new(&self.0).scroll_bounce(true))
+        }
+    }
+
+    #[gpui::test]
+    fn scroll_bounce_table_keeps_headers_fixed_and_accepts_new_wheel_input(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            BounceTable(cx.new(|cx| TableState::new(BounceDelegate, window, cx)))
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let state = view.read_with(cx, |view, _| view.0.clone());
+        let header = state.read_with(cx, |state, _| state.col_groups[0].bounds);
+        let wheel = |cx: &mut gpui::VisualTestContext, dy| {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Lines(gpui::point(0., dy)),
+                ..Default::default()
+            });
+        };
+        for (dy, phase) in [
+            (-10000., gpui::TouchPhase::Started),
+            (0., gpui::TouchPhase::Ended),
+        ] {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position: gpui::point(px(100.), px(100.)),
+                delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(dy))),
+                touch_phase: phase,
+                ..Default::default()
+            });
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let end = state.read_with(cx, |state, _| {
+            state
+                .vertical_scroll_handle
+                .0
+                .borrow()
+                .base_handle
+                .offset()
+                .y
+        });
+        assert!(end < px(0.));
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            state.read_with(cx, |state, _| state.col_groups[0].bounds),
+            header
+        );
+        wheel(cx, 2.);
+        assert!(
+            state.read_with(cx, |state, _| state
+                .vertical_scroll_handle
+                .0
+                .borrow()
+                .base_handle
+                .offset()
+                .y)
+                > end
+        );
+    }
 
     impl TableDelegate for WidthsDelegate {
         fn columns_count(&self, _: &App) -> usize {
