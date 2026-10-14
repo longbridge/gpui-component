@@ -2,7 +2,7 @@
 //! bold/italic/code marks, cross-block selection, IME, undo/redo.
 
 use gpui_kit::base::text::block_editor::{
-    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, EditorCommand, TableEdit,
+    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, EditorCommand, MarkKind, TableEdit,
 };
 use gpui_kit::component::{button::Button, h_flex, v_flex};
 use gpui_kit::{
@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::section;
 
-const SAMPLE: &str = "# Block editor\n\nType here. **Bold** with Ctrl/Cmd-B, *italic* with Ctrl/Cmd-I, `code` with Ctrl/Cmd-E.\n\n## Lists\n\n- Bullet one\n- Bullet two\n  - Nested (Tab / Shift-Tab)\n\n1. First\n2. Second\n\nUndo with Ctrl/Cmd-Z, redo with Ctrl/Cmd-Shift-Z. Drag or Shift-arrows to select across blocks.\n\n```rust\nfn main() {\n    println!(\"code blocks: type ``` then Enter\");\n}\n```\n\n| Feature | Status |\n| --- | --- |\n| Tables | click a cell to edit, Tab to move |\n| Lists | Enter on an empty item exits |";
+const SAMPLE: &str = "# Block editor\n\nType here. **Bold** with Ctrl/Cmd-B, *italic* with Ctrl/Cmd-I, `code` with Ctrl/Cmd-E (or type `code`, **bold**, *italic*, ~~strike~~).\n\n## Lists\n\n- Bullet one\n- Bullet two\n  - Nested (Tab / Shift-Tab)\n\n1. First\n2. Second\n\nUndo with Ctrl/Cmd-Z, redo with Ctrl/Cmd-Shift-Z. Drag or Shift-arrows to select across blocks.\n\n```rust\nfn main() {\n    println!(\"code blocks: type ``` then Enter\");\n}\n```\n\n| Feature | Status |\n| --- | --- |\n| Tables | click a cell to edit, Tab to move |\n| Lists | Enter on an empty item exits |";
 
 /// A generated document of 1000+ blocks for the perf note.
 pub fn long_document(blocks: usize) -> String {
@@ -122,6 +122,30 @@ impl Render for BlockEditorStory {
                 h_flex()
                     .gap_2()
                     .flex_wrap()
+                    .child(Self::command_button(
+                        "bold",
+                        "B",
+                        EditorCommand::ToggleMark(MarkKind::Bold),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "italic",
+                        "I",
+                        EditorCommand::ToggleMark(MarkKind::Italic),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "strike",
+                        "S",
+                        EditorCommand::ToggleMark(MarkKind::Strikethrough),
+                        cx,
+                    ))
+                    .child(Self::command_button(
+                        "inline-code",
+                        "`code`",
+                        EditorCommand::ToggleMark(MarkKind::Code),
+                        cx,
+                    ))
                     .child(Self::command_button(
                         "p",
                         "Text",

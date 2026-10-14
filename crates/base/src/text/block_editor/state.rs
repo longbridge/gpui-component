@@ -998,6 +998,54 @@ impl BlockEditorState {
         self.after_edit(EditOrigin::InputRule(rule), cx);
     }
 
+    /// Inline-mark input rules: a closing `` ` ``, `*`, `**` or `~~` typed
+    /// after an opening one in the same leaf turns the text between into
+    /// code, italic, bold or strikethrough and drops the delimiters. One undo
+    /// group of its own: undo restores the literal delimiters.
+    fn apply_mark_rule(&mut self, cx: &mut Context<Self>) {
+        let Some(caret) = self.model.caret() else {
+            return;
+        };
+        let Some(inline) = self.model.doc.inline(caret.block) else {
+            return;
+        };
+        let Some((open, close, kind)) = mark_rule(inline, caret.offset) else {
+            return;
+        };
+        let block = caret.block;
+        let d = close.len();
+        let pos = |offset| BlockPosition::new(block, offset);
+        self.model.break_coalescing();
+        self.model.history.begin_transaction();
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(close.start),
+            head: pos(close.end),
+        });
+        let _ = self.model.delete(false);
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(open.start),
+            head: pos(open.end),
+        });
+        let _ = self.model.delete(false);
+        let end = close.start - d;
+        let _ = self.model.set_selection(BlockSelection::Text {
+            anchor: pos(open.start),
+            head: pos(end),
+        });
+        let _ = self.model.run(EditorCommand::ApplyMark(
+            super::marks::MarkChange::new().set(kind),
+        ));
+        let _ = self.model.set_selection(BlockSelection::caret(pos(end)));
+        // Text typed next is outside the new span.
+        let after = super::marks::MarkChange::new()
+            .clear(kind)
+            .apply(&self.model.active_marks().0);
+        self.model.history.commit_transaction();
+        self.model.break_coalescing();
+        self.model.stored_marks = Some(after);
+        self.after_edit(EditOrigin::InputRule("inline_mark"), cx);
+    }
+
     /// Replace a typed code fence with an empty code block, caret inside,
     /// as its own undo group (one undo restores the typed fence).
     fn fence_to_code_block(&mut self, block: BlockId, lang: String, cx: &mut Context<Self>) {
@@ -1164,6 +1212,8 @@ impl EntityInputHandler for BlockEditorState {
         self.end_composition();
         if text == " " {
             self.apply_input_rule(cx);
+        } else if text.ends_with(['`', '*', '~']) {
+            self.apply_mark_rule(cx);
         }
     }
 
@@ -1277,4 +1327,46 @@ fn code_fence(text: &str) -> Option<String> {
     lang.chars()
         .all(|c| c.is_alphanumeric() || matches!(c, '+' | '-' | '_' | '#' | '.'))
         .then(|| lang.to_string())
+}
+
+/// The `(opening delimiter, closing delimiter, mark)` of an inline-mark input
+/// rule whose closing delimiter ends at `caret`, if any. Nothing fires inside
+/// inline code, across an atom, or around empty / space-padded content.
+fn mark_rule(
+    inline: &super::inline::InlineText,
+    caret: usize,
+) -> Option<(Range<usize>, Range<usize>, MarkKind)> {
+    let text = inline.text();
+    let prefix = text.get(..caret)?;
+    let (delim, kind) = if prefix.ends_with('`') {
+        ("`", MarkKind::Code)
+    } else if prefix.ends_with("~~") {
+        ("~~", MarkKind::Strikethrough)
+    } else if prefix.ends_with("**") {
+        ("**", MarkKind::Bold)
+    } else if prefix.ends_with('*') {
+        ("*", MarkKind::Italic)
+    } else {
+        return None;
+    };
+    let close = caret - delim.len()..caret;
+    let before = &prefix[..close.start];
+    let start = before.rfind(delim)?;
+    // `*` must not be half of a `**`.
+    if delim == "*" && (before[..start].ends_with('*') || before.ends_with('*')) {
+        return None;
+    }
+    let open = start..start + delim.len();
+    let content = &text[open.end..close.start];
+    if content.is_empty()
+        || content.contains(super::inline::ATOM_CHAR)
+        || (kind != MarkKind::Code
+            && (content.starts_with(char::is_whitespace) || content.ends_with(char::is_whitespace)))
+    {
+        return None;
+    }
+    let in_code = inline
+        .pieces()
+        .any(|(r, m, _)| m.code && r.start < close.end && r.end > open.start);
+    (!in_code).then_some((open, close, kind))
 }

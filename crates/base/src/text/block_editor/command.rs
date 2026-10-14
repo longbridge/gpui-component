@@ -682,8 +682,12 @@ impl BlockEditorModel {
     /// the caller then inserts plain text).
     pub fn paste_blocks(&mut self, text: &str) -> Result<bool, CommandError> {
         // Single-line text is plain unless it holds an inline atom's
-        // Markdown (a copied image), which pastes back as the atom.
-        if !text.trim_end_matches('\n').contains('\n') && !text.contains("![") {
+        // Markdown (a copied image), which pastes back as the atom, or an
+        // inline code span (`x`), which pastes back as code.
+        if !text.trim_end_matches('\n').contains('\n')
+            && !text.contains("![")
+            && !text.contains('`')
+        {
             return Ok(false);
         }
         let mut cx = crate::text::node::NodeContext {
@@ -704,7 +708,9 @@ impl BlockEditorModel {
         let has_atoms = |block: &DetachedBlock| {
             matches!(
                 &block.content,
-                DetachedContent::Leaf(BlockContent::Inline(inline)) if inline.text().contains(super::inline::ATOM_CHAR)
+                DetachedContent::Leaf(BlockContent::Inline(inline))
+                    if inline.text().contains(super::inline::ATOM_CHAR)
+                        || inline.pieces().any(|(_, mark, _)| mark.code)
             )
         };
         if blocks.is_empty()

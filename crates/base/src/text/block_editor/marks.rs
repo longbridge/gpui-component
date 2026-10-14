@@ -110,6 +110,20 @@ impl MarkChange {
     }
 
     pub(crate) fn apply(&self, mark: &TextMark) -> TextMark {
+        let mut out = self.apply_raw(mark);
+        // Inline code holds literal text: only a link may wrap it, so other
+        // marks never apply inside code, and making text code drops them.
+        if out.code {
+            out.bold = false;
+            out.italic = false;
+            out.strikethrough = false;
+            out.underline = false;
+            out.highlight = None;
+        }
+        out
+    }
+
+    fn apply_raw(&self, mark: &TextMark) -> TextMark {
         let mut out = mark.clone();
         for kind in &self.clear {
             match kind {
