@@ -1556,3 +1556,33 @@ fn empty_cell_click_and_table_node_backspace(cx: &mut TestAppContext) {
     keys(cx, "backspace");
     assert_eq!(source(&editor, cx), "b");
 }
+
+/// QA: the block handle. A click in the left edge of a table or code block
+/// (left of its text) selects it as a node; Backspace then deletes it.
+#[gpui::test]
+fn left_edge_click_node_selects_table_and_code_block(cx: &mut TestAppContext) {
+    for src in [
+        "a\n\n| x | y |\n| --- | --- |\n| 1 | 2 |\n\nb",
+        "a\n\n```\ncode\n```\n\nb",
+    ] {
+        let (editor, cx) = open(cx, src);
+        let at = editor.read_with(cx, |e, _| {
+            let id = e.model().document().leaves().nth(1).unwrap().id();
+            let b = e.frame.borrow().leaf(id).unwrap().bounds();
+            gpui::point(b.left() - px(4.), b.center().y)
+        });
+        assert!(at.x > px(0.), "{src}: the edge is inside the editor");
+        cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+        cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+        draw(cx);
+        assert!(
+            editor.read_with(cx, |e, _| matches!(
+                e.model().selection(),
+                BlockSelection::Blocks { .. }
+            )),
+            "{src}"
+        );
+        keys(cx, "backspace");
+        assert_eq!(source(&editor, cx), "a\n\nb", "{src}");
+    }
+}

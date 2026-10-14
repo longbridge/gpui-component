@@ -526,6 +526,33 @@ impl Element for EditorRoot {
 
         let frame = frame.borrow();
         let style = &self.style;
+        // Block handle: a grip in the left edge of the hovered table or code
+        // block; clicking the edge node-selects it (`block_handle_at`).
+        let mouse = window.mouse_position();
+        let hovered = frame
+            .tables
+            .iter()
+            .map(|(_, b)| *b)
+            .chain(
+                frame
+                    .leaves
+                    .iter()
+                    .filter(|l| state_plain(&self.state, l.info.block, cx))
+                    .map(|l| l.bounds()),
+            )
+            .find(|b| {
+                mouse.y >= b.top()
+                    && mouse.y < b.bottom()
+                    && mouse.x >= b.left() - px(24.)
+                    && mouse.x < b.right()
+            });
+        if let Some(b) = hovered {
+            let grip = Bounds::new(
+                point(b.left() - px(14.), b.top() + px(2.)),
+                size(px(4.), px(16.).min(b.size.height)),
+            );
+            window.paint_quad(fill(grip, style.caret().opacity(0.35)).corner_radii(px(2.)));
+        }
         if let Some(area) = selected_area {
             let area = area.dilate(px(4.));
             window.paint_quad(gpui::quad(
@@ -592,4 +619,8 @@ impl Element for EditorRoot {
             }
         });
     }
+}
+
+fn state_plain(state: &Entity<BlockEditorState>, block: BlockId, cx: &App) -> bool {
+    state.read(cx).model.doc.plain(block).is_some()
 }

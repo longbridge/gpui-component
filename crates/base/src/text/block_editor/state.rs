@@ -679,6 +679,19 @@ impl BlockEditorState {
 
     /// Mouse: place or extend the caret at a window point.
     pub(crate) fn mouse_at(&mut self, at: Point<Pixels>, extend: bool, cx: &mut Context<Self>) {
+        // Block handle: a click in the left edge beside a table or code
+        // block (left of its text) selects the block as a node.
+        if !extend && let Some(block) = self.block_handle_at(at) {
+            self.goal_x = None;
+            self.end_composition();
+            let _ = self.model.set_selection(BlockSelection::Blocks {
+                anchor: block,
+                head: block,
+            });
+            self.dragging = false;
+            self.selection_changed(cx);
+            return;
+        }
         let hit = self.frame.borrow().hit_test(at);
         // A click on an inline atom selects the whole atom (#3113).
         if !extend && let Some(pos) = hit.and_then(|pos| self.atom_under(pos, at)) {
@@ -699,6 +712,24 @@ impl BlockEditorState {
             let pos = self.model.doc.clamp(pos);
             self.move_to(pos, extend, cx);
         }
+    }
+
+    /// The table or code block whose left edge (the strip left of its
+    /// text, inside the block's padding) is under `at`.
+    pub(crate) fn block_handle_at(&self, at: Point<Pixels>) -> Option<BlockId> {
+        let frame = self.frame.borrow();
+        use gpui::px;
+        let in_edge = |b: &Bounds<Pixels>| {
+            at.y >= b.top() && at.y < b.bottom() && at.x < b.left() && at.x >= b.left() - px(24.)
+        };
+        if let Some((table, _)) = frame.tables.iter().find(|(_, b)| in_edge(b)) {
+            return Some(*table);
+        }
+        frame
+            .leaves
+            .iter()
+            .find(|leaf| self.model.doc.plain(leaf.info.block).is_some() && in_edge(&leaf.bounds()))
+            .map(|leaf| leaf.info.block)
     }
 
     /// The start of the inline atom drawn under the window point `at` in
