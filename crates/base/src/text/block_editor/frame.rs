@@ -254,8 +254,20 @@ impl LeafGeom {
             return 0;
         };
         let offset = match piece {
-            Piece::Whole(layout) | Piece::Text { layout, .. } => {
-                piece.range().start + whole_index_at(layout, at)
+            Piece::Whole(layout) => whole_index_at(layout, at),
+            // Fragments are one line: take the caret position nearest to the
+            // point (`closest_index_for_position` rounds up at an exact
+            // boundary inside scaled code text).
+            Piece::Text { start, layout } => {
+                let nearest = (0..=layout.len())
+                    .filter_map(|i| {
+                        layout
+                            .position_for_index(i)
+                            .map(|p| (i, (p.x - at.x).abs()))
+                    })
+                    .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                    .map_or(0, |(i, _)| i);
+                start + nearest
             }
             Piece::Atom { range, bounds } => {
                 if at.x < bounds.center().x {

@@ -1208,7 +1208,7 @@ fn inline_code_keeps_pill_and_caret_geometry(cx: &mut TestAppContext) {
     assert!(pieces > 1, "rendered by the flow, in fragments");
     assert!(b.x < c.x && c.x < d.x, "{b:?} {c:?} {d:?}");
     // Clicking between `c` and `d` puts the caret at 4.
-    let at = gpui::point(c.x - px(1.), c.y + px(3.));
+    let at = gpui::point(c.x, c.y + px(3.));
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
     assert_eq!(
