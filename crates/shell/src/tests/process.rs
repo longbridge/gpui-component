@@ -9,7 +9,9 @@ use std::ops::Deref;
 
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
-use crate::{Capabilities, ExecuteGrant, ScriptView, ShellRuntime};
+use crate::{Capabilities, ScriptView, ShellRuntime};
+#[cfg(unix)]
+use crate::ExecuteGrant;
 
 #[cfg(unix)]
 const OUTPUT_PROBE: &str = r#"
