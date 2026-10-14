@@ -29,10 +29,15 @@ const CARRY: f32 = 0.31;
 /// it lets go of the edge with no speed.
 const STILL: Duration = Duration::from_millis(50);
 
-/// The interval assumed for the first packet of a stream, and the shortest
-/// one trusted, so that coalesced packets do not read as a huge speed.
+/// The interval assumed for the first packet of a stream.
 const FRAME: f32 = 1. / 60.;
-const MIN_INTERVAL: f32 = 1. / 240.;
+
+/// How far back the stream's speed is read. Packets carry no timestamp, so a
+/// frame that takes long hands over several at once; read over a span, their
+/// distance still spreads over the time they took, instead of each one
+/// arriving at once and reading as a huge speed. That happens most on a fling
+/// through a long list, just as it runs into the top.
+const SPEED_SPAN: Duration = Duration::from_millis(50);
 
 #[derive(Default)]
 pub(crate) struct Overscroll {
@@ -42,6 +47,11 @@ pub(crate) struct Overscroll {
     /// When the stream last moved, and how fast, in pixels per second.
     moved_at: Option<Instant>,
     velocity: f32,
+    /// The packets that moved within the last `SPEED_SPAN`, and the one
+    /// before them, which marks where the span starts.
+    moves: Vec<(Instant, f32)>,
+    /// A finger rests on the trackpad but has not moved since it touched.
+    resting: bool,
     /// The edge already answered the rest of this gesture: a fling ran into
     /// it, or a finger let go of it stretched. The momentum that follows
     /// still scrolls the text back from the edge, but no longer moves the
@@ -62,20 +72,32 @@ impl Overscroll {
     fn start_gesture(&mut self) {
         self.spent = false;
         self.velocity = 0.;
+        self.moves.clear();
     }
 
-    /// Track the stream's speed from packets that moved.
-    fn sample(&mut self, dy: f32, gap: Option<Duration>, now: Instant) {
+    /// Track the stream's speed from packets that moved: the distance they
+    /// covered over the time since the span started.
+    fn sample(&mut self, dy: f32, now: Instant) {
         if dy == 0. {
             return;
         }
-        let seconds = gap.map_or(FRAME, |gap| gap.as_secs_f32().max(MIN_INTERVAL));
-        let velocity = dy / seconds;
-        // Finger packets are uneven; average the last few.
-        self.velocity = if self.moved_at.is_some() && self.velocity * velocity > 0. {
-            (self.velocity + velocity) / 2.
+        if self.moves.last().is_some_and(|&(_, last)| last * dy < 0.) {
+            self.moves.clear();
+        }
+        self.moves.push((now, dy));
+        let start = self
+            .moves
+            .iter()
+            .rposition(|&(at, _)| now.saturating_duration_since(at) > SPEED_SPAN)
+            .unwrap_or(0);
+        self.moves.drain(..start);
+        let (first, _) = self.moves[0];
+        let seconds = now.saturating_duration_since(first).as_secs_f32();
+        self.velocity = if seconds > 0. && self.moves.len() > 1 {
+            self.moves[1..].iter().map(|&(_, dy)| dy).sum::<f32>() / seconds
         } else {
-            velocity
+            // The first packet, or several handed over at once.
+            self.moves.iter().map(|&(_, dy)| dy).sum::<f32>() / FRAME
         };
         self.moved_at = Some(now);
     }
@@ -105,11 +127,25 @@ impl Overscroll {
             self.start_gesture();
             self.moved_at = None;
         }
-        self.sample(dy, gap, now);
+        self.sample(dy, now);
         if phase == TouchPhase::Started {
             // Grab the edge, a returning one included, where it is.
             self.physics.begin(extent);
             self.spent = false;
+            self.resting = dy == 0.;
+        } else if dy != 0. {
+            self.resting = false;
+        } else if self.resting && self.physics.is_dragging() {
+            // A finger that touches and lifts without moving cancels its
+            // gesture, and GPUI reports the cancel as a move of nothing: it
+            // lets go of the edge where it held it.
+            self.resting = false;
+            self.physics.let_go(0.);
+            self.spent = self.offset() != 0.;
+            if self.spent {
+                self.sampled_at = Some(now);
+            }
+            return self.physics.is_moving();
         }
         if self.physics.is_dragging() {
             // A stretched edge takes the packet first; only what crosses back
@@ -241,18 +277,30 @@ mod tests {
     /// A momentum stream of `speed` px/s decaying as AppKit's does, against
     /// text already at its end. Returns the edge's offset at each frame.
     fn fling(speed: f32) -> Vec<f32> {
+        fling_through(speed, 0., 0)
+    }
+
+    /// The same stream through `room` px of text first, with every packet
+    /// from frame `stall` to the impact handed over in one go, as when the
+    /// frames that scroll the text take long to draw.
+    fn fling_through(speed: f32, mut room: f32, stall: u32) -> Vec<f32> {
         let start = Instant::now();
         let frame = Duration::from_micros(16_667);
         let mut overscroll = Overscroll::default();
-        let mut room = 0.;
         let mut dy = -speed / 60.;
+        let mut held = Vec::new();
         let mut path = Vec::new();
         for n in 0..120 {
             let at = start + frame * n;
             // Momentum keeps arriving well after the edge has settled.
             if n < 100 {
-                overscroll.packet(dy, TouchPhase::Moved, 300., at, text(&mut room));
+                held.push(dy);
                 dy *= 0.95;
+                if stall == 0 || n < stall || room == 0. || -held.iter().sum::<f32>() > room {
+                    for dy in held.drain(..) {
+                        overscroll.packet(dy, TouchPhase::Moved, 300., at, text(&mut room));
+                    }
+                }
             }
             overscroll.step(at);
             path.push(overscroll.offset());
@@ -277,6 +325,39 @@ mod tests {
         // And twice the speed throws it about twice as far.
         let faster = fling(10_000.).iter().copied().fold(0., f32::min);
         assert!((faster / peak - 2.).abs() < 0.15, "{faster} vs {peak}");
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[test]
+    fn packets_handed_over_at_once_do_not_throw_the_edge_further() {
+        let peak = |path: Vec<f32>| path.iter().copied().fold(0., f32::min);
+        let even = peak(fling_through(5000., 800., 0));
+        let stalled = peak(fling_through(5000., 800., 3));
+        assert!(even < -20., "{even}");
+        // Read per packet, the burst threw it four times as far. Read over
+        // the span, only the longer span's slower decay shows.
+        assert!((stalled / even - 1.).abs() < 0.25, "{stalled} vs {even}");
+    }
+
+    #[test]
+    fn a_touch_that_lifts_without_moving_lets_go_of_the_edge() {
+        let start = Instant::now();
+        let mut overscroll = Overscroll::default();
+        let mut room = 0.;
+        overscroll.packet(-80., TouchPhase::Moved, 400., start, text(&mut room));
+        let later = start + Duration::from_millis(30);
+        overscroll.step(later);
+        let held = overscroll.offset();
+        // Touch, then lift: GPUI reports `MayBegin` as `Started` and the
+        // cancel as a `Moved` of nothing.
+        overscroll.packet(0., TouchPhase::Started, 400., later, text(&mut room));
+        assert!(overscroll.packet(0., TouchPhase::Moved, 400., later, text(&mut room)));
+        let mut at = later;
+        while overscroll.step(at) {
+            at += Duration::from_millis(16);
+        }
+        assert!(held < 0.);
+        assert_eq!(overscroll.offset(), 0.);
     }
 
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
