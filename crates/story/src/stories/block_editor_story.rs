@@ -236,6 +236,9 @@ impl Render for BlockEditorStory {
                         .w_full()
                         .max_h(rems(28.))
                         .overflow_y_scroll()
+                        // Scroll containment: wheel events over this pane
+                        // must not also scroll the story/gallery.
+                        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                         .track_scroll(&self.scroll)
                         .child(BlockEditor::new(&self.editor)),
                 ),
@@ -243,7 +246,12 @@ impl Render for BlockEditorStory {
             .child(
                 section("Markdown").child(
                     div()
+                        .id("block-editor-markdown")
                         .flex_1()
+                        .w_full()
+                        .max_h(rems(28.))
+                        .overflow_y_scroll()
+                        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                         .text_xs()
                         .whitespace_normal()
                         .child(self.markdown.clone()),
