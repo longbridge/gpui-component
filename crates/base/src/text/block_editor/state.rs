@@ -127,6 +127,8 @@ pub struct BlockEditorState {
     /// Last complete frame, written by the element after prepaint.
     pub(crate) frame: Rc<RefCell<FrameLayout>>,
     pub(crate) cull: Rc<RefCell<super::cull::CullState>>,
+    /// The accessible value (document text), cached per revision (D8).
+    pub(crate) a11y_value: RefCell<Option<(u64, SharedString)>>,
     /// Scroll container to keep the caret in view (see `set_scroll_handle`).
     pub(crate) scroll_handle: Option<gpui::ScrollHandle>,
     /// The caret moved and should be scrolled into view after layout.
@@ -183,6 +185,7 @@ impl BlockEditorState {
             projection: ProjectionCache::default(),
             frame: Rc::default(),
             cull: Rc::default(),
+            a11y_value: RefCell::default(),
             scroll_handle: None,
             reveal: Default::default(),
             marked: None,
@@ -314,6 +317,29 @@ impl BlockEditorState {
         if self.model.redo() {
             self.after_edit(EditOrigin::Redo, cx);
         }
+    }
+
+    /// The document as plain text for assistive technology (D8): leaves in
+    /// order, one per line, inline atoms dropped. Built at most once per
+    /// revision, and only asked for while accessibility is active.
+    pub(crate) fn accessible_value(&self) -> SharedString {
+        let revision = self.model.revision();
+        if let Some((cached, value)) = &*self.a11y_value.borrow()
+            && *cached == revision
+        {
+            return value.clone();
+        }
+        let doc = &self.model.doc;
+        let value: SharedString = doc
+            .leaves()
+            .iter()
+            .filter_map(|id| doc.leaf_text(*id))
+            .map(|text| text.replace(super::inline::ATOM_CHAR, ""))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .into();
+        *self.a11y_value.borrow_mut() = Some((revision, value.clone()));
+        value
     }
 
     pub(crate) fn snapshot(&mut self) -> Rc<Snapshot> {

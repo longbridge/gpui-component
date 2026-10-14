@@ -1240,3 +1240,43 @@ fn cull_units_are_cached_per_revision(cx: &mut TestAppContext) {
     let rendered = editor.read_with(cx, |e, _| e.cull.borrow().rendered);
     assert!(rendered < 400, "culled: {rendered} of 2000 laid out");
 }
+
+/// Phase 5 accessibility: per-block roles and the D8 root value.
+#[gpui::test]
+fn accessibility_roles_and_cached_value(cx: &mut TestAppContext) {
+    use gpui::Role;
+    let (editor, cx) = open(
+        cx,
+        "# Title\n\ntext ![i](x.png)\n\n- a\n\n```\ncode\n```\n\n---",
+    );
+    draw(cx);
+    let roles: Vec<_> = editor.update(cx, |e, _| {
+        e.snapshot()
+            .blocks
+            .iter()
+            .flat_map(|b| b.nodes.iter())
+            .map(|n| super::super::element::block_role(n))
+            .collect()
+    });
+    assert_eq!(
+        roles,
+        vec![
+            Some((Role::Heading, Some(1))),
+            Some((Role::Paragraph, None)),
+            Some((Role::List, None)),
+            Some((Role::Code, None)),
+            Some((Role::Splitter, None)),
+        ]
+    );
+    let value = editor.read_with(cx, |e, _| e.accessible_value());
+    assert_eq!(value.as_ref(), "Title\ntext \na\ncode");
+    // Cached for the current revision.
+    let cached = editor.read_with(cx, |e, _| {
+        e.a11y_value.borrow().as_ref().map(|(rev, _)| *rev) == Some(e.model().revision())
+    });
+    assert!(cached);
+    caret_at(&editor, cx, 0, 5);
+    type_text(cx, "!");
+    let edited = editor.read_with(cx, |e, _| e.accessible_value());
+    assert!(edited.starts_with("Title!\n"));
+}

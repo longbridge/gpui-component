@@ -10,11 +10,13 @@
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, CursorStyle, DispatchPhase, Element, ElementId, ElementInputHandler,
     Entity, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, InteractiveElement,
     IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, RenderOnce, Styled, Window, div, fill, point, px, size,
+    ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement, Styled, Window, div, fill,
+    point, px, size,
 };
 
 use super::{
@@ -47,6 +49,27 @@ impl BlockEditor {
             state: state.clone(),
         }
     }
+}
+
+/// The accessible role (and heading level) of a top-level block (Phase 5,
+/// per-block accessibility). `None` for blocks that are not exposed on
+/// their own (definitions, breaks).
+pub(crate) fn block_role(node: &BlockNode) -> Option<(Role, Option<usize>)> {
+    Some(match node {
+        BlockNode::Paragraph(_) => (Role::Paragraph, None),
+        BlockNode::Heading { level, .. } => (Role::Heading, Some(*level as usize)),
+        BlockNode::Blockquote { .. } => (Role::Blockquote, None),
+        BlockNode::List { .. } => (Role::List, None),
+        BlockNode::CodeBlock(_) => (Role::Code, None),
+        BlockNode::Table(_) => (Role::Table, None),
+        BlockNode::HorizontalRule { .. } => (Role::Splitter, None),
+        BlockNode::Custom { .. } => (Role::Group, None),
+        BlockNode::ListItem { .. } => (Role::ListItem, None),
+        BlockNode::Root { .. }
+        | BlockNode::Break { .. }
+        | BlockNode::Definition { .. }
+        | BlockNode::Unknown => return None,
+    })
 }
 
 /// `flow_position` over the flattened top-level nodes.
@@ -273,6 +296,16 @@ impl RenderOnce for BlockEditor {
                         cx,
                     ),
                 };
+                // Per-block accessibility node around the rendered block.
+                let element = match block_role(node) {
+                    Some((role, level)) => div()
+                        .id(("block", unit.id.as_u64() as usize))
+                        .role(role)
+                        .when_some(level, |this, level| this.aria_level(level))
+                        .child(element)
+                        .into_any_element(),
+                    None => element,
+                };
                 children.push(
                     Measured {
                         id: unit.id,
@@ -293,6 +326,12 @@ impl RenderOnce for BlockEditor {
         let s = &self.state;
         div()
             .id("block-editor")
+            // D8: one multi-line text input over the document; the value is
+            // built only while accessibility is active (cached per revision).
+            .role(Role::MultilineTextInput)
+            .when(window.is_a11y_active() || cfg!(test), |this| {
+                this.aria_value(self.state.read(cx).accessible_value())
+            })
             .key_context(CONTEXT)
             .track_focus(&focus)
             .cursor(CursorStyle::IBeam)
