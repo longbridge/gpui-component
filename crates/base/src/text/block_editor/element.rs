@@ -500,6 +500,22 @@ impl Element for EditorRoot {
         let caret = state.model.caret();
         let show_caret = state.show_caret(window, cx) && collapsed;
         let frame = state.frame.clone();
+        // Node selection (a table, code block, …): the blocks' laid-out area.
+        let selected_area = state.model.selected_blocks().and_then(|(parent, range)| {
+            let doc = &state.model.doc;
+            let ids = doc.children(parent).get(range)?.to_vec();
+            let frame = frame.borrow();
+            frame
+                .leaves
+                .iter()
+                .filter(|leaf| {
+                    let path = doc.path(leaf.info.block);
+                    ids.iter()
+                        .any(|id| *id == leaf.info.block || path.contains(id))
+                })
+                .map(|leaf| leaf.bounds())
+                .reduce(|a, b| a.union(&b))
+        });
 
         window.handle_input(
             &focus,
@@ -510,6 +526,17 @@ impl Element for EditorRoot {
 
         let frame = frame.borrow();
         let style = &self.style;
+        if let Some(area) = selected_area {
+            let area = area.dilate(px(4.));
+            window.paint_quad(gpui::quad(
+                area,
+                px(4.),
+                style.selection().opacity(0.35),
+                px(2.),
+                style.caret(),
+                gpui::BorderStyle::Solid,
+            ));
+        }
         if let Some((block, range)) = marked
             && let Some(leaf) = frame.leaf(block)
         {

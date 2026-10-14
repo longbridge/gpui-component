@@ -1525,3 +1525,34 @@ fn empty_leaves_have_a_font_sized_caret(cx: &mut TestAppContext) {
         assert!(line.contains(&caret.center()), "{src}");
     }
 }
+
+/// QA: a click anywhere in an empty cell's area puts the caret in that cell,
+/// and Backspace after a table selects the table node, then deletes it.
+#[gpui::test]
+fn empty_cell_click_and_table_node_backspace(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "| x | y |\n| --- | --- |\n|  |  |\n\nb");
+    let (cell, at) = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(3).unwrap().id();
+        let b = e.frame.borrow().leaf(id).unwrap().bounds();
+        (id, gpui::point(b.left() + px(2.), b.center().y))
+    });
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    draw(cx);
+    assert_eq!(
+        editor.read_with(cx, |e, _| e.model().caret().map(|c| c.block)),
+        Some(cell)
+    );
+    caret_at(&editor, cx, 4, 0);
+    keys(cx, "backspace");
+    assert!(editor.read_with(cx, |e, _| matches!(
+        e.model().selection(),
+        BlockSelection::Blocks { .. }
+    )));
+    assert!(
+        source(&editor, cx).contains("| x |"),
+        "first Backspace only selects"
+    );
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "b");
+}
