@@ -1613,7 +1613,7 @@ impl<M: InputModeKind> TextElement<M> {
     fn ask_for_spacers(&self, cx: &mut App) {
         let (provider, lines, version) = {
             let state = self.state.read(cx);
-            let version = state.display_map.version();
+            let version = state.display_map.rows_version();
             if state.spacers_asked == Some(version) {
                 return;
             }
@@ -2922,7 +2922,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         } else {
             Vec::new()
         };
-        let spacer_backgrounds: Vec<(Pixels, Pixels, Hsla)> =
+        let mut spacer_backgrounds: Vec<(Pixels, Pixels, Hsla)> =
             match (visible_buffer_lines.first(), visible_buffer_lines.last()) {
                 (Some(&first), Some(&last)) => state
                     .display_map
@@ -3205,6 +3205,22 @@ impl<M: InputModeKind> Element for TextElement<M> {
         last_layout.ghost_lines = current_row
             .filter(|_| ghost_line_count > 0)
             .map(|row| (row, ghost_lines_height));
+        // Ghost lines follow the cursor row's text, so they push down the
+        // spacers below it as well as every row after it.
+        if let Some(ghost_top) = last_layout.ghost_lines.and_then(|(row, _)| {
+            let rows = self
+                .state
+                .read(cx)
+                .display_map
+                .buffer_line_to_display_row_range(row)?;
+            Some(line_height * rows.end)
+        }) {
+            for (top, _, _) in &mut spacer_backgrounds {
+                if *top >= ghost_top {
+                    *top += ghost_lines_height;
+                }
+            }
+        }
         // Completion/code-action menus position at the active caret.
         last_layout.cursor_bounds = cursor_infos
             .iter()
@@ -5196,9 +5212,21 @@ mod tests {
             assert_eq!(held.asked.get(), 4);
             // Line 3 is folded away, and its spacers with it.
             assert_eq!(editor.read(cx).display_map.spacer_row_count(), 2);
+            // The same answer leaves the version; cached rows stay valid.
+            let version = editor.read(cx).display_map().version();
             editor.update(cx, |state, cx| state.refresh_spacers(cx));
             window.draw(cx).clear(cx);
             assert_eq!(held.asked.get(), 5);
+            assert_eq!(editor.read(cx).display_map().version(), version);
+
+            // A different one moves it, without asking the provider anew.
+            *held.spacers.borrow_mut() = vec![Spacer::below(1, 4)];
+            editor.update(cx, |state, cx| state.refresh_spacers(cx));
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+            assert_eq!(held.asked.get(), 6);
+            assert_ne!(editor.read(cx).display_map().version(), version);
+            assert_eq!(editor.read(cx).display_map.spacer_row_count(), 4);
         });
     }
 

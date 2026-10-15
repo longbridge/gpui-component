@@ -40,9 +40,12 @@ pub struct DisplayMap {
     spacer_map: SpacerMap,
     /// The spacers as they were last set, before projection.
     spacers: Vec<Spacer>,
-    /// The version the spacers were last projected at, `None` when they must be
-    /// projected again.
+    /// The rows version the spacers were last projected at, `None` when they
+    /// must be projected again.
     spacers_projected: Option<usize>,
+    /// Counts the changes of the spacers, so that [`Self::version`] moves with
+    /// them.
+    spacers_version: usize,
 }
 
 impl DisplayMap {
@@ -53,6 +56,7 @@ impl DisplayMap {
             spacer_map: SpacerMap::default(),
             spacers: Vec::new(),
             spacers_projected: None,
+            spacers_version: 0,
         }
     }
 
@@ -92,17 +96,22 @@ impl DisplayMap {
     }
 
     /// A number that changes whenever a buffer line may have taken different
-    /// display rows: an edit, a rewrap or a change of folds.
+    /// display rows: an edit, a rewrap, a change of folds or of spacers.
     ///
     /// Compare versions for equality on the same map to invalidate cached
     /// queries. The counter can wrap; it is not a document revision or a count
-    /// of edits. Scrolling and inline completion ghost lines do not change it.
-    ///
-    /// Spacer rows do not change it either: they come from the editor's
-    /// [`crate::input::SpacerProvider`], which reads the version to know when
-    /// to answer again. Rows read after the spacers change include them.
+    /// of edits. Scrolling and inline completion ghost lines do not change it,
+    /// nor does a [`crate::input::SpacerProvider`] answering with the spacers
+    /// already shown.
     #[inline]
     pub fn version(&self) -> usize {
+        self.rows_version().wrapping_add(self.spacers_version)
+    }
+
+    /// Like [`Self::version`], without the spacers: what the spacers are
+    /// placed by and asked for again at, so that an answer does not ask anew.
+    #[inline]
+    pub(crate) fn rows_version(&self) -> usize {
         self.wrap_map
             .wrapper()
             .version()
@@ -191,10 +200,11 @@ impl DisplayMap {
 
     /// Replace the spacers. They are placed again whenever the rows move.
     pub(crate) fn set_spacers(&mut self, spacers: Vec<Spacer>) {
-        if spacers.is_empty() && self.spacers.is_empty() {
+        if spacers == self.spacers {
             return;
         }
         self.spacers = spacers;
+        self.spacers_version = self.spacers_version.wrapping_add(1);
         self.spacers_projected = None;
         self.project_spacers();
     }
@@ -268,7 +278,7 @@ impl DisplayMap {
         if self.spacers.is_empty() && self.spacer_map.row_count() == 0 {
             return;
         }
-        let version = self.version();
+        let version = self.rows_version();
         if self.spacers_projected == Some(version) {
             return;
         }

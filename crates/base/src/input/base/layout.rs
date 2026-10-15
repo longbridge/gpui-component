@@ -108,7 +108,8 @@ impl LastLayout {
     ///
     /// Tops are relative to the content origin and, as painted, rows after the
     /// ghost lines are shifted down by their height. A row's spacers are not
-    /// part of its height.
+    /// part of its height; ghost lines stand between its text and the spacers
+    /// below it.
     pub(super) fn row_extents(&self) -> impl Iterator<Item = (Pixels, Pixels)> + '_ {
         let mut top = self.visible_top;
         self.lines
@@ -120,12 +121,13 @@ impl LastLayout {
                 top += above;
                 let height = line.size(self.line_height).height;
                 let extent = (top, height);
-                top += height + below;
+                top += height;
                 if let Some((ghost_row, ghost_height)) = self.ghost_lines
                     && ghost_row == row
                 {
                     top += ghost_height;
                 }
+                top += below;
                 extent
             })
     }

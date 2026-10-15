@@ -429,8 +429,8 @@ let version = map.version();
 
 The map covers the whole prepared text, including lines outside the viewport.
 Wrapping follows the latest prepared layout parameters; before text preparation,
-the map has no display rows. `map.version()` changes on edits, rewrapping, and
-fold changes. Compare versions on the same map to invalidate cached queries;
+the map has no display rows. `map.version()` changes on edits, rewrapping,
+fold and spacer changes. Compare versions on the same map to invalidate cached queries;
 scrolling does not change the version.
 
 The map excludes inline completion ghost lines. Display row indices multiplied
@@ -506,9 +506,9 @@ them level.
 In the display map, spacer rows are display rows: `display_row_count()` counts them,
 `buffer_line_to_display_row_range(line)` holds only the rows of the line's text,
 `display_row_to_buffer_line(row)` reads a spacer row as the line it stands beside, and
-`is_spacer_row(row)` tells a spacer row from a row of text. Setting or refreshing spacers
-does not change `version()`, which is what a provider reads to know when to answer
-again; rows read after the spacers change include them.
+`is_spacer_row(row)` tells a spacer row from a row of text. `version()` changes when the
+spacers do, so a cache of rows stays valid; a provider answering with the spacers already
+shown leaves it unchanged, so refreshing on a version change settles.
 
 ## Value and events
 

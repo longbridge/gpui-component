@@ -363,7 +363,7 @@ let version = map.version();
 ```
 
 映射覆盖整个已准备的文本，包括视口外的行。软换行使用最近准备的布局参数；文本尚未准备时，
-映射没有显示行。编辑、重新换行或折叠变化会改变 `map.version()`。比较同一映射的版本可以判断
+映射没有显示行。编辑、重新换行、折叠或填充行变化会改变 `map.version()`。比较同一映射的版本可以判断
 何时需要重新查询；滚动不会改变版本。
 
 映射不包含内联补全的额外行。显示行序号乘以行高表示文本映射位置，不一定是实际绘制位置：
@@ -428,8 +428,8 @@ left.update(cx, |state, cx| state.set_spacer_provider(Some(level), cx));
 
 在显示映射中，填充行也是显示行：`display_row_count()` 会计入它们，`buffer_line_to_display_row_range(line)`
 只包含该行文本所占的行，`display_row_to_buffer_line(row)` 把填充行视为它旁边的那一行，`is_spacer_row(row)`
-用于区分填充行和文本行。设置或刷新填充行不会改变 `version()`——provider 正是通过它判断何时需要重新回答；
-填充行变化之后读取的行已包含它们。
+用于区分填充行和文本行。填充行变化时 `version()` 也会变化，因此按版本缓存的行映射不会过期；provider 返回与当前相同的填充行时版本不变，
+所以在版本变化时调用 `refresh_spacers` 最终会稳定下来。
 
 ## 值与事件
 
