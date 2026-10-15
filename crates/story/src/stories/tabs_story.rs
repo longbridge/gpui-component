@@ -346,7 +346,10 @@ impl Render for TabsStory {
             )
             .child(
                 section("Filling Space")
-                    .description("Segmented tabs can share the available width equally.")
+                    .description(
+                        "Segmented tabs can share the available width equally, \
+                         truncating long labels when given `min_w_0`.",
+                    )
                     .w_full()
                     .child(
                         TabBar::new("flex tabs")
@@ -360,6 +363,33 @@ impl Render for TabsStory {
                             }))
                             .child(Tab::new().flex_1().label("About"))
                             .child(Tab::new().flex_1().label("Profile")),
+                    )
+                    .child(
+                        TabBar::new("shrinking tabs")
+                            .w(px(360.))
+                            .segmented()
+                            .with_size(self.size)
+                            .selected_index(self.active_tab_ix)
+                            .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                                this.set_active_tab(*ix, window, cx);
+                            }))
+                            .children(
+                                [
+                                    "Account Settings & Preferences",
+                                    "Notifications",
+                                    "Billing History",
+                                ]
+                                .into_iter()
+                                .enumerate()
+                                .map(|(ix, label)| {
+                                    Tab::new().flex_1().min_w_0().label(label).suffix(
+                                        Button::new(("shrinking-tab-close", ix))
+                                            .ghost()
+                                            .xsmall()
+                                            .icon(IconName::Close),
+                                    )
+                                }),
+                            ),
                     ),
             )
     }
