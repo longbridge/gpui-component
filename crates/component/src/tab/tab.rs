@@ -617,7 +617,7 @@ impl Sizable for Tab {
 }
 
 impl RenderOnce for Tab {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let mut normal_style = self.variant.normal(cx);
         let mut selected_style = self.variant.selected(cx);
         let mut disabled_style = self.variant.disabled(self.selected, cx);
@@ -700,6 +700,12 @@ impl RenderOnce for Tab {
         let fg_to = tab_style.fg;
         // Icon-only tabs are fixed-size and exempt from `max_width`.
         let max_width = self.max_width.filter(|_| self.icon.is_none());
+        // A tab the caller lets shrink below its content (e.g. `flex_1().min_w_0()`)
+        // gives way like a capped one: on one line, with an ellipsized label.
+        let style = self.base.style();
+        let shrinkable =
+            style.flex_shrink.is_some_and(|shrink| shrink > 0.) && style.min_size.width.is_some();
+        let truncates = self.icon.is_none() && (max_width.is_some() || shrinkable);
 
         let inner_content = h_flex()
             .flex_1()
@@ -710,11 +716,11 @@ impl RenderOnce for Tab {
             .justify_center()
             .overflow_hidden()
             .margins(inner_margins)
-            // Normally the label decides the tab width, so it never shrinks. With
-            // `max_width` it is the one part that gives way.
-            .map(|this| match max_width {
-                Some(_) => this.flex_auto(),
-                None => this.flex_shrink_0(),
+            // Normally the label decides the tab width, so it never shrinks. When
+            // the tab truncates it is the one part that gives way.
+            .map(|this| match truncates {
+                true => this.flex_auto(),
+                false => this.flex_shrink_0(),
             })
             .map(|this| match self.icon {
                 Some(icon) => this
@@ -727,17 +733,17 @@ impl RenderOnce for Tab {
                     })),
                 None => this
                     .paddings(inner_paddings)
-                    .map(|this| match (self.label, max_width) {
+                    .map(|this| match (self.label, truncates) {
                         // Text always takes its natural width, so it needs a box
                         // that is allowed to shrink to ellipsize inside of.
-                        (Some(label), Some(_)) => this.child(
+                        (Some(label), true) => this.child(
                             div()
                                 .min_w_0()
                                 .whitespace_nowrap()
                                 .text_ellipsis()
                                 .child(label),
                         ),
-                        (Some(label), None) => this.child(label),
+                        (Some(label), false) => this.child(label),
                         (None, _) => this,
                     })
                     .children(self.children),
@@ -790,14 +796,15 @@ impl RenderOnce for Tab {
             .relative()
             .flex()
             // Wrapping would move the overflow onto a clipped second line instead
-            // of letting the label shrink, so a capped tab lays out on one line.
-            .map(|this| match max_width {
-                Some(max_width) => this.flex_nowrap().max_w(max_width),
-                None => this.flex_wrap(),
+            // of letting the label shrink, so a truncating tab lays out on one line.
+            .map(|this| match truncates {
+                true => this.flex_nowrap(),
+                false => this.flex_wrap(),
             })
+            .when_some(max_width, |this, max_width| this.max_w(max_width))
             .gap_1()
             .items_center()
-            .flex_shrink_0()
+            .when(!shrinkable, |this| this.flex_shrink_0())
             .h(height)
             .overflow_hidden()
             .map(|this| match self.size {
@@ -851,12 +858,12 @@ impl RenderOnce for Tab {
                         ),
                 )
             })
-            // Under `max_width` the label is the only part that gives way, so
-            // hold the prefix and suffix (e.g. a close button) at their full size.
+            // When the tab truncates, the label is the only part that gives way,
+            // so hold the prefix and suffix (e.g. a close button) at full size.
             .when_some(self.prefix, |this, prefix| {
                 this.child(
                     div()
-                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .when(truncates, |this| this.flex_shrink_0())
                         .child(prefix),
                 )
             })
@@ -864,7 +871,7 @@ impl RenderOnce for Tab {
             .when_some(self.suffix, |this, suffix| {
                 this.child(
                     div()
-                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .when(truncates, |this| this.flex_shrink_0())
                         .child(suffix),
                 )
             })

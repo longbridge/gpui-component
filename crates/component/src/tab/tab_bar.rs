@@ -499,12 +499,13 @@ impl RenderOnce for TabBar {
                     tab
                 });
             // The wrapper below is the flex item the bar lays out, so a tab's
-            // own flex and minimum-size styles must size it. Preserve the
+            // own flex and size constraints must size it. Preserve the
             // non-shrinking default unless the caller explicitly allows shrink.
             let flex_grow = tab.style().flex_grow;
             let flex_basis = tab.style().flex_basis;
             let flex_shrink = tab.style().flex_shrink;
             let min_size = tab.style().min_size.clone();
+            let max_size = tab.style().max_size.clone();
 
             rendered_tabs.push(if let Some(ref rc) = bounds_rc {
                 let rc = rc.clone();
@@ -520,6 +521,7 @@ impl RenderOnce for TabBar {
                             this.style().flex_shrink = Some(flex_shrink);
                         }
                         this.style().min_size = min_size;
+                        this.style().max_size = max_size;
                         this
                     })
                     .on_prepaint(move |bounds, _, _| {
