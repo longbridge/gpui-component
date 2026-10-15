@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
-use crate::{StyledExt as _, TestSupportExt as _};
+use crate::{StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
 
 const CONTEXT: &str = "Select";
 
@@ -302,6 +302,7 @@ impl RenderOnce for Select {
             })
             .children(self.children)
             .refine_style(&self.style)
+            .a11y_disabled(disabled)
     }
 }
 

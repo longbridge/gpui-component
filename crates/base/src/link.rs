@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _};
+use crate::{StateStyle, StyledExt as _, a11y_disabled::A11yDisabledExt as _};
 
 type ActivationHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type OpenHandler = Rc<dyn Fn(&str, &ClickEvent, &mut Window, &mut App)>;
@@ -199,6 +199,7 @@ impl RenderOnce for Link {
             })
             .children(self.children)
             .refine_style(&style)
+            .a11y_disabled(disabled)
     }
 }
 
@@ -461,6 +462,7 @@ mod tests {
 
         assert_eq!(disabled.role(), Role::Link);
         assert!(!disabled.supports_action(accesskit::Action::Click));
-        assert!(!disabled.is_disabled());
+        assert!(!enabled.is_disabled());
+        assert!(disabled.is_disabled());
     }
 }
