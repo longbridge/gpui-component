@@ -423,6 +423,14 @@ consuming. `horizontal_scroll_area` is the paired viewport and mask, used by the
 Markdown scrolling table. A Markdown code block whose style sets `overflow.y` to
 `Overflow::Scroll` pairs its viewport with a vertical mask and a `Scrollbar`.
 
+A plain mouse wheel has only a vertical axis, which a native horizontal scroller
+with a locked axis ignores. `ScrollableMask::vertical_wheel` sits over such a
+scroller and handles only that wheel: its lines move the scroller sideways and,
+at the edge, chain to the ancestor; trackpad gestures and horizontal wheels go
+on to the scroller with its axis lock and bounce. TabBar, the attachment row,
+the app menu bar and a horizontal `Scrollable` use it. The mask is pinned to its
+parent's top-left corner, so it covers the parent in a row as in a column.
+
 One handle represents one logical viewport. Sharing a handle between nested or
 unrelated scroll areas causes offsets, hitboxes, and scrollbar geometry to
 interfere.

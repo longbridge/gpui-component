@@ -19,6 +19,7 @@ use crate::{
     button::{Button, ButtonCustomVariant, ButtonVariants as _},
     h_flex,
     progress::ProgressCircle,
+    scroll::ScrollableMask,
     shimmer::{ShimmerStyle, ShimmerText},
     spinner::Spinner,
     tooltip::Tooltip,
@@ -1369,15 +1370,18 @@ impl RenderOnce for AttachmentGroup {
                 ))
         };
 
-        div().relative().w_full().min_w_0().child(row).when_some(
-            fades,
-            |this, (color, leading, trailing)| {
+        div()
+            .relative()
+            .w_full()
+            .min_w_0()
+            .child(row)
+            .child(ScrollableMask::vertical_wheel(&handle))
+            .when_some(fades, |this, (color, leading, trailing)| {
                 this.when(leading > 0., |this| this.child(fade(color, leading, true)))
                     .when(trailing > 0., |this| {
                         this.child(fade(color, trailing, false))
                     })
-            },
-        )
+            })
     }
 }
 
