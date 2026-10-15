@@ -10,8 +10,6 @@ use std::ops::Deref;
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 use crate::{Capabilities, ScriptView, ShellRuntime};
-#[cfg(unix)]
-use crate::ExecuteGrant;
 
 #[cfg(unix)]
 const OUTPUT_PROBE: &str = r#"
@@ -434,7 +432,7 @@ export default class Probe extends View {
 fn reloading_the_application_kills_the_children_it_spawned(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(
-        Capabilities::new().execute(ExecuteGrant::Allowed(vec!["/bin/sh".to_owned()])),
+        Capabilities::new().execute(crate::ExecuteGrant::Allowed(vec!["/bin/sh".to_owned()])),
     );
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -495,7 +493,7 @@ fn probe(
 ) {
     cx.update(crate::init);
     crate::set_capabilities(
-        Capabilities::new().execute(ExecuteGrant::Allowed(vec![command.to_owned()])),
+        Capabilities::new().execute(crate::ExecuteGrant::Allowed(vec![command.to_owned()])),
     );
 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
