@@ -1,5 +1,6 @@
+use crate::engine::quickjs::js_error;
 use rquickjs::{
-    Ctx, Exception, Object, Result, Value,
+    Ctx, Object, Result, Value,
     function::Func,
     module::{Declarations, Exports, ModuleDef},
 };
@@ -30,7 +31,7 @@ impl ModuleDef for OsModule {
                 crate::runtime::home_dir()
                     .map(|home| home.to_string_lossy().into_owned())
                     .ok_or_else(|| {
-                        Exception::throw_message(
+                        js_error::error(
                             &ctx,
                             "os.homedir(): neither HOME nor USERPROFILE names an absolute directory",
                         )

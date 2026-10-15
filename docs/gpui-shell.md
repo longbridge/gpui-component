@@ -203,7 +203,9 @@ Seven things are deliberately absent, and will stay absent:
    Standard Runtime deliberately exposes selected bare modules plus a
    WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
    compatibility. The shell's narrow `window` and `process` globals expose only
-   GPUI/host capabilities.
+   GPUI/host capabilities. `WebView` (§14.8) does not change this: it embeds a
+   web page as one element, and the script around it still runs in QuickJS
+   with no DOM.
 
 ---
 
@@ -2237,6 +2239,41 @@ descriptor, its exports, and any companion parts — or explicitly deferred with
 reason. That file is the single answer to "why is X not bound"; a prose list
 beside the source would be a second answer, and the one nothing checks.
 
+### 14.8 WebView
+
+`WebViewState` and `WebView` are registered in the catalog by the default
+`webview` feature, over `gpui-webview`. They follow the retained-state shape
+of `EditorState` and `Editor`: the state owns the native webview, so the
+document, its history and its scroll position survive renders, and the element
+places it in the layout.
+
+**Traffic in both directions is text.** The script reaches the page with
+`evaluate_script(js)`, which returns nothing; the page answers with
+`window.ipc.postMessage(text)`, delivered to `WebView.on_message`.
+`WebView.on_load(url)` reports each document that finishes loading, whoever
+navigated, because that is the first moment a page can be spoken to. A JSON
+protocol between the two is the application's to define.
+
+The native handlers have no `App`, so they push into a bounded channel
+(1,024 events; a message over 1 MiB is dropped) that a window task drains,
+invoking the listeners of the most recent render. The listeners live in the
+state rather than on the element, the way an input's `on_change` does, and a
+render that drops one stops its delivery. The channel's senders live in the
+native webview, so the task ends when the state is released.
+
+**Only `http` and `https` load.** The rule applies to `load_url`, the initial
+URL, and the page's own navigation, through wry's navigation handler; `about:`
+is let through because the engines use `about:blank` while setting up. Without
+it a page or a script could open `file:` URLs and read the disk past every
+`fs` grant. Beyond the scheme, loading is not a capability: browsing a page is
+not treated as network access by the script, which never sees the bytes.
+
+**Platform limits come from `gpui-webview`.** It is built on GPUI Fast, so the
+feature selects GPUI Fast for the whole runtime. On Linux the page needs an X11
+window; on a Wayland window `WebViewState` throws with that reason, and the
+host does not force X11 on applications that never create a page. On Windows
+the native page draws above GPUI content it overlaps.
+
 ---
 
 ## 15. Dock and Panels
@@ -3280,19 +3317,19 @@ persisting a decision in host configuration are all part of §18 and not built.
 
 ### 19.3 Resource limits
 
-| Limit             | Mechanism                                                | Value                                                                                                                                                          |
-| ----------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runaway execution | `Runtime::set_interrupt_handler`, on a per-call deadline | 50 ms in `Render`/`Layout`, 500 ms in `Event`/`Task`, 5 s outside any scope                                                                                    |
-| Memory            | `Runtime::set_memory_limit`                              | 256 MiB — a leak reports as a catchable exception on the offending allocation rather than an OOM kill of the host                                              |
-| Stack             | `Runtime::set_max_stack_size`                            | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort |
-| Microtask storms  | Bounded drain (§12.2)                                    | 100,000 jobs per drain                                                                                                                                         |
-| Host task fan-out | Per-runtime scheduler registry                           | 1,024 outstanding tasks                                                                                                                                        |
-| Module source     | Bounded module loader                                    | 8 MiB per module                                                                                                                                               |
-| Filesystem output | Bounded adapters                                         | 8 MiB per `writeFile`; `readdir` stops at 10,000 entries or 1 MiB of names                                                                                     |
-| Store             | Bounded cache and barriers                               | 8 MiB total; 4,096 keys; 1 MiB per value; 1,024 pending flush waiters                                                                                          |
-| Assets            | Bounded asset source                                     | 16 MiB per asset; listing stops at 10,000 entries or 1 MiB of names                                                                                            |
-| WebSocket queue   | Bounded actor channel                                    | 8 combined read/write/close commands                                                                                                                           |
-| Child processes   | Bounded adapter plus cancellation hook                   | 30 seconds; 8 MiB stdout and 8 MiB stderr; kill and reap on timeout, overflow, cancellation, owner loss or runtime shutdown                                    |
+| Limit             | Mechanism                                                | Value                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runaway execution | `Runtime::set_interrupt_handler`, on a per-call deadline | A watchdog for scripts that never return, not a performance budget: 2 s in `Render`/`Layout`, 5 s in `Event`/`Task`, 10 s outside any scope. A call that is only slow logs a warning (100 ms in `Render`/`Layout`, 1 s elsewhere) and is not stopped                                                                                                                                     |
+| Memory            | None                                                     | Unbounded, as in a GPUI application written in Rust: the operating system manages memory. A 256 MiB ceiling turned a large data set into a broken application long before the machine was short of memory. An embedding host may still bound its own runtime; exhaustion is reported as running out of memory rather than as the `null` QuickJS throws when it cannot allocate the error |
+| Stack             | `Runtime::set_max_stack_size`                            | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort                                                                                                                                                                                                                           |
+| Microtask storms  | Bounded drain (§12.2)                                    | 100,000 jobs per drain                                                                                                                                                                                                                                                                                                                                                                   |
+| Host task fan-out | Per-runtime scheduler registry                           | 1,024 outstanding tasks                                                                                                                                                                                                                                                                                                                                                                  |
+| Module source     | Bounded module loader                                    | 8 MiB per module                                                                                                                                                                                                                                                                                                                                                                         |
+| Filesystem output | Bounded adapters                                         | 8 MiB per `writeFile`; `readdir` stops at 10,000 entries or 1 MiB of names                                                                                                                                                                                                                                                                                                               |
+| Store             | Bounded cache and barriers                               | 8 MiB total; 4,096 keys; 1 MiB per value; 1,024 pending flush waiters                                                                                                                                                                                                                                                                                                                    |
+| Assets            | Bounded asset source                                     | 16 MiB per asset; listing stops at 10,000 entries or 1 MiB of names                                                                                                                                                                                                                                                                                                                      |
+| WebSocket queue   | Bounded actor channel                                    | 8 combined read/write/close commands                                                                                                                                                                                                                                                                                                                                                     |
+| Child processes   | Bounded adapter plus cancellation hook                   | 30 seconds; 8 MiB stdout and 8 MiB stderr; kill and reap on timeout, overflow, cancellation, owner loss or runtime shutdown                                                                                                                                                                                                                                                              |
 
 The budget is per host call, not global: every `scope::enter` mints a fresh
 generation, and a change of generation is the signal that a new call has begun
@@ -4409,7 +4446,7 @@ Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
 `ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
-host. `ShellRoot` with the dialog stack, one sheet, the
+host. `WebView` with page messages and load events (§14.8). `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
 capabilities for asynchronous `fs`, storage, clipboard, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect

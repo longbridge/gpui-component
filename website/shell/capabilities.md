@@ -327,6 +327,29 @@ Output is **captured, not inherited**: a script that runs a command almost alway
 
 Execution is bounded: 30 seconds, 8 MiB of stdout and 8 MiB of stderr. Reaching a bound kills and reaps the child and rejects the promise. Cancelling owned work or tearing down its runtime also terminates the child. The child starts with a cleared environment rather than inheriting host secrets; the shell does not expose an option to add environment variables.
 
+`process.run(command, args, { cwd, timeoutMs })` takes an optional third argument: a working directory, which must be inside a `capabilities.fs.read` grant, and a deadline other than 30 seconds.
+
+### Streaming: `process.spawn`
+
+```js
+const child = process.spawn("codex", ["exec", "--json", task], { cwd, lines: true });
+child
+  .on("stdout", (line, cx) => { this.events.push(JSON.parse(line)); cx.notify(); })
+  .on("stderr", (line) => console.warn(line))
+  .on("exit", ({ code, signal, error }, cx) => { this.done = true; cx.notify(); });
+```
+
+`process.run` waits for the end. A command that runs for minutes, talks over stdin, or is read as it works — an AI command line streaming JSON lines, a long-lived server speaking a protocol on stdin and stdout — needs its output as it arrives. `spawn` returns a `ChildProcess` at once:
+
+- `on("stdout" | "stderr", (text, cx) => …)` delivers output as it is read, or a line at a time with `lines: true`: without the line ending, joined across reads, and the last line delivered even with no newline after it. Output is decoded as UTF-8 whole, even when a character spans two reads. There is no limit on total output, but a single line over 8 MiB kills the process, because a line is held until its newline arrives.
+- `on("exit", ({ code, signal, error }, cx) => …)` fires **once, after the last output**. `error` is set when the runtime stopped the process — a `timeoutMs` deadline, or a line too long — and absent for a process that ended or was `kill()`ed.
+- `write(text)` and `end()` feed stdin when the child was started with `stdin: "pipe"`.
+- `kill()` kills the whole process group, a Job Object on Windows, so a command's own children go with it.
+
+Handlers run on the UI thread with an async `cx`, as a `cx.spawn` task's do, so they can `cx.notify()` and keep the context across an `await`. There is **no deadline** unless `timeoutMs` asks for one. A child belongs to the view that spawned it: releasing the view, reloading the application under `dev --watch`, or closing the window kills it and everything it started, so nothing is left behind as an orphan.
+
+`spawn` takes the same grant as `run`, resolves the command on the host PATH the same way, and starts it with the same empty environment.
+
 It is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted. A denied command **throws at the call** rather than rejecting, like a denied `fs` path — a rejected promise nobody awaited is a denial nobody sees.
 
 `process.exit` is **a request, never `exit(2)`** inside the runtime. It hands the code to a handler the host installed, which decides what to do — close the plugin's panel, close the window, end the process. One plugin must not be able to take the host process down, and the host may have unsaved state.

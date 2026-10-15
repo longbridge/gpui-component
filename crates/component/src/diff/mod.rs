@@ -554,7 +554,9 @@ fn render_diff(
                 // single-axis wheel remapping. The sibling mask owns X input.
                 .when(!soft_wrap, |this| this.overflow_x_hidden())
                 .track_scroll(&horizontal)
-                .child(
+                .child(gpui_base::ScrollBounce::new(
+                    "diff-bounce",
+                    &scrollbar,
                     list(scrollbar.clone(), move |ix, window, cx| {
                         let row = &rows[ix];
                         div()
@@ -565,7 +567,7 @@ fn render_diff(
                     })
                     .w(content_width)
                     .h_full(),
-                )
+                ))
                 .into_any_element(),
             scrollbar.clone(),
             horizontal.clone(),

@@ -5,10 +5,11 @@
 //! `RangeError` naming the label rather than a decoder that quietly reads the
 //! bytes as something they are not.
 
+use crate::engine::quickjs::js_error;
 use std::cell::{Cell, RefCell};
 
 use rquickjs::{
-    ArrayBuffer, Class, Ctx, Exception, FromJs, Function, Object, Result, TypedArray, Value,
+    ArrayBuffer, Class, Ctx, FromJs, Function, Object, Result, TypedArray, Value,
     class::Trace,
     convert::Coerced,
     function::{Opt, This},
@@ -57,7 +58,7 @@ impl TextEncoder {
     ) -> Result<Object<'js>> {
         let text = usv_string(&ctx, input)?;
         let destination = TypedArray::<u8>::from_value(destination).map_err(|_| {
-            Exception::throw_type(
+            js_error::type_error(
                 &ctx,
                 "TextEncoder.encodeInto(source, destination) expects a Uint8Array destination",
             )
@@ -109,7 +110,7 @@ impl TextDecoder {
                 label.trim().to_ascii_lowercase().as_str(),
                 "utf-8" | "utf8" | "unicode-1-1-utf-8"
             ) {
-                return Err(Exception::throw_range(
+                return Err(js_error::range_error(
                     &ctx,
                     &format!(
                         "TextDecoder encoding `{label}` is not supported; only utf-8 is available"
@@ -197,7 +198,7 @@ impl TextDecoder {
                 Err(_) => {
                     self.pending.borrow_mut().clear();
                     self.started.set(false);
-                    Err(Exception::throw_type(
+                    Err(js_error::type_error(
                         &ctx,
                         "TextDecoder.decode received invalid UTF-8 data",
                     ))
@@ -248,7 +249,7 @@ fn incomplete_tail(bytes: &[u8]) -> usize {
 /// typed array, `DataView`), copied out.
 fn buffer_source<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<Vec<u8>> {
     let not_buffer = || {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             "TextDecoder.decode(input) expects an ArrayBuffer, a typed array or a DataView",
         )

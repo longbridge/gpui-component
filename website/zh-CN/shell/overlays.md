@@ -225,7 +225,7 @@ a task; otherwise the host opened the window with another root view
 
 第一种情况出在脚本：`init` 运行时窗口还在构建，还没有能承载浮层的根，所以请在事件处理函数里，或在 View 启动的 task 里打开浮层。第二种情况是 Host 接线问题。
 
-见 [Getting Started](./getting-started.md#把运行时接进-rust-应用)。
+见 [Getting Started](./getting-started.md#自己构建运行时)。
 
 ## 还没有的东西
 

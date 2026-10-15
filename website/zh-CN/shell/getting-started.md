@@ -1,17 +1,17 @@
 ---
 title: Getting Started
-description: 安装 gpui-shell 二进制，把运行时接进一个 Rust 应用、写它要加载的脚本，并在不开窗口的情况下检查这个脚本。
+description: 安装 gpui-shell，用 JavaScript 编写并运行 gpui-shell Standalone App，在不开窗口的情况下检查它，并在需要更多能力时把它迁移到 Rust Host 下。
 order: 2
 maturity: [preview]
 ---
 
 # Getting Started
 
-`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由 Host 构建运行时、决定脚本能碰到什么，并把脚本 View 挂在它想挂的位置。直接运行一个脚本目录是随之而来的开发便利，而不是它的定位；不过做这件事的 `gpui-shell` 二进制，也是两类项目检查脚本的工具，所以先安装它。
+应用先写成 gpui-shell Standalone App：用 JavaScript 编写，带热重载运行，不开窗口就能检查，也能直接打包发布，全程不需要 Rust，也没有构建步骤。产品前期需要的绝大多数功能都在这里。之后需要更多——原生库、繁重的计算、已经用 Rust 写好的逻辑——同一套脚本可以原样搬到一个嵌入了这个 crate 的 Rust 程序下面；本页末尾的[迁移到 Rust Host](#迁移到-rust-host) 讲怎么做。一个想要 JavaScript 扩展点的 Rust GPUI 应用，则是从另一侧走同样的最后一步。
 
 ## 安装 gpui-shell
 
-无论以哪种方式使用运行时，都先安装 `gpui-shell` 二进制。完全用 JavaScript 写的应用直接跑在它上面；嵌入这个库的 Rust Host 也要用它来 `check` 脚本、用 `types` 生成 TypeScript 声明，以及用 `agents` 生成给编程 Agent 的说明。
+无论以哪种方式使用运行时，都先安装 `gpui-shell` 命令。完全用 JavaScript 写的应用直接跑在它上面；嵌入这个库的 Rust Host 也要用它来 `check` 脚本、用 `types` 生成 TypeScript 声明，以及用 `agents` 生成给编程 Agent 的说明。
 
 ### 从 Release 安装
 
@@ -36,45 +36,6 @@ cargo install --git https://github.com/longbridge/gpui-kit gpui-shell --locked
 它会装到 `~/.cargo/bin`，和 Release 一样内置 `gpui-component` 组件目录。再次运行同一条命令即可更新，`main` 有新提交时 Cargo 会重新构建。用 `--branch <name>`、`--tag <tag>` 或 `--rev <commit>` 可以构建指定的版本。这需要 Rust 工具链；在 Linux 上还需要 GPUI 链接的系统库，仓库里的 `script/install-linux.sh` 列出了 Ubuntu 上需要的包。
 
 如果 `PATH` 里 `~/.local/bin` 排在 `~/.cargo/bin` 前面，脚本装的 Release 版会盖过 Git 版；用 `command -v gpui-shell` 确认实际运行的是哪一个。
-
-## 把运行时接进 Rust 应用
-
-`gpui-shell` 二进制本身是一个很薄的 Host：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的 Host 做的也是同样四件事。
-
-```rust
-use gpui_kit::shell::{Capabilities, ShellRuntime};
-
-gpui_platform::application()
-    .with_assets(gpui_kit::shell::AppAssets::new(root.clone()))
-    .run(move |cx| {
-        // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
-        gpui_kit::shell::init(cx);
-
-        let runtime = ShellRuntime::new(cx).expect("script runtime");
-
-        // 在 Host 开口之前，什么都不允许。
-        gpui_kit::shell::set_store_path(store_directory.join("store.json"));
-        gpui_kit::shell::set_capabilities(
-            Capabilities::new()
-                .read_roots([root.clone()])
-                .write_roots([store_directory.clone()])
-                .store(true),
-        );
-
-        cx.open_window(Default::default(), move |window, cx| {
-            runtime.load(&root, window, cx)
-        })
-        .expect("window");
-    });
-```
-
-其中两行承载的是规则而不是机制。
-
-**`runtime.load(...)` 返回窗口的 `ShellRoot`**，作用与 `gpui-component` 窗口中的 `Root` 相同。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。manifest 负责选择应用入口并记录能力请求，但不会自行批准这些请求。带 manifest 与不带 manifest 的目录都使用 Host 当前的默认 policy；后者采用 `main.js`。
-
-**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由 Host 决定，因为只有 Host 知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
-
-同时也要装上 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 以及 phase 非法的调用；没有 subscriber 时，这些全部被丢弃，症状是一个安静地不再响应的界面。
 
 ## 它加载的那个脚本
 
@@ -138,7 +99,7 @@ gpui-shell run ./hello
 
 ## 单独运行一个脚本
 
-一个脚本目录也可以直接跑起来，不必先写 Host。自带的示例就是这么运行的；一段脚本在被它将来所属的那个应用加载之前，通常也是这样开发的。在仓库的克隆里运行：
+运行一个目录不需要你自己的 Host。自带的示例就是这么运行的；无论应用之后是否迁移到 Rust Host 下，开发时也都是这样运行。在仓库的克隆里运行：
 
 ```bash
 gpui-shell run examples/js_todolist
@@ -146,7 +107,7 @@ gpui-shell run examples/js_todolist
 
 窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
 
-参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根 View。如果目录中存在 `gpui-shell.json`，二进制会先验证它，并采用其中声明的 `entry` 与 capabilities。
+参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根 View。如果目录中存在 `gpui-shell.json`，`gpui-shell` 会先验证它，并采用其中声明的 `entry` 与 capabilities。
 
 包含路径分隔符的参数——`./hello`、`examples/js_todolist`——是一个目录；不含分隔符的裸名字则表示一个**已安装**的应用，见下文。`-d` / `--dir <directory>` 永远表示目录。
 
@@ -154,11 +115,11 @@ gpui-shell run examples/js_todolist
 
 `gpui-shell` 一个进程只运行一个应用，自身不带任何界面。运行哪个应用由命令行决定：
 
-| 命令                         | 运行的应用                                         |
-| ---------------------------- | -------------------------------------------------- |
-| `gpui-shell run clock`       | 已安装的应用 `~/.gpui-shell/apps/clock/`         |
-| `gpui-shell run -d ~/dev/clock` | 指定的那个目录                                     |
-| `gpui-shell`                 | 与可执行文件一起打包的应用；没有则显示 help        |
+| 命令                            | 运行的应用                                  |
+| ------------------------------- | ------------------------------------------- |
+| `gpui-shell run clock`          | 已安装的应用 `~/.gpui-shell/apps/clock/`    |
+| `gpui-shell run -d ~/dev/clock` | 指定的那个目录                              |
+| `gpui-shell`                    | 与可执行文件一起打包的应用；没有则显示 help |
 
 安装应用就是把它的目录复制或链接到 `~/.gpui-shell/apps/`，目录名就是运行它时用的名字。`gpui-shell list` 列出所有已安装的应用及其 manifest 申请的 capabilities，一个都不会执行。无论以哪种方式运行——已安装、打包，还是用 `--dir`——应用都按 manifest 的 `id` 保存数据，移动或重装都不会丢，正在编辑的副本也和已安装的副本共用数据。只有没有 manifest 的目录才按路径区分。
 
@@ -191,7 +152,7 @@ gpui-shell agents                 # 打印出来
 gpui-shell agents -d ./hello      # 写入 ./hello/AGENTS.md
 ```
 
-`agents` 会打印 coding agent 为这个运行时编写应用所需的规则，以及用来验证结果的 `check` 流程：没有 DOM、状态在 `init` 中赋值、改完状态调用 `cx.notify()`、元素只能用一次、capabilities 默认拒绝。其中的模块列表和组件目录都来自打印它的这个二进制。指定应用时，它会在那里写入 `AGENTS.md`，并且只替换自己生成过的文件（首行有标记），手写的说明不会被覆盖。
+`agents` 会打印 coding agent 为这个运行时编写应用所需的规则，以及用来验证结果的 `check` 流程：没有 DOM、状态在 `init` 中赋值、改完状态调用 `cx.notify()`、元素只能用一次、capabilities 默认拒绝。其中的模块列表和组件目录都来自打印它的这个 `gpui-shell`。指定应用时，它会在那里写入 `AGENTS.md`，并且只替换自己生成过的文件（首行有标记），手写的说明不会被覆盖。
 
 ## 不运行也能检查脚本
 
@@ -253,6 +214,90 @@ gpui-shell run ./hello --watch    # 只重载
 
 两者都不放宽沙箱。`--dev` 可配合 `run` 或 `dev`，在构造运行时之前开启 development mode：恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。它不会重载，也不改变日志级别。见 [Capabilities](./capabilities.md#沙箱)。
 
+## 迁移到 Rust Host
+
+当应用需要脚本够不到的东西时，就给它一个自己的 Rust 程序。JavaScript 一行都不用重写：脚本、manifest、import 与已存储的数据都保持原样。这一步有两种深度，通常第一种就够了。
+
+### 保留命令，加上 Rust
+
+`gpui-shell` 命令本身就在库里，所以你自己的 Rust 程序可以就是这个命令：换成自己的名字，再给脚本注册一些 Rust 函数。从 Git 依赖这个 crate：
+
+```toml
+[dependencies]
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit" }
+```
+
+```rust
+use gpui_shell::{HostModule, HostValue, host::HostBrand};
+
+fn main() {
+    gpui_shell::export_module(
+        HostModule::new("native")
+            .declarations("export function greet(name: string): string;")
+            .function("greet", |arguments| {
+                let name = arguments.string(0)?;
+                Ok(HostValue::from(format!("Hello, {name}")))
+            }),
+    )
+    .expect("register the native module");
+
+    let components = gpui_shell::components::components().expect("component catalog");
+    gpui_shell::host::main_with_brand_and_components(
+        HostBrand::new("clock", env!("CARGO_PKG_VERSION")),
+        components,
+    );
+}
+```
+
+```js
+import { greet } from "native";
+
+greet("world"); // "Hello, world"
+```
+
+在调用 `main_with_brand_and_components` 之前注册模块：import 在应用加载时就完成链接。其余部分就是发布的那个命令——`clock dev -d ./clock`、`clock check`、`clock types`（现在也会声明 `native`）和 `clock agents` 的行为与 `gpui-shell` 相同；应用读取同一份 manifest，得到同样的授权，数据也仍在同一个 `id` 下。不带参数运行 `clock` 会运行可执行文件旁边的 `app` 目录，所以一个[独立包](./packaging.md#独立包)就是这个可执行文件加上应用目录。唯一被拒绝的命令是 `bundle`：它生成的启动器会安装 `gpui-shell` 的 Release，而那里面没有你的模块。哪些值能跨过边界、函数怎样访问 Host 的状态，见 [HostModule](./host-module.md)。
+
+### 自己构建运行时
+
+需要掌控进程里更多东西的 Host——自己的窗口、和 Rust View 并排的脚本 View、多个授权不同的应用——自己构建运行时。它要做四件事：初始化库、建一个运行时、授予它愿意授予的能力，并把脚本 View 挂在 `ShellRoot` 下。`gpui-shell` 命令本身就是一个只做这四件事的很薄的 Host。
+
+```rust
+use gpui_shell::{Capabilities, ShellRuntime};
+
+gpui_platform::application()
+    .with_assets(gpui_shell::AppAssets::new(root.clone()))
+    .run(move |cx| {
+        // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
+        gpui_shell::init(cx);
+
+        let runtime = ShellRuntime::new(cx).expect("script runtime");
+
+        // 沿用 gpui-shell 命令的数据目录：manifest 里的 `id`。
+        let data = gpui_shell::set_bundle_id("com.example.clock").expect("data directory");
+
+        // 在 Host 开口之前，什么都不允许。
+        gpui_shell::set_capabilities(
+            Capabilities::new()
+                .read_roots([root.clone()])
+                .write_roots([data.clone()])
+                .storage(true),
+        );
+
+        cx.open_window(Default::default(), move |window, cx| {
+            runtime.load(&root, window, cx)
+        })
+        .expect("window");
+    });
+```
+
+其中两行承载的是规则而不是机制。
+
+**`runtime.load(...)` 返回窗口的 `ShellRoot`**，作用与 `gpui-component` 窗口中的 `Root` 相同。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。manifest 负责选择应用入口并记录能力请求，但不会自行批准这些请求。带 manifest 与不带 manifest 的目录都使用 Host 当前的默认 policy；后者采用 `main.js`。
+
+**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由 Host 决定，因为只有 Host 知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
+
+同时也要装上 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 以及 phase 非法的调用；没有 subscriber 时，这些全部被丢弃，症状是一个安静地不再响应的界面。
+
 ## 命令一览
 
 ```text
@@ -269,20 +314,20 @@ gpui-shell bundle [<name> | -d <directory>] [--platform <platform>] [--icon <png
 gpui-shell --help | --version
 ```
 
-| 参数                 | 含义                                               |
-| -------------------- | -------------------------------------------------- |
-| `<name>`             | 已安装的应用，`~/.gpui-shell/apps/<name>`        |
-| `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                     |
-| _（无）_             | 与可执行文件一起打包的应用，没有则显示 help        |
-| `run`                | 在窗口中运行一个应用                               |
-| `dev`                | 开发时运行：源码变化时重载，日志级别 `DEBUG`       |
-| `new`                | 在新目录中创建一个空白应用                         |
-| `list`               | 列出已安装的应用及其申请的 capabilities            |
-| `check`              | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`        |
-| `types`              | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置 |
-| `agents`             | 打印给 coding agent 的开发说明，或写成 `AGENTS.md` |
-| `bundle`             | 在 `dist/` 中生成桌面应用，见 [Packaging](./packaging.md) |
-| `--packaged`         | 配合 `run`，像包的启动脚本那样运行目录：必须有 manifest，不写编辑器文件 |
-| `--watch`            | 配合 `run`，源码变化时重载；`dev` 总会重载         |
-| `--dev`              | 配合 `run` 或 `dev`，开启开发模式：放宽沙箱        |
-| `--print-spec`       | 配合 `check`，额外打印构建出的元素描述             |
+| 参数                | 含义                                                                    |
+| ------------------- | ----------------------------------------------------------------------- |
+| `<name>`            | 已安装的应用，`~/.gpui-shell/apps/<name>`                               |
+| `-d`, `--dir <dir>` | 应用根目录，或其中的 `main.js`                                          |
+| _（无）_            | 与可执行文件一起打包的应用，没有则显示 help                             |
+| `run`               | 在窗口中运行一个应用                                                    |
+| `dev`               | 开发时运行：源码变化时重载，日志级别 `DEBUG`                            |
+| `new`               | 在新目录中创建一个空白应用                                              |
+| `list`              | 列出已安装的应用及其申请的 capabilities                                 |
+| `check`             | 不开窗口地加载并渲染一次，退出码 `0` 或 `1`                             |
+| `types`             | 写出 `gpui-kit.d.ts`、链接 manifest 依赖、生成配置                      |
+| `agents`            | 打印给 coding agent 的开发说明，或写成 `AGENTS.md`                      |
+| `bundle`            | 在 `dist/` 中生成桌面应用，见 [Packaging](./packaging.md)               |
+| `--packaged`        | 配合 `run`，像包的启动脚本那样运行目录：必须有 manifest，不写编辑器文件 |
+| `--watch`           | 配合 `run`，源码变化时重载；`dev` 总会重载                              |
+| `--dev`             | 配合 `run` 或 `dev`，开启开发模式：放宽沙箱                             |
+| `--print-spec`      | 配合 `check`，额外打印构建出的元素描述                                  |

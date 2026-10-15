@@ -1,13 +1,13 @@
 ---
 title: Getting Started
-description: Install the gpui-shell binary, add the runtime to a Rust application, write the script it loads, and check that script without opening a window.
+description: Install gpui-shell, write and run a standalone app in JavaScript, check it without opening a window, and move it under a Rust host when it needs more.
 order: 2
 maturity: [preview]
 ---
 
 # Getting Started
 
-`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script Views where it wants them. Running a script directory on its own is the development convenience that comes with that, not the point of it — but the `gpui-shell` binary that does it is also how either kind of project checks its scripts, so it is installed first.
+Start as a gpui-shell standalone app: write it in JavaScript, run it with hot reload, check it without opening a window and ship it, with no Rust and no build step. That covers most of what a product needs early on. When it needs more — a native library, heavy computation, logic already written in Rust — the same scripts move under a Rust binary that embeds the crate, unchanged; [Move to a Rust host](#move-to-a-rust-host) at the end of this page shows how. A Rust GPUI application that wants JavaScript extension points takes the same last step from the other side.
 
 ## Install gpui-shell
 
@@ -36,46 +36,6 @@ cargo install --git https://github.com/longbridge/gpui-kit gpui-shell --locked
 It installs to `~/.cargo/bin`, with the same `gpui-component` catalog as a release. Run the same command again to update; Cargo rebuilds when `main` has moved. `--branch <name>`, `--tag <tag>` or `--rev <commit>` builds a specific point instead. This needs a Rust toolchain, and on Linux the system libraries GPUI links against — `script/install-linux.sh` in the repository lists them for Ubuntu.
 
 If `~/.local/bin` comes before `~/.cargo/bin` on your `PATH`, a release installed by the script shadows the Git build; `command -v gpui-shell` shows which one runs.
-
-## Add the runtime to a Rust application
-
-A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script View under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
-
-```rust
-use gpui_kit::shell::{Capabilities, ShellRuntime};
-
-gpui_platform::application()
-    .with_assets(gpui_kit::shell::AppAssets::new(root.clone()))
-    .run(move |cx| {
-        // Initializes gpui-base, the shell's default token palette, and the
-        // style reflection table.
-        gpui_kit::shell::init(cx);
-
-        let runtime = ShellRuntime::new(cx).expect("script runtime");
-
-        // Nothing is permitted until the host says so.
-        gpui_kit::shell::set_store_path(store_directory.join("store.json"));
-        gpui_kit::shell::set_capabilities(
-            Capabilities::new()
-                .read_roots([root.clone()])
-                .write_roots([store_directory.clone()])
-                .store(true),
-        );
-
-        cx.open_window(Default::default(), move |window, cx| {
-            runtime.load(&root, window, cx)
-        })
-        .expect("window");
-    });
-```
-
-Two of those lines carry rules rather than mechanics.
-
-**`runtime.load(...)` returns the window's `ShellRoot`**, the same role `Root` has in a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. A manifest selects the application entry and records capability requests; it never approves those requests. Both manifest-backed and bare directories run under the host's current default policy, and a bare directory uses `main.js`.
-
-**Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
-
-Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a View that quietly stopped responding.
 
 ## The script it loads
 
@@ -139,7 +99,7 @@ Four things in that file are worth naming now, because everything else builds on
 
 ## Running a script on its own
 
-A script directory can also be run directly, without writing a host. This is how the bundled examples run, and how a script is usually developed before it is loaded by the application that will own it. From a clone of the repository:
+Running a directory needs no host of your own. This is how the bundled examples run, and how an application is developed whether or not it later moves under a Rust host. From a clone of the repository:
 
 ```bash
 gpui-shell run examples/js_todolist
@@ -155,11 +115,11 @@ An argument that contains a path separator — `./hello`, `examples/js_todolist`
 
 `gpui-shell` runs one application per process and has no interface of its own. Where that application comes from is decided by the command line:
 
-| Command                      | Runs                                                        |
-| ---------------------------- | ----------------------------------------------------------- |
-| `gpui-shell run clock`       | the installed application `~/.gpui-shell/apps/clock/`     |
-| `gpui-shell run -d ~/dev/clock` | that directory                                              |
-| `gpui-shell`                 | the application packaged beside the executable; without one, the help |
+| Command                         | Runs                                                                  |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `gpui-shell run clock`          | the installed application `~/.gpui-shell/apps/clock/`                 |
+| `gpui-shell run -d ~/dev/clock` | that directory                                                        |
+| `gpui-shell`                    | the application packaged beside the executable; without one, the help |
 
 To install an application, copy or link its directory into `~/.gpui-shell/apps/`; the directory name is the name it runs by. `gpui-shell list` prints every installed application with the capabilities its manifest asks for, running none of them. An application keeps its data under its manifest `id` however it is run — installed, packaged, or with `--dir` — so moving or reinstalling it does not lose it, and the copy you are editing shares its data with the installed one. Only a directory without a manifest is keyed by its path.
 
@@ -254,6 +214,91 @@ A reload does all of its fallible work before it touches the live View. If the n
 
 Neither relaxes the sandbox. `--dev`, with `run` or `dev`, enables development mode before the runtime is constructed: it restores dynamic-code constructors and leaves built-in prototypes writable, while capability checks remain unchanged. It does not reload or change the log level. See [Capabilities](./capabilities.md#the-sandbox).
 
+## Move to a Rust host
+
+When the application needs more than the scripts can reach, it gets a Rust binary of its own. None of the JavaScript is rewritten: the scripts, the manifest, the imports and the stored data stay as they are. There are two depths to this, and the first is usually enough.
+
+### Keep the command, add Rust
+
+The `gpui-shell` command lives in the library, so a binary of your own can be that command, under its own name, with Rust functions registered for the scripts. Depend on the crate from Git:
+
+```toml
+[dependencies]
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit" }
+```
+
+```rust
+use gpui_shell::{HostModule, HostValue, host::HostBrand};
+
+fn main() {
+    gpui_shell::export_module(
+        HostModule::new("native")
+            .declarations("export function greet(name: string): string;")
+            .function("greet", |arguments| {
+                let name = arguments.string(0)?;
+                Ok(HostValue::from(format!("Hello, {name}")))
+            }),
+    )
+    .expect("register the native module");
+
+    let components = gpui_shell::components::components().expect("component catalog");
+    gpui_shell::host::main_with_brand_and_components(
+        HostBrand::new("clock", env!("CARGO_PKG_VERSION")),
+        components,
+    );
+}
+```
+
+```js
+import { greet } from "native";
+
+greet("world"); // "Hello, world"
+```
+
+Register modules before calling `main_with_brand_and_components`: an import is linked when the application loads. Everything else is the shipped command — `clock dev -d ./clock`, `clock check`, `clock types` (which now declares `native` too) and `clock agents` behave as `gpui-shell`'s do, and the application reads the same manifest, receives the same grants and keeps its data under the same `id`. `clock` with no arguments runs the `app` directory beside the executable, so a [standalone package](./packaging.md#standalone-packages) is that binary plus the application directory. `bundle` is the one command it refuses, because its launchers install `gpui-shell` releases, which do not carry your modules. [HostModule](./host-module.md) covers what may cross the boundary and how a function reaches host state.
+
+### Build the runtime yourself
+
+A host that owns more of the process — its own windows, a script View beside Rust views, several applications with different grants — builds the runtime itself. It does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script View under a `ShellRoot`. The `gpui-shell` command is itself a thin host that does exactly this.
+
+```rust
+use gpui_shell::{Capabilities, ShellRuntime};
+
+gpui_platform::application()
+    .with_assets(gpui_shell::AppAssets::new(root.clone()))
+    .run(move |cx| {
+        // Initializes gpui-base, the shell's default token palette, and the
+        // style reflection table.
+        gpui_shell::init(cx);
+
+        let runtime = ShellRuntime::new(cx).expect("script runtime");
+
+        // The data directory the gpui-shell command used: the manifest `id`.
+        let data = gpui_shell::set_bundle_id("com.example.clock").expect("data directory");
+
+        // Nothing is permitted until the host says so.
+        gpui_shell::set_capabilities(
+            Capabilities::new()
+                .read_roots([root.clone()])
+                .write_roots([data.clone()])
+                .storage(true),
+        );
+
+        cx.open_window(Default::default(), move |window, cx| {
+            runtime.load(&root, window, cx)
+        })
+        .expect("window");
+    });
+```
+
+Two of those lines carry rules rather than mechanics.
+
+**`runtime.load(...)` returns the window's `ShellRoot`**, the same role `Root` has in a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. A manifest selects the application entry and records capability requests; it never approves those requests. Both manifest-backed and bare directories run under the host's current default policy, and a bare directory uses `main.js`.
+
+**Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
+
+Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a View that quietly stopped responding.
+
 ## Command reference
 
 ```text
@@ -270,20 +315,20 @@ gpui-shell bundle [<name> | -d <directory>] [--platform <platform>] [--icon <png
 gpui-shell --help | --version
 ```
 
-| Argument               | Meaning                                                                  |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `<name>`               | An installed application, `~/.gpui-shell/apps/<name>`                 |
-| `-d`, `--dir <dir>`   | The application root, or the `main.js` inside it                         |
-| _(none)_               | The application packaged beside the executable, or else this help        |
-| `run`                  | Run one application in a window                                         |
-| `dev`                  | Run it while developing: reload on change, log at `DEBUG`                |
-| `new`                  | Create a blank application in a new directory                            |
-| `list`                 | Print the installed applications and their requested capabilities        |
-| `check`                | Load and render once without a window; exit `0` or `1`                   |
-| `types`                | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config |
-| `agents`               | Print, or write as `AGENTS.md`, the instructions for coding agents       |
-| `bundle`               | Make a desktop application in `dist/`; see [Packaging](./packaging.md)   |
-| `--packaged`           | With `run`, run a directory as a bundle's launcher does: manifest required, no editor files |
-| `--watch`              | With `run`, reload when the sources change; `dev` always does            |
-| `--dev`                | With `run` or `dev`, development mode: relax the sandbox                 |
-| `--print-spec`         | With `check`, also print the element description that was built          |
+| Argument            | Meaning                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `<name>`            | An installed application, `~/.gpui-shell/apps/<name>`                                       |
+| `-d`, `--dir <dir>` | The application root, or the `main.js` inside it                                            |
+| _(none)_            | The application packaged beside the executable, or else this help                           |
+| `run`               | Run one application in a window                                                             |
+| `dev`               | Run it while developing: reload on change, log at `DEBUG`                                   |
+| `new`               | Create a blank application in a new directory                                               |
+| `list`              | Print the installed applications and their requested capabilities                           |
+| `check`             | Load and render once without a window; exit `0` or `1`                                      |
+| `types`             | Write `gpui-kit.d.ts`, link the manifest's dependencies, scaffold config                    |
+| `agents`            | Print, or write as `AGENTS.md`, the instructions for coding agents                          |
+| `bundle`            | Make a desktop application in `dist/`; see [Packaging](./packaging.md)                      |
+| `--packaged`        | With `run`, run a directory as a bundle's launcher does: manifest required, no editor files |
+| `--watch`           | With `run`, reload when the sources change; `dev` always does                               |
+| `--dev`             | With `run` or `dev`, development mode: relax the sandbox                                    |
+| `--print-spec`      | With `check`, also print the element description that was built                             |

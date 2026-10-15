@@ -325,6 +325,29 @@ process.exit(0);
 
 执行是有界的：30 秒、stdout 8 MiB、stderr 8 MiB。触及任一上限都会终止并回收子进程，同时 reject promise。取消所属任务或销毁 runtime 也会终止子进程。子进程从清空的环境开始，不会继承 Host secret；shell 也不提供添加环境变量的选项。
 
+`process.run(command, args, { cwd, timeoutMs })` 可以带第三个参数：工作目录（必须在 `capabilities.fs.read` 授权范围内），以及替代 30 秒的超时时间。
+
+### 流式执行：`process.spawn`
+
+```js
+const child = process.spawn("codex", ["exec", "--json", task], { cwd, lines: true });
+child
+  .on("stdout", (line, cx) => { this.events.push(JSON.parse(line)); cx.notify(); })
+  .on("stderr", (line) => console.warn(line))
+  .on("exit", ({ code, signal, error }, cx) => { this.done = true; cx.notify(); });
+```
+
+`process.run` 要等命令结束才返回。有些命令会运行好几分钟、需要通过 stdin 交互，或者需要边运行边读取输出，比如以 JSON lines 流式输出的 AI 命令行，或者通过 stdin/stdout 说协议的常驻服务。这类命令要在输出到达时就拿到它。`spawn` 立即返回一个 `ChildProcess`：
+
+- `on("stdout" | "stderr", (text, cx) => …)`：读到输出就投递；`lines: true` 时按行投递，不含换行符，跨多次读取的行会拼接完整，结尾没有换行的最后一行也会投递。输出按 UTF-8 解码，字符跨两次读取也不会被拆坏。输出总量没有上限，但单行超过 8 MiB 会杀掉进程，因为一行要等到换行符出现才能交出。
+- `on("exit", ({ code, signal, error }, cx) => …)`：**只触发一次，并且在最后一次输出之后**。运行时主动停止进程时（`timeoutMs` 到期，或者单行过长）会带上 `error`；进程自己结束或被 `kill()` 时没有 `error`。
+- `write(text)` 和 `end()`：子进程以 `stdin: "pipe"` 启动时，用来写入和关闭 stdin。
+- `kill()`：杀掉整个进程组（Windows 上是 Job Object），命令自己启动的子进程也一起结束。
+
+处理函数在 UI 线程上执行，拿到的是异步 `cx`，和 `cx.spawn` 任务里的一样，所以可以 `cx.notify()`，跨 `await` 也能继续使用。除非用 `timeoutMs` 指定，否则**没有超时限制**。子进程归属于启动它的视图：视图被释放、`dev --watch` 下应用重载、窗口关闭时，都会杀掉它以及它启动的所有进程，不会留下孤儿进程。
+
+`spawn` 和 `run` 使用相同的授权，按同样的方式在 Host 的 PATH 上查找命令，也同样以清空的环境启动。
+
 它受执行授权约束，授权有三种形态：拒绝（默认）、命令名白名单，或不受限。被拒绝的命令**在调用处抛出**而不是 reject，和被拒绝的 `fs` 路径一样——没人 await 的 rejected promise，等于没人看见的拒绝。
 
 `process.exit` 在运行时内部是**一个请求，绝不是 `exit(2)`**。它把退出码交给 Host 安装的处理函数，由后者决定怎么做——关闭插件的面板、关闭窗口、结束进程。一个插件不能把 Host 进程带走，而 Host 可能还有未保存的状态。

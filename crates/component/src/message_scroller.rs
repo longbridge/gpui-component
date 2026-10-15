@@ -1,7 +1,7 @@
 use std::{ops::Range, time::Duration};
 
 use gpui::{
-    AnyElement, App, Axis, Context, ElementId, Entity, FollowMode, Hsla, InteractiveElement as _,
+    AnyElement, App, Context, ElementId, Entity, FollowMode, Hsla, InteractiveElement as _,
     IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce, Role,
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     linear_color_stop, linear_gradient, list, prelude::FluentBuilder as _, px, rems,
@@ -9,10 +9,7 @@ use gpui::{
 use gpui_base::motion::{Transition, transition};
 
 use crate::{ActiveTheme as _, Disableable as _, IconName, StyledExt as _, button::Button};
-use crate::{
-    button::ButtonVariants as _,
-    scroll::{ScrollableElement as _, ScrollableMask},
-};
+use crate::{button::ButtonVariants as _, scroll::ScrollableElement as _};
 
 const LIST_OVERDRAW: gpui::Pixels = px(400.);
 const JUMP_BUTTON_TRANSITION: Duration = Duration::from_millis(200);
@@ -380,7 +377,17 @@ impl RenderOnce for MessageScroller {
             .size_full()
             .min_h_0()
             .min_w_0()
-            .child(list)
+            .child(
+                // The bounce scrolls the list itself, past the list's own
+                // scroll handler; tell the state, as that handler would.
+                gpui_base::ScrollBounce::new((root_id.clone(), "bounce"), &list_state, list)
+                    .on_scroll({
+                        let state = self.state.downgrade();
+                        move |_, cx| {
+                            let _ = state.update(cx, |_, cx| cx.notify());
+                        }
+                    }),
+            )
             // The fade sits above the rows but below the scrollbar and the
             // jump button, so neither control is washed out by it.
             .when_some(
@@ -412,11 +419,6 @@ impl RenderOnce for MessageScroller {
             .min_h_0()
             .overflow_hidden()
             .child(viewport)
-            // Keep vertical wheel scrolling from leaking into an ancestor
-            // scroller (like in Table): the mask consumes vertical-dominant
-            // wheel events while the list can move and chains to the ancestor
-            // only at the edges.
-            .child(ScrollableMask::new(Axis::Vertical, &list_state).id(root_id.clone()))
             .when(self.jump_button && jump_button_visibility > 0., |this| {
                 let state = self.state.clone();
 

@@ -2,7 +2,7 @@ use std::{panic::Location, rc::Rc};
 
 use crate::{InteractiveElementExt as _, StyledExt};
 
-use super::{Scrollbar, ScrollbarAxis, ScrollbarHandle};
+use super::{ScrollableMask, Scrollbar, ScrollbarAxis, ScrollbarHandle};
 use gpui::{
     App, Div, Element, ElementId, InteractiveElement, IntoElement, Overflow, ParentElement,
     PointRefinement, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement,
@@ -68,6 +68,7 @@ pub struct Scrollable<E: InteractiveElement + Styled + ParentElement + Element> 
     id: ElementId,
     element: E,
     axis: ScrollbarAxis,
+    scroll_bounce: Option<bool>,
 }
 
 impl<E> Scrollable<E>
@@ -80,6 +81,7 @@ where
             id: caller_id(),
             element,
             axis: axis.into(),
+            scroll_bounce: None,
         }
     }
 
@@ -89,6 +91,13 @@ where
     /// otherwise share a single scroll position.
     pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = id.into();
+        self
+    }
+
+    /// Bounce at the vertical boundaries. On by default on iOS, Android and
+    /// macOS, off elsewhere; horizontal-only areas do not bounce.
+    pub fn scroll_bounce(mut self, enabled: bool) -> Self {
+        self.scroll_bounce = Some(enabled);
         self
     }
 }
@@ -175,7 +184,19 @@ where
             .size_full()
             .refine_style(&root_style)
             .relative()
-            .child(scroll_area)
+            .child(
+                gpui_base::ScrollBounce::new(
+                    (self.id.clone(), "bounce"),
+                    &scroll_handle,
+                    scroll_area,
+                )
+                .when_some(self.scroll_bounce, |bounce, on| bounce.enabled(on)),
+            )
+            // A plain mouse wheel has only a vertical axis, which the locked
+            // horizontal area above would ignore.
+            .when(self.axis == ScrollbarAxis::Horizontal, |this| {
+                this.child(ScrollableMask::vertical_wheel(&scroll_handle))
+            })
             .child(render_scrollbar(
                 scrollbar_id,
                 &scroll_handle,
@@ -548,6 +569,29 @@ mod tests {
                 .x
                 < initial_x
         );
+    }
+
+    #[gpui::test]
+    fn horizontal_scrollable_scrolls_with_a_vertical_mouse_wheel(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| HorizontalFlexItemScrollableTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first_item_x = |cx: &mut VisualTestContext| {
+            cx.debug_bounds("horizontal-flex-item-first-item")
+                .unwrap()
+                .origin
+                .x
+        };
+        let initial_x = first_item_x(cx);
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(50.), px(10.)),
+            delta: ScrollDelta::Lines(point(0., -1.)),
+            ..Default::default()
+        });
+        draw(cx);
+        assert!(first_item_x(cx) < initial_x);
     }
 
     struct ExplicitMinHeightScrollableTest;

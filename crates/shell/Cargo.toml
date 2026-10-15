@@ -25,11 +25,15 @@ gpui-fast = [
     "gpui-fps/gpui-fast",
     "gpui-component?/gpui-fast",
 ]
-default = ["quickjs", "components"]
+default = ["quickjs", "components", "webview"]
 # The `gpui-component` catalog (`gpui_shell::components`), which scripts import
 # as `"gpui-component"`. Without it the runtime binds `gpui-base` only and does
 # not depend on the styled component library at all.
 components = ["dep:gpui-component"]
+# `WebView` and `WebViewState` in the `"gpui-component"` catalog: a native web
+# page, through `gpui-webview`. That crate is built on GPUI Fast, so this selects
+# it for the whole runtime; on Linux a page needs an X11 or XWayland window.
+webview = ["components", "gpui-fast", "dep:gpui-webview", "dep:wry"]
 # The scripting engine. See `src/engine/mod.rs` for the surface an engine has
 # to provide; QuickJS is the only implementation today, and the feature exists
 # so a second one can be added without the seam having to be invented first.
@@ -48,7 +52,9 @@ gpui_platform.workspace = true
 gpui-fast-platform = { workspace = true, optional = true }
 gpui-base = { workspace = true, features = ["inspector"] }
 gpui-fps.workspace = true
-gpui-component = { workspace = true, features = ["tree-sitter-rust"], optional = true }
+gpui-component = { workspace = true, features = ["syntect"], optional = true }
+gpui-webview = { workspace = true, optional = true }
+wry = { version = "0.53.3", package = "lb-wry", optional = true }
 
 # Keep the bindings, runtime, and LLRT compatibility facade on the same release.
 rquickjs = { package = "quickjs-jit", version = "0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = [

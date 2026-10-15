@@ -110,3 +110,61 @@ export default class ChatHost extends View {
         assert!(tree.contains(expected), "missing `{expected}`:\n{tree}");
     }
 }
+
+/// Rows are rebuilt during layout on every frame; a row's own handlers belong
+/// to that frame, so they can be registered and they fire.
+#[gpui::test]
+fn message_scroller_rows_hold_their_own_handlers(cx: &mut TestAppContext) {
+    cx.update(gpui_shell::components::init);
+    let runtime = gpui_shell::components::new_isolated_runtime().expect("runtime");
+    let app = TempApp::new(
+        r#"
+import { div, View } from "gpui-kit";
+import { TextView } from "gpui-base";
+import { MessageScroller, MessageScrollerState } from "gpui-component";
+
+export default class Rows extends View {
+  init() { this.scroller = MessageScrollerState(1); this.clicked = false; }
+  render() {
+    return div().size_full()
+      .when(this.clicked, (el) => el.child(div().id("row-clicked")))
+      .child(new MessageScroller("messages", this.scroller, () =>
+        div().id("row").w(200).h(40)
+          .on_click((_event, cx) => { this.clicked = true; cx.notify(); })
+          .child(TextView.markdown("text", "[link](https://example.com)")
+            .on_link_click((_url, cx) => cx.notify())))
+        .w(200).h(120));
+  }
+}
+"#,
+    );
+    let loaded = runtime
+        .load_application(app.path(), "main.js")
+        .expect("load application");
+    let mounted = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let mounted_for_window = mounted.clone();
+    let runtime_for_window = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_window
+            .mount_application(&loaded, window, cx)
+            .expect("mount application");
+        *mounted_for_window.borrow_mut() = Some(view.clone());
+        ScriptRoot(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_click(
+        gpui::point(gpui::px(150.), gpui::px(30.)),
+        gpui::Modifiers::none(),
+    );
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let tree = context.update(|_, cx| {
+        let view = mounted.borrow().clone().expect("mounted view");
+        assert_eq!(view.read(cx).build_error(), None);
+        view.read(cx).snapshot().expect("snapshot").debug_tree()
+    });
+    assert!(
+        tree.contains("row-clicked"),
+        "the row's click was not delivered:\n{tree}"
+    );
+}
