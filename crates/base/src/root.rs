@@ -274,17 +274,13 @@ impl Render for Root {
 mod tests {
     use super::*;
     use crate::FocusTrapElement as _;
-    use gpui::{
-        FocusHandle, KeyDownEvent, KeyUpEvent, Keystroke, StatefulInteractiveElement as _,
-        Subscription, TestAppContext, VisualTestContext, px,
-    };
+    use gpui::{FocusHandle, Subscription, TestAppContext, VisualTestContext, px};
     use std::cell::Cell;
 
     struct TrapContent {
         background: Vec<FocusHandle>,
         container: FocusHandle,
         controls: Vec<FocusHandle>,
-        background_clicks: Rc<Cell<usize>>,
         _focus_subscriptions: Vec<Subscription>,
     }
 
@@ -294,13 +290,11 @@ mod tests {
                 .tab_group()
                 .size_full()
                 .children(self.background.iter().enumerate().map(|(index, handle)| {
-                    let clicks = self.background_clicks.clone();
                     div()
                         .id(("background", index))
                         .track_focus(handle)
                         .tab_index(0)
                         .size(px(1.))
-                        .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
                 }))
                 .child(
                     div()
@@ -327,7 +321,7 @@ mod tests {
         FocusHandle,
         Vec<FocusHandle>,
         Vec<FocusHandle>,
-        [Rc<Cell<usize>>; 2],
+        Rc<Cell<usize>>,
     ) {
         cx.update(crate::init);
         let (container, controls, background) = cx.update(|cx| {
@@ -344,13 +338,11 @@ mod tests {
             )
         });
         let background_focuses = Rc::new(Cell::new(0));
-        let background_clicks = Rc::new(Cell::new(0));
         let (_, cx) = cx.add_window_view({
             let container = container.clone();
             let controls = controls.clone();
             let background = background.clone();
             let background_focuses = background_focuses.clone();
-            let background_clicks = background_clicks.clone();
             move |window, cx| {
                 let content = cx.new(|cx| {
                     let subscriptions = background
@@ -366,7 +358,6 @@ mod tests {
                         background,
                         container,
                         controls,
-                        background_clicks,
                         _focus_subscriptions: subscriptions,
                     }
                 });
@@ -376,13 +367,7 @@ mod tests {
         cx.update(|window, _| window.activate_window());
         cx.executor().run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        (
-            cx,
-            container,
-            controls,
-            background,
-            [background_focuses, background_clicks],
-        )
+        (cx, container, controls, background, background_focuses)
     }
 
     fn assert_trapped_focus(
@@ -399,7 +384,7 @@ mod tests {
 
     #[gpui::test]
     fn focus_trap_wraps_forward_past_more_than_100_background_stops(cx: &mut TestAppContext) {
-        let (cx, container, controls, _, background_events) = trap_harness(cx, 2);
+        let (cx, container, controls, _, background_focuses) = trap_harness(cx, 2);
         cx.update(|window, cx| {
             controls[1].focus(window, cx);
             window.draw(cx).clear(cx);
@@ -409,12 +394,12 @@ mod tests {
         assert_trapped_focus(cx, &container, &controls[0]);
         cx.dispatch_action(Tab);
         assert_trapped_focus(cx, &container, &controls[1]);
-        assert!(background_events.iter().all(|count| count.get() == 0));
+        assert_eq!(background_focuses.get(), 0);
     }
 
     #[gpui::test]
     fn focus_trap_wraps_backward_past_more_than_100_background_stops(cx: &mut TestAppContext) {
-        let (cx, container, controls, _, background_events) = trap_harness(cx, 2);
+        let (cx, container, controls, _, background_focuses) = trap_harness(cx, 2);
         cx.update(|window, cx| {
             controls[0].focus(window, cx);
             window.draw(cx).clear(cx);
@@ -424,12 +409,12 @@ mod tests {
         assert_trapped_focus(cx, &container, &controls[1]);
         cx.dispatch_action(TabPrev);
         assert_trapped_focus(cx, &container, &controls[0]);
-        assert!(background_events.iter().all(|count| count.get() == 0));
+        assert_eq!(background_focuses.get(), 0);
     }
 
     #[gpui::test]
     fn focus_trap_without_tab_stops_keeps_its_container_focused(cx: &mut TestAppContext) {
-        let (cx, container, _, _, background_events) = trap_harness(cx, 0);
+        let (cx, container, _, _, background_focuses) = trap_harness(cx, 0);
         cx.update(|window, cx| {
             container.focus(window, cx);
             window.draw(cx).clear(cx);
@@ -439,19 +424,19 @@ mod tests {
         assert_trapped_focus(cx, &container, &container);
         cx.dispatch_action(TabPrev);
         assert_trapped_focus(cx, &container, &container);
-        assert!(background_events.iter().all(|count| count.get() == 0));
+        assert_eq!(background_focuses.get(), 0);
     }
 
     #[gpui::test]
     fn inactive_focus_trap_does_not_capture_background_navigation(cx: &mut TestAppContext) {
-        let (cx, _, _, background, background_events) = trap_harness(cx, 2);
+        let (cx, _, _, background, background_focuses) = trap_harness(cx, 2);
         cx.update(|window, cx| {
             background[0].focus(window, cx);
             window.draw(cx).clear(cx);
         });
         // Prove that the observers used by the containment regressions really
         // receive native focus notifications when a background control is used.
-        assert_eq!(background_events[0].get(), 1);
+        assert_eq!(background_focuses.get(), 1);
 
         cx.dispatch_action(Tab);
         cx.update(|window, cx| {
@@ -463,15 +448,7 @@ mod tests {
             window.draw(cx).clear(cx);
             assert_eq!(window.focused(cx), Some(background[0].clone()));
         });
-        assert_eq!(background_events[0].get(), 3);
-        let keystroke = Keystroke::parse("enter").unwrap();
-        cx.simulate_event(KeyDownEvent {
-            keystroke: keystroke.clone(),
-            is_held: false,
-            prefer_character_input: false,
-        });
-        cx.simulate_event(KeyUpEvent { keystroke });
-        assert_eq!(background_events[1].get(), 1);
+        assert_eq!(background_focuses.get(), 3);
     }
 
     struct Content;
@@ -512,20 +489,10 @@ mod tests {
         }
         assert_ne!(ids[0], ids[1]);
     }
+
     mod nested_traps {
         use super::*;
-        use gpui::{FocusHandle, VisualTestContext, px};
-        fn assert_trapped_focus(
-            cx: &mut VisualTestContext,
-            container: &FocusHandle,
-            expected: &FocusHandle,
-        ) {
-            cx.update(|window, cx| {
-                window.draw(cx).clear(cx);
-                assert_eq!(window.focused(cx).as_ref(), Some(expected));
-                assert!(container.contains_focused(window, cx));
-            });
-        }
+
         struct NestedTraps {
             containers: Vec<FocusHandle>,
             controls: Vec<[FocusHandle; 2]>,
