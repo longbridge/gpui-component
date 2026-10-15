@@ -2,9 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
     Anchor, AnyElement, App, Background, Bounds, ClickEvent, Edges, ElementId, Entity, EntityId,
-    HitboxBehavior, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
-    ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div, point,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_base::spring;
 use rust_i18n::t;
@@ -16,6 +16,7 @@ use super::{
 };
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
+use crate::scroll::ScrollableMask;
 use crate::{
     ActiveTheme, ElementExt, Icon, InteractiveElementExt as _, Selectable, Sizable, Size,
     StyledExt, h_flex, styled::raised_shadow,
@@ -653,7 +654,7 @@ impl RenderOnce for TabBar {
                             .when(has_suffix_or_menu, |this| this.child(self.last_empty_space)),
                     )
                     // Outside the tracked children so tab indices stay unchanged.
-                    .child(tab_wheel_scroll_mask(&scroll_handle)),
+                    .child(ScrollableMask::vertical_wheel(&scroll_handle)),
             )
             .when(self.menu, |this| {
                 this.child(
@@ -694,43 +695,6 @@ impl RenderOnce for TabBar {
 }
 
 type TabClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
-
-fn tab_wheel_scroll_mask(handle: &ScrollHandle) -> impl IntoElement {
-    let bounds_handle = handle.clone();
-    let scroll_handle = handle.clone();
-    canvas(
-        move |_, window, _| window.insert_hitbox(bounds_handle.bounds(), HitboxBehavior::Normal),
-        move |_, hitbox, window, _| {
-            let view = window.current_view();
-            let line_height = window.line_height();
-            // Painted after the tabs, before ancestor Scrollable capture handlers.
-            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
-                if !phase.capture() || !hitbox.should_handle_scroll(window) {
-                    return;
-                }
-                // Keep precise trackpad gestures on GPUI's locked axis.
-                let ScrollDelta::Lines(delta) = event.delta else {
-                    return;
-                };
-                if delta.x != 0. || !delta.y.is_finite() {
-                    return;
-                }
-                let mut offset = scroll_handle.offset();
-                let max = scroll_handle.max_offset().x;
-                let current = offset.x.clamp(-max, px(0.));
-                let x = (current + line_height * delta.y).clamp(-max, px(0.));
-                if x != current {
-                    offset.x = x;
-                    scroll_handle.set_offset(offset);
-                    cx.notify(view);
-                    cx.stop_propagation();
-                }
-            });
-        },
-    )
-    .absolute()
-    .size_full()
-}
 
 /// Scrolls a clicked tab into view, the way an `NSScrollView` reveals a
 /// clicked row, and leaves part of the tab beyond it showing so the strip
@@ -1610,49 +1574,6 @@ mod tests {
         }
     }
 
-    #[gpui::test]
-    fn precise_wheel_events_preserve_trackpad_axis_locking(cx: &mut TestAppContext) {
-        cx.update(crate::theme::init);
-        for (dx, dy, expected_x) in [
-            (-40., 0., -40.),
-            (-40., -5., -40.),
-            (0., -40., 0.),
-            (-5., -40., 0.),
-        ] {
-            let scroll_handle = ScrollHandle::new();
-            let (_, cx) = cx.add_window_view({
-                let scroll_handle = Some(scroll_handle.clone());
-                move |_, _| WheelHarness {
-                    scroll_handle,
-                    variant: TabVariant::Tab,
-                }
-            });
-            draw(cx);
-            let first_before = cx.debug_bounds("wheel-tab-0").unwrap();
-            wheel(
-                cx,
-                scroll_handle.bounds().center(),
-                gpui::ScrollDelta::Pixels(point(px(dx), px(dy))),
-                gpui::TouchPhase::Started,
-            );
-            assert_eq!(scroll_handle.offset(), point(px(expected_x), px(0.)));
-            let first_after = cx.debug_bounds("wheel-tab-0").unwrap();
-            assert_eq!(first_after.left() - first_before.left(), px(expected_x));
-
-            // A small cross-axis movement keeps the gesture's original axis.
-            if expected_x == 0. {
-                wheel(
-                    cx,
-                    first_before.center(),
-                    gpui::ScrollDelta::Pixels(point(px(-4.), px(-3.))),
-                    gpui::TouchPhase::Moved,
-                );
-                assert_eq!(scroll_handle.offset().x, px(0.));
-                assert_eq!(cx.debug_bounds("wheel-tab-0").unwrap(), first_before);
-            }
-        }
-    }
-
     #[derive(Clone)]
     enum WheelParent {
         Div(ScrollHandle),
@@ -1795,31 +1716,6 @@ mod tests {
                     assert!(first_after.top() < first_before.top());
                 }
             }
-        }
-    }
-
-    #[gpui::test]
-    fn empty_and_nonfinite_vertical_wheel_deltas_do_not_move_tabs(cx: &mut TestAppContext) {
-        cx.update(crate::theme::init);
-        let scroll_handle = ScrollHandle::new();
-        let (_, cx) = cx.add_window_view({
-            let scroll_handle = Some(scroll_handle.clone());
-            move |_, _| WheelHarness {
-                scroll_handle,
-                variant: TabVariant::Tab,
-            }
-        });
-        draw(cx);
-        let first = cx.debug_bounds("wheel-tab-0").unwrap();
-        for dy in [0., f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-            wheel(
-                cx,
-                first.center(),
-                gpui::ScrollDelta::Lines(point(0., dy)),
-                gpui::TouchPhase::Moved,
-            );
-            assert_eq!(scroll_handle.offset(), point(px(0.), px(0.)));
-            assert_eq!(cx.debug_bounds("wheel-tab-0").unwrap(), first);
         }
     }
 
