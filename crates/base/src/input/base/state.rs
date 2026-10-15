@@ -8765,6 +8765,23 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_textarea_visual_rows_only_read_the_existing_cache(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            cx.new(|cx| {
+                let mut state = crate::input::TextareaState::new(window, cx)
+                    .rows(12)
+                    .default_value("one\ntwo");
+                assert_eq!(state.visual_row_count(), 0, "not laid out yet");
+                state.display_map.ensure_text_prepared(&state.text, cx);
+                assert_eq!(state.visual_row_count(), 2);
+                state
+            });
+            gpui::EmptyView
+        });
+    }
+
+    #[gpui::test]
     fn test_prewrap_counts_wrapped_rows_before_the_first_paint(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let text = "select id, name, email, phone from users where active\nlimit 10";
@@ -11664,6 +11681,22 @@ impl InputBaseState<crate::input::TextareaMode> {
     /// default plain-text layout needs no adjustment here.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self::new_in_mode(window, cx)
+    }
+
+    /// The cached number of content rows, including soft-wrapped continuations.
+    ///
+    /// This O(1) query does not shape text or update layout. It is independent
+    /// of the configured minimum rows, auto-grow limits, and viewport height.
+    /// Empty text has one row once laid out; before the first layout the cache
+    /// can be zero.
+    ///
+    /// Layout refreshes the cache for the control's width and font. After a
+    /// resize or font change, this returns the previous count until the next
+    /// textarea layout. Text edits use the cached wrapping parameters. A host
+    /// deriving a preferred height from this count should consume it on a
+    /// subsequent render; reading it does not force layout or notify the host.
+    pub fn visual_row_count(&self) -> usize {
+        self.display_map.wrap_row_count()
     }
 
     pub fn set_auto_grow(&mut self, min_rows: usize, max_rows: usize, cx: &mut Context<Self>) {

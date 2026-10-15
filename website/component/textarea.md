@@ -40,6 +40,34 @@ Textarea::new(&message)
 ```
 
 The control grows until `max_rows`; overflowing content then scrolls.
+Auto-grow sets the control's minimum height from its content (within those
+limits). Use application-owned preferred height instead when a surrounding
+flex layout must be allowed to shrink below that preferred height.
+
+### Application-owned preferred height
+
+`TextareaState::visual_row_count(&self) -> usize` reads the existing cached
+content row count, including soft-wrapped continuations and explicit line
+breaks. It is an O(1) query: it does not shape text, allocate, or update layout.
+The count is independent of `rows`, auto-grow limits, and the visible viewport;
+an empty laid-out textarea has one row.
+
+The cache is populated during textarea layout. Before the first layout it can
+be zero; after a width or font change it reflects the previous layout until
+the textarea is laid out again. Text edits use the currently cached wrapping
+parameters. Reading the getter does not force a layout or notify the parent.
+A host that derives its height from the count must consume the refreshed cache
+on a subsequent render; it must not assume the new width's count is available
+while constructing that same frame.
+
+For example, keep the state at `.rows(1)`, clamp the cached count to `3..=12`,
+and translate it to a preferred height using the host's line height and the
+control's vertical padding. Give the surrounding flex item that preferred
+height with `.min_h(px(0.)).flex_shrink(1.)`, and render
+`Textarea::new(&message).h(relative(1.))` inside it. The host can then shrink
+below three rows when space is limited, while the textarea retains its own
+internal scrolling. This is a host layout policy, not a second text-wrapping
+implementation.
 
 ## Scrolling
 

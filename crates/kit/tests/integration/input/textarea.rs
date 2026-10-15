@@ -1134,6 +1134,127 @@ fn rows_set_the_minimum_height_of_a_plain_textarea(cx: &mut TestAppContext) {
     .unwrap();
 }
 
+#[gpui_kit::test]
+fn plain_rows_one_reports_content_rows_without_growing(cx: &mut TestAppContext) {
+    let (handle, _, text) = composer(cx, |state| state.rows(1));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click(target(&text), cx);
+        let height = window.find(target(&text)).bounds().size.height;
+        assert_eq!(text.read(cx).visual_row_count(), 1);
+        window.input("one\ntwo\nthree", cx);
+        assert_eq!(text.read(cx).visual_row_count(), 3);
+        assert_eq!(window.find(target(&text)).bounds().size.height, height);
+        window.press(END, cx);
+        assert!(text.read(cx).scroll_offset().y < px(0.));
+        assert_caret_visible(text.read(cx));
+        window.press("secondary-a", cx);
+        window.press("backspace", cx);
+        assert_eq!(text.read(cx).visual_row_count(), 1);
+    })
+    .unwrap();
+}
+
+struct PreferredRows {
+    text: Entity<TextareaState>,
+}
+
+impl Render for PreferredRows {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let rows = self.text.read(cx).visual_row_count().clamp(3, 12);
+        div().size_full().flex().flex_col().child(
+            div()
+                .id("preferred-rows")
+                .w_full()
+                .h(px(rows as f32 * 24. + 32.))
+                .min_h(px(0.))
+                .flex_shrink(1.)
+                .child(Textarea::new(&self.text).w_full().h(gpui_kit::relative(1.)))
+                .test_support(),
+        )
+    }
+}
+
+#[gpui_kit::test]
+fn cached_rows_support_host_preferred_height_shrink_and_internal_scroll(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (handle, view) = common::open_window(cx, Some(size(px(480.), px(480.))), |window, cx| {
+        let text = cx.new(|cx| TextareaState::new(window, cx).rows(1));
+        cx.new(|_| PreferredRows { text })
+    });
+    let text = cx.update(|cx| view.read(cx).text.clone());
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(text.read(cx).visual_row_count(), 1);
+        assert_eq!(window.find("preferred-rows").bounds().size.height, px(104.));
+        for rows in [6, 20] {
+            let value = (0..rows).map(|_| "line").collect::<Vec<_>>().join("\n");
+            text.update(cx, |state, cx| state.set_value(value, window, cx));
+            window.render_frame(cx);
+            // The host consumes the cache on its next render, not by shaping
+            // another copy of the text during its own layout.
+            view.update(cx, |_, cx| cx.notify());
+            window.render_frame(cx);
+            assert_eq!(text.read(cx).visual_row_count(), rows);
+            assert_eq!(
+                window.find("preferred-rows").bounds().size.height,
+                px(rows.clamp(3, 12) as f32 * 24. + 32.)
+            );
+        }
+    })
+    .unwrap();
+    cx.simulate_window_resize(handle.into(), size(px(480.), px(120.)));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("preferred-rows").bounds().size.height <= px(120.));
+        assert_eq!(text.read(cx).visual_row_count(), 20);
+        window.click(target(&text), cx);
+        window.press(END, cx);
+        assert!(text.read(cx).scroll_offset().y < px(0.));
+        assert_caret_visible(text.read(cx));
+        window.press("secondary-a", cx);
+        window.press("backspace", cx);
+        view.update(cx, |_, cx| cx.notify());
+        window.render_frame(cx);
+        assert_eq!(text.read(cx).visual_row_count(), 1);
+        assert_eq!(window.find("preferred-rows").bounds().size.height, px(104.));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn cached_visual_rows_follow_unicode_wrapping_and_resize(cx: &mut TestAppContext) {
+    let value = "日本語 e\u{301} 👩‍👩‍👧‍👦 ".repeat(20);
+    let (handle, _, text) = composer(cx, |state| state.rows(1).default_value(value.clone()));
+    let initial = cx
+        .update_window(handle.into(), |_, window, cx| {
+            window.click(target(&text), cx);
+            window.press(END, cx);
+            let rows = text.read(cx).visual_row_count();
+            assert!(rows > 1, "soft wraps count, not just newlines");
+            rows
+        })
+        .unwrap();
+    cx.simulate_window_resize(handle.into(), size(px(240.), px(480.)));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert!(text.read(cx).visual_row_count() > initial);
+        assert_eq!(text.read(cx).value(), value);
+        assert_eq!(text.read(cx).cursor(), value.len());
+    })
+    .unwrap();
+    cx.simulate_window_resize(handle.into(), size(px(480.), px(480.)));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(text.read(cx).visual_row_count(), initial);
+        text.update(cx, |state, cx| state.set_soft_wrap(false, window, cx));
+        window.render_frame(cx);
+        assert_eq!(text.read(cx).visual_row_count(), 1);
+        assert_eq!(text.read(cx).value(), value);
+        assert_eq!(text.read(cx).cursor(), value.len());
+    })
+    .unwrap();
+}
+
 /// A textarea partway down a page that scrolls.
 struct ScrollingPage {
     text: Entity<TextareaState>,
