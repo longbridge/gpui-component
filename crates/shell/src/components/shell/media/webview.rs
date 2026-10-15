@@ -6,12 +6,18 @@
 //! which arrives at `WebView.on_message`, and the script talks back through
 //! `WebViewState.evaluate_script`. `WebView.on_load` reports each document
 //! that finishes loading, which is when a page can first be spoken to.
+//! The page sees the application theme's appearance through
+//! `prefers-color-scheme`; `WebViewState.set_theme` overrides it.
 //!
 //! Only `http` and `https` documents load, by script or by the page's own
 //! navigation: any other scheme — `file:` above all — would reach the local
 //! disk or a desktop URL handler past every capability the application holds.
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
+};
 
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallback,
@@ -61,11 +67,40 @@ impl Listeners {
     }
 }
 
+/// The colour scheme a page is shown in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PageTheme {
+    Light,
+    Dark,
+    System,
+}
+
+impl PageTheme {
+    fn of_app(cx: &gpui::App) -> Self {
+        match gpui_base::Theme::global(cx).appearance {
+            gpui_base::ThemeAppearance::Light => Self::Light,
+            gpui_base::ThemeAppearance::Dark => Self::Dark,
+        }
+    }
+
+    fn wry(self) -> wry::Theme {
+        match self {
+            Self::Light => wry::Theme::Light,
+            Self::Dark => wry::Theme::Dark,
+            Self::System => wry::Theme::Auto,
+        }
+    }
+}
+
 /// The retained value behind a script `WebViewState`.
 #[derive(Clone)]
 struct WebViewHandle {
     view: Entity<WebView>,
     listeners: Rc<RefCell<Listeners>>,
+    /// The script's `set_theme`; `None` follows the application theme.
+    theme: Rc<Cell<Option<PageTheme>>>,
+    /// What the native page was last told, so a render only reaches it on a change.
+    applied: Rc<Cell<Option<PageTheme>>>,
     _events: Rc<Task<()>>,
 }
 
@@ -130,11 +165,26 @@ impl WebViewHandle {
             }
         });
 
-        Ok(Self {
+        let this = Self {
             view,
             listeners,
+            theme: Rc::default(),
+            applied: Rc::default(),
             _events: Rc::new(events),
-        })
+        };
+        this.apply_theme(cx)?;
+        Ok(this)
+    }
+
+    /// Tell the page its colour scheme if it changed: the script's choice, or
+    /// the application theme's appearance.
+    fn apply_theme(&self, cx: &gpui::App) -> anyhow::Result<()> {
+        let theme = self.theme.get().unwrap_or_else(|| PageTheme::of_app(cx));
+        if self.applied.get() != Some(theme) {
+            self.view.read(cx).set_theme(theme.wry())?;
+            self.applied.set(Some(theme));
+        }
+        Ok(())
     }
 }
 
@@ -211,6 +261,42 @@ fn state_methods() -> Vec<StateMethodDescriptor> {
             Ok(ComponentDataValue::Null)
         }),
         StateMethodDescriptor::new::<WebViewHandle>(
+            "set_zoom",
+            "(zoom: number): void",
+            |state, arguments, _, cx| {
+                let zoom = match arguments {
+                    [ComponentDataValue::Number(zoom)] if zoom.is_finite() && *zoom > 0.0 => *zoom,
+                    _ => anyhow::bail!(
+                        "WebViewState.set_zoom expects a positive number, where 1 is the page's natural size"
+                    ),
+                };
+                state.view.read(cx).set_zoom(zoom)?;
+                Ok(ComponentDataValue::Null)
+            },
+        ),
+        StateMethodDescriptor::new::<WebViewHandle>("zoom", "(): number", |state, _, _, cx| {
+            Ok(ComponentDataValue::Number(state.view.read(cx).zoom()))
+        })
+        .with_readonly(true),
+        StateMethodDescriptor::new::<WebViewHandle>(
+            "set_theme",
+            "(theme: \"auto\" | \"light\" | \"dark\" | \"system\"): void",
+            |state, arguments, _, cx| {
+                let theme = match string_argument(arguments, "WebViewState.set_theme")? {
+                    "auto" => None,
+                    "light" => Some(PageTheme::Light),
+                    "dark" => Some(PageTheme::Dark),
+                    "system" => Some(PageTheme::System),
+                    other => anyhow::bail!(
+                        "WebViewState.set_theme expects \"auto\", \"light\", \"dark\" or \"system\", got `{other}`"
+                    ),
+                };
+                state.theme.set(theme);
+                state.apply_theme(cx)?;
+                Ok(ComponentDataValue::Null)
+            },
+        ),
+        StateMethodDescriptor::new::<WebViewHandle>(
             "evaluate_script",
             "(script: string): void",
             |state, arguments, _, cx| {
@@ -252,12 +338,16 @@ impl ComponentMaterializer for Materializer {
                 Op::Load(callback) => listeners.load = Some(request.resolve_callback(callback)?),
             }
         }
-        let state = request.with_state::<WebViewHandle, _>(&argument, |state| {
+        let handle = request.with_state::<WebViewHandle, _>(&argument, |state| {
             // A render that drops a listener stops its delivery rather than
             // keeping one from a snapshot that no longer exists.
             *state.listeners.borrow_mut() = listeners;
-            state.view.clone()
+            state.clone()
         })?;
+        // A theme switch re-renders the window, so following the application
+        // theme needs no subscription of its own.
+        request.with_window_app(|_, cx| handle.apply_theme(cx))?;
+        let state = handle.view;
         let mut container = gpui::div().child(state);
         container.style().refine(&request.take_style());
         Ok(container.into_any_element())

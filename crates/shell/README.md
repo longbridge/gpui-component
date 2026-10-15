@@ -337,6 +337,8 @@ WebView.new(this.page)
 | `load_url(url)` / `url()` | `WebViewState` | Navigate, and read the current address |
 | `back()` / `forward()` / `reload()` | `WebViewState` | History and reload |
 | `evaluate_script(js)` | `WebViewState` | Run JavaScript in the page; the page answers through a message |
+| `set_zoom(zoom)` / `zoom()` | `WebViewState` | Page zoom, where `1` is the natural size; the engine scales the page and keeps it across navigations |
+| `set_theme(theme)` | `WebViewState` | The scheme the page sees in `prefers-color-scheme`. By default (`"auto"`) it follows the application theme's appearance; `"light"`, `"dark"` or `"system"` override it. On Linux it is GTK's process-wide preference, shared by every page |
 | `.on_load(handler)` | `WebView` | `handler(url, cx)` after each document finishes loading |
 | `.on_message(handler)` | `WebView` | `handler(text, cx)` for each `window.ipc.postMessage(text)` from the page |
 
