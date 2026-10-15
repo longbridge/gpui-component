@@ -203,7 +203,9 @@ Seven things are deliberately absent, and will stay absent:
    Standard Runtime deliberately exposes selected bare modules plus a
    WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
    compatibility. The shell's narrow `window` and `process` globals expose only
-   GPUI/host capabilities.
+   GPUI/host capabilities. `WebView` (§14.8) does not change this: it embeds a
+   web page as one element, and the script around it still runs in QuickJS
+   with no DOM.
 
 ---
 
@@ -2236,6 +2238,41 @@ from the public exports. Each entry is either registered — naming its
 descriptor, its exports, and any companion parts — or explicitly deferred with a
 reason. That file is the single answer to "why is X not bound"; a prose list
 beside the source would be a second answer, and the one nothing checks.
+
+### 14.8 WebView
+
+`WebViewState` and `WebView` are registered in the catalog by the default
+`webview` feature, over `gpui-webview`. They follow the retained-state shape
+of `EditorState` and `Editor`: the state owns the native webview, so the
+document, its history and its scroll position survive renders, and the element
+places it in the layout.
+
+**Traffic in both directions is text.** The script reaches the page with
+`evaluate_script(js)`, which returns nothing; the page answers with
+`window.ipc.postMessage(text)`, delivered to `WebView.on_message`.
+`WebView.on_load(url)` reports each document that finishes loading, whoever
+navigated, because that is the first moment a page can be spoken to. A JSON
+protocol between the two is the application's to define.
+
+The native handlers have no `App`, so they push into a bounded channel
+(1,024 events; a message over 1 MiB is dropped) that a window task drains,
+invoking the listeners of the most recent render. The listeners live in the
+state rather than on the element, the way an input's `on_change` does, and a
+render that drops one stops its delivery. The channel's senders live in the
+native webview, so the task ends when the state is released.
+
+**Only `http` and `https` load.** The rule applies to `load_url`, the initial
+URL, and the page's own navigation, through wry's navigation handler; `about:`
+is let through because the engines use `about:blank` while setting up. Without
+it a page or a script could open `file:` URLs and read the disk past every
+`fs` grant. Beyond the scheme, loading is not a capability: browsing a page is
+not treated as network access by the script, which never sees the bytes.
+
+**Platform limits come from `gpui-webview`.** It is built on GPUI Fast, so the
+feature selects GPUI Fast for the whole runtime. On Linux the page needs an X11
+window; on a Wayland window `WebViewState` throws with that reason, and the
+host does not force X11 on applications that never create a page. On Windows
+the native page draws above GPUI content it overlaps.
 
 ---
 
@@ -4409,7 +4446,7 @@ Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
 `ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
-host. `ShellRoot` with the dialog stack, one sheet, the
+host. `WebView` with page messages and load events (§14.8). `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
 capabilities for asynchronous `fs`, storage, clipboard, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect
