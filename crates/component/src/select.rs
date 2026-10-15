@@ -364,14 +364,20 @@ where
                 .selected_index()
                 .and_then(|ix| list.delegate().delegate.item(ix))
                 .and_then(|item| items.position(item.value()));
-            for (ix, item) in &mut selection {
-                if let Some(position) = items.position(item.value())
-                    && let Some(replacement) = items.item(position)
-                {
-                    *ix = position;
-                    *item = replacement.clone();
-                }
-            }
+            // A value the new items no longer have is dropped, as
+            // `set_selected_value` does, rather than kept at an index that
+            // now points at another item.
+            selection.retain_mut(|(ix, item)| {
+                let Some(position) = items.position(item.value()) else {
+                    return false;
+                };
+                let Some(replacement) = items.item(position) else {
+                    return false;
+                };
+                *ix = position;
+                *item = replacement.clone();
+                true
+            });
             list.delegate_mut().delegate = items;
             list.set_selected_index(cursor, window, cx);
             list.delegate_mut()
@@ -1043,6 +1049,7 @@ mod tests {
             );
         });
     }
+
     #[gpui::test]
     fn replacing_items_reconciles_the_cursor_and_selection(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1075,6 +1082,14 @@ mod tests {
             });
             assert_eq!(state.read(cx).selected_index(cx), None);
             assert_eq!(state.read(cx).selected_value(), Some(&"main"));
+
+            // A selected value the new items no longer have is dropped.
+            state.update(cx, |state, cx| {
+                state.set_items(vec!["replacement", "other"], window, cx)
+            });
+            assert_eq!(state.read(cx).selected_value(), None);
+            assert!(state.read(cx).state.selection.is_empty());
+            assert!(list.read(cx).delegate().selection_snapshot.is_empty());
         });
     }
 
@@ -1084,6 +1099,7 @@ mod tests {
         title: &'static str,
         unavailable: bool,
     }
+
     impl super::SelectItem for RemoteChoice {
         type Value = &'static str;
         fn value(&self) -> &&'static str {

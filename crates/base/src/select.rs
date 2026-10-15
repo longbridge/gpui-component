@@ -478,7 +478,7 @@ mod tests {
             assert!(input.focus_handle(cx).is_focused(window));
             window.draw(cx).clear(cx);
         });
-        cx.simulate_input("two words");
+        cx.simulate_keystrokes("t w o space w o r d s");
         assert_eq!(input.read_with(cx, |input, _| input.value()), "two words");
         assert_eq!(
             &*state
@@ -582,6 +582,7 @@ mod tests {
             assert!(!disabled.supports_action(accesskit::Action::Click));
         });
     }
+
     #[gpui::test]
     fn confirm_is_consumed_when_opening_and_accepting(cx: &mut TestAppContext) {
         let (cx, state) = harness(cx, false);
