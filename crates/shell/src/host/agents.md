@@ -139,6 +139,11 @@ source of truth over this guide.
   theme. `#rrggbb` literals bypass the theme and break dark mode.
 - A number length is pixels; a string length is `"auto"`, `"50%"`, `"12px"`
   or `"1rem"`, as far as the Rust signature allows.
+- `.bg(...)` takes a colour or a `Background` from `"gpui-kit"`:
+  `.bg(Background.linear_gradient(180, Background.stop(top, 0), Background.stop(bottom, 1)))`
+  — stop positions are fractions from 0 to 1. `.shadow([...])` takes CSS-like
+  records, `{ x, y, blur, spread, color, inset }`, with CSS blur and CSS
+  stacking (first on top); `[]` clears.
 - `svg(path)` and `image(path)` resolve against the **application root**, not
   the importing file. Keep assets in a directory named after the application.
 - Use `.when(condition, (el) => el.…)` to keep a builder chain in one piece.

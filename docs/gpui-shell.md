@@ -1794,7 +1794,7 @@ each.
 
 ### 13.2 Styles that take arguments
 
-Fifty-seven methods are bound by hand in `style.rs`, and they are indistinguishable
+Sixty methods are bound by hand in `style.rs`, and they are indistinguishable
 from the reflected ones at the call site:
 
 ```js
@@ -1809,15 +1809,27 @@ function panel(cx) {
 }
 ```
 
-They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 6 paint, 8
-border, and 9 radius. Five families are deliberately unbound, with the reason
-recorded at the head of the array: `shadow` takes a `Vec<BoxShadow>` and belongs
-with the animation and token work rather than as a positional argument list;
-`cursor`, `text_align`, `text_overflow`, and `font_weight` take GPUI enums and
+They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 9 paint, 8
+border, and 9 radius. Two of the paint methods take a structured value rather
+than a primitive. `bg` accepts a `Background` from the script's `Background`
+builder as well as a colour, so a rounded element can be filled with a linear
+gradient; it reuses the `BackgroundSpec` that `window.paint_path` records, and
+both convert through one function. `shadow` takes an array of CSS-like records,
+`{ x, y, blur, spread, color, inset }`, where `blur` keeps CSS semantics and is
+halved into GPUI's gaussian deviation, and the list is reversed so the first
+shadow paints on top as in CSS; `[]` removes the shadows, and the
+`shadow_*` presets stay nullary and reflected. Both cross the bridge as
+`Bridged::Background` and `Bridged::Shadows`, so they replay through the same
+`SpecOp::ParamStyle` path as every other style, including state styles such as
+`.hover(...)` and template slots.
+
+Three families are deliberately unbound, with the reason recorded at the head
+of the array: `cursor`, `text_align`, and `text_overflow` take GPUI enums and
 would each need a name mapping when every variant already has a nullary form
-(`cursor_pointer`, `text_center`, `font_bold`); and `scrollbar_width` is
-not exposed because the shell owns native overflow behavior but does not yet
-offer configurable scrollbar presentation.
+(`cursor_pointer`, `text_center`); `font_weight` is bound only because GPUI
+represents it as a number; and `scrollbar_width` is not exposed because the
+shell owns native overflow behavior but does not yet offer configurable
+scrollbar presentation.
 
 Overflow itself is an element behavior rather than a `StyleRefinement` entry:
 `.overflow_scroll()`, `.overflow_x_scroll()`, and `.overflow_y_scroll()` wrap a
