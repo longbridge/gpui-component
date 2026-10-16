@@ -2134,7 +2134,13 @@ the one command, and Cargo forbids the dependency cycle a feature on a separate
 crate would have needed. `gpui_shell::init` installs the base layer;
 `gpui_shell::components::init` installs the catalog and then the runtime. A
 host that wants the protocol without the catalog builds `gpui-shell` without
-the feature and gets an empty registry, which declares no module at all.
+the feature and gets an empty registry, which declares no module at all. A host
+that wants the catalog and components of its own calls
+`gpui_shell::components::registry()`, which returns the catalog before it is
+frozen, registers into it, and freezes it; `components()` is that call followed
+by `freeze`. The registry already carries the catalog's initializer and window
+opener. A host whose components need startup of their own replaces the
+initializer with a function that calls `gpui_component::init` first.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
