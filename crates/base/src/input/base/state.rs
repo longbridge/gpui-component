@@ -655,6 +655,49 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.last_bounds
     }
 
+    /// The cached display map for querying wrapped rows and display positions.
+    ///
+    /// Reading this does not prepare text or force layout. Before the first
+    /// layout, [`DisplayMap::wrap_row_count`] can be zero; prepared empty text
+    /// has one row. The count describes content, independent of minimum rows,
+    /// auto-grow limits and viewport height.
+    ///
+    /// Text edits use the cached wrapping parameters. Layout refreshes the
+    /// cache after width or font changes; consume that count on a subsequent
+    /// render, or use [`Self::prewrap`] to prepare it before the first layout.
+    pub fn display_map(&self) -> &DisplayMap {
+        &self.display_map
+    }
+
+    /// Wrap the text for `font`, `font_size` and `width` before the first
+    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
+    ///
+    /// Call it after setting the value and the wrapping indent. `width` is the
+    /// width of the input's text area: its width less its padding, and less
+    /// the line-number gutter for an editor with line numbers. It wraps as
+    /// layout does, a little short of that width and with the state's wrapping
+    /// indent. Once the input has been laid out this does nothing, and layout
+    /// keeps the wrap up to date. The font and font size must match the input's
+    /// actual text style.
+    pub fn prewrap(
+        &mut self,
+        font: gpui::Font,
+        font_size: Pixels,
+        width: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        if self.last_layout.is_some() {
+            return;
+        }
+        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
+        self.display_map.set_font(font, font_size, cx);
+        self.display_map
+            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
+        self.display_map
+            .set_wrapping_indent(self.wrapping_indent, cx);
+        self.display_map.ensure_text_prepared(&self.text, cx);
+    }
+
     pub fn diagnostic_popover(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
         self.diagnostic_popover.clone()
     }
@@ -8908,6 +8951,54 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_textarea_prewrap_prepares_content_rows_before_layout(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        for (value, expected_rows) in [("", 1), ("one\ntwo", 2)] {
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                cx.new(|cx| {
+                    let mut state = crate::input::TextareaState::new(window, cx)
+                        .rows(12)
+                        .default_value(value);
+                    assert_eq!(state.display_map().wrap_row_count(), 0);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    assert_eq!(state.display_map().wrap_row_count(), expected_rows);
+                    assert_eq!(state.value(), value);
+                    state
+                });
+                gpui::EmptyView
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn test_textarea_prewrap_respects_soft_wrap_before_layout(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let value = "select id, name, email, phone from users where active\nlimit 10";
+        for soft_wrap in [true, false] {
+            cx.open_window(size(px(400.), px(100.)), |window, cx| {
+                let font = window.text_style().font();
+                cx.new(|cx| {
+                    let mut state = crate::input::TextareaState::new(window, cx)
+                        .rows(1)
+                        .soft_wrap(soft_wrap)
+                        .default_value(value);
+                    state.prewrap(font, px(14.), px(120.), cx);
+                    let rows = state.display_map().wrap_row_count();
+                    if soft_wrap {
+                        assert!(rows > 2, "the first logical line must wrap");
+                    } else {
+                        assert_eq!(rows, 2);
+                    }
+                    assert_eq!(state.value(), value);
+                    state
+                });
+                gpui::EmptyView
+            });
+        }
+    }
+
+    #[gpui::test]
     fn test_prewrap_counts_wrapped_rows_before_the_first_paint(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let text = "select id, name, email, phone from users where active\nlimit 10";
@@ -11971,41 +12062,6 @@ impl InputBaseState<crate::input::EditorMode> {
             *l = line_number;
         }
         self
-    }
-
-    /// The editor's display map for querying wrapped rows and display positions.
-    ///
-    /// Text is prepared during layout or by [`Self::prewrap`].
-    pub fn display_map(&self) -> &DisplayMap {
-        &self.display_map
-    }
-
-    /// Wrap the text for `font`, `font_size` and `width` before the first
-    /// layout, so that [`DisplayMap::wrap_row_count`] is known on the first frame.
-    ///
-    /// Call it after setting the value and the wrapping indent. `width` is the
-    /// width of the editor's text area: its width less its padding, and less
-    /// the line-number gutter when line numbers are shown. It wraps as layout
-    /// does, a little short of that width and with the state's wrapping
-    /// indent. Once the editor has been laid out this does nothing, and layout
-    /// keeps the wrap up to date.
-    pub fn prewrap(
-        &mut self,
-        font: gpui::Font,
-        font_size: Pixels,
-        width: Pixels,
-        cx: &mut Context<Self>,
-    ) {
-        if self.last_layout.is_some() {
-            return;
-        }
-        let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
-        self.display_map.set_font(font, font_size, cx);
-        self.display_map
-            .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
-        self.display_map
-            .set_wrapping_indent(self.wrapping_indent, cx);
-        self.display_map.ensure_text_prepared(&self.text, cx);
     }
 
     /// Set line number.
