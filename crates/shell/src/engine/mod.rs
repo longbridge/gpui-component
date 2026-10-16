@@ -39,6 +39,8 @@
 //!     &mut Window, &mut App) -> Option<ItemSpecs>
 //! ShellRuntime::item_keys(&Rc<Self>, CallbackId, &mut Window, &mut App,
 //!     FnOnce(&mut dyn FnMut(usize) -> Option<String>) -> R) -> Option<R>
+//! ShellRuntime::dispatch_visible_range(&Rc<Self>, CallbackId, Range<usize>,
+//!     usize, &mut Window, &mut App)
 //!
 //! set_storage_path(PathBuf)
 //! set_development_mode(bool)

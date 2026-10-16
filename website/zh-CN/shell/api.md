@@ -49,7 +49,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 `PathBuilder.fill()` 与 `.stroke(width)` 返回一个句柄，可链式调用 `move_to`、`line_to`、`curve_to`、`cubic_bezier_to`、`arc_to`、`add_polygon`、`close` 与 `dash_array`，最后以 `build()` 收尾。用 `window.paint_path(path, background)` 把结果画出来——它是唯一一个通过对象取到的元素构造器，因为它镜像的东西在 Rust 侧就是窗口上的一个方法。
 
-`list` 和 `uniform_list` 是 GPUI 自己的惰性列表，参数是 `(id, item_count, get_key, render)`，即 `gpui-base` 的 `v_virtual_list` 去掉 `item_sizes` 的形状：没有尺寸表，因为 GPUI 自己测量各项。`uniform_list` 测量一行，其余各行按它排布，`render(range, cx)` 和虚拟列表一样按区间返回元素数组。`list` 会测量画出的每一项并记住尺寸，`render(index, cx)` 为一项返回一个元素，所以高度不等的行或面板不必事先说明有多高。两者都只绘制屏幕内的内容外加折叠线下方的一小段，自己处理滚动，并按名字与 `Scrollbar` 配对；都不接受 `VirtualListScrollHandle`。`list` 的 `item_count` 变化时，读者停留在视口顶部的那一项上：列表按 `get_key` 给出的键重新找到这一项并滚回去，所以在上方插入一页更早的条目、或在下方追加一条，都不会挪动正在读的内容。
+`list` 和 `uniform_list` 是 GPUI 自己的惰性列表，参数是 `(id, item_count, get_key, render)`，即 `gpui-base` 的 `v_virtual_list` 去掉 `item_sizes` 的形状：没有尺寸表，因为 GPUI 自己测量各项。`uniform_list` 测量一行，其余各行按它排布，`render(range, cx)` 和虚拟列表一样按区间返回元素数组。`list` 会测量画出的每一项并记住尺寸，`render(index, cx)` 为一项返回一个元素，所以高度不等的行或面板不必事先说明有多高。两者都只绘制屏幕内的内容外加折叠线下方的一小段，自己处理滚动，并按名字与 `Scrollbar` 配对；都不接受 `VirtualListScrollHandle`。`list` 的 `item_count` 变化时，读者停留在视口顶部的那一项上：列表按 `get_key` 给出的键重新找到这一项并滚回去，所以在上方插入一页更早的条目、或在下方追加一条，都不会挪动正在读的内容。`on_visible_range_change` 在一帧结束后报告 `list` 显示了哪些条目，脚本可以据此在读者接近任一端时加载更多。
 
 字符串本身也是元素，和 GPUI 里 `&str` 实现 `IntoElement` 完全一样：`.child("hello")` 就是写文本的方式，样式来自持有它的那个元素。
 
@@ -599,26 +599,27 @@ render() {
 
 ### 事件
 
-| 方法                             | 交付什么                                                                    |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| `on_click(handler)`              | 激活时的 `(ClickEvent, cx)`                                                 |
-| `on_mouse_move(handler)`         | 指针悬停在元素上时的 `(MouseMoveEvent, cx)`                                 |
-| `on_hover(handler)`              | 指针进入与离开时的 `(hovered, cx)`                                          |
-| `on_key_down(handler)`           | 该元素持有键盘时按下按键的 `(KeyEvent, cx)`                                 |
-| `on_key_up(handler)`             | 同一条焦点路径上松开按键的 `(KeyEvent, cx)`                                 |
-| `on_mouse_down(button, handler)` | 按下该按钮时的 `(MouseButtonEvent, cx)`                                     |
-| `on_mouse_up(button, handler)`   | 松开时的 `(MouseButtonEvent, cx)`                                           |
-| `on_mouse_down_out(handler)`     | 在该元素之外任意位置按下时的 `(MouseButtonEvent, cx)`                       |
-| `on_scroll_wheel(handler)`       | 滚轮或触控板滚动时的 `(ScrollWheelEvent, cx)`                               |
-| `on_pinch(handler)`              | 触控板或触摸屏双指缩放每一步的 `(PinchEvent, cx)`                           |
-| `on_action(action, handler)`     | 该命名 action 被派发到此元素或其内部时的 `(ActionEvent, cx)`                |
-| `on_change(handler)`             | 开关变化时的 `(checked, cx)`；新值由脚本保存                                |
-| `on_step(handler)`               | `("increment" \| "decrement", cx)`，并且它会**取代**内置的步进              |
-| `on_item_click(handler)`         | 虚拟列表某一行被点击时的 `(key, cx)`，按 key 而不是按下标                   |
-| `on_open_change(handler)`        | 脚本之外的东西改变了 `Popover` 的打开状态时的 `(open, cx)`                  |
-| `on_confirm(handler)`            | 在打开的 `Select` 或 `Combobox` 中按下回车；无参数                          |
-| `on_dismiss(handler)`            | 在打开的 `Select` 或 `Combobox` 中按下 Escape，早于 `on_open_change(false)` |
-| `on_resize(handler)`             | 可调整组的拖拽结束后的 `(sizes, cx)`                                        |
+| 方法                               | 交付什么                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `on_click(handler)`                | 激活时的 `(ClickEvent, cx)`                                                 |
+| `on_mouse_move(handler)`           | 指针悬停在元素上时的 `(MouseMoveEvent, cx)`                                 |
+| `on_hover(handler)`                | 指针进入与离开时的 `(hovered, cx)`                                          |
+| `on_key_down(handler)`             | 该元素持有键盘时按下按键的 `(KeyEvent, cx)`                                 |
+| `on_key_up(handler)`               | 同一条焦点路径上松开按键的 `(KeyEvent, cx)`                                 |
+| `on_mouse_down(button, handler)`   | 按下该按钮时的 `(MouseButtonEvent, cx)`                                     |
+| `on_mouse_up(button, handler)`     | 松开时的 `(MouseButtonEvent, cx)`                                           |
+| `on_mouse_down_out(handler)`       | 在该元素之外任意位置按下时的 `(MouseButtonEvent, cx)`                       |
+| `on_scroll_wheel(handler)`         | 滚轮或触控板滚动时的 `(ScrollWheelEvent, cx)`                               |
+| `on_pinch(handler)`                | 触控板或触摸屏双指缩放每一步的 `(PinchEvent, cx)`                           |
+| `on_action(action, handler)`       | 该命名 action 被派发到此元素或其内部时的 `(ActionEvent, cx)`                |
+| `on_change(handler)`               | 开关变化时的 `(checked, cx)`；新值由脚本保存                                |
+| `on_step(handler)`                 | `("increment" \| "decrement", cx)`，并且它会**取代**内置的步进              |
+| `on_item_click(handler)`           | 虚拟列表某一行被点击时的 `(key, cx)`，按 key 而不是按下标                   |
+| `on_visible_range_change(handler)` | `list` 显示的条目或条目总数在一帧后变化时的 `(range, count, cx)`            |
+| `on_open_change(handler)`          | 脚本之外的东西改变了 `Popover` 的打开状态时的 `(open, cx)`                  |
+| `on_confirm(handler)`              | 在打开的 `Select` 或 `Combobox` 中按下回车；无参数                          |
+| `on_dismiss(handler)`              | 在打开的 `Select` 或 `Combobox` 中按下 Escape，早于 `on_open_change(false)` |
+| `on_resize(handler)`               | 可调整组的拖拽结束后的 `(sizes, cx)`                                        |
 
 ### Actions 与键绑定
 

@@ -50,7 +50,7 @@ API shape follows the Rust original: a method on `App` is a method on `cx`, a me
 
 `PathBuilder.fill()` and `.stroke(width)` return a handle that chains `move_to`, `line_to`, `curve_to`, `cubic_bezier_to`, `arc_to`, `add_polygon`, `close` and `dash_array`, and ends in `build()`. Paint the result with `window.paint_path(path, background)` — the one element constructor reached through an object, because the thing it mirrors is a method on the window.
 
-`list` and `uniform_list` are GPUI's own lazy lists and take `(id, item_count, get_key, render)`, the shape of `gpui-base`'s `v_virtual_list` without its `item_sizes`: no sizes, because GPUI measures the items itself. `uniform_list` measures one row and places every row by it, so `render(range, cx)` returns one element per item in the range as a virtual list's does. `list` measures each item it draws and keeps the sizes, so `render(index, cx)` returns one element for one item, and rows — or panels — of unequal height need not say how tall they are. Both draw only what is on screen plus a short band past the fold, scroll themselves, and pair with a `Scrollbar` by name; neither takes a `VirtualListScrollHandle`. When a `list`'s `item_count` changes, the reader stays on the item at the top of the view: the list finds that item again by its `get_key` key and scrolls back to it, so a page of older items put above, or a new one added below, does not move what is being read.
+`list` and `uniform_list` are GPUI's own lazy lists and take `(id, item_count, get_key, render)`, the shape of `gpui-base`'s `v_virtual_list` without its `item_sizes`: no sizes, because GPUI measures the items itself. `uniform_list` measures one row and places every row by it, so `render(range, cx)` returns one element per item in the range as a virtual list's does. `list` measures each item it draws and keeps the sizes, so `render(index, cx)` returns one element for one item, and rows — or panels — of unequal height need not say how tall they are. Both draw only what is on screen plus a short band past the fold, scroll themselves, and pair with a `Scrollbar` by name; neither takes a `VirtualListScrollHandle`. When a `list`'s `item_count` changes, the reader stays on the item at the top of the view: the list finds that item again by its `get_key` key and scrolls back to it, so a page of older items put above, or a new one added below, does not move what is being read. `on_visible_range_change` reports which items a `list` shows, after the frame, so a script can load more as the reader nears either end.
 
 A string is an element too, exactly as `&str` implements `IntoElement` in GPUI: `.child("hello")` is how text is written, and the style comes from the element holding it.
 
@@ -600,26 +600,27 @@ A slot is not a child: the element is consumed by the component and rendered whe
 
 ### Events
 
-| Method                           | What it delivers                                                                    |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| `on_click(handler)`              | `(ClickEvent, cx)` on activation                                                    |
-| `on_mouse_move(handler)`         | `(MouseMoveEvent, cx)` while the element is hovered                                 |
-| `on_hover(handler)`              | `(hovered, cx)` on both pointer entry and exit                                      |
-| `on_key_down(handler)`           | `(KeyEvent, cx)` while this element holds the keyboard                              |
-| `on_key_up(handler)`             | `(KeyEvent, cx)` on the same focus path                                             |
-| `on_mouse_down(button, handler)` | `(MouseButtonEvent, cx)` on a press of that button                                  |
-| `on_mouse_up(button, handler)`   | `(MouseButtonEvent, cx)` on its release                                             |
-| `on_mouse_down_out(handler)`     | `(MouseButtonEvent, cx)` on a press anywhere outside this element                   |
-| `on_scroll_wheel(handler)`       | `(ScrollWheelEvent, cx)` on wheel or trackpad scrolling                             |
-| `on_pinch(handler)`              | `(PinchEvent, cx)` on each step of a trackpad or touch pinch                        |
-| `on_action(action, handler)`     | `(ActionEvent, cx)` when that named action is dispatched to this element or into it |
-| `on_change(handler)`             | `(checked, cx)` on a toggle; the script owns the new value                          |
-| `on_step(handler)`               | `("increment" \| "decrement", cx)`, and it **replaces** built-in stepping           |
-| `on_item_click(handler)`         | `(key, cx)` when a virtual list row is clicked, keyed rather than indexed           |
-| `on_open_change(handler)`        | `(open, cx)` when something other than the script changed a `Popover`'s open state  |
-| `on_confirm(handler)`            | Enter in an open `Select` or `Combobox`; no payload                                 |
-| `on_dismiss(handler)`            | Escape in an open `Select` or `Combobox`, before `on_open_change(false)`            |
-| `on_resize(handler)`             | `(sizes, cx)` once a resizable group's drag has ended                               |
+| Method                             | What it delivers                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `on_click(handler)`                | `(ClickEvent, cx)` on activation                                                               |
+| `on_mouse_move(handler)`           | `(MouseMoveEvent, cx)` while the element is hovered                                            |
+| `on_hover(handler)`                | `(hovered, cx)` on both pointer entry and exit                                                 |
+| `on_key_down(handler)`             | `(KeyEvent, cx)` while this element holds the keyboard                                         |
+| `on_key_up(handler)`               | `(KeyEvent, cx)` on the same focus path                                                        |
+| `on_mouse_down(button, handler)`   | `(MouseButtonEvent, cx)` on a press of that button                                             |
+| `on_mouse_up(button, handler)`     | `(MouseButtonEvent, cx)` on its release                                                        |
+| `on_mouse_down_out(handler)`       | `(MouseButtonEvent, cx)` on a press anywhere outside this element                              |
+| `on_scroll_wheel(handler)`         | `(ScrollWheelEvent, cx)` on wheel or trackpad scrolling                                        |
+| `on_pinch(handler)`                | `(PinchEvent, cx)` on each step of a trackpad or touch pinch                                   |
+| `on_action(action, handler)`       | `(ActionEvent, cx)` when that named action is dispatched to this element or into it            |
+| `on_change(handler)`               | `(checked, cx)` on a toggle; the script owns the new value                                     |
+| `on_step(handler)`                 | `("increment" \| "decrement", cx)`, and it **replaces** built-in stepping                      |
+| `on_item_click(handler)`           | `(key, cx)` when a virtual list row is clicked, keyed rather than indexed                      |
+| `on_visible_range_change(handler)` | `(range, count, cx)` after a frame that changed which items a `list` shows, or how many it has |
+| `on_open_change(handler)`          | `(open, cx)` when something other than the script changed a `Popover`'s open state             |
+| `on_confirm(handler)`              | Enter in an open `Select` or `Combobox`; no payload                                            |
+| `on_dismiss(handler)`              | Escape in an open `Select` or `Combobox`, before `on_open_change(false)`                       |
+| `on_resize(handler)`               | `(sizes, cx)` once a resizable group's drag has ended                                          |
 
 ### Actions and key bindings
 

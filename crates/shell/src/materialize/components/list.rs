@@ -29,8 +29,26 @@
 //! looks for that key near the item's old index and scrolls back to it, the
 //! same distance into it. [`KeyedList`] does both around GPUI's own layout,
 //! because asking the script for a key is something only layout may do here.
+//!
+//! # A `list` reports what it shows after the frame
+//!
+//! A script that loads older items when the reader reaches the top has to be
+//! told where the reader is, and its item renderer cannot be the one to tell
+//! it: that runs inside layout, where state may not change. GPUI's own
+//! `ListState::set_scroll_handler` is no answer either. It is called for a
+//! wheel or trackpad scroll only — not for a scrollbar drag, a position set
+//! from code, a list following its tail or one whose items changed — and it
+//! reports the range from before the scroll it was called for.
+//!
+//! So `on_visible_range_change` is driven from the result rather than the
+//! cause: after each layout the list works out which items its viewport
+//! shows, and when that or the item count differs from what it last reported,
+//! it reports again once the frame is done, as an event.
 
-use std::rc::{Rc, Weak};
+use std::{
+    ops::Range,
+    rc::{Rc, Weak},
+};
 
 use gpui::{
     AnyElement, App, Element, ElementId, Empty, Entity, GlobalElementId, InspectorElementId,
@@ -65,11 +83,13 @@ use crate::{
 const LIST_OVERDRAW: gpui::Pixels = px(160.);
 
 /// The retained side of a `list`: GPUI's measurements, the count they were
-/// taken for, and the item the viewport started at when it was last laid out.
+/// taken for, the item the viewport started at when it was last laid out, and
+/// the visible range and count last reported to the script.
 struct MeasuredItems {
     state: ListState,
     item_count: usize,
     top: Option<TopItem>,
+    reported: Option<(Range<usize>, usize)>,
 }
 
 /// The item at the top of a `list`'s viewport after a layout, by key.
@@ -141,6 +161,12 @@ pub(in crate::materialize) fn list(
             if let Some(index) = behavior.item_to_measure_index {
                 list = list.with_width_from_item(Some(index));
             }
+            if behavior.on_visible_range_change.is_some() {
+                tracing::warn!(
+                    "on_visible_range_change is ignored on a uniform_list: it is list that \
+                     reports its visible range after the frame"
+                );
+            }
             list.style().refine(&refinement);
             list.into_any_element()
         }
@@ -157,6 +183,7 @@ pub(in crate::materialize) fn list(
                     state: ListState::new(item_count, ListAlignment::Top, LIST_OVERDRAW),
                     item_count,
                     top: None,
+                    reported: None,
                 }
             });
             let state = retained.read(cx).state.clone();
@@ -185,6 +212,7 @@ pub(in crate::materialize) fn list(
                 retained,
                 item_count,
                 get_key,
+                on_visible_range_change: behavior.on_visible_range_change,
                 runtime,
             }
             .into_any_element()
@@ -196,10 +224,11 @@ pub(in crate::materialize) fn list(
 ///
 /// Before: a changed item count is spliced into GPUI's measurements, and the
 /// reading position is carried to wherever the item at the top went. After:
-/// the item now at the top is remembered by key, for the next change. Both
-/// ask the script for keys, and [`crate::materialize`] never enters the script
-/// while an element is built, so they run here, inside layout, where the item
-/// renderer already does.
+/// the item now at the top is remembered by key, for the next change, and a
+/// changed visible range is reported. The first two ask the script for keys,
+/// and [`crate::materialize`] never enters the script while an element is
+/// built, so they run here, inside layout, where the item renderer already
+/// does. The report is deferred to after the frame.
 ///
 /// It has no layout node of its own: the list's is returned as its own, so the
 /// refinement the script gave the list is what sizes it.
@@ -208,6 +237,7 @@ struct KeyedList {
     retained: Entity<MeasuredItems>,
     item_count: usize,
     get_key: CallbackId,
+    on_visible_range_change: Option<CallbackId>,
     runtime: Weak<ShellRuntime>,
 }
 
@@ -313,6 +343,57 @@ impl KeyedList {
             });
         });
     }
+
+    /// Reports the visible range and the item count, once this frame is done,
+    /// when either differs from the last report.
+    ///
+    /// Deferred to the end of the effect cycle, because the handler is meant
+    /// to change state — load the page above, mark items read — and nothing
+    /// inside layout may. The comparison is with the last report, not with
+    /// what moved the list, so every way the range can change is reported —
+    /// a wheel or trackpad scroll, a scrollbar drag, a new item count, a
+    /// resize — and a frame that changed neither is not.
+    fn report_visible_range(&mut self, window: &mut Window, cx: &mut App) {
+        let retained = self.retained.read(cx);
+        let Some(callback) = self.on_visible_range_change else {
+            // A handler added later reports the list as it is then.
+            if retained.reported.is_some() {
+                self.retained
+                    .update(cx, |retained, _| retained.reported = None);
+            }
+            return;
+        };
+        let shown = (visible_range(&retained.state), self.item_count);
+        if retained.reported.as_ref() == Some(&shown) {
+            return;
+        }
+        self.retained
+            .update(cx, |retained, _| retained.reported = Some(shown.clone()));
+        let runtime = self.runtime.clone();
+        let (range, count) = shown;
+        window.defer(cx, move |window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_visible_range(callback, range, count, window, cx);
+            }
+        });
+    }
+}
+
+/// The items a list's viewport shows after its last layout: from the item at
+/// the top to the last one whose top edge is above the viewport's bottom.
+fn visible_range(state: &ListState) -> Range<usize> {
+    let count = state.item_count();
+    let start = state.logical_scroll_top().item_ix.min(count);
+    let bottom = state.viewport_bounds().bottom();
+    let mut end = start;
+    while end < count
+        && state
+            .bounds_for_item(end)
+            .is_some_and(|bounds| bounds.top() < bottom)
+    {
+        end += 1;
+    }
+    start..end
 }
 
 /// The order in which a remembered item is looked for after the count went
@@ -375,6 +456,7 @@ impl Element for KeyedList {
     ) {
         self.list.prepaint(window, cx);
         self.remember_top(window, cx);
+        self.report_visible_range(window, cx);
     }
 
     fn paint(

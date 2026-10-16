@@ -11105,3 +11105,171 @@ fn a_list_keeps_the_reader_on_their_item_when_the_count_changes(cx: &mut TestApp
     click_at(&mut context, 300.);
     assert_eq!(transcript_key_at(&mut context, &view, 5.), "m8");
 }
+
+/// A `list` of a hundred twenty-pixel rows in a 200px box, a `Scrollbar` paired
+/// with it by name, and a control under it that adds one row. What the list
+/// last reported through `on_visible_range_change` is written into the tree.
+fn reporting_list_source() -> &'static str {
+    r#"
+import { div, View, list } from "gpui-kit";
+import { Scrollbar, v_flex } from "gpui-base";
+
+export default class Rows extends View {
+  init() {
+    this.count = 100;
+    this.reported = "none";
+  }
+
+  render(cx) {
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .relative()
+          .h(200)
+          .child(
+            list("rows", this.count, (index) => `r${index}`, (index) =>
+              div().h(20).child(`row ${index}`),
+            ).on_visible_range_change((range, count, cx) => {
+              this.reported = `${range.start}..${range.end} of ${count}`;
+              cx.notify();
+            }),
+          )
+          .child(Scrollbar.vertical("rows").mode("always").absolute().inset_0()),
+      )
+      .child(
+        div()
+          .h(40)
+          .on_click((_event, cx) => {
+            this.count += 1;
+            cx.notify();
+          })
+          .child("one more"),
+      )
+      .child(`reported ${this.reported}`);
+  }
+}
+"#
+}
+
+/// Draws until a report made after one frame has been rendered by the next,
+/// and reads `start..end of count` out of the tree.
+fn reported_visible_range(
+    context: &mut VisualTestContext,
+    view: &gpui::Entity<ScriptView>,
+) -> (usize, usize, usize) {
+    for _ in 0..3 {
+        context.run_until_parked();
+        context.update(|window, cx| window.draw(cx).clear(cx));
+    }
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    let text = tree
+        .split("reported ")
+        .nth(1)
+        .unwrap_or_else(|| panic!("no report in: {tree}"));
+    let numbers: Vec<usize> = text
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .take(3)
+        .map(|part| part.parse().expect("a number"))
+        .collect();
+    assert_eq!(numbers.len(), 3, "no `start..end of count` in: {tree}");
+    (numbers[0], numbers[1], numbers[2])
+}
+
+#[gpui::test]
+fn a_list_reports_its_visible_range_however_it_changed(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, reporting_list_source());
+
+    // The first frame is reported, and the handler's `cx.notify()` is
+    // honoured, which it would not be from inside layout.
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 10, 100));
+
+    // A wheel scroll, which is the one case GPUI's own scroll handler sees.
+    scroll_by(&mut context, -100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 100));
+
+    // A new item count with the same items in view.
+    click_at(&mut context, 220.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 101));
+
+    // A press on the scrollbar's track below the thumb, which moves the list
+    // without a scroll event.
+    context.simulate_click(point(px(295.), px(190.)), Modifiers::default());
+    let (start, end, count) = reported_visible_range(&mut context, &view);
+    assert!(
+        start > 5 && end - start == 10 && count == 101,
+        "a jump on the scrollbar must be reported: {start}..{end} of {count}"
+    );
+}
+
+/// The case the report exists for: a chat that loads a page of older items
+/// when the reader reaches the top, and must not then be thrown to the top of
+/// the page it loaded, which would load the next one, and the next.
+#[gpui::test]
+fn a_list_can_load_older_items_when_the_reader_reaches_the_top(cx: &mut TestAppContext) {
+    let source = r#"
+import { div, View, list } from "gpui-kit";
+import { v_flex } from "gpui-base";
+
+export default class History extends View {
+  init() {
+    this.items = [];
+    for (let index = 0; index < 100; index++) this.items.push(`m${index}`);
+    this.pages = 0;
+    this.reported = "none";
+    this.clicked = "none";
+  }
+
+  render(cx) {
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .h(200)
+          .child(
+            list("rows", this.items.length, (index) => this.items[index], (index) =>
+              div().h(20).child(this.items[index]),
+            )
+              .on_item_click((key, cx) => {
+                this.clicked = key;
+                cx.notify();
+              })
+              .on_visible_range_change((range, count, cx) => {
+                this.reported = `${range.start}..${range.end} of ${count}`;
+                if (range.start === 0) {
+                  const page = [];
+                  for (let index = 0; index < 10; index++) page.push(`p${this.pages}-${index}`);
+                  this.pages += 1;
+                  this.items = page.concat(this.items);
+                }
+                cx.notify();
+              }),
+          ),
+      )
+      .child(`reported ${this.reported} clicked ${this.clicked}`);
+  }
+}
+"#;
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, source);
+
+    // The list opens at the top, so the first report loads a page, and the
+    // reader stays on `m0` with the page above the fold.
+    assert_eq!(reported_visible_range(&mut context, &view), (10, 20, 110));
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "m0");
+
+    // Scrolling up to the page's first item loads one more page, once. Two
+    // turns of the wheel, because a list scrolls only as far as it has
+    // measured, and it measures 160px above the top as it goes.
+    scroll_by(&mut context, 100.);
+    scroll_by(&mut context, 100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (10, 20, 120));
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "p0-0");
+}
