@@ -287,6 +287,8 @@ fn stat_rename_and_readlink_settle_through_promises(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+// Only the Unix test below uses it: creating a symlink needs privileges on Windows.
+#[cfg(unix)]
 const ABSOLUTE_LINK_PROBE: &str = r#"
 import { div, View } from "gpui-kit";
 import { v_flex } from "gpui-base";
