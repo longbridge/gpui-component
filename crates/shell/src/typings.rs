@@ -183,6 +183,7 @@ fn base_declarations() -> String {
 
 pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRegistry) -> String {
     let (nullary, parametric) = style_methods();
+    let component_module = component_module(components);
 
     let mut out = String::with_capacity(160 * 1024);
     out.push_str(&PREAMBLE.replace("{version}", crate::plugin::SHELL_VERSION));
@@ -207,7 +208,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     for descriptor in components.descriptors() {
         let _ = write!(
             out,
-            " | import(\"gpui-component\").{}Element",
+            " | import(\"{component_module}\").{}Element",
             descriptor.name()
         );
     }
@@ -232,7 +233,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str(INLINE_TOKEN_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
-    out.push_str("declare module \"gpui-component\" {\n");
+    let _ = writeln!(out, "declare module \"{component_module}\" {{");
     out.push_str("  import { ClickEvent, Context, Element, NativeElement } from \"gpui-kit\";\n");
     if components.states().any(|state| state.has_input_events()) {
         out.push_str("  import { InputEvent } from \"gpui-base\";\n");
@@ -252,6 +253,8 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
             out.push_str(";\n    /** `change`, `submit` (Enter), `focus` or `blur`, as on `gpui-base`'s `InputState`. */");
             out.push_str("\n    on(event: \"change\" | \"submit\" | \"focus\" | \"blur\", handler: (event: InputEvent, cx: Context) => void): boolean");
         }
+        out.push_str(";\n    /** Releases the state and its subscriptions now rather than with the application. Returns `false` when it was already released; a method called afterwards throws. Not allowed during render. */");
+        out.push_str("\n    release(): boolean");
         out.push_str(" }\n");
         push_jsdoc(&mut out, state.documentation(), None, "  ");
         // `State.new(...)` is the form `gpui-base` uses; the plain call is kept
@@ -527,7 +530,7 @@ pub(crate) fn write_application_with_components(
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
-        directories_importing_builtins(root)
+        directories_importing_builtins(root, component_module(components))
             .into_iter()
             .filter(|directory| directory != root),
     );
@@ -565,7 +568,7 @@ pub(crate) fn write_application_with_components(
 /// application directory is whatever someone pointed the runtime at, and a
 /// symlink farm or a vendored tree must not turn a startup step into an
 /// unbounded walk.
-fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
+fn directories_importing_builtins(root: &Path, component_module: &str) -> Vec<PathBuf> {
     const MAX_DEPTH: usize = 8;
     const MAX_FILES: usize = 4_096;
     const SKIPPED: [&str; 2] = ["node_modules", "target"];
@@ -614,7 +617,8 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
                     path.extension().and_then(|extension| extension.to_str()),
                     Some("js" | "mjs")
                 )
-                && std::fs::read_to_string(&path).is_ok_and(|source| imports_builtin(&source))
+                && std::fs::read_to_string(&path)
+                    .is_ok_and(|source| imports_builtin(&source, component_module))
             {
                 imports = true;
             }
@@ -628,26 +632,37 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The specifiers one `gpui-kit.d.ts` declares. A script importing any of them
+/// The specifiers one `gpui-kit.d.ts` declares besides the component
+/// catalog's, which [`component_module`] names. A script importing any of them
 /// wants the file beside it.
-const BUILTIN_SPECIFIERS: [&str; 6] = [
-    "gpui-kit",
-    "gpui",
-    "gpui-base",
-    crate::DEFAULT_COMPONENT_MODULE,
-    "gpui-shell",
-    "gpui-fps",
-];
+const BUILTIN_SPECIFIERS: [&str; 5] = ["gpui-kit", "gpui", "gpui-base", "gpui-shell", "gpui-fps"];
 
-/// Whether a script imports one of the built-in modules.
+/// The specifier the declarations give the component catalog.
+///
+/// The registry's own, so a host whose catalog scripts import from another
+/// name gets declarations for that name. The bare runtime's empty registry has
+/// none and keeps `gpui-component`, with an empty block.
+fn component_module(components: &crate::FrozenComponentRegistry) -> &'static str {
+    components
+        .module_specifier()
+        .unwrap_or(crate::DEFAULT_COMPONENT_MODULE)
+}
+
+/// Whether a script imports one of the built-in modules or the component
+/// catalog.
 ///
 /// Matching the quoted specifier rather than the bare word, so a file that only
 /// mentions gpui in a comment or a string does not collect a copy it has no use
 /// for.
-fn imports_builtin(source: &str) -> bool {
-    BUILTIN_SPECIFIERS.iter().any(|specifier| {
-        source.contains(&format!("\"{specifier}\"")) || source.contains(&format!("'{specifier}'"))
-    })
+fn imports_builtin(source: &str, component_module: &str) -> bool {
+    BUILTIN_SPECIFIERS
+        .iter()
+        .copied()
+        .chain([component_module])
+        .any(|specifier| {
+            source.contains(&format!("\"{specifier}\""))
+                || source.contains(&format!("'{specifier}'"))
+        })
 }
 
 /// Rewrites the declarations beside an application when they are not current.
@@ -704,6 +719,10 @@ enum Argument {
     DefiniteLength,
     AbsoluteLength,
     Color,
+    /// A colour or a `Background` value, which only `bg` accepts.
+    Fill,
+    /// A list of `BoxShadowSpec` records, which only `shadow` accepts.
+    Shadows,
     Number,
     /// Nothing the probe recognizes. Emitted as `never` rather than `any` so a
     /// style method added to the runtime without a matching literal here fails
@@ -719,6 +738,8 @@ impl Argument {
             Argument::DefiniteLength => "DefiniteLength",
             Argument::AbsoluteLength => "AbsoluteLength",
             Argument::Color => "Color",
+            Argument::Fill => "Color | Background",
+            Argument::Shadows => "readonly BoxShadowSpec[]",
             Argument::Number => "number",
             Argument::Unrecognized => "never",
         }
@@ -744,8 +765,23 @@ fn argument_of(name: &str) -> Argument {
     }
     let accepts = |value: Bridged| style::apply_param(name, &[value], StyleRefinement::default());
 
+    let background = || {
+        Bridged::Background(Box::new(crate::spec::BackgroundSpec {
+            kind: crate::spec::BackgroundKind::Solid {
+                color: "#ff0000".into(),
+            },
+            opacity: 1.,
+        }))
+    };
+
     if accepts(Bridged::Str("#ff0000".into())).is_ok() {
-        Argument::Color
+        if accepts(background()).is_ok() {
+            Argument::Fill
+        } else {
+            Argument::Color
+        }
+    } else if accepts(Bridged::Shadows(Vec::new())).is_ok() {
+        Argument::Shadows
     } else if accepts(Bridged::Str("auto".into())).is_ok() {
         Argument::Length
     } else if accepts(Bridged::Str("50%".into())).is_ok() {
@@ -2184,14 +2220,48 @@ const ELEMENTS: &str = r#"
     fill(): PathBuilder;
     stroke(width: number): PathBuilder;
   };
+  /**
+   * One box shadow for `.shadow([...])`, written like a CSS `box-shadow`
+   * layer. Every length is in pixels and defaults to 0. As in CSS, the first
+   * shadow in the list paints on top of the ones after it.
+   *
+   * `blur` has CSS semantics — the blur radius, twice the gaussian's standard
+   * deviation — and is halved for GPUI, so a value copied from a stylesheet
+   * looks the same here. `spread` may be negative.
+   *
+   * An `inset` shadow is painted inside the element: above its fill, but
+   * beneath its children and its border. Outer shadows paint beneath the fill.
+   */
+  export interface BoxShadowSpec {
+    /** Horizontal offset in pixels. */
+    x?: number;
+    /** Vertical offset in pixels. */
+    y?: number;
+    /** CSS blur radius in pixels; non-negative. */
+    blur?: number;
+    /** Spread in pixels; negative shrinks the shadow. */
+    spread?: number;
+    /** The shadow colour, usually with alpha (`#00000066`). */
+    color: Color;
+    /** Paint inside the element instead of around it. */
+    inset?: boolean;
+  }
   export interface BackgroundStop {}
+  /**
+   * A native GPUI background: what `window.paint_path` fills with, and what
+   * `.bg(...)` accepts besides a colour. A gradient set with `.bg` is drawn
+   * inside the element's rounded corners.
+   */
   export interface Background {
     opacity(factor: number): Background;
     color_space(space: "srgb" | "oklab"): Background;
   }
   export const Background: {
     solid(color: Color): Background;
-    /** A gradient stop. `percentage` is a fraction from 0 to 1, as in GPUI's `linear_color_stop`. */
+    /**
+     * A gradient stop. `percentage` is a fraction of the gradient line, from
+     * 0 (start) to 1 (end) — not 0 to 100.
+     */
     stop(color: Color, percentage: number): BackgroundStop;
     linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
     pattern_slash(color: Color, width: number, interval: number): Background;
@@ -4070,6 +4140,83 @@ mod tests {
             "export const InputState: { (text: string): InputState; new: (text: string) => InputState };"
         ));
         assert!(declarations.contains("Retained input state."));
+        assert!(declarations.contains("\n    release(): boolean }"));
+    }
+
+    /// A catalog that scripts import from `"host-native"`, with one component
+    /// and one state.
+    fn host_native_catalog() -> crate::FrozenComponentRegistry {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ConstructorDescriptor,
+            MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry =
+            crate::ComponentRegistry::new(crate::COMPONENT_REGISTRY_API_VERSION, "host-native")
+                .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Terminal", Arc::new(Empty)).with_constructors(vec![
+                    ConstructorDescriptor::new("Terminal", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                ]),
+            )
+            .unwrap();
+        registry
+            .register_state(crate::StateDescriptor::new(
+                "TerminalState",
+                "TerminalState",
+                Vec::new(),
+                |_, _, _| Ok(Box::new(())),
+            ))
+            .unwrap();
+        registry.freeze().unwrap()
+    }
+
+    /// A host's catalog may answer to a specifier other than
+    /// `gpui-component`; its declarations have to use the same one, or every
+    /// import from it is an unknown module to the editor.
+    #[test]
+    fn a_catalog_is_declared_under_its_own_module_specifier() {
+        let declarations = declarations_with_components(&host_native_catalog());
+
+        assert!(declarations.contains("declare module \"host-native\" {\n"));
+        assert!(declarations.contains(" | import(\"host-native\").TerminalElement"));
+        assert!(declarations.contains("export const TerminalState: "));
+        assert!(!declarations.contains("\"gpui-component\""));
+    }
+
+    /// A directory whose scripts import only that catalog still gets the file.
+    #[test]
+    fn a_directory_importing_only_the_catalog_gets_the_declarations() {
+        let root =
+            std::env::temp_dir().join(format!("gpui-shell-typings-catalog-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let panels = root.join("panels");
+        std::fs::create_dir_all(&panels).expect("nested directory");
+        std::fs::write(
+            panels.join("terminal.js"),
+            "import { Terminal } from \"host-native\";\n",
+        )
+        .expect("nested script");
+
+        let written = write_application_with_components(&root, &host_native_catalog())
+            .expect("declarations are writable");
+
+        assert!(written.contains(&panels.join(FILE_NAME)), "{written:?}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The element methods that are not style methods, so a test can subtract
@@ -4277,7 +4424,8 @@ mod tests {
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
         let declarations = base_declarations();
         for expected in [
-            "    bg<Self extends Element>(this: Self, value: Color): Self;",
+            "    bg<Self extends Element>(this: Self, value: Color | Background): Self;",
+            "    shadow<Self extends Element>(this: Self, value: readonly BoxShadowSpec[]): Self;",
             "    border_color<Self extends Element>(this: Self, value: Color): Self;",
             "    w<Self extends Element>(this: Self, value: Length): Self;",
             "    p<Self extends Element>(this: Self, value: DefiniteLength): Self;",
@@ -4304,6 +4452,15 @@ mod tests {
                  literal in `argument_of` before the declarations claim it accepts nothing"
             );
         }
+    }
+
+    #[test]
+    fn surface_paint_styles_take_their_structured_values() {
+        assert_eq!(argument_of("bg"), Argument::Fill);
+        assert_eq!(argument_of("border_color"), Argument::Color);
+        assert_eq!(argument_of("shadow"), Argument::Shadows);
+
+        assert!(base_declarations().contains("  export interface BoxShadowSpec {"));
     }
 
     #[test]
