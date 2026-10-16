@@ -1286,8 +1286,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// Set whether the platform may autocorrect the text and offer word
     /// suggestions.
     ///
-    /// Default is `true` for plain text, `false` for a masked input, an input
-    /// with a mask pattern and a code editor.
+    /// Default is `false`. Enable this explicitly for fields that accept prose;
+    /// masking or revealing text does not change the setting.
     pub fn autocorrect(mut self, autocorrect: bool) -> Self {
         self.autocorrect = Some(autocorrect);
         self
@@ -1295,8 +1295,8 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Set how a software keyboard capitalizes the text.
     ///
-    /// Default is [`Autocapitalize::Sentences`] for plain text, and
-    /// [`Autocapitalize::None`] where autocorrect is off by default.
+    /// Default is [`Autocapitalize::None`]. Enable capitalization explicitly for
+    /// fields where it is appropriate, independently of autocorrection.
     pub fn autocapitalize(mut self, autocapitalize: Autocapitalize) -> Self {
         self.autocapitalize = Some(autocapitalize);
         self
@@ -1306,8 +1306,10 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// this input, from [`Self::input_action`], [`Self::autocorrect`] and
     /// [`Self::autocapitalize`] or the defaults they describe.
     pub fn text_input_configuration(&self) -> TextInputConfiguration {
-        let plain_text = !self.masked && self.mask_pattern.is_none() && !self.is_code_editor();
-        let autocorrect = self.autocorrect.unwrap_or(plain_text);
+        // Masking is a presentation choice, not a reliable content type: a
+        // revealed password must not acquire text assistance. Keep assistance
+        // opt-in for structured fields such as passwords, email and URLs.
+        let autocorrect = self.autocorrect.unwrap_or(false);
         let input_action =
             self.input_action
                 .unwrap_or(if self.is_multi_line() && !self.submit_on_enter {
@@ -1317,11 +1319,7 @@ impl<M: InputModeKind> InputBaseState<M> {
                 });
         TextInputConfiguration {
             autocorrect,
-            autocapitalize: self.autocapitalize.unwrap_or(if plain_text {
-                Autocapitalize::Sentences
-            } else {
-                Autocapitalize::None
-            }),
+            autocapitalize: self.autocapitalize.unwrap_or(Autocapitalize::None),
             suggestions: autocorrect,
             input_action,
         }
@@ -4932,6 +4930,24 @@ mod tests {
     use super::*;
 
     #[gpui::test]
+    fn revealing_a_password_keeps_text_assistance_disabled(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::InputState::new(window, cx).masked(true));
+            let hidden = state.read(cx).text_input_configuration();
+            assert!(!hidden.autocorrect && !hidden.suggestions);
+            assert_eq!(hidden.autocapitalize, Autocapitalize::None);
+
+            // The component's reveal button uses this same state transition.
+            state.update(cx, |state, cx| state.toggle_masked(window, cx));
+            assert_eq!(state.read(cx).text_input_configuration(), hidden);
+            state.update(cx, |state, cx| state.toggle_masked(window, cx));
+            assert_eq!(state.read(cx).text_input_configuration(), hidden);
+            gpui::EmptyView
+        });
+    }
+
+    #[gpui::test]
     fn text_input_configuration_follows_the_input(cx: &mut TestAppContext) {
         use crate::input::{InputState, TextareaState};
 
@@ -4945,7 +4961,8 @@ mod tests {
                 cx.new(|cx| {
                     InputState::new(window, cx)
                         .input_action(TextInputAction::Search)
-                        .autocapitalize(Autocapitalize::None)
+                        .autocorrect(true)
+                        .autocapitalize(Autocapitalize::Words)
                 }),
             ));
             gpui::EmptyView
@@ -4956,10 +4973,8 @@ mod tests {
             assert_eq!(
                 plain.read(cx).text_input_configuration(),
                 TextInputConfiguration {
-                    autocorrect: true,
-                    autocapitalize: Autocapitalize::Sentences,
-                    suggestions: true,
                     input_action: TextInputAction::Done,
+                    ..Default::default()
                 }
             );
             assert_eq!(
@@ -4970,13 +4985,17 @@ mod tests {
                 }
             );
             assert_eq!(
-                textarea.read(cx).text_input_configuration().input_action,
-                TextInputAction::Enter
+                textarea.read(cx).text_input_configuration(),
+                TextInputConfiguration {
+                    input_action: TextInputAction::Enter,
+                    ..Default::default()
+                }
             );
             let search = search.read(cx).text_input_configuration();
             assert_eq!(search.input_action, TextInputAction::Search);
-            assert_eq!(search.autocapitalize, Autocapitalize::None);
+            assert_eq!(search.autocapitalize, Autocapitalize::Words);
             assert!(search.autocorrect);
+            assert!(search.suggestions);
         });
     }
 
