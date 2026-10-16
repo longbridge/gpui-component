@@ -704,6 +704,10 @@ enum Argument {
     DefiniteLength,
     AbsoluteLength,
     Color,
+    /// A colour or a `Background` value, which only `bg` accepts.
+    Fill,
+    /// A list of `BoxShadowSpec` records, which only `shadow` accepts.
+    Shadows,
     Number,
     /// Nothing the probe recognizes. Emitted as `never` rather than `any` so a
     /// style method added to the runtime without a matching literal here fails
@@ -719,6 +723,8 @@ impl Argument {
             Argument::DefiniteLength => "DefiniteLength",
             Argument::AbsoluteLength => "AbsoluteLength",
             Argument::Color => "Color",
+            Argument::Fill => "Color | Background",
+            Argument::Shadows => "readonly BoxShadowSpec[]",
             Argument::Number => "number",
             Argument::Unrecognized => "never",
         }
@@ -744,8 +750,23 @@ fn argument_of(name: &str) -> Argument {
     }
     let accepts = |value: Bridged| style::apply_param(name, &[value], StyleRefinement::default());
 
+    let background = || {
+        Bridged::Background(Box::new(crate::spec::BackgroundSpec {
+            kind: crate::spec::BackgroundKind::Solid {
+                color: "#ff0000".into(),
+            },
+            opacity: 1.,
+        }))
+    };
+
     if accepts(Bridged::Str("#ff0000".into())).is_ok() {
-        Argument::Color
+        if accepts(background()).is_ok() {
+            Argument::Fill
+        } else {
+            Argument::Color
+        }
+    } else if accepts(Bridged::Shadows(Vec::new())).is_ok() {
+        Argument::Shadows
     } else if accepts(Bridged::Str("auto".into())).is_ok() {
         Argument::Length
     } else if accepts(Bridged::Str("50%".into())).is_ok() {
@@ -2184,13 +2205,48 @@ const ELEMENTS: &str = r#"
     fill(): PathBuilder;
     stroke(width: number): PathBuilder;
   };
+  /**
+   * One box shadow for `.shadow([...])`, written like a CSS `box-shadow`
+   * layer. Every length is in pixels and defaults to 0. As in CSS, the first
+   * shadow in the list paints on top of the ones after it.
+   *
+   * `blur` has CSS semantics — the blur radius, twice the gaussian's standard
+   * deviation — and is halved for GPUI, so a value copied from a stylesheet
+   * looks the same here. `spread` may be negative.
+   *
+   * An `inset` shadow is painted inside the element: above its fill, but
+   * beneath its children and its border. Outer shadows paint beneath the fill.
+   */
+  export interface BoxShadowSpec {
+    /** Horizontal offset in pixels. */
+    x?: number;
+    /** Vertical offset in pixels. */
+    y?: number;
+    /** CSS blur radius in pixels; non-negative. */
+    blur?: number;
+    /** Spread in pixels; negative shrinks the shadow. */
+    spread?: number;
+    /** The shadow colour, usually with alpha (`#00000066`). */
+    color: Color;
+    /** Paint inside the element instead of around it. */
+    inset?: boolean;
+  }
   export interface BackgroundStop {}
+  /**
+   * A native GPUI background: what `window.paint_path` fills with, and what
+   * `.bg(...)` accepts besides a colour. A gradient set with `.bg` is drawn
+   * inside the element's rounded corners.
+   */
   export interface Background {
     opacity(factor: number): Background;
     color_space(space: "srgb" | "oklab"): Background;
   }
   export const Background: {
     solid(color: Color): Background;
+    /**
+     * A gradient stop. `percentage` is a fraction of the gradient line, from
+     * 0 (start) to 1 (end) — not 0 to 100.
+     */
     stop(color: Color, percentage: number): BackgroundStop;
     linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
     pattern_slash(color: Color, width: number, interval: number): Background;
@@ -4275,7 +4331,8 @@ mod tests {
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
         let declarations = base_declarations();
         for expected in [
-            "    bg<Self extends Element>(this: Self, value: Color): Self;",
+            "    bg<Self extends Element>(this: Self, value: Color | Background): Self;",
+            "    shadow<Self extends Element>(this: Self, value: readonly BoxShadowSpec[]): Self;",
             "    border_color<Self extends Element>(this: Self, value: Color): Self;",
             "    w<Self extends Element>(this: Self, value: Length): Self;",
             "    p<Self extends Element>(this: Self, value: DefiniteLength): Self;",
@@ -4302,6 +4359,15 @@ mod tests {
                  literal in `argument_of` before the declarations claim it accepts nothing"
             );
         }
+    }
+
+    #[test]
+    fn surface_paint_styles_take_their_structured_values() {
+        assert_eq!(argument_of("bg"), Argument::Fill);
+        assert_eq!(argument_of("border_color"), Argument::Color);
+        assert_eq!(argument_of("shadow"), Argument::Shadows);
+
+        assert!(base_declarations().contains("  export interface BoxShadowSpec {"));
     }
 
     #[test]

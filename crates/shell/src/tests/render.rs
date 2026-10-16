@@ -4061,6 +4061,115 @@ export default class Styled extends View {
 }
 
 #[gpui::test]
+fn bg_takes_a_background_and_shadow_takes_css_records(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r##"
+import { View, div, Background } from "gpui-kit";
+
+const gold = Background.linear_gradient(180, Background.stop("#f7da74", 0), Background.stop("#fdcd12", 1));
+
+export default class Surface extends View {
+  render() {
+    return div()
+      .rounded(10)
+      .bg(gold)
+      .shadow([
+        { spread: 1, color: "#0d0d0f" },
+        { y: 1, color: "#ffffff10", inset: true },
+        { y: 1, blur: 2, color: "#00000066" },
+      ])
+      .hover((el) => el.bg(gold.opacity(0.8)).shadow([]));
+  }
+}
+"##;
+
+    let view_type = runtime.load_source("surface", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    assert!(
+        tree.contains(r##".bg[Background(BackgroundSpec { kind: LinearGradient { angle: 180.0, from: ("#f7da74", 0.0), to: ("#fdcd12", 1.0)"##),
+        "gradient not recorded: {tree}"
+    );
+    assert!(
+        tree.contains(r##"ShadowSpec { x: 0.0, y: 1.0, blur: 0.0, spread: 0.0, color: "#ffffff10", inset: true }"##),
+        "inset shadow not recorded: {tree}"
+    );
+    assert!(tree.contains(r##"color: "#00000066""##), "{tree}");
+    assert!(
+        tree.contains(":hover(.bg[Background("),
+        "hover bg not recorded: {tree}"
+    );
+    assert!(
+        tree.contains(".shadow[Shadows([])]"),
+        "hover shadow not recorded: {tree}"
+    );
+}
+
+#[gpui::test]
+fn structured_paint_arguments_fail_where_they_were_written(cx: &mut TestAppContext) {
+    for (body, expected) in [
+        (
+            r##"div().shadow({ y: 1, color: "#000" })"##,
+            "wrap a single one in [ ]",
+        ),
+        (
+            r##"div().shadow([{ offsetY: 1, color: "#000" }])"##,
+            "shadow 0: unknown field `offsetY`",
+        ),
+        (
+            r##"div().shadow([{ y: 1 }])"##,
+            "shadow 0: `color` is required",
+        ),
+        (
+            r##"div().shadow([{ blur: -2, color: "#000" }])"##,
+            "shadow 0: `blur` must be a finite, non-negative number",
+        ),
+        (
+            r##"div().shadow([{ color: "#000", inset: "yes" }])"##,
+            "`inset` must be a boolean",
+        ),
+        (
+            r##"div().shadow([{ color: "#000" }, { color: "black" }])"##,
+            "shadow 1: `black` is not a color value",
+        ),
+        (
+            r##"div().bg(Background.linear_gradient(90, "gold", "#000"))"##,
+            "`gold` is not a color value",
+        ),
+        (r##"div().p([4])"##, "`p` does not take an array"),
+        (
+            r##"div().border_color(Background.solid("#000"))"##,
+            "got a Background",
+        ),
+    ] {
+        let source = format!(
+            r#"
+import {{ View, div, Background }} from "gpui-kit";
+export default class Broken extends View {{
+  render() {{ return {body}; }}
+}}
+"#,
+        );
+        let message = render_error(cx, "broken.js", &source);
+        assert!(message.contains(expected), "`{body}`: {message}");
+    }
+}
+
+#[gpui::test]
 fn transition_declarations_survive_the_script_render(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 

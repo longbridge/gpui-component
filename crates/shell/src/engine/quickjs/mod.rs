@@ -7361,69 +7361,11 @@ impl ShellRuntime {
                                 "path stroke width must be finite and non-negative",
                             ));
                         }
-                        if !opacity.is_finite() || opacity < 0.0 {
-                            return Err(js_error::type_error(
-                                &ctx,
-                                "path background opacity must be finite and non-negative",
-                            ));
-                        }
-                        let value_count =
-                            crate::engine::quickjs::host_modules::bridge_array_len(&ctx, &values)?;
-                        let mut value_strings = Vec::new();
-                        value_strings.try_reserve_exact(value_count).map_err(|_| {
-                            js_error::range_error(&ctx, "path background values are too large")
-                        })?;
-                        for index in 0..value_count {
-                            value_strings.push(values.get::<String>(index)?);
-                        }
-                        let number = |index: usize, name: &str| -> JsResult<f32> {
-                            value_strings
-                                .get(index)
-                                .and_then(|value| value.parse::<f32>().ok())
-                                .filter(|value| value.is_finite())
-                                .ok_or_else(|| js_error::type_error(&ctx, name))
-                        };
-                        let text = |index: usize, name: &str| -> JsResult<String> {
-                            value_strings
-                                .get(index)
-                                .cloned()
-                                .ok_or_else(|| js_error::type_error(&ctx, name))
-                        };
-                        let kind = match kind.as_str() {
-                            "solid" => crate::spec::BackgroundKind::Solid {
-                                color: text(0, "solid background needs a color")?,
-                            },
-                            "linear-gradient" => crate::spec::BackgroundKind::LinearGradient {
-                                angle: number(0, "gradient angle must be finite")?,
-                                from: (
-                                    text(1, "gradient needs a from color")?,
-                                    number(2, "gradient from percentage must be finite")?,
-                                ),
-                                to: (
-                                    text(3, "gradient needs a to color")?,
-                                    number(4, "gradient to percentage must be finite")?,
-                                ),
-                                color_space,
-                            },
-                            "pattern-slash" => crate::spec::BackgroundKind::PatternSlash {
-                                color: text(0, "slash pattern needs a color")?,
-                                width: number(1, "slash pattern width must be finite")?,
-                                interval: number(2, "slash pattern interval must be finite")?,
-                            },
-                            "checkerboard" => crate::spec::BackgroundKind::Checkerboard {
-                                color: text(0, "checkerboard needs a color")?,
-                                size: number(1, "checkerboard size must be finite")?,
-                            },
-                            _ => {
-                                return Err(js_error::type_error(&ctx, "unknown Background kind"));
-                            }
-                        };
+                        let background =
+                            background_spec(&ctx, &kind, &values, opacity, color_space)?;
                         Ok(upgrade(&path_runtime, &ctx)?.push_node(Component::Path {
                             fill,
-                            background: crate::spec::BackgroundSpec {
-                                kind,
-                                opacity: opacity as f32,
-                            },
+                            background,
                             stroke_width: width as f32,
                         }))
                     },
@@ -7913,6 +7855,7 @@ impl ShellRuntime {
             .ok_or_else(|| js_error::type_error(ctx, "unknown element method"))?;
         let value = match value {
             Some(StyleArgument::Value(value)) => value,
+            Some(StyleArgument::Object(saved)) => bridge_style(ctx, name, &saved.restore(ctx)?)?,
             // The value is not known yet, so neither is whether it is valid.
             // A placeholder is recorded, the position is noted, and the same
             // `style::apply_param` check runs at instantiation with the real
@@ -9849,6 +9792,10 @@ enum StyleArgument {
     Handler,
     /// A template's sentinel. See [`Argument::Slot`].
     Slot(u16),
+    /// An object or an array, kept to be read once the style is known: what
+    /// one means depends on the method (`shadow` reads an array of records,
+    /// `bg` a `Background`), and `FromJs` runs before the name is in hand.
+    Object(Persistent<Value<'static>>),
 }
 
 impl<'js> FromJs<'js> for StyleArgument {
@@ -9856,8 +9803,11 @@ impl<'js> FromJs<'js> for StyleArgument {
         if value.as_function().is_some() {
             return Ok(Self::Handler);
         }
-        if let Some(slot) = slot_index(&value) {
-            return Ok(Self::Slot(slot));
+        if value.as_object().is_some() {
+            if let Some(slot) = slot_index(&value) {
+                return Ok(Self::Slot(slot));
+            }
+            return Ok(Self::Object(Persistent::save(ctx, value)));
         }
         Ok(Self::Value(bridge(ctx, &value)?))
     }
@@ -9876,10 +9826,220 @@ fn slot_index(value: &Value<'_>) -> Option<u16> {
     (index.is_finite() && index >= 0.0 && index <= f64::from(u16::MAX)).then_some(index as u16)
 }
 
+/// Rebuilds a `Background` from the flattened form the prelude's
+/// `background(...)` builder holds: a kind, its values as strings, an opacity
+/// factor and a colour space.
+///
+/// The one parser for that form, shared by `window.paint_path` (which receives
+/// the pieces as arguments) and the `bg` style (which receives the frozen
+/// object and reads them off it), so a `Background` means the same thing
+/// wherever it is handed over. Colours are kept as written and checked when
+/// the value is used.
+fn background_spec(
+    ctx: &Ctx<'_>,
+    kind: &str,
+    values: &Array<'_>,
+    opacity: f64,
+    color_space: String,
+) -> JsResult<crate::spec::BackgroundSpec> {
+    use crate::spec::BackgroundKind;
+
+    if !opacity.is_finite() || opacity < 0.0 {
+        return Err(js_error::type_error(
+            ctx,
+            "background opacity must be finite and non-negative",
+        ));
+    }
+    let value_count = host_modules::bridge_array_len(ctx, values)?;
+    let mut value_strings = Vec::new();
+    value_strings
+        .try_reserve_exact(value_count)
+        .map_err(|_| js_error::range_error(ctx, "background values are too large"))?;
+    for index in 0..value_count {
+        value_strings.push(values.get::<String>(index)?);
+    }
+    let number = |index: usize, name: &str| -> JsResult<f32> {
+        value_strings
+            .get(index)
+            .and_then(|value| value.parse::<f32>().ok())
+            .filter(|value| value.is_finite())
+            .ok_or_else(|| js_error::type_error(ctx, name))
+    };
+    let text = |index: usize, name: &str| -> JsResult<String> {
+        value_strings
+            .get(index)
+            .cloned()
+            .ok_or_else(|| js_error::type_error(ctx, name))
+    };
+    let kind = match kind {
+        "solid" => BackgroundKind::Solid {
+            color: text(0, "solid background needs a color")?,
+        },
+        "linear-gradient" => BackgroundKind::LinearGradient {
+            angle: number(0, "gradient angle must be finite")?,
+            from: (
+                text(1, "gradient needs a from color")?,
+                number(2, "gradient from percentage must be finite")?,
+            ),
+            to: (
+                text(3, "gradient needs a to color")?,
+                number(4, "gradient to percentage must be finite")?,
+            ),
+            color_space,
+        },
+        "pattern-slash" => BackgroundKind::PatternSlash {
+            color: text(0, "slash pattern needs a color")?,
+            width: number(1, "slash pattern width must be finite")?,
+            interval: number(2, "slash pattern interval must be finite")?,
+        },
+        "checkerboard" => BackgroundKind::Checkerboard {
+            color: text(0, "checkerboard needs a color")?,
+            size: number(1, "checkerboard size must be finite")?,
+        },
+        _ => return Err(js_error::type_error(ctx, "unknown Background kind")),
+    };
+    Ok(crate::spec::BackgroundSpec {
+        kind,
+        opacity: opacity as f32,
+    })
+}
+
+/// A value the prelude's `Background` builder made, if `object` is one.
+fn background_object(
+    ctx: &Ctx<'_>,
+    object: &Object<'_>,
+) -> JsResult<Option<crate::spec::BackgroundSpec>> {
+    if !matches!(
+        object.get::<_, Option<bool>>("__background"),
+        Ok(Some(true))
+    ) {
+        return Ok(None);
+    }
+    let kind: String = object.get("kind")?;
+    let values: Array<'_> = object.get("values")?;
+    let opacity: f64 = object.get("opacityFactor")?;
+    let color_space: String = object.get("colorSpace")?;
+    background_spec(ctx, &kind, &values, opacity, color_space).map(Some)
+}
+
+/// The shadow record fields `shadow([...])` reads, in the order the error
+/// lists them.
+const SHADOW_FIELDS: [&str; 6] = ["x", "y", "blur", "spread", "color", "inset"];
+
+/// Reads a `shadow([...])` argument: an array of CSS-like records.
+///
+/// The shape is checked here, where the script's own values are still in hand
+/// to name; the colours are checked by `style::apply_param`, which runs at the
+/// call site too. An unknown key is refused rather than ignored, because
+/// `offsetY` or `blurRadius` would otherwise draw a shadow with that part
+/// silently missing.
+fn shadow_list(ctx: &Ctx<'_>, array: &Array<'_>) -> JsResult<Vec<crate::spec::ShadowSpec>> {
+    let length = host_modules::bridge_array_len(ctx, array)?;
+    let mut shadows = Vec::with_capacity(length);
+    for index in 0..length {
+        let entry: Value<'_> = array.get(index)?;
+        let fail =
+            |message: String| js_error::type_error(ctx, &format!("shadow {index}: {message}"));
+        let object = entry
+            .as_object()
+            .filter(|_| entry.as_array().is_none() && entry.as_function().is_none())
+            .ok_or_else(|| {
+                fail("expected an object like { y: 1, blur: 2, color: \"#00000066\" }".into())
+            })?;
+        for key in object.keys::<String>() {
+            let key = key?;
+            if !SHADOW_FIELDS.contains(&key.as_str()) {
+                return Err(fail(format!(
+                    "unknown field `{key}`; a shadow takes {}",
+                    SHADOW_FIELDS.join(", ")
+                )));
+            }
+        }
+        let number = |field: &str, minimum: Option<f64>| -> JsResult<f32> {
+            let value: Value<'_> = object.get(field)?;
+            if value.is_undefined() {
+                return Ok(0.);
+            }
+            match value.as_number() {
+                Some(number) if number.is_finite() && minimum.is_none_or(|min| number >= min) => {
+                    Ok(number as f32)
+                }
+                _ => Err(fail(format!(
+                    "`{field}` must be a finite{} number of pixels",
+                    if minimum.is_some() {
+                        ", non-negative"
+                    } else {
+                        ""
+                    }
+                ))),
+            }
+        };
+        let x = number("x", None)?;
+        let y = number("y", None)?;
+        let blur = number("blur", Some(0.))?;
+        let spread = number("spread", None)?;
+        let color: Value<'_> = object.get("color")?;
+        let color = color
+            .as_string()
+            .map(|text| text.to_string())
+            .transpose()?
+            .ok_or_else(|| {
+                fail("`color` is required and must be a #rgb, #rrggbb or #rrggbbaa string".into())
+            })?;
+        let inset: Value<'_> = object.get("inset")?;
+        let inset = if inset.is_undefined() {
+            false
+        } else {
+            inset
+                .as_bool()
+                .ok_or_else(|| fail("`inset` must be a boolean".into()))?
+        };
+        shadows.push(crate::spec::ShadowSpec {
+            x,
+            y,
+            blur,
+            spread,
+            color,
+            inset,
+        });
+    }
+    Ok(shadows)
+}
+
+/// Converts the argument of the parametric style `name`.
+///
+/// [`bridge`] plus the one shape only a style can take: the array `shadow`
+/// reads. Every other style refuses an array by name, rather than having it
+/// misread as a shadow list.
+fn bridge_style<'js>(ctx: &Ctx<'js>, name: &str, value: &Value<'js>) -> JsResult<Bridged> {
+    if name == "shadow" {
+        if let Some(array) = value.as_array() {
+            return Ok(Bridged::Shadows(shadow_list(ctx, array)?));
+        }
+        // Most likely a single record passed without its array.
+        if value.as_object().is_some() {
+            return Err(js_error::type_error(
+                ctx,
+                "`shadow` expects an array of shadows; wrap a single one in [ ]: \
+                 shadow([{ y: 1, blur: 2, color: \"#00000066\" }])",
+            ));
+        }
+    } else if value.as_array().is_some() {
+        return Err(js_error::type_error(
+            ctx,
+            &format!("`{name}` does not take an array"),
+        ));
+    }
+    bridge(ctx, value)
+}
+
 /// Converts one non-function script value.
 ///
-/// The one place the four bridged cases are named, so that [`Arguments`] and
-/// [`StyleArgument`] cannot come to disagree about what a script value is.
+/// The one place the bridged cases are named, so that [`Arguments`] and
+/// [`StyleArgument`] cannot come to disagree about what a script value is. A
+/// `Background` from the prelude's builder is recognised here, wherever it is
+/// passed; the `shadow` list is read by [`bridge_style`], which knows the
+/// method.
 fn bridge(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Bridged> {
     Ok(if value.is_null() || value.is_undefined() {
         Bridged::Nil
@@ -9889,10 +10049,17 @@ fn bridge(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Bridged> {
         Bridged::Number(number)
     } else if let Some(text) = value.as_string() {
         Bridged::Str(text.to_string()?)
+    } else if let Some(background) = value
+        .as_object()
+        .map(|object| background_object(ctx, object))
+        .transpose()?
+        .flatten()
+    {
+        Bridged::Background(Box::new(background))
     } else {
         return Err(js_error::type_error(
             ctx,
-            "unsupported argument type; expected null, boolean, number, string or function",
+            "unsupported argument type; expected null, boolean, number, string, Background or function",
         ));
     })
 }

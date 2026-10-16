@@ -264,16 +264,25 @@ impl ShellRuntime {
                 op,
                 argument: index,
             } => {
-                let value = super::bridge(ctx, argument)?;
-                // The check the ordinary path runs while recording. It could
-                // not run then — the value did not exist — so it runs here,
-                // which still reports one call rather than one frame later.
-                if let Some(SpecOp::ParamStyle(name, existing)) = template
+                let style = template
                     .arena()
                     .node(slot.node())
                     .map(crate::spec::SpecNode::ops)
                     .and_then(|ops| ops.get(op as usize))
-                {
+                    .and_then(|op| match op {
+                        SpecOp::ParamStyle(name, existing) => Some((*name, existing)),
+                        _ => None,
+                    });
+                // A style argument is read for its method, so `shadow`'s array
+                // of records fills a slot exactly as it is passed directly.
+                let value = match style {
+                    Some((name, _)) => super::bridge_style(ctx, name, argument)?,
+                    None => super::bridge(ctx, argument)?,
+                };
+                // The check the ordinary path runs while recording. It could
+                // not run then — the value did not exist — so it runs here,
+                // which still reports one call rather than one frame later.
+                if let Some((name, existing)) = style {
                     let mut checked: SmallVec<[Bridged; 2]> = existing.clone();
                     if let Some(place) = checked.get_mut(index as usize) {
                         *place = value.clone();
@@ -485,7 +494,10 @@ fn unused_argument(arity: usize, slots: &[Slot]) -> Option<usize> {
 /// — because the ordinary path is `.child(String(value))` in the prelude, and a
 /// number has to read the same whichever path recorded it.
 fn text_of<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
-    if matches!(super::bridge(ctx, value)?, Bridged::Nil) {
+    if matches!(
+        super::bridge(ctx, value)?,
+        Bridged::Nil | Bridged::Background(_) | Bridged::Shadows(_)
+    ) {
         return Err(js_error::type_error(
             ctx,
             "this template argument fills a text child and must be a string, a number \
