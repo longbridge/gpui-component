@@ -127,6 +127,35 @@ fn masked_input_handles_typing_without_reporting_secret_value(cx: &mut TestAppCo
     .unwrap();
 }
 
+struct Cleanable {
+    query: Entity<InputState>,
+}
+impl Render for Cleanable {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(
+            Input::new(&self.query)
+                .id("query")
+                .cleanable(true)
+                .w(px(240.)),
+        )
+    }
+}
+
+#[gpui_kit::test]
+fn clear_button_is_named(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+    let (handle, _) = common::open_window(cx, None, |window, cx| {
+        cx.new(|cx| Cleanable {
+            query: cx.new(|cx| InputState::new(window, cx).default_value("query")),
+        })
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+        assert_eq!(window.within("query").find("clean").label(), Some("Clear"));
+    })
+    .unwrap();
+}
+
 #[gpui_kit::test]
 fn existing_gpui_keyboard_editing_updates_observed_value(cx: &mut TestAppContext) {
     let (handle, handle_content) = inputs(cx);
