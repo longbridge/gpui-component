@@ -2191,6 +2191,7 @@ const ELEMENTS: &str = r#"
   }
   export const Background: {
     solid(color: Color): Background;
+    /** A gradient stop. `percentage` is a fraction from 0 to 1, as in GPUI's `linear_color_stop`. */
     stop(color: Color, percentage: number): BackgroundStop;
     linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
     pattern_slash(color: Color, width: number, interval: number): Background;
@@ -3658,7 +3659,8 @@ const FPS: &str = r#"  /**
    * whether and where, and nothing the script renders can move it, rebuild
    * it, or count against it. Calling it again moves or reconfigures the HUD
    * that is already up; the monitor behind it keeps its history across a hide
-   * and a show. Needs a live host call: `init()`, an event handler or a task.
+   * and a show. Call it from an event handler or a task: `init()` runs before
+   * the window has its root, so it throws there.
    */
   export function show_fps_monitor(options?: FpsMonitorOptions): void;
   /** Takes the HUD down. `true` if one was up. */
