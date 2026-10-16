@@ -349,6 +349,47 @@ on GPUI Fast; on Linux the page needs an X11 or XWayland window (start with
 content it overlaps. [`examples/js_webview`](../../examples/js_webview/main.js)
 is a small browser built on it.
 
+### MessageScroller
+
+`MessageScrollerState(count)` is a virtualized transcript's rows, scroll
+position and tail following; `MessageScroller` places it and asks the script
+for each visible row by index. A transcript changes while it is on screen, so
+the state is edited in place rather than recreated, which would drop the
+reader's position.
+
+```js
+import { MessageScroller, MessageScrollerState } from "gpui-component";
+
+// In init():
+this.rows = [];
+this.scroller = MessageScrollerState(0);
+
+// When a message arrives:
+this.rows.push(message);
+this.scroller.append(1);
+
+// In render():
+new MessageScroller("transcript", this.scroller, (index) => renderRow(this.rows[index]))
+  .flex_1()
+  .scrollbar(true);
+```
+
+| Method | Description |
+| --- | --- |
+| `append(count)` / `prepend(count)` | Add rows at the end, or at the start keeping the reader's position |
+| `splice(start, end, count)` | Replace rows `start..end` with `count` rows |
+| `reset(count)` | Start over with `count` rows and follow the tail |
+| `remeasure()` / `remeasure_items(start, end)` | Measure rows again after their content changed size |
+| `scroll_to_item(index)` / `scroll_to_end()` | Scroll to a row, or to the end and follow the tail |
+| `item_count()` | The number of rows |
+| `is_following_tail()` / `is_scrolled_up()` | Whether new rows keep the end in view, and whether the reader has scrolled away from it |
+| `logical_scroll_top()` | `{ item_ix, offset_in_item }`: the row at the top of the viewport and how far into it the list is scrolled |
+
+The edits that take a range or an index return `false`, and change nothing,
+when it is outside the current rows. The arguments are whole non-negative
+numbers; anything else throws. The reads may be called in `render`; the edits
+may not.
+
 ### Views
 
 ```js
