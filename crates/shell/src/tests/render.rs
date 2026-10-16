@@ -11209,6 +11209,32 @@ fn a_list_reports_its_visible_range_however_it_changed(cx: &mut TestAppContext) 
     );
 }
 
+#[gpui::test]
+fn a_list_reports_only_items_visible_after_its_padding(cx: &mut TestAppContext) {
+    let source = reporting_list_source().replace(
+        ").on_visible_range_change",
+        ").pt(20).on_visible_range_change",
+    );
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &source);
+
+    // The tenth row starts exactly at the bottom, below the top padding.
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 9, 100));
+    scroll_by(&mut context, -100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 14, 100));
+
+    // A row that intersects the bottom edge must still be reported.
+    scroll_by(&mut context, -10.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 100));
+
+    // GPUI paints no items when padding consumes the whole viewport.
+    let source = reporting_list_source().replace(
+        ").on_visible_range_change",
+        ").pt(100).pb(100).on_visible_range_change",
+    );
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &source);
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 0, 100));
+}
+
 /// The case the report exists for: a chat that loads a page of older items
 /// when the reader reaches the top, and must not then be thrown to the top of
 /// the page it loaded, which would load the next one, and the next.
