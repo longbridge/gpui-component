@@ -2134,6 +2134,16 @@ const ELEMENTS: &str = r#"
    * the other two throw. A duplicate key there quietly gives both items one
    * identity, and `on_item_click` reports it for either.
    *
+   * When `item_count` changes, the reader stays on the item they were
+   * reading: the list remembers the key of the item at the top of the
+   * viewport and, after the change, finds that key again and scrolls back to
+   * it, the same distance into it. So a page of older items put above, or a
+   * new one added below, leaves the view where it was — also at the very top,
+   * where the new items stay above the fold. If that item is gone, the view
+   * stays at the same index. A list scrolled past its last item stays at the
+   * end. To find the key, `get_key` is called near the item's old index from
+   * inside layout, so it must stay a plain lookup.
+   *
    * @param id      Identity, and the name a `Scrollbar` pairs with.
    * @param item_count How many items the collection has, visible or not.
    * @param get_key An item's stable domain key, from its current index; the

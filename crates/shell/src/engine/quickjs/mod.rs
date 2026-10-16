@@ -3383,6 +3383,85 @@ impl ShellRuntime {
         }
     }
 
+    /// Asks a lazy list's `get_key` for the keys of items by index, from
+    /// inside layout.
+    ///
+    /// What a `list` keeps the reader's place by when its item count changes:
+    /// it remembers the key of the item at the top of the viewport after each
+    /// layout and, once the count has changed, asks for keys around that
+    /// item's old index until it finds where the key went. `ask` is handed the
+    /// lookup and decides how far to go. Once `get_key` throws, every later
+    /// lookup answers `None` without calling it, and the error is logged.
+    ///
+    /// The scope is the item renderer's, for the same reasons: this runs from
+    /// GPUI's layout pass, so [`ScopePhase::Layout`] forbids `cx.notify()` and
+    /// retained state, and nothing is drained afterwards.
+    pub(crate) fn item_keys<R>(
+        self: &Rc<Self>,
+        get_key: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+        ask: impl FnOnce(&mut dyn FnMut(usize) -> Option<String>) -> R,
+    ) -> Option<R> {
+        let entry = self.callbacks.borrow().get(get_key)?;
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("item key resolver {get_key} belongs to a retired application");
+            return None;
+        }
+
+        let view = entry.live_view()?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+
+        self.metrics.time_frame_script(|| {
+            let (_guard, _) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+
+            let answered = self.with_js(|ctx| {
+                let key_handler = entry.value.clone().restore(ctx)?;
+                let mut failure = None;
+                let answer = ask(&mut |index| {
+                    if failure.is_some() {
+                        return None;
+                    }
+                    match key_handler.call::<_, String>((index,)) {
+                        Ok(key) => Some(key),
+                        Err(error) => {
+                            failure = Some(error);
+                            None
+                        }
+                    }
+                });
+                match failure {
+                    Some(error) => Err(error),
+                    None => Ok(answer),
+                }
+            });
+            match answered {
+                Ok(answer) => Some(answer),
+                Err(error) => {
+                    tracing::error!("error in a list's get_key: {error}");
+                    None
+                }
+            }
+        })
+    }
+
     /// Draws one piece of a dock's chrome.
     ///
     /// The second call into script that runs on a frame's budget rather than an
