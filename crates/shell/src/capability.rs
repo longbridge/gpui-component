@@ -450,6 +450,17 @@ impl Capabilities {
                 let normalized = resolved_path.unwrap_or_else(|| normalize(path));
                 match normalized.strip_prefix(&resolved) {
                     Ok(relative) => relative.to_path_buf(),
+                    // The root itself, named by a path whose last component is a
+                    // link to it — `~/.claude/skills` pointing into a dotfiles
+                    // checkout. Kept as written it lies outside the resolved
+                    // root, but there is no link *inside* the grant to act on:
+                    // the operation is on the root, as `open` would have it.
+                    Err(_)
+                        if last == Final::Keep
+                            && resolved_root(path).as_deref() == Some(resolved.as_path()) =>
+                    {
+                        PathBuf::new()
+                    }
                     Err(_) => continue,
                 }
             } else {
@@ -956,6 +967,97 @@ mod symlink_tests {
             "a write followed a dangling symlink out of the root"
         );
         assert!(!outside.join("not-there.txt").exists());
+    }
+
+    #[test]
+    fn open_link_names_the_link_itself_given_an_absolute_path() {
+        let sandbox = Sandbox::new("link-itself");
+        sandbox.link("alias", Path::new("ours.txt"));
+        let capabilities = sandbox.granted();
+        let alias = sandbox.root.join("inside/alias");
+
+        let link = capabilities
+            .open_link(&alias, Access::Read)
+            .expect("a path inside the root");
+        assert_eq!(link.path(), Path::new("alias"));
+        assert!(
+            link.dir()
+                .symlink_metadata(link.path())
+                .expect("the link")
+                .is_symlink()
+        );
+
+        // Reading through it still resolves to what it names.
+        let through = capabilities
+            .open(&alias, Access::Read)
+            .expect("a path inside the root");
+        assert_eq!(through.path(), Path::new("ours.txt"));
+    }
+
+    #[test]
+    fn a_root_that_is_itself_a_link_can_be_named_by_its_own_path() {
+        let sandbox = Sandbox::new("linked-root");
+        let alias = sandbox.root.join("alias");
+        std::os::unix::fs::symlink(sandbox.root.join("inside"), &alias).expect("a linked root");
+        let capabilities = Capabilities::new()
+            .read_roots([alias.clone()])
+            .write_roots([alias.clone()]);
+
+        let root = capabilities
+            .open_link(&alias, Access::Read)
+            .expect("the root, named through the link it was granted as");
+        assert_eq!(root.path(), Path::new("."));
+        assert!(
+            root.dir()
+                .symlink_metadata(root.path())
+                .expect("the root")
+                .is_dir()
+        );
+
+        let inside = capabilities
+            .open_link(&alias.join("ours.txt"), Access::Write)
+            .expect("a path inside the linked root");
+        assert_eq!(inside.path(), Path::new("ours.txt"));
+    }
+
+    #[test]
+    fn open_link_keeps_a_dangling_link_and_removes_only_the_link() {
+        let sandbox = Sandbox::new("link-dangling");
+        let outside = sandbox.outside();
+        sandbox.link("dangling", &outside.join("not-there.txt"));
+        let capabilities = sandbox.granted();
+
+        let link = capabilities
+            .open_link(&sandbox.root.join("inside/dangling"), Access::Write)
+            .expect("a path inside the root");
+        assert_eq!(link.path(), Path::new("dangling"));
+        link.dir()
+            .remove_file(link.path())
+            .expect("the link itself is removed");
+        assert!(
+            std::fs::symlink_metadata(sandbox.root.join("inside/dangling")).is_err(),
+            "the link is gone"
+        );
+        assert!(!outside.join("not-there.txt").exists());
+    }
+
+    #[test]
+    fn open_link_refuses_a_parent_that_leads_out_of_the_root() {
+        let sandbox = Sandbox::new("link-parent");
+        let outside = sandbox.outside();
+        sandbox.link("escape", &outside);
+        let capabilities = sandbox.granted();
+
+        assert!(
+            capabilities
+                .open_link(
+                    &sandbox.root.join("inside/escape/secret.txt"),
+                    Access::Write
+                )
+                .is_err(),
+            "a parent that resolves outside the root was accepted"
+        );
+        assert!(outside.join("secret.txt").exists());
     }
 
     #[test]
