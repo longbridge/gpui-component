@@ -7815,6 +7815,26 @@ impl ShellRuntime {
                     runtime.clone(),
                     descriptor.clone(),
                 )?;
+                let release_runtime = runtime.clone();
+                let kind = descriptor.kind();
+                component_module.set(
+                    format!("{}.release", descriptor.export()),
+                    Func::from(move |ctx: Ctx<'_>, proof: String, handle: u64| -> JsResult<bool> {
+                        let runtime = upgrade(&release_runtime, &ctx)?;
+                        if proof != runtime.component_state_proof {
+                            return Err(js_error::type_error(&ctx, "state belongs to another runtime"));
+                        }
+                        if matches!(scope::current_phase(), Some(ScopePhase::Render | ScopePhase::Layout)) {
+                            return Err(js_error::type_error(&ctx, "state cannot be released during render or layout"));
+                        }
+                        runtime.flush_component_state_releases();
+                        let mut states = runtime
+                            .component_states
+                            .try_borrow_mut()
+                            .map_err(|_| js_error::type_error(&ctx, "state registry is already borrowed"))?;
+                        Ok(states.remove(handle, kind))
+                    }),
+                )?;
                 let state_runtime = runtime.clone();
                 let descriptor = descriptor.clone();
                 component_module.set(
