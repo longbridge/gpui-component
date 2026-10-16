@@ -125,9 +125,12 @@ source of truth over this guide.
 - **Text state reports its own events.** Create an `InputState` in `init`,
   pass it to `Input.new(state)` from the same module, and subscribe with
   `state.on("change" | "submit" | "focus" | "blur", (event, cx) => …)`;
-  `submit` is Enter, and `event.shift` says whether Shift was held. Both
-  modules' `InputState` and `TextareaState` answer `on` the same way, but each
-  module's `Input` takes only its own module's state.
+  `submit` is Enter, and `event.shift` says whether Shift was held. A
+  `TextareaState` inserts the line break before it reports `submit`;
+  `gpui-base`'s has `set_submit_on_enter(true)` to make Enter only submit
+  (Shift+Enter still inserts a line break, and still reports `submit` with
+  `shift: true`). Both modules' `InputState` and `TextareaState` answer `on`
+  the same way, but each module's `Input` takes only its own module's state.
 - **Overlays are window calls made from an event handler or a task:**
   `window.open_dialog(() => element)`, `window.open_sheet(...)`,
   `window.push_toast({ title })`. `init` runs before the window can show one,

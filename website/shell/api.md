@@ -357,6 +357,7 @@ From `TextareaState.new(options?)`, where `options` is `{ placeholder?: string, 
 | `set_rows(rows: number): void`                            | The visible row count                                                |
 | `set_auto_grow(min_rows: number, max_rows: number): void` | Grows with its content between the two                               |
 | `set_soft_wrap(wrap: boolean): void`                      | Whether long lines wrap                                              |
+| `set_submit_on_enter(submit: boolean): void`              | Whether Enter submits instead of starting a new line                 |
 
 #### `SliderState`
 

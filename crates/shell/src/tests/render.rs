@@ -5764,6 +5764,95 @@ export default class Bad extends View {
     );
 }
 
+/// A textarea set to submit on Enter keeps the line break out of the text,
+/// and Shift+Enter still starts a new line.
+///
+/// Without the setting base inserts the break first and then reports
+/// `submit`, so the first handler call would read `send` followed by a break.
+/// The handler records the text it reads with each break shown as `|`.
+///
+/// The test sends base's `Enter` action rather than the key. When nothing
+/// handles a key, the test window types its character, and it gives Enter the
+/// character `\n`; the macOS, Windows and Linux windows type nothing for it.
+/// Base hands a submitting Enter on to the parent, so the key would put the
+/// break back in here and only here.
+#[gpui::test]
+fn a_textarea_that_submits_on_enter_keeps_the_line_break_for_shift_enter(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { Textarea, TextareaState } from "gpui-base";
+
+export default class Composer extends View {
+  init() {
+    this.draft = TextareaState.new({ rows: 4 });
+    this.draft.set_submit_on_enter(true);
+    this.submits = [];
+    this.draft.on("submit", (event, cx) => {
+      const text = this.draft.value().replace(/\n/g, "|");
+      this.submits.push(`${event.shift ? "shift" : "enter"}=${text}`);
+      cx.notify();
+    });
+  }
+  render(cx) {
+    return div()
+      .child(Textarea.new(this.draft).w(300).h(100))
+      .child(`submits:${this.submits.join(",")};`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("composer.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+    let state = runtime
+        .entities()
+        .first_textarea()
+        .expect("the script's textarea state");
+    context.update(|window, cx| state.update(cx, |state, cx| state.focus(window, cx)));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let enter = |shift| gpui_base::input::Enter {
+        secondary: false,
+        shift,
+    };
+
+    context.simulate_input("send");
+    context.dispatch_action(enter(false));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let entered = described(&mut context, &view);
+    assert!(
+        entered.contains("submits:enter=send;"),
+        "Enter must submit the text without a line break: {entered}"
+    );
+
+    context.dispatch_action(enter(true));
+    context.simulate_input("two");
+    context.dispatch_action(enter(false));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after = described(&mut context, &view);
+    assert!(
+        after.contains("submits:enter=send,shift=send|,enter=send|two;"),
+        "Shift+Enter must insert the break and report `submit` with `shift`: {after}"
+    );
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "send\ntwo"
+    );
+}
+
 /// Hot reload has to pick up a change in an imported module, not only in the
 /// entry point. QuickJS caches an evaluated module by name and an ES module
 /// cannot be unloaded, so a naive reload re-evaluates `main.js` against the

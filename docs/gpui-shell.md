@@ -840,6 +840,14 @@ The event names a script can subscribe to are `change`, `submit`, `focus`, and
 `submit` covers base's `InputEvent::PressEnter`. An unknown name reports the
 full valid set.
 
+Base emits `PressEnter` for every Enter, including one a textarea has just
+turned into a line break, so a textarea's `submit` arrives after the break is
+in the text. `TextareaState.set_submit_on_enter(true)` passes through to base's
+`set_submit_on_enter`: Enter then inserts nothing and only submits, and
+Shift+Enter still inserts a line break and is still reported, with
+`shift: true`. The shell does not filter that second `submit`, because base
+reports it and a script may want it; the handler checks `event.shift`.
+
 ### 7.4 Cycles across two garbage collectors
 
 The classic embedded-script leak: Rust holds a script closure, the closure

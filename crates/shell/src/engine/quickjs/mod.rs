@@ -6176,7 +6176,8 @@ globalThis.__gpui = (() => {
   });
 
   // The multi-line state shares almost all of its surface with the single-line
-  // one, and adds the three calls that only mean anything once text can wrap.
+  // one, and adds the calls that only mean anything once text has more than
+  // one line.
   const textareaState = (handle) => ({
     ...tokenStateMethods(handle, __textarea_token_call),
     __handle: handle,
@@ -6191,6 +6192,7 @@ globalThis.__gpui = (() => {
         oneBased(max_rows, "set_auto_grow(min_rows, max_rows) max_rows"),
       ),
     set_soft_wrap: (wrap) => __textarea_set_soft_wrap(handle, Boolean(wrap)),
+    set_submit_on_enter: (submit) => __textarea_set_submit_on_enter(handle, Boolean(submit)),
     release: () => __textarea_release(handle),
   });
 

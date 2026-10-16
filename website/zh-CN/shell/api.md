@@ -356,6 +356,7 @@ area 上的方法是 `add_panel(view, options)`、`remove_panel(id)`、`panels()
 | `set_rows(rows: number): void`                            | 可见行数                                                                |
 | `set_auto_grow(min_rows: number, max_rows: number): void` | 在这两者之间随内容增高                                                  |
 | `set_soft_wrap(wrap: boolean): void`                      | 长行是否折行                                                            |
+| `set_submit_on_enter(submit: boolean): void`              | 回车是否提交而不是换行                                                  |
 
 #### `SliderState`
 
