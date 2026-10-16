@@ -29,7 +29,7 @@ pub use gpui_base::input::{
     DocumentColorProvider, DocumentRangeSemanticTokensProvider, EditorState, Enter, Escape,
     FoldRange, GoToDefinition, GutterColumn, GutterMarker, HighlightStyleResolver,
     HoverPopoverState, HoverProvider, Indent, IndentInline, InputEdit, InputEvent,
-    InputHighlighter, InputHighlighterFactory, InputState, LineDecoration,
+    InputHighlighter, InputHighlighterFactory, InputHit, InputHitArea, InputState, LineDecoration,
     LineDecorationCollection, LineDecorationProvider, Lsp, MaskPattern, MoveDown, MoveEnd,
     MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight, MoveToEnd, MoveToEndOfLine,
     MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveToStartOfLine, MoveUp, Outdent,
