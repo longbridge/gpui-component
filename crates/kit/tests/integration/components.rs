@@ -58,7 +58,7 @@ fn kit_controls_use_native_events_and_report_state(cx: &mut TestAppContext) {
         });
     cx.update_window(handle.into(), |_, window, cx| {
         window.draw(cx).clear(cx);
-        assert_eq!(window.find("disabled").disabled(), None);
+        assert_eq!(window.find("disabled").disabled(), Some(true));
         window.click("disabled", cx);
         window.click("search", cx);
         assert_eq!(window.find("search").focused(), Some(true));

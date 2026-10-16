@@ -11,6 +11,7 @@ use gpui::{
 
 use crate::{
     Decrement, Increment, StyledExt as _,
+    a11y_disabled::A11yDisabledExt as _,
     actions::{SelectLeft, SelectNextColumn, SelectPrevColumn, SelectRight},
     input::Delete,
 };
@@ -627,7 +628,7 @@ impl RenderOnce for TimeField {
             root = root.child((self.segment)(item, segment_state, window, cx));
         }
 
-        root.refine_style(&self.style)
+        root.refine_style(&self.style).a11y_disabled(disabled)
     }
 }
 
