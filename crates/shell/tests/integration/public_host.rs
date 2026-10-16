@@ -6,10 +6,13 @@ use std::{
     fs,
     ops::Deref,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
 };
 
-use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
+use gpui::{Entity, IntoElement as _, ParentElement as _, TestAppContext, VisualTestContext};
 
 static NEXT_APP: AtomicU64 = AtomicU64::new(0);
 
@@ -438,4 +441,107 @@ export default class CoexistingStates extends View {
                 .contains("Input")
         );
     });
+}
+
+/// What the host's own component was handed, in materialization order.
+static HOST_BADGE_LABELS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static HOST_INIT_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+struct HostBadge;
+
+impl gpui_shell::ComponentMaterializer for HostBadge {
+    fn materialize(
+        &self,
+        request: gpui_shell::MaterializeRequest<'_>,
+    ) -> gpui_shell::anyhow::Result<gpui_shell::gpui::AnyElement> {
+        let label = request
+            .payload()
+            .downcast_ref::<String>()
+            .ok_or_else(|| gpui_shell::anyhow::anyhow!("HostBadge payload"))?
+            .clone();
+        HOST_BADGE_LABELS.lock().unwrap().push(label.clone());
+        Ok(gpui_shell::gpui::div().child(label).into_any_element())
+    }
+}
+
+fn host_badge(name: &'static str, export: &'static str) -> gpui_shell::ComponentDescriptor {
+    gpui_shell::ComponentDescriptor::new(name, Arc::new(HostBadge))
+        .with_constructors(vec![gpui_shell::ConstructorDescriptor::new(
+            export,
+            vec![gpui_shell::ArgumentDescriptor::new(
+                "label",
+                gpui_shell::ArgumentSchema::String,
+            )],
+            |args| match args {
+                [gpui_shell::ComponentArgument::String(label)] => {
+                    Ok(gpui_shell::ComponentPayload::new(label.clone()))
+                }
+                _ => Err("HostBadge expects a label".into()),
+            },
+        )])
+        .with_methods(vec![])
+}
+
+/// The catalog's own startup, then the host's, as `components::registry`
+/// tells a host to chain them.
+fn host_init(cx: &mut gpui_shell::gpui::App) {
+    gpui_component::init(cx);
+    HOST_INIT_CALLS.fetch_add(1, Ordering::SeqCst);
+}
+
+#[gpui_shell::gpui::test]
+fn an_embedding_host_registers_its_own_component_beside_the_catalog(cx: &mut TestAppContext) {
+    let mut registry = gpui_shell::components::registry()
+        .expect("catalog")
+        .with_initializer(host_init);
+    assert!(matches!(
+        registry.register(host_badge("HostSpinner", "Spinner")),
+        Err(gpui_shell::RegistryError::DuplicateExport("Spinner"))
+    ));
+    registry
+        .register(host_badge("HostBadge", "HostBadge"))
+        .expect("register the host component");
+    let components = registry.freeze().expect("freeze");
+
+    cx.update(|cx| gpui_shell::init_with_components(cx, &components));
+    assert_eq!(HOST_INIT_CALLS.load(Ordering::SeqCst), 1);
+
+    let source = r#"
+import { div, View } from "gpui-kit";
+import { HostBadge, Spinner } from "gpui-component";
+
+export default class ExtendedCatalog extends View {
+  render() {
+    return div().child(new Spinner().size("small")).child(new HostBadge("ready"));
+  }
+}
+"#;
+    let app = TempApp::new(source);
+    let runtime =
+        gpui_shell::ShellRuntime::new_isolated_with_components(components).expect("runtime");
+    let loaded = runtime
+        .load_application(app.path(), "main.js")
+        .expect("load application");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.mount_application(&loaded, window, cx))
+        .expect("mount application");
+    context.draw(
+        gpui_shell::gpui::Point::default(),
+        gpui_shell::gpui::size(gpui_shell::gpui::px(400.), gpui_shell::gpui::px(120.)),
+        {
+            let view = view.clone();
+            move |_, _| view.into_any_element()
+        },
+    );
+
+    let tree = context.update(|_, cx| {
+        let view = view.read(cx);
+        assert_eq!(view.build_error(), None);
+        view.snapshot().expect("render snapshot").debug_tree()
+    });
+    assert!(tree.contains("Spinner"), "{tree}");
+    assert!(tree.contains("HostBadge"), "{tree}");
+    assert_eq!(*HOST_BADGE_LABELS.lock().unwrap(), ["ready"]);
 }

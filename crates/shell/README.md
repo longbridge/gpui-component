@@ -676,6 +676,19 @@ let reading = runtime.read_metrics();
 gpui_shell::clear_exported_modules();
 ```
 
+A host with native components of its own registers them beside the
+`gpui-component` catalog. A runtime takes one frozen catalog, so the host
+takes the catalog before it is frozen, adds to it, and freezes it:
+
+```rust,ignore
+let mut registry = gpui_shell::components::registry()?;
+registry.register(my_component_descriptor())?;
+gpui_shell::host::main_with_components(registry.freeze()?);
+```
+
+Scripts import those components from `"gpui-component"` with the rest of the
+catalog, so their export names must not collide with the catalog's.
+
 ## How It Works
 
 GPUI elements are values that are consumed when used: `RenderOnce::render`
