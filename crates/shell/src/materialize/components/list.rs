@@ -13,11 +13,28 @@
 //! Neither takes a `VirtualListScrollHandle`: the position is GPUI's own state,
 //! kept under the id the list was built with. That id is also the name a
 //! `Scrollbar` pairs with, through the same shared slot a scroll area uses.
+//!
+//! # A `list` keeps the reader's place by key
+//!
+//! GPUI's `list` knows its items by index only. When the count changes, the
+//! items it measured may now be other items, so the shell splices the whole
+//! collection — and GPUI's splice moves a scroll position inside the spliced
+//! range to its start. Left at that, every message appended to a transcript,
+//! and every page of older ones put above it, would throw the reader to the
+//! first item.
+//!
+//! The script's `get_key(index)` is what says which item is which, so the
+//! position is carried by key: after each layout the list remembers the key of
+//! the item at the top of the viewport, and when the count has changed it
+//! looks for that key near the item's old index and scrolls back to it, the
+//! same distance into it. [`KeyedList`] does both around GPUI's own layout,
+//! because asking the script for a key is something only layout may do here.
 
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use gpui::{
-    AnyElement, App, ElementId, Empty, IntoElement, ListAlignment, ListState, Refineable as _,
+    AnyElement, App, Element, ElementId, Empty, Entity, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, ListAlignment, ListOffset, ListState, Pixels, Refineable as _,
     SharedString, StyleRefinement, Styled as _, UniformListScrollHandle, Window, list as gpui_list,
     px, uniform_list,
 };
@@ -32,7 +49,7 @@ use crate::{
         },
         warn_ignored_key, warn_unhonoured_a11y,
     },
-    spec::{ListKind, ListSpec},
+    spec::{CallbackId, ListKind, ListSpec},
 };
 
 /// How far past the viewport a `list` draws and measures, in pixels.
@@ -47,12 +64,22 @@ use crate::{
 /// to leave an item a screen away undrawn.
 const LIST_OVERDRAW: gpui::Pixels = px(160.);
 
-/// The retained side of a `list`: GPUI's measurements, and the count they were
-/// taken for, so a collection that grew or shrank is spliced rather than
-/// re-measured from nothing.
+/// The retained side of a `list`: GPUI's measurements, the count they were
+/// taken for, and the item the viewport started at when it was last laid out.
 struct MeasuredItems {
     state: ListState,
     item_count: usize,
+    top: Option<TopItem>,
+}
+
+/// The item at the top of a `list`'s viewport after a layout, by key.
+struct TopItem {
+    index: usize,
+    key: String,
+    /// The `get_key` the key came from. Every script render registers a new
+    /// one, so a different one means the collection may have changed since,
+    /// and the key has to be asked for again.
+    get_key: CallbackId,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -129,21 +156,14 @@ pub(in crate::materialize) fn list(
                 MeasuredItems {
                     state: ListState::new(item_count, ListAlignment::Top, LIST_OVERDRAW),
                     item_count,
+                    top: None,
                 }
             });
-            let state = retained.update(cx, |retained, _| {
-                if retained.item_count != item_count {
-                    // Every item is a new one as far as the measurements go;
-                    // what survives is the scroll position, which `reset`
-                    // would throw away.
-                    retained.state.splice(0..retained.item_count, item_count);
-                    retained.item_count = item_count;
-                }
-                retained.state.clone()
-            });
+            let state = retained.read(cx).state.clone();
             shared_scroll_position(&identity.clone(), window, cx)
                 .update(cx, |shared, _| *shared = SharedScroll::List(state.clone()));
 
+            let runtime = weak.clone();
             let mut list = gpui_list(state, move |index, window, cx| {
                 render_range(
                     &weak,
@@ -160,7 +180,233 @@ pub(in crate::materialize) fn list(
             })
             .size_full();
             list.style().refine(&refinement);
-            list.into_any_element()
+            KeyedList {
+                list: list.into_any_element(),
+                retained,
+                item_count,
+                get_key,
+                runtime,
+            }
+            .into_any_element()
         }
+    }
+}
+
+/// GPUI's `List`, with what the shell does on either side of laying it out.
+///
+/// Before: a changed item count is spliced into GPUI's measurements, and the
+/// reading position is carried to wherever the item at the top went. After:
+/// the item now at the top is remembered by key, for the next change. Both
+/// ask the script for keys, and [`crate::materialize`] never enters the script
+/// while an element is built, so they run here, inside layout, where the item
+/// renderer already does.
+///
+/// It has no layout node of its own: the list's is returned as its own, so the
+/// refinement the script gave the list is what sizes it.
+struct KeyedList {
+    list: AnyElement,
+    retained: Entity<MeasuredItems>,
+    item_count: usize,
+    get_key: CallbackId,
+    runtime: Weak<ShellRuntime>,
+}
+
+impl KeyedList {
+    /// Splices a changed item count into GPUI's measurements and keeps the
+    /// reader on the item they were reading.
+    ///
+    /// Every measurement is dropped, as before: the count says how many items
+    /// there are, not which ones changed, so none of the old sizes can be
+    /// trusted for the new items. What is kept is the position, which GPUI's
+    /// splice would otherwise move to the first item.
+    fn splice_item_count(&mut self, window: &mut Window, cx: &mut App) {
+        let new_count = self.item_count;
+        let retained = self.retained.read(cx);
+        let old_count = retained.item_count;
+        if old_count == new_count {
+            return;
+        }
+        let state = retained.state.clone();
+        let remembered = retained
+            .top
+            .as_ref()
+            .map(|top| (top.index, top.key.clone()));
+        let position = state.logical_scroll_top();
+
+        // A position past the last item is the end of the list, and a splice
+        // of everything leaves it at the new end.
+        let target = (position.item_ix < old_count).then(|| {
+            let moved_to = remembered.and_then(|(index, key)| {
+                let found =
+                    self.find_key(&key, search_order(index, old_count, new_count), window, cx)?;
+                // The remembered item was at the top when the list was last
+                // laid out. A scroll since then has put the position some
+                // items away from it, and it stays that many items away.
+                Some(found as isize + position.item_ix as isize - index as isize)
+            });
+            ListOffset {
+                // The item is gone, or was never seen: stay at the index.
+                item_ix: moved_to.map_or(position.item_ix, |index| {
+                    index.clamp(0, new_count as isize) as usize
+                }),
+                offset_in_item: position.offset_in_item,
+            }
+        });
+
+        state.splice(0..old_count, new_count);
+        if let Some(target) = target {
+            state.scroll_to(target);
+        }
+        self.retained.update(cx, |retained, _| {
+            retained.item_count = new_count;
+            retained.top = None;
+        });
+    }
+
+    /// The first of `candidates` whose key, as `get_key` answers now, is `key`.
+    fn find_key(
+        &self,
+        key: &str,
+        mut candidates: impl Iterator<Item = usize>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<usize> {
+        self.runtime
+            .upgrade()?
+            .item_keys(self.get_key, window, cx, |key_of| {
+                candidates.find(|candidate| key_of(*candidate).as_deref() == Some(key))
+            })
+            .flatten()
+    }
+
+    /// Remembers the key of the item at the top of the viewport, as this
+    /// layout left it.
+    ///
+    /// The key is asked for only when that item or the render has changed:
+    /// nothing on a frame that only repaints, one call on a frame that
+    /// scrolled to another item, on top of the rows the list draws.
+    fn remember_top(&mut self, window: &mut Window, cx: &mut App) {
+        let retained = self.retained.read(cx);
+        let index = retained.state.logical_scroll_top().item_ix;
+        if index >= self.item_count {
+            self.retained.update(cx, |retained, _| retained.top = None);
+            return;
+        }
+        if retained
+            .top
+            .as_ref()
+            .is_some_and(|top| top.index == index && top.get_key == self.get_key)
+        {
+            return;
+        }
+        let key = self.runtime.upgrade().and_then(|runtime| {
+            runtime
+                .item_keys(self.get_key, window, cx, |key_of| key_of(index))
+                .flatten()
+        });
+        let get_key = self.get_key;
+        self.retained.update(cx, |retained, _| {
+            retained.top = key.map(|key| TopItem {
+                index,
+                key,
+                get_key,
+            });
+        });
+    }
+}
+
+/// The order in which a remembered item is looked for after the count went
+/// from `old_count` to `new_count`: where it was, then where a change wholly
+/// above it would have moved it, then outward from where it was, one step
+/// each way. Every index below `new_count` comes up exactly once.
+fn search_order(index: usize, old_count: usize, new_count: usize) -> impl Iterator<Item = usize> {
+    let shifted = (index + new_count)
+        .checked_sub(old_count)
+        .filter(|shifted| *shifted != index);
+    let outward = (1..=index.max(new_count))
+        .flat_map(move |distance| [index.checked_add(distance), index.checked_sub(distance)])
+        .flatten()
+        .filter(move |candidate| Some(*candidate) != shifted);
+    std::iter::once(index)
+        .chain(shifted)
+        .chain(outward)
+        .filter(move |candidate| *candidate < new_count)
+}
+
+impl IntoElement for KeyedList {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for KeyedList {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        self.splice_item_count(window, cx);
+        (self.list.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: gpui::Bounds<Pixels>,
+        _request_layout: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.list.prepaint(window, cx);
+        self.remember_top(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: gpui::Bounds<Pixels>,
+        _request_layout: &mut (),
+        _prepaint: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.list.paint(window, cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::search_order;
+
+    #[test]
+    fn the_search_tries_the_likely_places_first_and_every_index_once() {
+        // Ten items put above the item at 4 of 20 move it to 14.
+        let order: Vec<usize> = search_order(4, 20, 30).collect();
+        assert_eq!(order[..2], [4, 14]);
+        let mut visited = order.clone();
+        visited.sort_unstable();
+        assert_eq!(visited, (0..30).collect::<Vec<_>>());
+
+        // A collection that shrank below the old index is still covered.
+        let mut visited: Vec<usize> = search_order(50, 60, 10).collect();
+        visited.sort_unstable();
+        assert_eq!(visited, (0..10).collect::<Vec<_>>());
     }
 }

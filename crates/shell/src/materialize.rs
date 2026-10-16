@@ -35,6 +35,13 @@
 //! matters; but a `list` of twenty visible rows costs twenty crossings where a
 //! virtual list costs one, and that is the price of not stating heights.
 //!
+//! A `list` also calls its `get_key` around its own layout: once for the item
+//! at the top whenever that item or the render changes, and, when the item
+//! count changes, near that item's old index until its key turns up again —
+//! one or two calls when items were added or removed on one side of it only,
+//! and the whole collection once if it is gone. That is what keeps the
+//! reader's place; [`components::list`] says why it needs the key.
+//!
 //! Three things confine it, and they are worth naming because each is what
 //! stops the exception from spreading:
 //!

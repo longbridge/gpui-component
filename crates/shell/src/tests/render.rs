@@ -11083,3 +11083,134 @@ fn a_list_reports_which_item_was_clicked(cx: &mut TestAppContext) {
     // covers 60..80.
     assert_a_click_reports_the_row_key(cx, measured_list_source(), 70.);
 }
+
+/// A transcript in a `list`: a hundred twenty-pixel rows in a 200px box, and
+/// under it three controls that change the collection the way a chat does —
+/// a page of older items above, one newer item below, and one item taken out.
+/// `builders` is appended to the list's own chain.
+///
+/// The key under a click is written into the tree, which is how a test reads
+/// which item is where.
+fn transcript_source(builders: &str) -> String {
+    format!(
+        r#"
+import {{ div, View, list }} from "gpui-kit";
+import {{ v_flex }} from "gpui-base";
+
+export default class Transcript extends View {{
+  init() {{
+    this.items = [];
+    for (let index = 0; index < 100; index++) this.items.push(`m${{index}}`);
+    this.pages = 0;
+    this.clicked = "none";
+  }}
+
+  control(label, change) {{
+    return div()
+      .h(40)
+      .on_click((_event, cx) => {{
+        change();
+        cx.notify();
+      }})
+      .child(label);
+  }}
+
+  render(cx) {{
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .h(200)
+          .child(
+            list("rows", this.items.length, (index) => this.items[index], (index) =>
+              div().h(20).child(this.items[index]),
+            )
+              .on_item_click((key, cx) => {{
+                this.clicked = key;
+                cx.notify();
+              }}){builders},
+          ),
+      )
+      .child(this.control("older", () => {{
+        const page = [];
+        for (let index = 0; index < 10; index++) page.push(`p${{this.pages}}-${{index}}`);
+        this.pages += 1;
+        this.items = page.concat(this.items);
+      }}))
+      .child(this.control("newer", () => {{
+        this.items = this.items.concat([`m${{this.items.length + 1000}}`]);
+      }}))
+      .child(this.control("take out m7", () => {{
+        this.items = this.items.filter((key) => key !== "m7");
+      }}))
+      .child(`clicked ${{this.clicked}}`);
+  }}
+}}
+"#
+    )
+}
+
+/// Clicks at `y` and draws the frame the click produced.
+fn click_at(context: &mut VisualTestContext, y: f32) {
+    context.simulate_click(point(px(150.), px(y)), Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+}
+
+/// The key of the transcript item under `y`, as `on_item_click` reports it.
+fn transcript_key_at(
+    context: &mut VisualTestContext,
+    view: &gpui::Entity<ScriptView>,
+    y: f32,
+) -> String {
+    click_at(context, y);
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    tree.split("clicked ")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(|character: char| character.is_whitespace() || character == '"')
+                .next()
+        })
+        .unwrap_or_else(|| panic!("no clicked key in: {tree}"))
+        .to_owned()
+}
+
+#[gpui::test]
+fn a_list_keeps_the_reader_on_their_item_when_the_count_changes(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &transcript_source(""));
+
+    // 150px down: `m7` is at the top, ten pixels of it scrolled past, so the
+    // boundary with `m8` is ten pixels into the box.
+    scroll_by(&mut context, -150.);
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "m7");
+    assert_eq!(transcript_key_at(&mut context, &view, 15.), "m8");
+
+    // Ten older items above: GPUI's splice alone would show `p0-0` at the top.
+    click_at(&mut context, 220.);
+    assert_eq!(
+        transcript_key_at(&mut context, &view, 5.),
+        "m7",
+        "a page put above the reader must not move what they are reading"
+    );
+    assert_eq!(
+        transcript_key_at(&mut context, &view, 15.),
+        "m8",
+        "and the position inside the item must survive with it"
+    );
+
+    // One newer item below.
+    click_at(&mut context, 260.);
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "m7");
+    assert_eq!(transcript_key_at(&mut context, &view, 15.), "m8");
+
+    // The item at the top itself taken out: there is nothing to follow, so the
+    // position stays at its index, where the next item now is.
+    click_at(&mut context, 300.);
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "m8");
+}
