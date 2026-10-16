@@ -351,7 +351,7 @@ is a small browser built on it.
 
 ### MessageScroller
 
-`MessageScrollerState(count)` is a virtualized transcript's rows, scroll
+`MessageScrollerState.new(count)` is a virtualized transcript's rows, scroll
 position and tail following; `MessageScroller` places it and asks the script
 for each visible row by index. A transcript changes while it is on screen, so
 the state is edited in place rather than recreated, which would drop the
@@ -362,14 +362,14 @@ import { MessageScroller, MessageScrollerState } from "gpui-component";
 
 // In init():
 this.rows = [];
-this.scroller = MessageScrollerState(0);
+this.scroller = MessageScrollerState.new(0);
 
 // When a message arrives:
 this.rows.push(message);
 this.scroller.append(1);
 
 // In render():
-new MessageScroller("transcript", this.scroller, (index) => renderRow(this.rows[index]))
+MessageScroller.new("transcript", this.scroller, (index) => renderRow(this.rows[index]))
   .flex_1()
   .scrollbar(true);
 ```
@@ -377,9 +377,9 @@ new MessageScroller("transcript", this.scroller, (index) => renderRow(this.rows[
 | Method | Description |
 | --- | --- |
 | `append(count)` / `prepend(count)` | Add rows at the end, or at the start keeping the reader's position |
-| `splice(start, end, count)` | Replace rows `start..end` with `count` rows |
+| `splice(range, count)` | Replace the rows in `range` (`{ start, end }`) with `count` rows |
 | `reset(count)` | Start over with `count` rows and follow the tail |
-| `remeasure()` / `remeasure_items(start, end)` | Measure rows again after their content changed size |
+| `remeasure()` / `remeasure_items(range)` | Measure rows again after their content changed size |
 | `scroll_to_item(index)` / `scroll_to_end()` | Scroll to a row, or to the end and follow the tail |
 | `item_count()` | The number of rows |
 | `is_following_tail()` / `is_scrolled_up()` | Whether new rows keep the end in view, and whether the reader has scrolled away from it |

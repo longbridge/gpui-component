@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{ops::Range, sync::Arc, time::Duration};
 
 use gpui_component::{
     Sizable as _, Size,
@@ -514,33 +514,51 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     Ok(())
 }
 
-/// Reads exactly `N` row indices or counts: finite, whole and non-negative.
-fn row_numbers<const N: usize>(
-    arguments: &[ComponentDataValue],
-    context: &str,
-) -> anyhow::Result<[usize; N]> {
-    let invalid = || match N {
-        1 => anyhow::anyhow!("{context} expects a non-negative integer"),
-        _ => anyhow::anyhow!("{context} expects {N} non-negative integers"),
+/// A row index or count: finite, whole and non-negative.
+fn row_number(value: &ComponentDataValue) -> Option<usize> {
+    match value {
+        ComponentDataValue::Number(value)
+            if value.is_finite()
+                && value.fract() == 0.0
+                && *value >= 0.0
+                && *value <= usize::MAX as f64 =>
+        {
+            Some(*value as usize)
+        }
+        _ => None,
+    }
+}
+
+/// An `ItemRange` (`{ start, end }`) of row indices.
+fn item_range(value: &ComponentDataValue) -> Option<Range<usize>> {
+    let ComponentDataValue::Object(fields) = value else {
+        return None;
     };
-    if arguments.len() != N {
-        return Err(invalid());
+    let field = |name: &str| {
+        fields
+            .iter()
+            .find(|(key, _)| key == name)
+            .and_then(|(_, value)| row_number(value))
+    };
+    Some(field("start")?..field("end")?)
+}
+
+fn row_argument(arguments: &[ComponentDataValue], context: &str) -> anyhow::Result<usize> {
+    match arguments {
+        [count] => row_number(count),
+        _ => None,
     }
-    let mut numbers = [0; N];
-    for (number, argument) in numbers.iter_mut().zip(arguments) {
-        *number = match argument {
-            ComponentDataValue::Number(value)
-                if value.is_finite()
-                    && value.fract() == 0.0
-                    && *value >= 0.0
-                    && *value <= usize::MAX as f64 =>
-            {
-                *value as usize
-            }
-            _ => return Err(invalid()),
-        };
+    .ok_or_else(|| anyhow::anyhow!("{context} expects a non-negative integer"))
+}
+
+fn range_argument(arguments: &[ComponentDataValue], context: &str) -> anyhow::Result<Range<usize>> {
+    match arguments {
+        [range] => item_range(range),
+        _ => None,
     }
-    Ok(numbers)
+    .ok_or_else(|| {
+        anyhow::anyhow!("{context} expects an ItemRange of non-negative integer start and end")
+    })
 }
 
 /// A transcript grows, streams and is trimmed while it is on screen, so the
@@ -591,18 +609,26 @@ fn scroller_state_methods() -> Vec<StateMethodDescriptor> {
             "reset",
             "(item_count: number): void",
             |state, arguments, _, cx| {
-                let [count] = row_numbers(arguments, "MessageScrollerState.reset")?;
+                let count = row_argument(arguments, "MessageScrollerState.reset")?;
                 state.update(cx, |state, cx| state.reset(count, cx));
                 Ok(ComponentDataValue::Null)
             },
         ),
         StateMethodDescriptor::new::<State>(
             "splice",
-            "(start: number, end: number, count: number): boolean",
+            "(range: import(\"gpui-kit\").ItemRange, count: number): boolean",
             |state, arguments, _, cx| {
-                let [start, end, count] = row_numbers(arguments, "MessageScrollerState.splice")?;
+                let (range, count) = match arguments {
+                    [range, count] => item_range(range).zip(row_number(count)),
+                    _ => None,
+                }
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "MessageScrollerState.splice expects an ItemRange and a non-negative integer count"
+                    )
+                })?;
                 Ok(ComponentDataValue::Boolean(
-                    state.update(cx, |state, cx| state.splice(start..end, count, cx)),
+                    state.update(cx, |state, cx| state.splice(range, count, cx)),
                 ))
             },
         ),
@@ -610,7 +636,7 @@ fn scroller_state_methods() -> Vec<StateMethodDescriptor> {
             "append",
             "(count: number): boolean",
             |state, arguments, _, cx| {
-                let [count] = row_numbers(arguments, "MessageScrollerState.append")?;
+                let count = row_argument(arguments, "MessageScrollerState.append")?;
                 Ok(ComponentDataValue::Boolean(
                     state.update(cx, |state, cx| state.append(count, cx)),
                 ))
@@ -620,7 +646,7 @@ fn scroller_state_methods() -> Vec<StateMethodDescriptor> {
             "prepend",
             "(count: number): boolean",
             |state, arguments, _, cx| {
-                let [count] = row_numbers(arguments, "MessageScrollerState.prepend")?;
+                let count = row_argument(arguments, "MessageScrollerState.prepend")?;
                 Ok(ComponentDataValue::Boolean(
                     state.update(cx, |state, cx| state.prepend(count, cx)),
                 ))
@@ -632,11 +658,11 @@ fn scroller_state_methods() -> Vec<StateMethodDescriptor> {
         }),
         StateMethodDescriptor::new::<State>(
             "remeasure_items",
-            "(start: number, end: number): boolean",
+            "(range: import(\"gpui-kit\").ItemRange): boolean",
             |state, arguments, _, cx| {
-                let [start, end] = row_numbers(arguments, "MessageScrollerState.remeasure_items")?;
+                let range = range_argument(arguments, "MessageScrollerState.remeasure_items")?;
                 Ok(ComponentDataValue::Boolean(
-                    state.update(cx, |state, cx| state.remeasure_items(start..end, cx)),
+                    state.update(cx, |state, cx| state.remeasure_items(range, cx)),
                 ))
             },
         ),
@@ -644,7 +670,7 @@ fn scroller_state_methods() -> Vec<StateMethodDescriptor> {
             "scroll_to_item",
             "(index: number): boolean",
             |state, arguments, _, cx| {
-                let [index] = row_numbers(arguments, "MessageScrollerState.scroll_to_item")?;
+                let index = row_argument(arguments, "MessageScrollerState.scroll_to_item")?;
                 Ok(ComponentDataValue::Boolean(
                     state.update(cx, |state, cx| state.scroll_to_item(index, cx)),
                 ))

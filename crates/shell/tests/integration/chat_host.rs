@@ -184,20 +184,20 @@ import { MessageScroller, MessageScrollerState } from "gpui-component";
 const rejects = (call) => { try { call(); return "ok"; } catch { return "err"; } };
 
 export default class Edits extends View {
-  init() { this.scroller = MessageScrollerState(2); this.results = "none"; }
+  init() { this.scroller = MessageScrollerState.new(2); this.results = "none"; }
   run() {
     const s = this.scroller;
     const out = [];
     out.push(s.append(3), s.item_count());
     out.push(s.prepend(1), s.item_count());
-    out.push(s.splice(0, 2, 1), s.item_count());
-    out.push(s.splice(4, 9, 1), s.item_count());
-    out.push(s.remeasure_items(0, 2), s.remeasure_items(4, 9));
+    out.push(s.splice({ start: 0, end: 2 }, 1), s.item_count());
+    out.push(s.splice({ start: 4, end: 9 }, 1), s.item_count());
+    out.push(s.remeasure_items({ start: 0, end: 2 }), s.remeasure_items({ start: 4, end: 9 }));
     out.push(s.scroll_to_item(1), s.logical_scroll_top().item_ix, s.scroll_to_item(5));
     s.remeasure();
     s.reset(4);
     out.push(s.item_count(), s.is_following_tail());
-    out.push(rejects(() => s.append(-1)), rejects(() => s.append(1.5)), rejects(() => s.splice(1, 2)));
+    out.push(rejects(() => s.append(-1)), rejects(() => s.append(1.5)), rejects(() => s.splice(1, 2, 1)));
     this.results = out.join("-");
   }
   render() {
@@ -206,7 +206,7 @@ export default class Edits extends View {
       .child(div().id(`results-${this.results}`))
       .child(div().id("run").w(200).h(40)
         .on_click((_event, cx) => { this.run(); cx.notify(); }))
-      .child(new MessageScroller("messages", this.scroller, (index) =>
+      .child(MessageScroller.new("messages", this.scroller, (index) =>
         div().h(30).child(`row ${index}`)).w(200).h(120));
   }
 }
