@@ -234,6 +234,9 @@ pub struct TableState<D: TableDelegate> {
     /// handles those clicks itself. The table then leaves its selected row
     /// alone on a modified click, so a click that takes a row out of the
     /// delegate's selection is not undone by the table selecting it.
+    ///
+    /// In cell selection without a row header, a modified click on the
+    /// selected cell does not escalate it to its row either.
     select_on_modifier_click: bool,
     /// Whether the table can select cell, default is false.
     ///
@@ -908,8 +911,11 @@ where
         // Double-clicks are passed through to `DoubleClickedCell` and never
         // trigger the escalation.
         let is_reselect = self.selected_cell() == Some((row_ix, col_ix));
-        let should_escalate_to_row =
-            !self.row_header && self.row_selectable && is_reselect && !is_double_click;
+        let should_escalate_to_row = !self.row_header
+            && self.row_selectable
+            && is_reselect
+            && !is_double_click
+            && self.selects_row_on_click(e);
         if should_escalate_to_row {
             self.set_selected_row(row_ix, cx);
             return;
