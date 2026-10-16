@@ -3223,6 +3223,16 @@ const BASE: &str = r#"  /** A row. */
     set_auto_grow(min_rows: number, max_rows: number): void;
     /** Wraps long lines instead of scrolling sideways. Default is on. */
     set_soft_wrap(wrap: boolean): void;
+    /**
+     * Makes Enter submit instead of starting a new line. Default is off.
+     *
+     * Off, Enter inserts a line break and then reports `submit`, so a handler
+     * that sends the text finds the break at its end. On, Enter leaves the text
+     * as it is and reports `submit` with `shift: false`. Shift+Enter inserts a
+     * line break either way, and also reports `submit`, with `shift: true` —
+     * a handler that sends should return when `event.shift` is set.
+     */
+    set_submit_on_enter(submit: boolean): void;
     release(): boolean;
   }
 
