@@ -2307,6 +2307,7 @@ impl CodeBlock {
         self.lang.clone()
     }
 
+    #[cfg_attr(not(feature = "block-editor"), allow(dead_code))]
     pub(crate) fn meta(&self) -> Option<SharedString> {
         self.meta.clone()
     }

@@ -131,6 +131,11 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
+/// Clipboard metadata that marks a copy as the editor's own inline Markdown
+/// (D17). Paste parses tagged text as inline Markdown; untagged text keeps
+/// the conservative import.
+pub(crate) const COPY_TAG: &str = "gpui-kit/block-editor/inline-markdown/v1";
+
 /// Events emitted by [`BlockEditorState`].
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -195,6 +200,8 @@ pub enum ClipboardPolicy {
 pub struct PasteRequest {
     range: super::CapturedRange,
     plain: bool,
+    /// The item was the editor's own tagged inline-Markdown copy (D17).
+    markdown: bool,
     sequence: u64,
 }
 
@@ -1315,46 +1322,40 @@ impl BlockEditorState {
         let _ = self.run(EditorCommand::ToggleMark(kind), cx);
     }
 
-    fn selected_text(&self) -> String {
+    /// The selection as clipboard text, and whether it is the editor's own
+    /// inline Markdown (D17): then the copy is tagged with
+    /// [`COPY_TAG`] so paste parses it back.
+    fn selected_text(&self) -> (String, bool) {
         if let Some(table) = self.model.cells_markdown() {
-            return table;
+            return (table, false);
         }
         if let Some((parent, range)) = self.model.selected_blocks() {
             let ids = &self.model.doc.children(parent)[range];
-            return super::serialize::join_blocks(&self.model.doc, ids);
+            return (super::serialize::join_blocks(&self.model.doc, ids), false);
         }
         let Ok(range) = self.model.doc.resolve_selection(self.model.selection()) else {
-            return String::new();
+            return (String::new(), false);
         };
-        self.model
+        let mut inline_only = true;
+        let text = self
+            .model
             .text_ranges(range)
             .into_iter()
             .filter_map(|(id, lo, hi)| {
-                // Inline atoms copy as their Markdown source (an image as
-                // `![alt](url)`), never as the U+FFFC placeholder (#3113:
-                // the clipboard holds the token's text).
+                // Marks and inline atoms copy as Markdown (an image as
+                // `![alt](url)`, never the U+FFFC placeholder, #3113). A
+                // partial selection serializes as its own inline, so
+                // delimiters are always balanced at the cut edges.
                 if let Some(inline) = self.model.doc.inline(id) {
-                    let slice = inline.slice(lo..hi);
-                    return Some(
-                        slice
-                            .pieces()
-                            .map(|(range, _, atom)| match atom {
-                                Some(atom) => super::serialize::inline_markdown(
-                                    &super::inline::InlineText::atom(
-                                        atom.clone(),
-                                        Default::default(),
-                                    ),
-                                ),
-                                None => slice.text()[range].to_string(),
-                            })
-                            .collect(),
-                    );
+                    return Some(super::serialize::inline_markdown(&inline.slice(lo..hi)));
                 }
+                inline_only = false;
                 let text = self.model.doc.leaf_text(id)?;
                 text.get(lo..hi).map(str::to_string)
             })
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("\n");
+        (text, inline_only)
     }
 
     // ---- action handlers --------------------------------------------------
@@ -1452,9 +1453,7 @@ impl BlockEditorState {
                 head: BlockPosition::new(block, 3),
             });
             let _ = self.model.delete(false);
-            let _ = self
-                .model
-                .run(EditorCommand::InsertBlock(BlockKind::HorizontalRule));
+            let _ = self.model.paragraph_to_rule();
             self.model.history.commit_transaction();
             self.model.break_coalescing();
             self.after_edit(EditOrigin::InputRule("horizontal_rule"), cx);
@@ -1608,10 +1607,15 @@ impl BlockEditorState {
         let _ = self.run(EditorCommand::Outdent, cx);
     }
     pub(crate) fn on_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        let text = self.selected_text();
-        if !text.is_empty() {
-            cx.write_to_clipboard(ClipboardItem::new_string(text));
+        let (text, own) = self.selected_text();
+        if text.is_empty() {
+            return;
         }
+        cx.write_to_clipboard(if own {
+            ClipboardItem::new_string_with_metadata(text, COPY_TAG.to_string())
+        } else {
+            ClipboardItem::new_string(text)
+        });
     }
     pub(crate) fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
         self.end_composition();
@@ -1667,11 +1671,13 @@ impl BlockEditorState {
             let request = PasteRequest {
                 range: self.model.capture(self.model.selection.clone()),
                 plain,
+                markdown: item.metadata().is_some_and(|m| m == COPY_TAG),
                 sequence: self.paste_sequence,
             };
             cx.emit(BlockEditorEvent::PasteRequested { request, item });
         } else if let Some(text) = item.text() {
-            self.paste_text(&text, plain, cx);
+            let markdown = item.metadata().is_some_and(|m| m == COPY_TAG);
+            self.paste_text(&text, plain, markdown, cx);
         }
     }
 
@@ -1694,14 +1700,17 @@ impl BlockEditorState {
         }
         self.pending_paste = None;
         if let Some(text) = text {
-            self.paste_text(text, request.plain, cx);
+            self.paste_text(text, request.plain, request.markdown, cx);
         }
         true
     }
-    fn paste_text(&mut self, text: &str, plain: bool, cx: &mut Context<Self>) {
+    fn paste_text(&mut self, text: &str, plain: bool, markdown: bool, cx: &mut Context<Self>) {
         self.edit(
             EditOrigin::Paste,
             |model| {
+                if !plain && markdown && model.paste_inline_markdown(text)? {
+                    return Ok(());
+                }
                 if !plain && model.paste_blocks(text)? {
                     return Ok(());
                 }

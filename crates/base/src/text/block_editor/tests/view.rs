@@ -702,6 +702,7 @@ fn caret_leaf(editor: &Entity<BlockEditorState>, cx: &VisualTestContext) -> Opti
 #[gpui::test]
 fn culled_blocks_are_navigable(cx: &mut TestAppContext) {
     let doc: String = (0..600).map(|i| format!("paragraph {i}\n\n")).collect();
+    let doc = doc.trim_end().to_string();
     let (editor, cx) = open(cx, &doc);
     draw(cx);
     draw(cx);
@@ -912,7 +913,9 @@ fn single_line_and_plain_paste_stay_inline(cx: &mut TestAppContext) {
         !src.contains("\n# H"),
         "plain paste keeps markers as text: {src:?}"
     );
-    assert_eq!(src, "x# H\n\n\\- ay", "markers stay text");
+    // The blank line of the pasted text is an empty paragraph, kept in the
+    // source (canonical source fidelity).
+    assert_eq!(src, "x# H\n\n\n\n\\- ay", "markers stay text");
 }
 
 /// Spacers are sized from top-to-next-top distances, so a block far down
@@ -992,16 +995,18 @@ fn end_at_soft_wrap_stays_on_the_visual_line(cx: &mut TestAppContext) {
     );
 }
 
-/// Without a scroll handle, caret-into-view is a no-op (no panic, flag
-/// cleared).
+/// With the default (editor-owned) scroll handle, caret-into-view is
+/// consumed without a scroll owner (no panic, flag cleared).
 #[gpui::test]
 fn reveal_without_scroll_handle_is_a_noop(cx: &mut TestAppContext) {
     let doc: String = (0..400).map(|i| format!("p {i}\n\n")).collect();
-    let (editor, cx) = open(cx, &doc);
+    let (editor, cx) = open(cx, doc.trim_end());
     caret_at(&editor, cx, 399, 0);
     draw(cx);
     draw(cx);
-    assert!(editor.read_with(cx, |e, _| e.scroll_handle.is_none() && !e.reveal.get()));
+    // The editor owns a default scroll handle (host-contract surface), so the
+    // request is consumed against it; an owner may replace it.
+    assert!(editor.read_with(cx, |e, _| !e.reveal.get()));
 }
 
 #[gpui::test]
@@ -1128,7 +1133,7 @@ fn code_fence_with_space_converts(cx: &mut TestAppContext) {
     keys(cx, "M-z");
     assert_eq!(
         source(&editor, cx),
-        "\\`\\`\\`",
+        "\\`\\`\\` ",
         "undo restores the typed fence"
     );
 }
@@ -2229,17 +2234,24 @@ fn host_submit_policy_does_not_submit_composition_or_shift_enter(cx: &mut TestAp
 
 #[gpui::test]
 fn host_semantic_paste_intercepts_keyboard_and_native_action_once(cx: &mut TestAppContext) {
-    use crate::text::block_editor::{BlockEditorEvent, ClipboardPolicy};
+    use crate::text::block_editor::ClipboardPolicy;
     use std::{cell::RefCell, rc::Rc};
     let (editor, cx) = open(cx, "draft");
     let pending = Rc::new(RefCell::new(Vec::new()));
     let captured = pending.clone();
     let subscription = cx.update(|_, cx| {
-        cx.subscribe(&editor, move |_, event: &BlockEditorEvent, _| {
-            if let BlockEditorEvent::PasteRequested { request, item } = event {
-                captured.borrow_mut().push((request.clone(), item.clone()));
-            }
-        })
+        cx.subscribe(
+            &editor,
+            move |_, event: &crate::text::block_editor::BlockEditorEvent, _| {
+                if let crate::text::block_editor::BlockEditorEvent::PasteRequested {
+                    request,
+                    item,
+                } = event
+                {
+                    captured.borrow_mut().push((request.clone(), item.clone()));
+                }
+            },
+        )
     });
     editor.update(cx, |state, _| {
         state.set_clipboard_policy(ClipboardPolicy::Host)
@@ -2641,4 +2653,242 @@ fn instance_typography_rewraps_heading_and_retains_caret(cx: &mut TestAppContext
             &heading[wrapped_line_end..]
         )
     );
+}
+
+// ---- D17: copy and paste keep inline marks --------------------------------
+
+fn select_in(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    from: (usize, usize),
+    to: (usize, usize),
+) {
+    editor.update(cx, |e, cx| {
+        let leaves: Vec<_> = e.model().document().leaves().map(|l| l.id()).collect();
+        e.set_selection(
+            BlockSelection::Text {
+                anchor: BlockPosition::new(leaves[from.0], from.1),
+                head: BlockPosition::new(
+                    leaves[to.0],
+                    to.1.min(e.model.doc.leaf_len(leaves[to.0]).unwrap()),
+                ),
+            },
+            cx,
+        )
+        .unwrap();
+    });
+}
+
+fn clipboard_text(cx: &mut VisualTestContext) -> String {
+    cx.read_from_clipboard().and_then(|c| c.text()).unwrap()
+}
+
+/// Copy `from..to` of `doc`, then paste at the end of the document's last
+/// leaf (a "T" paragraph appended to `doc`). Returns (clipboard, source).
+fn copy_paste(
+    cx: &mut TestAppContext,
+    doc: &str,
+    from: (usize, usize),
+    to: (usize, usize),
+) -> (String, String) {
+    let (editor, cx) = open(cx, &format!("{doc}\n\nT"));
+    select_in(&editor, cx, from, to);
+    keys(cx, "M-c");
+    let clip = clipboard_text(cx);
+    let last = editor.read_with(cx, |e, _| e.model().document().leaves().count() - 1);
+    caret_at(&editor, cx, last, 1);
+    keys(cx, "M-v");
+    (clip, source(&editor, cx))
+}
+
+#[gpui::test]
+fn d17_whole_leaf_round_trips_each_mark(cx: &mut TestAppContext) {
+    for md in [
+        "Hello `testing` world",
+        "a **bold** b",
+        "an *it* x",
+        "a ~~gone~~ b",
+        "see [docs](https://x.dev \"T\") now",
+        "***both*** end",
+        "**bold and *nested* text**",
+        "x `a*b` y **c_d** z",
+        "<u>under</u> and <mark>hi</mark>",
+    ] {
+        let (editor, cx2) = open(cx, &format!("{md}\n\nT"));
+        select_in(&editor, cx2, (0, 0), (0, usize::MAX));
+        keys(cx2, "M-c");
+        caret_at(&editor, cx2, 1, 1);
+        keys(cx2, "M-v");
+        // The pasted copy has exactly the marks of the original leaf.
+        let (orig, pasted) = editor.read_with(cx2, |e, _| {
+            let leaves = e.model.doc.leaves();
+            let inline = |i: usize| e.model.doc.inline(leaves[i]).unwrap().clone();
+            let pasted = inline(1);
+            (inline(0), pasted.slice(1..pasted.len()))
+        });
+        assert_eq!(pasted, orig, "{md:?}");
+    }
+}
+
+#[gpui::test]
+fn d17_inline_code_copy_and_paste_keeps_backticks(cx: &mut TestAppContext) {
+    let (clip, src) = copy_paste(cx, "Hello `testing` world", (0, 0), (0, 19));
+    assert_eq!(clip, "Hello `testing` world");
+    assert_eq!(src, "Hello `testing` world\n\nTHello `testing` world");
+}
+
+#[gpui::test]
+fn d17_partial_selections_have_balanced_markers(cx: &mut TestAppContext) {
+    // Starts and ends inside a code span.
+    let (clip, src) = copy_paste(cx, "Hello `testing` world", (0, 9), (0, 16));
+    assert_eq!(clip, "`ting` wo");
+    assert!(src.ends_with("\n\nT`ting` wo"), "{src:?}");
+    // One word out of a bold run.
+    let (clip, src) = copy_paste(cx, "a **bold phrase here** b", (0, 7), (0, 13));
+    assert_eq!(clip, "**phrase**");
+    assert!(src.ends_with("\n\nT**phrase**"), "{src:?}");
+    // Starting mid-bold, ending in plain text after it.
+    let (clip, _) = copy_paste(cx, "**bold** and more", (0, 2), (0, 9));
+    assert_eq!(clip, "**ld** and ");
+    // Italic partly, strikethrough partly, link partly.
+    let (clip, _) = copy_paste(cx, "x *italic text* y", (0, 4), (0, 10));
+    assert_eq!(clip, "*alic t*");
+    let (clip, _) = copy_paste(cx, "x ~~struck out~~ y", (0, 4), (0, 9));
+    assert_eq!(clip, "~~ruck~~ ");
+    let (clip, src) = copy_paste(cx, "go [the docs](https://x.dev) ok", (0, 7), (0, 9));
+    assert_eq!(clip, "[do](https://x.dev)");
+    assert!(src.ends_with("\n\nT[do](https://x.dev)"), "{src:?}");
+    // Nested bold-italic cut in the middle.
+    let (clip, _) = copy_paste(cx, "***both marks***", (0, 1), (0, 6));
+    assert!(
+        clip.contains("oth m") && clip.starts_with(['*', '_']),
+        "{clip:?}"
+    );
+    // Whitespace at the cut edges stays outside the markers.
+    let (clip, _) = copy_paste(cx, "a **bold** b", (0, 1), (0, 6));
+    assert_eq!(clip, " **bold**");
+}
+
+#[gpui::test]
+fn d17_multi_block_selection_keeps_marks_per_block(cx: &mut TestAppContext) {
+    let (clip, src) = copy_paste(cx, "**a** one\n\n# `h` two\n\n*b* three", (0, 0), (2, 7));
+    assert_eq!(clip, "**a** one\n`h` two\n*b* three");
+    assert!(
+        src.ends_with("\n\nT**a** one\n\n`h` two\n\n*b* three"),
+        "{src:?}"
+    );
+}
+
+#[gpui::test]
+fn d17_paste_plain_stays_literal_and_external_text_is_conservative(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "**bold** x\n\nT");
+    select_in(&editor, cx, (0, 0), (0, 4));
+    keys(cx, "M-c");
+    assert_eq!(clipboard_text(cx), "**bold**");
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "M-shift-v");
+    // Raw characters, no marks.
+    assert_eq!(source(&editor, cx), "**bold** x\n\nT\\*\\*bold\\*\\*");
+    // External plain text (no tag) is not parsed as inline Markdown.
+    cx.update(|_, cx| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string("2*3*4 and **x**".into()))
+    });
+    caret_at(&editor, cx, 1, 0);
+    keys(cx, "M-v");
+    assert_eq!(
+        source(&editor, cx),
+        "**bold** x\n\n2\\*3\\*4 and \\*\\*x\\*\\*T\\*\\*bold\\*\\*"
+    );
+    // The same text, tagged as our own copy, is parsed.
+    cx.update(|_, cx| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string_with_metadata(
+            "**y**".into(),
+            "gpui-kit/block-editor/inline-markdown/v1".into(),
+        ))
+    });
+    caret_at(&editor, cx, 0, 6);
+    keys(cx, "M-v");
+    assert!(
+        source(&editor, cx).starts_with("**bold** x**y**"),
+        "{}",
+        source(&editor, cx)
+    );
+}
+
+#[gpui::test]
+fn d17_own_copy_of_special_characters_pastes_literally_and_undoes_once(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "2\\*3\\*4 and snake\\_case # \\[x\\]\n\nT");
+    select_in(&editor, cx, (0, 0), (0, usize::MAX));
+    keys(cx, "M-c");
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "M-v");
+    let leaf_text = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(1).unwrap().id();
+        e.model.doc.leaf_text(id).unwrap().to_string()
+    });
+    assert_eq!(leaf_text, "T2*3*4 and snake_case # [x]");
+    keys(cx, "M-z");
+    assert_eq!(
+        source(&editor, cx),
+        "2\\*3\\*4 and snake\\_case # \\[x\\]\n\nT"
+    );
+}
+
+#[gpui::test]
+fn d17_table_cell_copy_still_copies_structure(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "| **x** | y |\n| --- | --- |\n| `1` | 2 |");
+    let from = leaf_point(&editor, cx, 0, 0);
+    let to = leaf_point(&editor, cx, 3, 1);
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    keys(cx, "M-c");
+    assert_eq!(
+        clipboard_text(cx),
+        "| **x** | y |\n| --- | --- |\n| `1` | 2 |"
+    );
+    // Marks inside a single cell's text survive a copy/paste too.
+    let (editor, cx) = open(cx, "| **x** y | z |\n| --- | --- |\n| a | b |");
+    select_in(&editor, cx, (0, 0), (0, 3));
+    keys(cx, "M-c");
+    assert_eq!(clipboard_text(cx), "**x** y");
+    caret_at(&editor, cx, 3, 1);
+    keys(cx, "M-v");
+    assert_eq!(
+        source(&editor, cx),
+        "| **x** y | z |\n| --- | --- |\n| a | b**x** y |"
+    );
+}
+
+#[gpui::test]
+fn d17_host_policy_keeps_the_own_copy_flag_across_apply_paste(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "`c` d\n\nT");
+    let pending = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = pending.clone();
+    let _sub = cx.update(|_, cx| {
+        cx.subscribe(
+            &editor,
+            move |_, event: &crate::text::block_editor::BlockEditorEvent, _| {
+                if let crate::text::block_editor::BlockEditorEvent::PasteRequested {
+                    request,
+                    item,
+                } = event
+                {
+                    sink.borrow_mut().push((request.clone(), item.clone()));
+                }
+            },
+        )
+    });
+    editor.update(cx, |s, _| {
+        s.set_clipboard_policy(crate::text::block_editor::ClipboardPolicy::Host)
+    });
+    select_in(&editor, cx, (0, 0), (0, 1));
+    keys(cx, "M-c");
+    caret_at(&editor, cx, 1, 1);
+    keys(cx, "M-v");
+    let (request, item) = pending.borrow_mut().pop().unwrap();
+    editor.update(cx, |s, cx| {
+        assert!(s.apply_paste(&request, item.text().as_deref(), cx))
+    });
+    assert_eq!(source(&editor, cx), "`c` d\n\nT`c`");
 }

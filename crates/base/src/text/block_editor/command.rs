@@ -350,6 +350,106 @@ impl BlockEditorModel {
         Ok(())
     }
 
+    /// Paste the editor's own inline Markdown copy (D17): each line is
+    /// parsed as inline Markdown (marks survive), lines become blocks as
+    /// typed. Edge whitespace stays literal. One undo step. In a code block
+    /// the marks are dropped (the text is inserted raw); `Ok(false)` when
+    /// the target cannot take it (a table cell with several lines).
+    pub fn paste_inline_markdown(&mut self, text: &str) -> Result<bool, CommandError> {
+        let lines: Vec<InlineText> = text
+            .split('\n')
+            .map(|l| self.inline_from_markdown(l))
+            .collect();
+        let cell = |m: &Self| m.current_cell().is_some();
+        if lines.len() > 1 && cell(self) {
+            return Ok(false);
+        }
+        self.history.begin_transaction();
+        let result = (|| {
+            if self.selected_cells().is_some() {
+                self.clear_cells(EditOrigin::Paste)?;
+            } else if self.selected_blocks().is_some() {
+                self.replace_blocks_with_paragraph(EditOrigin::Paste)?;
+            }
+            let range = self.resolved()?;
+            self.transact(EditOrigin::Paste, |tx| {
+                let mut pos = if range.is_collapsed() {
+                    range.start
+                } else {
+                    delete_range(tx, range)?
+                };
+                if tx.doc.plain(pos.block).is_some() {
+                    let raw = lines
+                        .iter()
+                        .map(InlineText::text)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    tx.replace_plain(pos.block, pos.offset..pos.offset, &raw)?;
+                    pos.offset += raw.len();
+                    return Ok(caret(pos));
+                }
+                for (ix, line) in lines.iter().enumerate() {
+                    if ix > 0 {
+                        pos = split_at(tx, pos)?;
+                    }
+                    if tx.doc.inline(pos.block).is_none() {
+                        return Err(CommandError::NotEditable(pos.block));
+                    }
+                    let len = line.len();
+                    tx.replace_text(pos.block, pos.offset..pos.offset, line.clone())?;
+                    pos.offset += len;
+                }
+                Ok(caret(pos))
+            })
+        })();
+        self.history.commit_transaction();
+        result.map(|_| true)
+    }
+
+    /// One line of inline Markdown as marked text. Leading and trailing
+    /// whitespace stays literal (a Markdown paragraph would drop it); a line
+    /// that does not parse to exactly one paragraph is kept as plain text.
+    fn inline_from_markdown(&self, line: &str) -> InlineText {
+        let core = line.trim();
+        if core.is_empty() {
+            return InlineText::plain(line, TextMark::default());
+        }
+        let start = line.len() - line.trim_start().len();
+        let mut cx = crate::text::node::NodeContext {
+            markdown_extensions: self.doc.extensions.clone(),
+            ..Default::default()
+        };
+        let parsed = crate::text::format::markdown::parse(core, &mut cx)
+            .ok()
+            .and_then(|parsed| {
+                let mut defs = super::import::Defs::new();
+                super::import::collect_definitions(&parsed.blocks, &mut defs);
+                let mut blocks = Vec::new();
+                for node in parsed.blocks.iter() {
+                    super::import::import_block(node, &defs, &mut blocks);
+                }
+                match (blocks.len(), blocks.pop()) {
+                    (1, Some(block)) if block.kind == BlockKindData::Paragraph => {
+                        match block.content {
+                            DetachedContent::Leaf(BlockContent::Inline(inline)) => Some(inline),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            });
+        let Some(inline) = parsed else {
+            return InlineText::plain(line, TextMark::default());
+        };
+        let mut out = InlineText::plain(&line[..start], TextMark::default());
+        out.push(inline);
+        out.push(InlineText::plain(
+            &line[start + core.len()..],
+            TextMark::default(),
+        ));
+        out
+    }
+
     /// Backspace (`forward == false`) or Delete: a grapheme, the selection, a join with the neighbouring block, or (next to a table) select the table.
     pub fn delete(&mut self, forward: bool) -> Result<(), CommandError> {
         if self.selected_cells().is_some() {
@@ -1321,6 +1421,27 @@ impl BlockEditorModel {
                 }
             }
             Ok(None)
+        })
+    }
+
+    /// The `---` input rule: the caret's (empty) paragraph becomes a
+    /// horizontal rule followed by an empty paragraph holding the caret.
+    pub(crate) fn paragraph_to_rule(&mut self) -> Result<bool, CommandError> {
+        let leaf = self.caret_resolved()?.pos.block;
+        self.transact(EditOrigin::Command("horizontal_rule"), |tx| {
+            let (parent, index) = tx
+                .doc
+                .index_in_parent(leaf)
+                .ok_or(StepError::UnknownBlock(leaf))?;
+            let rule = DetachedBlock::leaf(
+                BlockKindData::HorizontalRule,
+                BlockContent::Atom(super::document::AtomData::None),
+            );
+            let para = DetachedBlock::paragraph(InlineText::new());
+            let id = para.id;
+            tx.remove_block(leaf)?;
+            tx.insert(parent, index, vec![rule, para])?;
+            Ok(caret(BlockPosition::new(id, 0)))
         })
     }
 
