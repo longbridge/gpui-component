@@ -1,4 +1,4 @@
-import { div, View, type Element, type NativeElement, type Context } from 'gpui-kit';
+import { div, View, Background, type Element, type NativeElement, type Context, type BoxShadowSpec } from 'gpui-kit';
 import { Spinner, Separator, Skeleton, HForm, Field, type SpinnerElement } from 'gpui-component';
 import { TextView } from 'gpui-base';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from 'gpui-component';
@@ -36,8 +36,17 @@ export default class FluentContracts extends View {
     });
     if (answer !== 42) throw new Error('map must preserve its return value');
     const native: NativeElement = div();
+    const raised: BoxShadowSpec[] = [
+      { spread: 1, color: '#0d0d0f' },
+      { y: 1, color: '#ffffff10', inset: true },
+      { y: 1, blur: 2, color: '#00000066' },
+    ];
     return native.p(2).size(240).role('status').transition('opacity', 120).children([
       padded(element),
+      div().rounded(10)
+        .bg(Background.linear_gradient(180, Background.stop('#f7da74', 0), Background.stop('#fdcd12', 1)))
+        .shadow(raised)
+        .hover(style => style.bg('#fff').shadow([])),
       new Separator().p(2).label('Section'),
       new Skeleton().flex().secondary(),
       new HForm().child(new Field().label('Name').child('Ada')).children([]).columns(2),

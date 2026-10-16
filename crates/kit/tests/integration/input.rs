@@ -45,7 +45,12 @@ impl Render for Inputs {
                     .disabled(self.disabled)
                     .readonly(self.readonly),
             )
-            .child(Input::new(&self.secret).id("secret").w(px(240.)))
+            .child(
+                Input::new(&self.secret)
+                    .id("secret")
+                    .mask_toggle()
+                    .w(px(240.)),
+            )
     }
 }
 fn inputs(cx: &mut TestAppContext) -> (WindowHandle<gpui_kit::base::Root>, Entity<Inputs>) {
@@ -123,6 +128,67 @@ fn masked_input_handles_typing_without_reporting_secret_value(cx: &mut TestAppCo
     .unwrap();
     common::update_content(handle, &handle_content, cx, |view, _, cx| {
         assert_eq!(view.secret.read(cx).value(), "secret")
+    })
+    .unwrap();
+}
+
+struct Cleanable {
+    query: Entity<InputState>,
+}
+impl Render for Cleanable {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(
+            Input::new(&self.query)
+                .id("query")
+                .cleanable(true)
+                .w(px(240.)),
+        )
+    }
+}
+
+#[gpui_kit::test]
+fn clear_button_is_named(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+    let (handle, _) = common::open_window(cx, None, |window, cx| {
+        cx.new(|cx| Cleanable {
+            query: cx.new(|cx| InputState::new(window, cx).default_value("query")),
+        })
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+        assert_eq!(window.within("query").find("clean").label(), Some("Clear"));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn masked_input_is_a_password_field(cx: &mut TestAppContext) {
+    let (handle, _) = inputs(cx);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+        assert_eq!(
+            window.find("secret").role(),
+            Some(gpui_kit::Role::PasswordInput)
+        );
+        assert_eq!(window.find("first").role(), Some(gpui_kit::Role::TextInput));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn mask_toggle_is_named_for_the_action_it_takes(cx: &mut TestAppContext) {
+    let (handle, _) = inputs(cx);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+        assert_eq!(
+            window.within("secret").find("toggle-mask").label(),
+            Some("Show password")
+        );
+        window.within("secret").click("toggle-mask", cx);
+        assert_eq!(
+            window.within("secret").find("toggle-mask").label(),
+            Some("Hide password")
+        );
     })
     .unwrap();
 }

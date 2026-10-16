@@ -230,6 +230,8 @@ pub struct DiffState {
     layout: Option<LayoutKey>,
     content_width: Pixels,
     row_height: Option<Pixels>,
+    /// The list width the row-height hint was last applied at.
+    hinted_width: Option<Pixels>,
     annotations: HashSet<(Option<DiffLinePosition>, SharedString, ElementId)>,
     window: Option<WindowId>,
     /// Bumped when files or presentation options change, so a preparation
@@ -361,6 +363,7 @@ impl DiffState {
             layout: None,
             content_width: px(0.),
             row_height: None,
+            hinted_width: None,
             annotations: HashSet::new(),
             window: None,
             presentation_generation: 0,
@@ -1333,6 +1336,24 @@ impl DiffState {
             }
         }
         rows
+    }
+
+    /// Applies the row-height hint again once the list has laid out at a new
+    /// width. Returns whether it did, so the frame must be laid out again.
+    ///
+    /// A list that lays out at a new width forgets every row height, hints
+    /// included, which happens on its first layout too. The patch then
+    /// measures only the rows rendered so far, and scrolling stops once the
+    /// last of them reaches the bottom of the viewport. Call this after the
+    /// list's prepaint, so the hint is back before the next wheel event.
+    pub(crate) fn keep_row_height_hint(&mut self) -> bool {
+        let width = self.list.viewport_bounds().size.width;
+        if self.row_height.is_none() || self.hinted_width == Some(width) {
+            return false;
+        }
+        self.hinted_width = Some(width);
+        self.apply_row_height_hint();
+        true
     }
 
     /// Gives unmeasured rows a code-row height so the scrollbar is sized for

@@ -840,6 +840,14 @@ The event names a script can subscribe to are `change`, `submit`, `focus`, and
 `submit` covers base's `InputEvent::PressEnter`. An unknown name reports the
 full valid set.
 
+Base emits `PressEnter` for every Enter, including one a textarea has just
+turned into a line break, so a textarea's `submit` arrives after the break is
+in the text. `TextareaState.set_submit_on_enter(true)` passes through to base's
+`set_submit_on_enter`: Enter then inserts nothing and only submits, and
+Shift+Enter still inserts a line break and is still reported, with
+`shift: true`. The shell does not filter that second `submit`, because base
+reports it and a script may want it; the handler checks `event.shift`.
+
 ### 7.4 Cycles across two garbage collectors
 
 The classic embedded-script leak: Rust holds a script closure, the closure
@@ -1794,7 +1802,7 @@ each.
 
 ### 13.2 Styles that take arguments
 
-Fifty-seven methods are bound by hand in `style.rs`, and they are indistinguishable
+Sixty methods are bound by hand in `style.rs`, and they are indistinguishable
 from the reflected ones at the call site:
 
 ```js
@@ -1809,15 +1817,27 @@ function panel(cx) {
 }
 ```
 
-They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 6 paint, 8
-border, and 9 radius. Five families are deliberately unbound, with the reason
-recorded at the head of the array: `shadow` takes a `Vec<BoxShadow>` and belongs
-with the animation and token work rather than as a positional argument list;
-`cursor`, `text_align`, `text_overflow`, and `font_weight` take GPUI enums and
+They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 9 paint, 8
+border, and 9 radius. Two of the paint methods take a structured value rather
+than a primitive. `bg` accepts a `Background` from the script's `Background`
+builder as well as a colour, so a rounded element can be filled with a linear
+gradient; it reuses the `BackgroundSpec` that `window.paint_path` records, and
+both convert through one function. `shadow` takes an array of CSS-like records,
+`{ x, y, blur, spread, color, inset }`, where `blur` keeps CSS semantics and is
+halved into GPUI's gaussian deviation, and the list is reversed so the first
+shadow paints on top as in CSS; `[]` removes the shadows, and the
+`shadow_*` presets stay nullary and reflected. Both cross the bridge as
+`Bridged::Background` and `Bridged::Shadows`, so they replay through the same
+`SpecOp::ParamStyle` path as every other style, including state styles such as
+`.hover(...)` and template slots.
+
+Three families are deliberately unbound, with the reason recorded at the head
+of the array: `cursor`, `text_align`, and `text_overflow` take GPUI enums and
 would each need a name mapping when every variant already has a nullary form
-(`cursor_pointer`, `text_center`, `font_bold`); and `scrollbar_width` is
-not exposed because the shell owns native overflow behavior but does not yet
-offer configurable scrollbar presentation.
+(`cursor_pointer`, `text_center`); `font_weight` is bound only because GPUI
+represents it as a number; and `scrollbar_width` is not exposed because the
+shell owns native overflow behavior but does not yet offer configurable
+scrollbar presentation.
 
 Overflow itself is an element behavior rather than a `StyleRefinement` entry:
 `.overflow_scroll()`, `.overflow_x_scroll()`, and `.overflow_y_scroll()` wrap a
@@ -2031,7 +2051,10 @@ dependency runs upward only — `"gpui-base"` imports the element and
 component-factory types it is built out of from `"gpui-kit"`, and `"gpui-kit"` refers
 down only where one shared element prototype forces it: `track_scroll`, `mode`,
 `axis` and `cx.theme()` name their argument types with an inline
-`import("gpui-base").X`.
+`import("gpui-base").X`. The component catalog's block is declared under the
+specifier its registry carries (§14.7) — `"gpui-component"` for the shipped
+catalog — and a directory whose scripts import only that specifier gets the
+file too.
 
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
@@ -2122,7 +2145,13 @@ the one command, and Cargo forbids the dependency cycle a feature on a separate
 crate would have needed. `gpui_shell::init` installs the base layer;
 `gpui_shell::components::init` installs the catalog and then the runtime. A
 host that wants the protocol without the catalog builds `gpui-shell` without
-the feature and gets an empty registry, which declares no module at all.
+the feature and gets an empty registry, which declares no module at all. A host
+that wants the catalog and components of its own calls
+`gpui_shell::components::registry()`, which returns the catalog before it is
+frozen, registers into it, and freezes it; `components()` is that call followed
+by `freeze`. The registry already carries the catalog's initializer and window
+opener. A host whose components need startup of their own replaces the
+initializer with a function that calls `gpui_component::init` first.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
@@ -2199,7 +2228,11 @@ proof the module stamps on it. The proof comes from `RandomState`'s OS-seeded
 keys: anything a script can observe — a process id, a clock, a counter — would
 be reconstructible, and a forged handle would reach another application's state.
 Retained values are owned by the application generation that created them and
-are released with it.
+are released with it, or earlier when the script calls `release()` on the state
+object. `release()` drops the value and its event subscriptions, returns whether
+the state was still live, and is refused during render and layout like any other
+change to retained state. A method called on it afterwards throws.
+A registered state method may not be named `release`.
 
 A retained state built on the text engine — an `Entity<InputBaseState<M>>`,
 which is what both `gpui-component`'s `InputState` and `TextareaState` are —
