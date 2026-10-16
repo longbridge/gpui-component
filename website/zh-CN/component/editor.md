@@ -356,10 +356,10 @@ use gpui_kit::component::input::{GutterColumn, InputHitArea};
 
 if let Some(hit) = editor.read(cx).hit_test(position) {
     match hit.area() {
-        InputHitArea::Gutter { column: Some(GutterColumn::LineNumbers) } => {
+        InputHitArea::Gutter { column: Some(GutterColumn::LineNumbers), .. } => {
             // 行号：`hit.row()` 是缓冲区行。
         }
-        InputHitArea::Text { offset } => { /* 文本，位于 `offset` */ }
+        InputHitArea::Text { offset, .. } => { /* 文本，位于 `offset` */ }
         _ => {}
     }
 }

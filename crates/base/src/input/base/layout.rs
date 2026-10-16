@@ -66,8 +66,10 @@ pub struct InputHit {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputHitArea {
     /// The text, at the byte offset a click there places the caret at.
+    #[non_exhaustive]
     Text { offset: usize },
     /// The gutter, in one of its columns, or `None` in its margin or padding.
+    #[non_exhaustive]
     Gutter { column: Option<GutterColumn> },
 }
 

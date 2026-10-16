@@ -422,10 +422,10 @@ use gpui_kit::component::input::{GutterColumn, InputHitArea};
 
 if let Some(hit) = editor.read(cx).hit_test(position) {
     match hit.area() {
-        InputHitArea::Gutter { column: Some(GutterColumn::LineNumbers) } => {
+        InputHitArea::Gutter { column: Some(GutterColumn::LineNumbers), .. } => {
             // A line number: `hit.row()` is the buffer row.
         }
-        InputHitArea::Text { offset } => { /* the text, at `offset` */ }
+        InputHitArea::Text { offset, .. } => { /* the text, at `offset` */ }
         _ => {}
     }
 }

@@ -7131,16 +7131,26 @@ mod tests {
             let row = state.row_bounds(1).unwrap();
             let ghost = state.hit_test(point(gutter_x, row.bottom() + line_height.half()));
             assert_eq!(ghost.unwrap().row(), None);
+            // In the text, the ghost lines are on the row they follow.
+            let ghost = state.hit_test(point(text_x, row.bottom() + line_height.half()));
+            assert_eq!(
+                ghost.map(|hit| (hit.row(), hit.is_spacer())),
+                Some((Some(1), false))
+            );
             for y in [
                 row.bottom() + line_height * 1.5,
                 row.bottom() + line_height * 2.5,
             ] {
-                let hit = state.hit_test(point(gutter_x, y)).unwrap();
-                assert_eq!((hit.row(), hit.is_spacer()), (Some(1), true), "{y:?}");
+                for x in [gutter_x, text_x] {
+                    let hit = state.hit_test(point(x, y)).unwrap();
+                    assert_eq!((hit.row(), hit.is_spacer()), (Some(1), true), "{y:?}");
+                }
             }
-            let probe = point(gutter_x, state.row_bounds(2).unwrap().top() + px(1.));
-            let next = state.hit_test(probe).unwrap();
-            assert_eq!((next.row(), next.is_spacer()), (Some(2), false));
+            for x in [gutter_x, text_x] {
+                let probe = point(x, state.row_bounds(2).unwrap().top() + px(1.));
+                let next = state.hit_test(probe).unwrap();
+                assert_eq!((next.row(), next.is_spacer()), (Some(2), false));
+            }
         });
     }
 }

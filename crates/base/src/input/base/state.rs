@@ -3128,7 +3128,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         let mut last_line_pos = None;
 
         // Traverse visible buffer lines (compact, no hidden entries)
-        for (vi, (line_layout, _buffer_line)) in last_layout
+        for (vi, (line_layout, &buffer_line)) in last_layout
             .lines
             .iter()
             .zip(last_layout.visible_buffer_lines.iter())
@@ -3138,14 +3138,21 @@ impl<M: InputModeKind> InputBaseState<M> {
             let (spacer_above, spacer_below) = last_layout.spacers(vi);
             y_offset += spacer_above;
             let height = line_layout.size(line_height).height;
+            // Ghost lines stand between the row's text and its spacers below,
+            // and push every row after it down, as `row_extents` lays them out.
+            let ghost_height = match last_layout.ghost_lines {
+                Some((ghost_row, ghost_height)) if ghost_row == buffer_line => ghost_height,
+                _ => px(0.),
+            };
 
             // Calculate line origin for this display row
             let line_origin = point(px(0.), y_offset);
             let mut pos = inner_position - line_origin;
-            // A pointer on a spacer row is on the row of text it stands beside.
+            // A pointer on a spacer row, or on the ghost lines, is on the row
+            // of text it stands beside.
             if pos.y < px(0.) && pos.y >= -spacer_above {
                 pos.y = px(0.);
-            } else if pos.y >= height && pos.y < height + spacer_below {
+            } else if pos.y >= height && pos.y < height + ghost_height + spacer_below {
                 pos.y = height - line_height;
             }
 
@@ -3174,7 +3181,7 @@ impl<M: InputModeKind> InputBaseState<M> {
                 return (self.resolve_index(line_start_offset), false, 0);
             }
 
-            y_offset += height + spacer_below;
+            y_offset += height + ghost_height + spacer_below;
             last_line_pos = Some(pos);
         }
 
@@ -3746,10 +3753,13 @@ impl<M: InputModeKind> InputBaseState<M> {
             ));
         }
 
+        // As for the gutter, the ghost lines extend the text below its bounds.
         let paddings = self.editor_paddings;
+        let ghost_height = last_layout.ghost_lines.map_or(px(0.), |(_, height)| height);
         let outer = Bounds::from_corners(
             self.input_bounds.origin - point(paddings.left, paddings.top),
-            self.input_bounds.bottom_right() + point(paddings.right, paddings.bottom),
+            self.input_bounds.bottom_right()
+                + point(paddings.right, paddings.bottom + ghost_height),
         );
         if !outer.contains(&position) {
             return None;
