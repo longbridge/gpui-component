@@ -2043,7 +2043,10 @@ dependency runs upward only — `"gpui-base"` imports the element and
 component-factory types it is built out of from `"gpui-kit"`, and `"gpui-kit"` refers
 down only where one shared element prototype forces it: `track_scroll`, `mode`,
 `axis` and `cx.theme()` name their argument types with an inline
-`import("gpui-base").X`.
+`import("gpui-base").X`. The component catalog's block is declared under the
+specifier its registry carries (§14.7) — `"gpui-component"` for the shipped
+catalog — and a directory whose scripts import only that specifier gets the
+file too.
 
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
