@@ -287,6 +287,84 @@ fn stat_rename_and_readlink_settle_through_promises(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+const ABSOLUTE_LINK_PROBE: &str = r#"
+import { div, View } from "gpui-kit";
+import { v_flex } from "gpui-base";
+import * as fs from "fs/promises";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.state = "pending";
+    cx.spawn(async (cx) => {
+      const root = "__ROOT__";
+      const outcome = async (body) => {
+        try {
+          return String(await body());
+        } catch (error) {
+          return `rejected(${error.message})`;
+        }
+      };
+      const link = `${root}/link.txt`;
+      this.state = [
+        await outcome(async () => (await fs.lstat(link)).isSymbolicLink()),
+        await outcome(() => fs.readlink(link)),
+        await outcome(() => fs.readFile(`${root}/absolute-link.txt`, "utf8")),
+        await outcome(async () => {
+          await fs.rename(`${root}/to-move.txt`, `${root}/moved.txt`);
+          return (await fs.lstat(`${root}/moved.txt`)).isSymbolicLink();
+        }),
+        await outcome(() => fs.unlink(link)),
+      ].join("|");
+      cx.notify();
+    });
+  }
+  render() { return v_flex().child(this.state); }
+}
+"#;
+
+/// An absolute path names a symlink the same way a relative one does: `lstat`,
+/// `readlink`, `rename` and `unlink` act on the link itself, not on what it
+/// points to. Reading through a link whose stored target is absolute keeps
+/// working.
+#[cfg(unix)]
+#[gpui::test]
+fn link_operations_on_an_absolute_path_act_on_the_link(cx: &mut TestAppContext) {
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-fs-absolute-link-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a granted root");
+    std::fs::write(directory.join("target.txt"), "linked").expect("link target");
+    std::os::unix::fs::symlink("target.txt", directory.join("link.txt")).expect("symlink");
+    std::os::unix::fs::symlink("target.txt", directory.join("to-move.txt")).expect("symlink");
+    std::os::unix::fs::symlink(
+        directory.join("target.txt"),
+        directory.join("absolute-link.txt"),
+    )
+    .expect("symlink with an absolute target");
+
+    let source = ABSOLUTE_LINK_PROBE.replace("__ROOT__", &directory.to_string_lossy());
+    let rendered = metadata_probe(
+        cx,
+        Capabilities::new()
+            .read_roots([directory.clone()])
+            .write_roots([directory.clone()]),
+        &source,
+    );
+    let target_survived = directory.join("target.txt").is_file();
+    let link_removed = std::fs::symlink_metadata(directory.join("link.txt")).is_err();
+    let _ = std::fs::remove_dir_all(&directory);
+
+    // One assertion reporting everything, so a failure shows every symptom at once.
+    assert!(
+        rendered.contains("true|target.txt|linked|true|undefined")
+            && target_survived
+            && link_removed,
+        "probe: {rendered}; target survived: {target_survived}; link removed: {link_removed}"
+    );
+}
+
 /// `rename` needs write access at both ends, so it cannot carry a file out of
 /// a root the application may only read.
 #[gpui::test]

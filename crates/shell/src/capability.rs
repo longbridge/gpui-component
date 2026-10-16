@@ -391,6 +391,27 @@ impl Capabilities {
     /// functions and the asset source, so there is no second path policy to keep
     /// in sync.
     pub(crate) fn open(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
+        self.open_resolving(path, access, Final::Follow)
+    }
+
+    /// [`Self::open`] for an operation on a path's final component itself —
+    /// `lstat`, `readlink`, `unlink`, `rmdir`, either end of `rename` — which
+    /// must not follow it when it is a symlink.
+    ///
+    /// The directories leading up to it are still resolved, so a path reached
+    /// through `/var` on macOS agrees with its root. Only the last component is
+    /// kept as written, which is what the relative form of the same path already
+    /// gets from the lexical branch.
+    pub(crate) fn open_link(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
+        self.open_resolving(path, access, Final::Keep)
+    }
+
+    fn open_resolving(
+        &self,
+        path: &Path,
+        access: Access,
+        last: Final,
+    ) -> Result<Grant, CapabilityError> {
         let roots = match access {
             Access::Read => &self.read_roots,
             Access::Write => &self.write_roots,
@@ -414,7 +435,19 @@ impl Capabilities {
                 // Resolved the same way the root was, or the two disagree about
                 // a directory neither of them left: on macOS a temporary path
                 // reaches `/private/var` through `/var`.
-                let normalized = resolved_root(path).unwrap_or_else(|| normalize(path));
+                //
+                // Resolving runs `canonicalize`, which follows a symlink in the
+                // last component too. That is right for reading through the link
+                // — a stored target that is absolute is one `Dir` will not follow
+                // — and wrong for an operation on the link, which would land on
+                // its target instead.
+                let resolved_path = match (last, path.parent(), path.file_name()) {
+                    (Final::Keep, Some(parent), Some(name)) => {
+                        resolved_root(parent).map(|parent| parent.join(name))
+                    }
+                    _ => resolved_root(path),
+                };
+                let normalized = resolved_path.unwrap_or_else(|| normalize(path));
                 match normalized.strip_prefix(&resolved) {
                     Ok(relative) => relative.to_path_buf(),
                     Err(_) => continue,
@@ -464,6 +497,15 @@ impl Capabilities {
             access,
         })
     }
+}
+
+/// Whether [`Capabilities::open`] resolves a symlink in a path's last component.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Final {
+    /// Read or write through the link, to what it names.
+    Follow,
+    /// Act on the link itself.
+    Keep,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
