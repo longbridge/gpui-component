@@ -183,6 +183,7 @@ fn base_declarations() -> String {
 
 pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRegistry) -> String {
     let (nullary, parametric) = style_methods();
+    let component_module = component_module(components);
 
     let mut out = String::with_capacity(160 * 1024);
     out.push_str(&PREAMBLE.replace("{version}", crate::plugin::SHELL_VERSION));
@@ -207,7 +208,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     for descriptor in components.descriptors() {
         let _ = write!(
             out,
-            " | import(\"gpui-component\").{}Element",
+            " | import(\"{component_module}\").{}Element",
             descriptor.name()
         );
     }
@@ -232,7 +233,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str(INLINE_TOKEN_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
-    out.push_str("declare module \"gpui-component\" {\n");
+    let _ = writeln!(out, "declare module \"{component_module}\" {{");
     out.push_str("  import { ClickEvent, Context, Element, NativeElement } from \"gpui-kit\";\n");
     if components.states().any(|state| state.has_input_events()) {
         out.push_str("  import { InputEvent } from \"gpui-base\";\n");
@@ -527,7 +528,7 @@ pub(crate) fn write_application_with_components(
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
-        directories_importing_builtins(root)
+        directories_importing_builtins(root, component_module(components))
             .into_iter()
             .filter(|directory| directory != root),
     );
@@ -565,7 +566,7 @@ pub(crate) fn write_application_with_components(
 /// application directory is whatever someone pointed the runtime at, and a
 /// symlink farm or a vendored tree must not turn a startup step into an
 /// unbounded walk.
-fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
+fn directories_importing_builtins(root: &Path, component_module: &str) -> Vec<PathBuf> {
     const MAX_DEPTH: usize = 8;
     const MAX_FILES: usize = 4_096;
     const SKIPPED: [&str; 2] = ["node_modules", "target"];
@@ -614,7 +615,8 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
                     path.extension().and_then(|extension| extension.to_str()),
                     Some("js" | "mjs")
                 )
-                && std::fs::read_to_string(&path).is_ok_and(|source| imports_builtin(&source))
+                && std::fs::read_to_string(&path)
+                    .is_ok_and(|source| imports_builtin(&source, component_module))
             {
                 imports = true;
             }
@@ -628,26 +630,37 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The specifiers one `gpui-kit.d.ts` declares. A script importing any of them
+/// The specifiers one `gpui-kit.d.ts` declares besides the component
+/// catalog's, which [`component_module`] names. A script importing any of them
 /// wants the file beside it.
-const BUILTIN_SPECIFIERS: [&str; 6] = [
-    "gpui-kit",
-    "gpui",
-    "gpui-base",
-    crate::DEFAULT_COMPONENT_MODULE,
-    "gpui-shell",
-    "gpui-fps",
-];
+const BUILTIN_SPECIFIERS: [&str; 5] = ["gpui-kit", "gpui", "gpui-base", "gpui-shell", "gpui-fps"];
 
-/// Whether a script imports one of the built-in modules.
+/// The specifier the declarations give the component catalog.
+///
+/// The registry's own, so a host whose catalog scripts import from another
+/// name gets declarations for that name. The bare runtime's empty registry has
+/// none and keeps `gpui-component`, with an empty block.
+fn component_module(components: &crate::FrozenComponentRegistry) -> &'static str {
+    components
+        .module_specifier()
+        .unwrap_or(crate::DEFAULT_COMPONENT_MODULE)
+}
+
+/// Whether a script imports one of the built-in modules or the component
+/// catalog.
 ///
 /// Matching the quoted specifier rather than the bare word, so a file that only
 /// mentions gpui in a comment or a string does not collect a copy it has no use
 /// for.
-fn imports_builtin(source: &str) -> bool {
-    BUILTIN_SPECIFIERS.iter().any(|specifier| {
-        source.contains(&format!("\"{specifier}\"")) || source.contains(&format!("'{specifier}'"))
-    })
+fn imports_builtin(source: &str, component_module: &str) -> bool {
+    BUILTIN_SPECIFIERS
+        .iter()
+        .copied()
+        .chain([component_module])
+        .any(|specifier| {
+            source.contains(&format!("\"{specifier}\""))
+                || source.contains(&format!("'{specifier}'"))
+        })
 }
 
 /// Rewrites the declarations beside an application when they are not current.
@@ -4068,6 +4081,82 @@ mod tests {
             "export const InputState: { (text: string): InputState; new: (text: string) => InputState };"
         ));
         assert!(declarations.contains("Retained input state."));
+    }
+
+    /// A catalog that scripts import from `"host-native"`, with one component
+    /// and one state.
+    fn host_native_catalog() -> crate::FrozenComponentRegistry {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ConstructorDescriptor,
+            MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry =
+            crate::ComponentRegistry::new(crate::COMPONENT_REGISTRY_API_VERSION, "host-native")
+                .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Terminal", Arc::new(Empty)).with_constructors(vec![
+                    ConstructorDescriptor::new("Terminal", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                ]),
+            )
+            .unwrap();
+        registry
+            .register_state(crate::StateDescriptor::new(
+                "TerminalState",
+                "TerminalState",
+                Vec::new(),
+                |_, _, _| Ok(Box::new(())),
+            ))
+            .unwrap();
+        registry.freeze().unwrap()
+    }
+
+    /// A host's catalog may answer to a specifier other than
+    /// `gpui-component`; its declarations have to use the same one, or every
+    /// import from it is an unknown module to the editor.
+    #[test]
+    fn a_catalog_is_declared_under_its_own_module_specifier() {
+        let declarations = declarations_with_components(&host_native_catalog());
+
+        assert!(declarations.contains("declare module \"host-native\" {\n"));
+        assert!(declarations.contains(" | import(\"host-native\").TerminalElement"));
+        assert!(declarations.contains("export const TerminalState: "));
+        assert!(!declarations.contains("\"gpui-component\""));
+    }
+
+    /// A directory whose scripts import only that catalog still gets the file.
+    #[test]
+    fn a_directory_importing_only_the_catalog_gets_the_declarations() {
+        let root =
+            std::env::temp_dir().join(format!("gpui-shell-typings-catalog-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let panels = root.join("panels");
+        std::fs::create_dir_all(&panels).expect("nested directory");
+        std::fs::write(
+            panels.join("terminal.js"),
+            "import { Terminal } from \"host-native\";\n",
+        )
+        .expect("nested script");
+
+        let written = write_application_with_components(&root, &host_native_catalog())
+            .expect("declarations are writable");
+
+        assert!(written.contains(&panels.join(FILE_NAME)), "{written:?}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The element methods that are not style methods, so a test can subtract
