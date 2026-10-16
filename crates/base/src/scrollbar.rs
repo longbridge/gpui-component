@@ -819,6 +819,8 @@ pub struct Scrollbar {
     scroll_handle: Rc<dyn ScrollbarHandle>,
     scroll_size: Option<Size<Pixels>>,
     viewport_bounds: Option<Bounds<Pixels>>,
+    // Scroll range may use a smaller viewport than the padded track bounds.
+    scroll_viewport_size: Option<Size<Pixels>>,
     use_layout_bounds: bool,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
@@ -843,6 +845,7 @@ impl Scrollbar {
             max_fps: 120,
             scroll_size: None,
             viewport_bounds: None,
+            scroll_viewport_size: None,
             use_layout_bounds: false,
             styles: ScrollbarStyles::default(),
         }
@@ -892,6 +895,11 @@ impl Scrollbar {
     /// bounds.
     pub fn viewport_bounds(mut self, bounds: Bounds<Pixels>) -> Self {
         self.viewport_bounds = Some(bounds);
+        self
+    }
+
+    pub(crate) fn scroll_viewport_size(mut self, size: Size<Pixels>) -> Self {
+        self.scroll_viewport_size = Some(size);
         self
     }
 
@@ -1201,21 +1209,22 @@ struct ThumbGeometry {
 impl ThumbGeometry {
     fn new(
         origin: Pixels,
-        container: Pixels,
+        track_size: Pixels,
+        viewport_size: Pixels,
         content: Pixels,
         margin_end: Pixels,
         inset: Pixels,
         min_length: Pixels,
     ) -> Self {
-        let track = (container - margin_end).max(px(0.));
-        let logical_length = (container / content * container).max(min_length).min(track);
+        let track = (track_size - margin_end).max(px(0.));
+        let logical_length = (viewport_size / content * track).max(min_length).min(track);
         let inset = inset.clamp(px(0.), logical_length / 2.);
         Self {
             origin,
             inset,
             length: logical_length - inset * 2.,
             travel: track - logical_length,
-            extent: content - container,
+            extent: content - viewport_size,
         }
     }
 
@@ -1370,6 +1379,7 @@ impl Element for Scrollbar {
         let scroll_size = self
             .scroll_size
             .unwrap_or(self.scroll_handle.content_size());
+        let scroll_viewport_size = self.scroll_viewport_size.unwrap_or(hitbox.size);
 
         for axis in self.axis.all().into_iter() {
             let is_vertical = axis.is_vertical();
@@ -1379,19 +1389,22 @@ impl Element for Scrollbar {
                 .width
                 .or(cx.theme().scrollbar.styles().track.width)
                 .unwrap_or(WIDTH);
-            let (scroll_area_size, container_size, scroll_position) = if is_vertical {
-                (
-                    scroll_size.height,
-                    hitbox.size.height,
-                    self.scroll_handle.offset().y,
-                )
-            } else {
-                (
-                    scroll_size.width,
-                    hitbox.size.width,
-                    self.scroll_handle.offset().x,
-                )
-            };
+            let (scroll_area_size, container_size, scroll_viewport_size, scroll_position) =
+                if is_vertical {
+                    (
+                        scroll_size.height,
+                        hitbox.size.height,
+                        scroll_viewport_size.height,
+                        self.scroll_handle.offset().y,
+                    )
+                } else {
+                    (
+                        scroll_size.width,
+                        hitbox.size.width,
+                        scroll_viewport_size.width,
+                        self.scroll_handle.offset().x,
+                    )
+                };
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
             let margin_end = if has_both && !is_vertical {
@@ -1401,7 +1414,7 @@ impl Element for Scrollbar {
             };
 
             // Hide scrollbar, if the scroll area is smaller than the container.
-            if scroll_area_size <= container_size {
+            if scroll_area_size <= scroll_viewport_size {
                 has_both = false;
                 continue;
             }
@@ -1484,6 +1497,7 @@ impl Element for Scrollbar {
             let geometry = ThumbGeometry::new(
                 origin,
                 container_size,
+                scroll_viewport_size,
                 scroll_area_size,
                 margin_end,
                 inset,
@@ -1493,6 +1507,7 @@ impl Element for Scrollbar {
             let active_geometry = ThumbGeometry::new(
                 origin,
                 container_size,
+                scroll_viewport_size,
                 scroll_area_size,
                 margin_end,
                 active_inset,
@@ -2262,14 +2277,17 @@ mod tests {
         handle: TestHandle,
         axis: ScrollbarAxis,
         mode: ScrollbarMode,
+        scroll_viewport_size: Option<Size<Pixels>>,
     }
 
     impl Render for ScrollbarHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div()
-                .relative()
-                .size(px(100.))
-                .child(Scrollbar::new(&self.handle).axis(self.axis).mode(self.mode))
+            let mut scrollbar = Scrollbar::new(&self.handle).axis(self.axis).mode(self.mode);
+            if let Some(size) = self.scroll_viewport_size {
+                scrollbar = scrollbar.scroll_viewport_size(size);
+            }
+
+            div().relative().size(px(100.)).child(scrollbar)
         }
     }
 
@@ -2282,10 +2300,50 @@ mod tests {
         let handle = TestHandle::new(content_size);
         let (_, cx) = cx.add_window_view({
             let handle = handle.clone();
-            move |_, _| ScrollbarHarness { handle, axis, mode }
+            move |_, _| ScrollbarHarness {
+                handle,
+                axis,
+                mode,
+                scroll_viewport_size: None,
+            }
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
         (cx, handle)
+    }
+
+    #[gpui::test]
+    fn thumb_drag_reaches_content_end_when_track_includes_padding(cx: &mut TestAppContext) {
+        let handle = TestHandle::new(size(px(100.), px(160.)));
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| ScrollbarHarness {
+                handle,
+                axis: ScrollbarAxis::Vertical,
+                mode: ScrollbarMode::Always,
+                scroll_viewport_size: Some(size(px(100.), px(80.))),
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_mouse_down(
+            point(px(95.), px(20.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_move(
+            point(px(95.), px(99.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_up(
+            point(px(95.), px(99.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+
+        assert_eq!(handle.offset().y, px(-80.));
     }
 
     #[test]
@@ -2618,6 +2676,7 @@ mod tests {
                 handle,
                 axis: ScrollbarAxis::Vertical,
                 mode: ScrollbarMode::Always,
+                scroll_viewport_size: None,
             }
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -2683,7 +2742,8 @@ mod tests {
 
     #[test]
     fn full_track_thumb_does_not_reset_the_scroll_offset() {
-        let geometry = ThumbGeometry::new(px(20.), px(40.), px(500.), px(0.), px(4.), px(64.));
+        let geometry =
+            ThumbGeometry::new(px(20.), px(40.), px(40.), px(500.), px(0.), px(4.), px(64.));
         let offset = point(px(0.), px(-100.));
         assert_eq!(
             geometry.drag_offset(
@@ -2693,6 +2753,26 @@ mod tests {
                 offset
             ),
             offset
+        );
+    }
+
+    #[test]
+    fn thumb_geometry_maps_content_viewport_to_padded_track() {
+        let geometry =
+            ThumbGeometry::new(px(20.), px(96.), px(80.), px(160.), px(0.), px(0.), px(0.));
+
+        assert_eq!(geometry.length, px(48.));
+        assert_eq!(geometry.travel, px(48.));
+        assert_eq!(geometry.extent, px(80.));
+        assert_eq!(geometry.offset(px(68.), px(0.)), px(-80.));
+
+        let barely_overflowing =
+            ThumbGeometry::new(px(20.), px(96.), px(80.), px(85.), px(0.), px(0.), px(0.));
+        assert_eq!(barely_overflowing.extent, px(5.));
+        assert!(barely_overflowing.travel > px(0.));
+        assert_eq!(
+            barely_overflowing.offset(px(20.) + barely_overflowing.travel, px(0.)),
+            px(-5.)
         );
     }
 
