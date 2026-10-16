@@ -251,6 +251,17 @@ let state = cx.new(|cx| {
 });
 ```
 
+### 修饰键点击
+
+按住 ⌘（Windows 和 Linux 上为 Ctrl）或 Shift 点击行时，表格会像普通点击一样选中该行。如果 delegate 自己维护多行选择并处理这些点击（通常在鼠标按下时），请关闭表格对这类点击的选择，避免覆盖 delegate 的选择：
+
+```rust
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .select_on_modifier_click(false)
+});
+```
+
 ### 单元格选择
 
 启用 `cell_selectable(true)` 后：

@@ -266,6 +266,15 @@ impl<E: Element> Observed<E> {
         }
     }
 
+    /// Replaces the observed element while keeping its observation, so a
+    /// wrapper inside it is seen by the snapshot.
+    pub(crate) fn map_inner<F>(self, f: impl FnOnce(E) -> F) -> Observed<F> {
+        Observed {
+            inner: f(self.inner),
+            focus: self.focus,
+        }
+    }
+
     pub(crate) fn new(inner: E) -> Self {
         assert!(
             Element::id(&inner).is_some(),
