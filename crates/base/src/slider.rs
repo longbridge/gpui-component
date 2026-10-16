@@ -9,7 +9,7 @@ use gpui::{
     TouchDragEvent, TouchPhase, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{element_ext::ElementExt, geometry::AxisExt};
+use crate::{a11y_disabled::A11yDisabledExt as _, element_ext::ElementExt, geometry::AxisExt};
 
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
@@ -522,28 +522,30 @@ impl RenderOnce for Slider {
             } else {
                 Orientation::Horizontal
             })
-            .on_a11y_action(AccessibleAction::Increment, {
-                let state = slider_state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        let value =
-                            (state.value().end() + state.step_value()).min(state.max_value());
-                        state.set_value(value, window, cx);
-                    });
-                }
-            })
-            .on_a11y_action(AccessibleAction::Decrement, {
-                let state = slider_state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        let value =
-                            (state.value().end() - state.step_value()).max(state.min_value());
-                        state.set_value(value, window, cx);
-                    });
-                }
-            })
+            // A disabled slider takes no value, from the pointer or from
+            // assistive technology.
             .when(!self.disabled, |this| {
-                this.on_mouse_up(
+                this.on_a11y_action(AccessibleAction::Increment, {
+                    let state = slider_state.clone();
+                    move |_, window, cx| {
+                        state.update(cx, |state, cx| {
+                            let value =
+                                (state.value().end() + state.step_value()).min(state.max_value());
+                            state.set_value(value, window, cx);
+                        });
+                    }
+                })
+                .on_a11y_action(AccessibleAction::Decrement, {
+                    let state = slider_state.clone();
+                    move |_, window, cx| {
+                        state.update(cx, |state, cx| {
+                            let value =
+                                (state.value().end() - state.step_value()).max(state.min_value());
+                            state.set_value(value, window, cx);
+                        });
+                    }
+                })
+                .on_mouse_up(
                     MouseButton::Left,
                     window.listener_for(&self.state, |state, _, _, cx| state.handle_release(cx)),
                 )
@@ -553,6 +555,7 @@ impl RenderOnce for Slider {
                 )
             })
             .children(self.children)
+            .a11y_disabled(self.disabled)
     }
 }
 

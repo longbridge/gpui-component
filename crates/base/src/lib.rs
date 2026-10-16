@@ -9,6 +9,7 @@ extern crate gpui_fast as gpui;
 #[cfg(all(feature = "gpui-fast", test))]
 extern crate gpui_fast_platform as gpui_platform;
 
+mod a11y_disabled;
 mod accordion;
 pub mod actions;
 mod alert_dialog;
@@ -46,6 +47,7 @@ mod nav_stack;
 mod number_input;
 mod observe;
 mod otp_input;
+mod overscroll;
 mod pagination;
 pub mod plot;
 mod popover;

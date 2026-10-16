@@ -33,7 +33,12 @@ decimal = ["component", "gpui-component/decimal"]
 block-editor = ["gpui-base/block-editor", "gpui-component?/block-editor"]
 # Speech input: microphone capture and the system speech recognizer.
 speech = ["component", "gpui-component/speech"]
+# Syntax highlighting from a tree-sitter syntax tree, which also drives folding
+# and syntax-aware editing. Each language is a `tree-sitter-*` grammar feature.
 tree-sitter = ["component", "gpui-component/tree-sitter"]
+# Lighter syntax highlighting: about 200 languages from syntect for a few
+# megabytes, with no syntax tree. With both enabled, tree-sitter is used.
+syntect = ["component", "gpui-component/syntect"]
 tree-sitter-languages = ["component", "gpui-component/tree-sitter-languages"]
 tree-sitter-astro = ["component", "gpui-component/tree-sitter-astro"]
 tree-sitter-bash = ["component", "gpui-component/tree-sitter-bash"]

@@ -386,6 +386,7 @@ impl CommandStory {
                     content.child(with_entries(
                         Command::new(&search)
                             .bordered(false)
+                            .rounded(cx.theme().radius_lg)
                             .placeholder("Search stocks...")
                             .empty(|_, _, cx| {
                                 v_flex()
@@ -629,6 +630,7 @@ impl Render for CommandStory {
                                             content.child(with_entries(
                                                 Command::new(&command)
                                                     .bordered(false)
+                                                    .rounded(cx.theme().radius_lg)
                                                     .placeholder("Type a command or search...")
                                                     .on_confirm(move |index_path, window, cx| {
                                                         _ = confirm_owner.update(cx, |story, cx| {

@@ -12,8 +12,11 @@ redistribute, and no fork for a contributor who only wants to add a panel.
 also how a plugin is developed: get the script running standalone, then mount
 it in a host.
 
-**It is not an Electron or a Tauri.** There is no WebView, no DOM, no HTML or
-CSS, no browser engine, and no Node.js. A script never renders. It describes an
+**It is not an Electron or a Tauri.** The interface is not a web page: there is
+no DOM, no HTML or CSS, and no Node.js. A `WebView` component can show a web
+page as one element of a GPUI layout, the way an image does, but the
+application around it is never drawn by a browser engine. A script never
+renders. It describes an
 interface once, and Rust replays that description into real GPUI elements on
 every frame after it — the same element model a Rust application on `gpui-base`
 builds, through the same GPU renderer. JavaScript is the application layer here,
@@ -309,6 +312,43 @@ state, sampling, interruption, reduced motion, and frame requests stay native.
 Disabled, selected and checked appearance is the caller's to draw; the base
 layer only reports the state.
 
+### WebView
+
+`"gpui-component"` exports `WebViewState` and `WebView` (the default `webview`
+feature). The state owns a native web page — WKWebView, WebView2 or WebKitGTK —
+so the document and its history survive renders; `WebView` places it in the
+layout and takes shell style for its size.
+
+```js
+import { WebView, WebViewState } from "gpui-component";
+
+// In init():
+this.page = WebViewState.new("https://gpui-kit.com");
+
+// In render():
+WebView.new(this.page)
+  .flex_1()
+  .on_load((url, cx) => this.page.evaluate_script("window.ipc.postMessage(document.title)"))
+  .on_message((title, cx) => { this.title = title; cx.notify(); });
+```
+
+| Method | On | Description |
+| --- | --- | --- |
+| `load_url(url)` / `url()` | `WebViewState` | Navigate, and read the current address |
+| `back()` / `forward()` / `reload()` | `WebViewState` | History and reload |
+| `evaluate_script(js)` | `WebViewState` | Run JavaScript in the page; the page answers through a message |
+| `set_zoom(zoom)` / `zoom()` | `WebViewState` | Page zoom, where `1` is the natural size; the engine scales the page and keeps it across navigations |
+| `set_theme(theme)` | `WebViewState` | The scheme the page sees in `prefers-color-scheme`. By default (`"auto"`) it follows the application theme's appearance; `"light"`, `"dark"` or `"system"` override it. On Linux it is GTK's process-wide preference, shared by every page |
+| `.on_load(handler)` | `WebView` | `handler(url, cx)` after each document finishes loading |
+| `.on_message(handler)` | `WebView` | `handler(text, cx)` for each `window.ipc.postMessage(text)` from the page |
+
+Only `http` and `https` documents load, whether the script or the page
+navigates. Loading is not gated by a capability. The feature builds the runtime
+on GPUI Fast; on Linux the page needs an X11 or XWayland window (start with
+`WAYLAND_DISPLAY=` in a Wayland session), and on Windows it draws above GPUI
+content it overlaps. [`examples/js_webview`](../../examples/js_webview/main.js)
+is a small browser built on it.
+
 ### Views
 
 ```js
@@ -501,7 +541,7 @@ Deliberately absent:
   supplies collection, select, table, tree, chart, and editor bindings. Consult
   [the component inventory](component-inventory.json) and
   [the gallery](../../examples/js_story/README.md) for available and deferred
-  surfaces; do not assume every delegate, LSP, or WebView facility is exposed.
+  surfaces; do not assume every delegate or LSP facility is exposed.
 - Packaging tooling: `bundle` makes macOS and Linux packages that download the
   runtime, and portable Windows folders; a standalone macOS or Linux package
   carrying the binary is still assembled by hand.

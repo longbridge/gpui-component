@@ -230,7 +230,9 @@ impl SettingPage {
                     .relative()
                     .flex_1()
                     .w_full()
-                    .child(
+                    .child(gpui_base::ScrollBounce::new(
+                        "bounce",
+                        &list_state,
                         list(list_state.clone(), {
                             let query = query.clone();
                             let options = *options;
@@ -251,7 +253,7 @@ impl SettingPage {
                             }
                         })
                         .size_full(),
-                    )
+                    ))
                     .vertical_scrollbar(&list_state),
             )
     }

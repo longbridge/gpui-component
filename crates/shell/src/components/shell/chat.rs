@@ -10,10 +10,10 @@ use gpui_component::{
     shimmer::ShimmerText,
 };
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
-    ComponentDescriptor, ComponentElementCallback, ComponentMaterializer, ComponentPayload,
-    ComponentRegistry, ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError,
-    StateDescriptor, anyhow,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDataValue, ComponentDescriptor,
+    ComponentElementCallback, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, StateDescriptor,
+    anyhow,
     gpui::{
         self, App, AppContext as _, Axis, Entity, IntoElement as _, ParentElement as _,
         Refineable as _, RenderOnce, Styled as _, Window,
@@ -192,9 +192,12 @@ impl RenderOnce for BoundMessageScroller {
     fn render(self, _: &mut Window, _: &mut App) -> impl gpui::IntoElement {
         let renderer = self.renderer;
         let mut scroller =
+            // Rows are rebuilt during layout on every frame, so they are built
+            // as frame-owned subtrees: a row's own handlers — a link in its
+            // text, a button — retire with the frame instead of piling up.
             MessageScroller::new(self.id, self.state, move |index, window, cx| match renderer
-                .build_with(
-                    &[ComponentCallbackArgument::Number(index as f64)],
+                .build_interactive_data_with(
+                    &[ComponentDataValue::Number(index as f64)],
                     window,
                     cx,
                 ) {

@@ -2697,6 +2697,23 @@
       "name": "title_bar",
       "classification": "component",
       "registration": { "status": "registered", "descriptor": "TitleBar", "exports": ["TitleBar"] }
+    },
+    {
+      "source": "webview",
+      "name": "webview",
+      "classification": "platform",
+      "registration": {
+        "status": "registered",
+        "descriptor": "WebView",
+        "exports": ["WebView"],
+        "states": [
+          {
+            "export": "WebViewState",
+            "kind": "WebViewState",
+            "role": "retained-native-page"
+          }
+        ]
+      }
     }
   ]
 }

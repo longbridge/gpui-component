@@ -1,4 +1,4 @@
-import { div } from 'gpui-kit';
+import { div, Background } from 'gpui-kit';
 import { Spinner, Empty, EmptyHeader, EmptyMedia } from 'gpui-component';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, TextareaState } from 'gpui-component';
 
@@ -62,3 +62,12 @@ new Spinner().p(4).role('status');
 new Spinner().transition('opacity', 120);
 // @ts-expect-error Styling must not restore unsupported transitions.
 new Spinner().p(4).transition('opacity', 120);
+
+// @ts-expect-error A shadow list is an array, even for one shadow.
+div().shadow({ y: 1, color: '#000' });
+// @ts-expect-error Every shadow names its colour.
+div().shadow([{ y: 1 }]);
+// @ts-expect-error Shadow fields are CSS-like names, not GPUI's.
+div().shadow([{ blur_radius: 2, color: '#000' }]);
+// @ts-expect-error Only `bg` takes a Background; a border colour is a colour.
+div().border_color(Background.solid('#000'));

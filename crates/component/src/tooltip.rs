@@ -1,10 +1,10 @@
 use crate::root::WindowState;
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{
-    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, IntoElement,
-    MouseButton, ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
+    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, GlobalElementId,
+    IntoElement, MouseButton, ParentElement, Pixels, Render, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 pub use gpui_base::TooltipDefaults;
 use gpui_base::{
@@ -229,6 +229,12 @@ impl ComponentTooltip {
 
 // ── Internal managed tooltip trait ──────────────────────────────────────────
 
+#[derive(Default)]
+struct TooltipTrigger {
+    id: Option<GlobalElementId>,
+    bounds: Bounds<Pixels>,
+}
+
 pub(crate) trait ManagedTooltipExt:
     StatefulInteractiveElement + crate::ElementExt + Sized
 {
@@ -254,24 +260,34 @@ pub(crate) trait ManagedTooltipExt:
         build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self {
         let build_tooltip = Rc::new(build_tooltip);
-        let trigger_bounds_cell: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
-        let bounds_writer = trigger_bounds_cell.clone();
+        let trigger = Rc::new(RefCell::new(TooltipTrigger::default()));
+        let trigger_writer = trigger.clone();
 
-        self.on_prepaint(move |bounds, _, _| {
-            bounds_writer.set(bounds);
+        self.on_prepaint(move |bounds, window, _| {
+            let id = window.with_global_id("managed-tooltip-trigger".into(), |id, _| id.clone());
+            *trigger_writer.borrow_mut() = TooltipTrigger {
+                id: Some(id),
+                bounds,
+            };
         })
         .on_hover({
-            let trigger_bounds_cell = trigger_bounds_cell.clone();
+            let trigger = trigger.clone();
             let build_tooltip = build_tooltip.clone();
             move |hovered, window, cx| {
-                let bounds = trigger_bounds_cell.get();
+                let trigger = trigger.borrow();
+                let Some(id) = trigger.id.as_ref() else {
+                    return;
+                };
+                let bounds = trigger.bounds;
                 // A press keeps the tooltip dismissed until the pointer leaves
                 // the trigger. This also drops the hover-enter that a click
                 // removing the trigger dispatches to the stale frame.
                 if *hovered && WindowState::is_tooltip_trigger_pressed(bounds, window, cx) {
                     return;
                 }
-                if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
+                if let Some(overlay) =
+                    WindowState::tooltip_overlay_for_trigger(id, *hovered, window, cx)
+                {
                     if *hovered {
                         overlay.update(cx, |o: &mut BaseTooltipOverlay, cx| {
                             let build = build_tooltip.clone();
@@ -297,7 +313,7 @@ pub(crate) trait ManagedTooltipExt:
             }
         })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            WindowState::press_tooltip_trigger(trigger_bounds_cell.get(), window, cx);
+            WindowState::press_tooltip_trigger(trigger.borrow().bounds, window, cx);
             if let Some(overlay) = WindowState::tooltip_overlay(window, cx) {
                 overlay.update(cx, |overlay, cx| {
                     overlay.hide(cx);
@@ -399,6 +415,107 @@ mod tests {
         cx.executor().advance_clock(Duration::from_secs(1));
         cx.run_until_parked();
         draw(cx);
+    }
+
+    struct AdjacentTriggers {
+        builds: [Rc<Cell<usize>>; 2],
+    }
+
+    impl Render for AdjacentTriggers {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().children((0..2).map(|index| {
+                let builds = self.builds[index].clone();
+                div()
+                    .id(("trigger", index))
+                    .absolute()
+                    .left(px(10. + index as f32 * 100.))
+                    .top(px(10.))
+                    .w(px(100.))
+                    .h(px(30.))
+                    .managed_tooltip(move |_, cx| {
+                        builds.set(builds.get() + 1);
+                        cx.new(|_| super::Tooltip::new("tip")).into()
+                    })
+            }))
+        }
+    }
+
+    fn open_adjacent_triggers(
+        cx: &mut TestAppContext,
+    ) -> (VisualTestContext, Entity<AdjacentTriggers>) {
+        cx.update(crate::init);
+        let probe = cx.new(|_| AdjacentTriggers {
+            builds: Default::default(),
+        });
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.new(|cx| Root::new(probe.clone(), window, cx))
+            })
+            .unwrap()
+        });
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        draw(&mut cx);
+        (cx, probe)
+    }
+
+    fn assert_tooltip_shown(
+        cx: &mut VisualTestContext,
+        probe: &Entity<AdjacentTriggers>,
+        index: usize,
+    ) {
+        let builds = cx.update(|_, cx| probe.read(cx).builds.clone());
+        let before = builds.each_ref().map(|builds| builds.get());
+        draw(cx);
+        assert!(
+            builds[index].get() > before[index],
+            "the hovered tooltip stays visible"
+        );
+        assert_eq!(builds[1 - index].get(), before[1 - index]);
+    }
+
+    #[gpui::test]
+    fn tooltips_switch_in_both_directions(cx: &mut TestAppContext) {
+        let (mut cx, probe) = open_adjacent_triggers(cx);
+        for (step, index) in [0, 1, 0].into_iter().enumerate() {
+            let at = point(px(50. + index as f32 * 100.), px(25.));
+            cx.simulate_mouse_move(at, None, Default::default());
+            if step > 0 {
+                draw(&mut cx);
+                assert_tooltip_shown(&mut cx, &probe, index);
+            }
+            wait(&mut cx);
+            assert_tooltip_shown(&mut cx, &probe, index);
+            // Rebuilding the triggers must preserve ownership for hover-leave.
+            cx.update(|_, cx| probe.update(cx, |_, cx| cx.notify()));
+            draw(&mut cx);
+        }
+        cx.simulate_mouse_move(point(px(300.), px(300.)), None, Default::default());
+        wait(&mut cx);
+        let builds = cx.update(|_, cx| probe.read(cx).builds.clone());
+        let before = builds.each_ref().map(|builds| builds.get());
+        draw(&mut cx);
+        assert_eq!(builds.each_ref().map(|builds| builds.get()), before);
+    }
+
+    #[gpui::test]
+    fn leaving_a_trigger_does_not_cancel_the_next_tooltip_delay(cx: &mut TestAppContext) {
+        for (source, destination) in [(0, 1), (1, 0)] {
+            let (mut cx, probe) = open_adjacent_triggers(cx);
+            cx.simulate_mouse_move(
+                point(px(50. + source as f32 * 100.), px(25.)),
+                None,
+                Default::default(),
+            );
+            cx.executor().advance_clock(Duration::from_millis(100));
+            cx.run_until_parked();
+            cx.simulate_mouse_move(
+                point(px(50. + destination as f32 * 100.), px(25.)),
+                None,
+                Default::default(),
+            );
+            wait(&mut cx);
+            assert_tooltip_shown(&mut cx, &probe, destination);
+        }
     }
 
     /// A press dismisses the tooltip, and it stays dismissed while the

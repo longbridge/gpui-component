@@ -704,6 +704,10 @@ enum Argument {
     DefiniteLength,
     AbsoluteLength,
     Color,
+    /// A colour or a `Background` value, which only `bg` accepts.
+    Fill,
+    /// A list of `BoxShadowSpec` records, which only `shadow` accepts.
+    Shadows,
     Number,
     /// Nothing the probe recognizes. Emitted as `never` rather than `any` so a
     /// style method added to the runtime without a matching literal here fails
@@ -719,6 +723,8 @@ impl Argument {
             Argument::DefiniteLength => "DefiniteLength",
             Argument::AbsoluteLength => "AbsoluteLength",
             Argument::Color => "Color",
+            Argument::Fill => "Color | Background",
+            Argument::Shadows => "readonly BoxShadowSpec[]",
             Argument::Number => "number",
             Argument::Unrecognized => "never",
         }
@@ -744,8 +750,23 @@ fn argument_of(name: &str) -> Argument {
     }
     let accepts = |value: Bridged| style::apply_param(name, &[value], StyleRefinement::default());
 
+    let background = || {
+        Bridged::Background(Box::new(crate::spec::BackgroundSpec {
+            kind: crate::spec::BackgroundKind::Solid {
+                color: "#ff0000".into(),
+            },
+            opacity: 1.,
+        }))
+    };
+
     if accepts(Bridged::Str("#ff0000".into())).is_ok() {
-        Argument::Color
+        if accepts(background()).is_ok() {
+            Argument::Fill
+        } else {
+            Argument::Color
+        }
+    } else if accepts(Bridged::Shadows(Vec::new())).is_ok() {
+        Argument::Shadows
     } else if accepts(Bridged::Str("auto".into())).is_ok() {
         Argument::Length
     } else if accepts(Bridged::Str("50%".into())).is_ok() {
@@ -1029,6 +1050,18 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * registered for its scheme.
      */
     open_url(url: string): void;
+    /**
+     * Opens a file or directory with whatever the system opens it with —
+     * the user's default application for its type, or the file manager for
+     * a directory. `App::open_with_system`.
+     *
+     * The path must be inside a directory granted in `capabilities.fs.read`
+     * and must exist; anything else throws. Use this rather than running
+     * `xdg-open` or `open` through `process.run`, which starts commands
+     * without the desktop session's environment, so the opener cannot find
+     * the default application.
+     */
+    open_path(path: string): void;
 
     /** `App::read_from_clipboard`. `undefined` when it holds no text. */
     read_from_clipboard(): string | undefined;
@@ -1524,20 +1557,12 @@ const ELEMENT_METHODS: &str = r#"    /**
      * key names the item that was pressed; the index would name whatever slid
      * into its place.
      *
-     * One handler for the list rather than one per row, and that is a limit
-     * rather than a shorthand: a handler registered inside the item renderer
-     * throws. Handlers belong to the render pass that registered them and are
-     * released with it; a row is rebuilt on every frame the list is scrolled,
-     * so a per-row handler would accumulate for as long as the view stood —
-     * twenty visible rows over a thousand frames is twenty thousand functions
-     * nothing can reach and nothing releases.
-     *
-     * The key is normally enough: the script already holds the data the row was
-     * built from. A row with several independently clickable parts needs a
-     * handler lifetime scoped to one batch of items, which this runtime does
-     * not have yet; when it does, this restriction lifts and `on_click` inside
-     * an item renderer starts working, with no change to anything written
-     * against `on_item_click`.
+     * A row may also register handlers of its own — `row.on_click(...)` inside
+     * the item renderer works, and a row with several clickable parts needs it.
+     * Those handlers belong to the batch of rows that registered them and are
+     * released when the next frame replaces it. `on_item_click` remains the
+     * cheaper choice for a whole-row click: one handler for the list, and the
+     * key it reports names the item even after a filter or a sort.
      */
     on_item_click<Self extends Element>(this: Self, handler: (key: string, cx: Context) => void): Self;
     /**
@@ -1549,8 +1574,7 @@ const ELEMENT_METHODS: &str = r#"    /**
      *
      * A press rather than a click, because that is when a context menu opens:
      * the row is still under the pointer, so the menu can name what it is for
-     * before it is drawn over it. And one handler for the list rather than one
-     * per row, for the reason `on_item_click` gives.
+     * before it is drawn over it.
      *
      * It is delivered on the row, so a handler for the same button on an
      * element around the list still fires after it, in the ordinary bubble
@@ -2181,13 +2205,48 @@ const ELEMENTS: &str = r#"
     fill(): PathBuilder;
     stroke(width: number): PathBuilder;
   };
+  /**
+   * One box shadow for `.shadow([...])`, written like a CSS `box-shadow`
+   * layer. Every length is in pixels and defaults to 0. As in CSS, the first
+   * shadow in the list paints on top of the ones after it.
+   *
+   * `blur` has CSS semantics — the blur radius, twice the gaussian's standard
+   * deviation — and is halved for GPUI, so a value copied from a stylesheet
+   * looks the same here. `spread` may be negative.
+   *
+   * An `inset` shadow is painted inside the element: above its fill, but
+   * beneath its children and its border. Outer shadows paint beneath the fill.
+   */
+  export interface BoxShadowSpec {
+    /** Horizontal offset in pixels. */
+    x?: number;
+    /** Vertical offset in pixels. */
+    y?: number;
+    /** CSS blur radius in pixels; non-negative. */
+    blur?: number;
+    /** Spread in pixels; negative shrinks the shadow. */
+    spread?: number;
+    /** The shadow colour, usually with alpha (`#00000066`). */
+    color: Color;
+    /** Paint inside the element instead of around it. */
+    inset?: boolean;
+  }
   export interface BackgroundStop {}
+  /**
+   * A native GPUI background: what `window.paint_path` fills with, and what
+   * `.bg(...)` accepts besides a colour. A gradient set with `.bg` is drawn
+   * inside the element's rounded corners.
+   */
   export interface Background {
     opacity(factor: number): Background;
     color_space(space: "srgb" | "oklab"): Background;
   }
   export const Background: {
     solid(color: Color): Background;
+    /**
+     * A gradient stop. `percentage` is a fraction of the gradient line, from
+     * 0 (start) to 1 (end) — not 0 to 100.
+     */
     stop(color: Color, percentage: number): BackgroundStop;
     linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
     pattern_slash(color: Color, width: number, interval: number): Background;
@@ -2959,8 +3018,9 @@ const BASE: &str = r#"  /** A row. */
    * Two consequences follow from that, and both are enforced rather than
    * documented away:
    *
-   * * **No handlers inside the renderer.** `on_click` and the rest throw if
-   *   called there. Use `on_item_click` on the list — see its note for why.
+   * * **Handlers inside the renderer last one frame.** `on_click` and the rest
+   *   work on a row, and are released when the next frame redraws it. For a
+   *   whole-row click, `on_item_click` on the list is cheaper — see its note.
    * * **No state inside the renderer.** `InputState.new()`, `cx.focus_handle()`
    *   and the rest throw there as they do in `render()`, and `cx.notify()` is
    *   refused: asking for a re-render from inside layout is a loop.
@@ -3769,13 +3829,71 @@ declare module "console" {
 }
 declare module "process" {
   export interface CommandOutput { code: number; stdout: string; stderr: string; }
-  export function run(command: string, args?: string[]): Promise<CommandOutput>;
+  export interface RunOptions {
+    /** Must be inside a directory granted in `capabilities.fs.read`. */
+    cwd?: string;
+    /** Defaults to 30 seconds. */
+    timeoutMs?: number;
+  }
+  /**
+   * Runs a command to completion and resolves with what it did. Bounded: 30
+   * seconds unless `timeoutMs` says otherwise, 8 MiB of each stream. For a
+   * command that runs longer, talks over stdin, or should be read as it
+   * works, use `spawn`.
+   */
+  export function run(command: string, args?: string[], options?: RunOptions): Promise<CommandOutput>;
+  export interface SpawnOptions {
+    /** Must be inside a directory granted in `capabilities.fs.read`, or this throws. */
+    cwd?: string;
+    /** `"pipe"` to `write()` to the child; defaults to `"null"`. */
+    stdin?: "pipe" | "null";
+    /** No limit by default. When given, the whole process group is killed at the deadline. */
+    timeoutMs?: number;
+    /**
+     * Deliver stdout and stderr a line at a time, without the line ending —
+     * joined across reads, with a last unterminated line delivered at the end.
+     * A single line over 8 MiB kills the process and is reported on `exit`.
+     */
+    lines?: boolean;
+  }
+  export interface ExitResult {
+    code: number | null;
+    signal: string | null;
+    /** Set when the runtime stopped the process: a timeout, or a line too long. */
+    error?: string;
+  }
+  /**
+   * A running child. Handlers run on the UI thread with an async `cx`, like a
+   * `cx.spawn` task's. `exit` fires once, after the last `stdout`/`stderr`.
+   * Releasing the view that spawned it, reloading the application or closing
+   * the window kills it and everything it started.
+   */
+  export interface ChildProcess {
+    readonly pid: number;
+    on(event: "stdout" | "stderr", handler: (text: string, cx: import("gpui-kit").AsyncContext) => void): ChildProcess;
+    on(event: "exit", handler: (result: ExitResult, cx: import("gpui-kit").AsyncContext) => void): ChildProcess;
+    /** Needs `stdin: "pipe"`; throws otherwise, or after `end()`. */
+    write(text: string): void;
+    /** Closes stdin. */
+    end(): void;
+    /** Kills the whole process group (a Job Object on Windows). `exit` still fires once. */
+    kill(): void;
+  }
+  /**
+   * Starts a command and streams what it does: output as it arrives, no
+   * deadline unless asked for, stdin on request. The same grant as `run`
+   * (`capabilities.fs.execute`), the same host-PATH resolution and the same
+   * empty environment. UTF-8 output is decoded whole even when a character
+   * spans two reads; there is no limit on total output.
+   */
+  export function spawn(command: string, args?: string[], options?: SpawnOptions): ChildProcess;
   export function exit(code?: number): void;
   export function nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void;
   export const platform: string;
   export const arch: string;
   const process: {
     run: typeof run;
+    spawn: typeof spawn;
     exit: typeof exit;
     nextTick: typeof nextTick;
     platform: string;
@@ -4213,7 +4331,8 @@ mod tests {
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
         let declarations = base_declarations();
         for expected in [
-            "    bg<Self extends Element>(this: Self, value: Color): Self;",
+            "    bg<Self extends Element>(this: Self, value: Color | Background): Self;",
+            "    shadow<Self extends Element>(this: Self, value: readonly BoxShadowSpec[]): Self;",
             "    border_color<Self extends Element>(this: Self, value: Color): Self;",
             "    w<Self extends Element>(this: Self, value: Length): Self;",
             "    p<Self extends Element>(this: Self, value: DefiniteLength): Self;",
@@ -4240,6 +4359,15 @@ mod tests {
                  literal in `argument_of` before the declarations claim it accepts nothing"
             );
         }
+    }
+
+    #[test]
+    fn surface_paint_styles_take_their_structured_values() {
+        assert_eq!(argument_of("bg"), Argument::Fill);
+        assert_eq!(argument_of("border_color"), Argument::Color);
+        assert_eq!(argument_of("shadow"), Argument::Shadows);
+
+        assert!(base_declarations().contains("  export interface BoxShadowSpec {"));
     }
 
     #[test]
