@@ -1601,6 +1601,26 @@ const ELEMENT_METHODS: &str = r#"    /**
       handler: (key: string, event: MouseButtonEvent, cx: Context) => void,
     ): Self;
     /**
+     * `handler(range, count, cx)` after a frame in which the items a `list`
+     * shows, or how many it has, changed. `range` is the visible items as a
+     * half-open `[start, end)`, and `count` is the list's `item_count`.
+     *
+     * It is called once the frame is done, as an event handler is, so it may
+     * change state and call `cx.notify()`: load the page above when
+     * `range.start` reaches 0, or the next one when `range.end` reaches
+     * `count`. The item renderer cannot do this, because it runs inside
+     * layout.
+     *
+     * What calls it is the range itself, not what moved it: the first frame,
+     * a wheel or trackpad scroll, a `Scrollbar` drag, a change of
+     * `item_count`, a change of the list's height. A frame that leaves both
+     * the same calls nothing. Only `list` reports it; on `uniform_list` and
+     * the virtual lists it is ignored.
+     */
+    on_visible_range_change<Self extends Element>(this: Self,
+      handler: (range: ItemRange, count: number, cx: Context) => void,
+    ): Self;
+    /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
      * A `Radio` only ever reports `true`. It cannot deselect itself, so an
@@ -2179,6 +2199,11 @@ const ELEMENTS: &str = r#"
    * stays at the same index. A list scrolled past its last item stays at the
    * end. To find the key, `get_key` is called near the item's old index from
    * inside layout, so it must stay a plain lookup.
+   *
+   * To load more items as the reader nears either end, use
+   * `on_visible_range_change`: it reports which items are shown once the
+   * frame is done, where state may change. The item renderer cannot be used
+   * for that, because it runs inside layout.
    *
    * @param id      Identity, and the name a `Scrollbar` pairs with.
    * @param item_count How many items the collection has, visible or not.
@@ -4278,6 +4303,7 @@ mod tests {
         "keep_mounted",
         "on_item_click",
         "on_item_secondary_click",
+        "on_visible_range_change",
         "on_change",
         "on_step",
         "on_open_change",
