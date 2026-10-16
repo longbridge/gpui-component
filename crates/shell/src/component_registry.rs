@@ -170,6 +170,21 @@ impl RetainedStateStore {
         Ok(body(value))
     }
 
+    /// Drops one state of `kind` ahead of its application, with its
+    /// subscriptions. Returns whether it was still live.
+    pub fn remove(&mut self, handle: u64, kind: &'static str) -> bool {
+        if self
+            .values
+            .get(&handle)
+            .is_none_or(|entry| entry.kind != kind)
+        {
+            return false;
+        }
+        self.values
+            .remove(&handle)
+            .is_some_and(|entry| entry.owner.as_ref().is_none_or(|owner| owner.is_active()))
+    }
+
     pub fn release_application(&mut self, application: &Rc<crate::runtime::ApplicationGeneration>) {
         self.values.retain(|_, entry| {
             !entry
@@ -2221,7 +2236,11 @@ impl ComponentRegistry {
         }
         let mut method_names = HashSet::new();
         for method in &descriptor.methods {
-            if !is_javascript_identifier(method.name) || !method_names.insert(method.name) {
+            // Every state object already answers `release()`.
+            if !is_javascript_identifier(method.name)
+                || method.name == "release"
+                || !method_names.insert(method.name)
+            {
                 return Err(RegistryError::InvalidMethod {
                     component: descriptor.kind,
                     method: method.name,
@@ -2483,6 +2502,10 @@ impl FrozenComponentRegistry {
             if state.has_input_events() {
                 source.push_str(&format!("on: (event, handler) => globalThis.__gpui_components[{:?}](__stateProof, handle, event, handler),", format!("{}.on", state.export())));
             }
+            source.push_str(&format!(
+                "release: () => globalThis.__gpui_components[{:?}](__stateProof, handle),",
+                format!("{}.release", state.export())
+            ));
             source.push_str("}); __stateHandles.set(value, handle); return value; }\n");
             push_new_alias(&mut source, state.export);
         }

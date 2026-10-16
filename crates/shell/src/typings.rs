@@ -253,6 +253,8 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
             out.push_str(";\n    /** `change`, `submit` (Enter), `focus` or `blur`, as on `gpui-base`'s `InputState`. */");
             out.push_str("\n    on(event: \"change\" | \"submit\" | \"focus\" | \"blur\", handler: (event: InputEvent, cx: Context) => void): boolean");
         }
+        out.push_str(";\n    /** Releases the state and its subscriptions now rather than with the application. Returns `false` when it was already released; a method called afterwards throws. Not allowed during render. */");
+        out.push_str("\n    release(): boolean");
         out.push_str(" }\n");
         push_jsdoc(&mut out, state.documentation(), None, "  ");
         // `State.new(...)` is the form `gpui-base` uses; the plain call is kept
@@ -4137,6 +4139,7 @@ mod tests {
             "export const InputState: { (text: string): InputState; new: (text: string) => InputState };"
         ));
         assert!(declarations.contains("Retained input state."));
+        assert!(declarations.contains("\n    release(): boolean }"));
     }
 
     /// A catalog that scripts import from `"host-native"`, with one component

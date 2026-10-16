@@ -2220,7 +2220,11 @@ proof the module stamps on it. The proof comes from `RandomState`'s OS-seeded
 keys: anything a script can observe — a process id, a clock, a counter — would
 be reconstructible, and a forged handle would reach another application's state.
 Retained values are owned by the application generation that created them and
-are released with it.
+are released with it, or earlier when the script calls `release()` on the state
+object. `release()` drops the value and its event subscriptions, returns whether
+the state was still live, and is refused during render and layout like any other
+change to retained state. A method called on it afterwards throws.
+A registered state method may not be named `release`.
 
 A retained state built on the text engine — an `Entity<InputBaseState<M>>`,
 which is what both `gpui-component`'s `InputState` and `TextareaState` are —
