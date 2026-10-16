@@ -676,6 +676,9 @@ impl Element for EditorRoot {
             && let Some(pos) = caret
             && let Some(b) = frame.caret_bounds(pos, style.caret_width())
         {
+            // Whole device pixels, like the input caret: a 1px line at a
+            // fractional x would blur over two pixels.
+            let b = crate::input::snap_caret_to_device_pixels(b, window.scale_factor());
             window.paint_quad(fill(b, style.caret()));
         }
         drop(frame);

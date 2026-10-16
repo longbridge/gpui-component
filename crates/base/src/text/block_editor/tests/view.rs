@@ -2892,3 +2892,33 @@ fn d17_host_policy_keeps_the_own_copy_flag_across_apply_paste(cx: &mut TestAppCo
     });
     assert_eq!(source(&editor, cx), "`c` d\n\nT`c`");
 }
+
+/// The caret is the input's one-pixel line (main #3515), snapped to whole
+/// device pixels like the input caret.
+#[gpui::test]
+fn caret_is_the_shared_one_pixel_line(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "hello");
+    caret_at(&editor, cx, 0, 2);
+    let width = editor.read_with(cx, |e, _| e.style.caret_width());
+    assert_eq!(width, px(1.));
+    let b = editor.read_with(cx, |e, _| {
+        let c = e.model().caret().unwrap();
+        e.frame
+            .borrow()
+            .caret_bounds(c, e.style.caret_width())
+            .unwrap()
+    });
+    assert_eq!(b.size.width, px(1.));
+    for scale in [1.0_f32, 1.5, 2.0] {
+        let s = crate::input::snap_caret_to_device_pixels(
+            gpui::Bounds::new(gpui::point(px(10.3), px(4.)), gpui::size(px(1.), px(18.))),
+            scale,
+        );
+        let device = |p: gpui::Pixels| f32::from(p) * scale;
+        assert!(
+            (device(s.origin.x) - device(s.origin.x).round()).abs() < 1e-3,
+            "{scale}"
+        );
+        assert!(device(s.size.width) >= 1.0 - 1e-3, "{scale}");
+    }
+}

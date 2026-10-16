@@ -599,6 +599,8 @@ Block rules fire only at the start of a paragraph. An empty list turns them all 
 - *Host paste policy:* `PasteRequest` records whether the item was tagged, so `apply_paste` behaves the same after the host resolves it.
 - *Tradeoff:* a copy that loses its metadata (for example through a clipboard manager on Linux) pastes with literal markers instead of marks. Other apps see the Markdown source, so escapes such as `snake\_case` appear in plain text consumers. Parsing every external single line as Markdown was rejected because it can mangle ordinary text.
 
+**Caret (after main #3515):** the default `caret_width` is the input's shared `CURSOR_WIDTH` (1px on every platform), and the editor paints its caret snapped to whole device pixels with the input's `snap_caret_to_device_pixels`. Callers can still override it with `with_caret_width`.
+
 **Decisions taken during the UI spike (answered by Richard, 14 Oct 2026):**
 - **Scroll handle:** the owner passes its scroll container's `ScrollHandle` (`set_scroll_handle`); the editor does not own a scroll container.
 - **Culling / Phase 5:** light culling first (top-level units, chunked long top-level lists, overscan, pinned selection/IME units), then Phase 5 taken partway (prefix-sum index, cached units, layout reuse, top-level a11y roles) and stopped; remaining Phase 5 items stay open.
