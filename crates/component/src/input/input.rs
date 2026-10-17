@@ -481,6 +481,11 @@ impl Input {
             } else {
                 IconName::EyeOff
             })
+            .accessibility_label(if masked {
+                t!("Input.Show Password")
+            } else {
+                t!("Input.Hide Password")
+            })
             .xsmall()
             .text()
             .tab_stop(false)
@@ -676,7 +681,15 @@ impl RenderOnce for Input {
         let content_type = self.content_type;
         let disabled = self.disabled;
         let is_multi_line = presentation.is_multi_line();
-        let accessibility_role = accessibility_role(is_multi_line, content_type, self.role);
+        // Without a content type, a masked input is a password field to screen
+        // readers, so they announce it as one.
+        let accessibility_role = accessibility_role(
+            is_multi_line,
+            content_type.or(presentation
+                .is_masked()
+                .then_some(InputContentType::Password)),
+            self.role,
+        );
         let accessibility_state = state.clone();
         // Tests read the same accessibility value as assistive technology.
         // Avoid materializing the rope in normal builds without a client.

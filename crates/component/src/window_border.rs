@@ -191,6 +191,9 @@ impl RenderOnce for WindowBorder {
                 let Decorations::Client { tiling } = window.window_decorations() else {
                     return;
                 };
+                if !window.is_resizable() {
+                    return;
+                }
                 if tiling.top && tiling.bottom && tiling.left && tiling.right {
                     return;
                 }
@@ -264,12 +267,14 @@ impl RenderOnce for WindowBorder {
                     .bg(gpui::transparent_black())
                     .children(children),
             )
-            .child(div().absolute().size_full().children(resize_hit_zones(
-                window_size,
-                platform_inset,
-                resize_hit_size,
-                &tiling,
-            )))
+            .when(window.is_resizable(), |parent| {
+                parent.child(div().absolute().size_full().children(resize_hit_zones(
+                    window_size,
+                    platform_inset,
+                    resize_hit_size,
+                    &tiling,
+                )))
+            })
             .into_any_element()
     }
 }

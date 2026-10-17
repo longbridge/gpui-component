@@ -48,6 +48,15 @@ pub(crate) fn ensure_gtk(cx: &mut App) -> wry::Result<()> {
     Ok(())
 }
 
+/// WebKitGTK answers `prefers-color-scheme` from GTK's preference, which GTK 3 does not
+/// read from the desktop, so without this every page renders light.
+pub(crate) fn set_theme(theme: wry::Theme) {
+    use gtk::prelude::GtkSettingsExt as _;
+    if let Some(settings) = gtk::Settings::default() {
+        settings.set_gtk_application_prefer_dark_theme(matches!(theme, wry::Theme::Dark));
+    }
+}
+
 /// The GPUI window as the Xlib parent Wry requires; GPUI reports its X11 window through XCB.
 pub(crate) struct X11Parent(XlibWindowHandle);
 
@@ -147,13 +156,14 @@ pub(crate) fn forward_mouse_down(
         });
 }
 
-/// Zoom the page so its CSS pixels match GPUI's scale; GDK only supports integer scales.
-pub(crate) fn match_scale_factor(webview: &wry::WebView, scale_factor: f32) {
+/// Zoom the page so its CSS pixels match GPUI's scale (GDK only supports integer scales),
+/// times the page zoom the application asked for.
+pub(crate) fn match_scale_factor(webview: &wry::WebView, scale_factor: f32, zoom: f64) {
     use gtk::prelude::WidgetExt as _;
     use wry::WebViewExtUnix as _;
 
     let gdk_scale = webview.webview().scale_factor().max(1);
-    let _ = webview.zoom(f64::from(scale_factor) / f64::from(gdk_scale));
+    let _ = webview.zoom(f64::from(scale_factor) / f64::from(gdk_scale) * zoom);
 }
 
 /// A GPUI Fast composition surface hosting the webview: an X11 child window that GPUI cuts

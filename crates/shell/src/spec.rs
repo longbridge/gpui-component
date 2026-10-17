@@ -161,6 +161,22 @@ pub enum BackgroundKind {
     },
 }
 
+/// Retained description of one GPUI `BoxShadow`, as a script wrote it.
+///
+/// The colour stays the literal the script passed, like [`BackgroundSpec`]'s,
+/// so a spec dump reads back what was written; it is parsed when the style is
+/// applied. `blur` keeps CSS semantics (twice the gaussian deviation) and is
+/// halved only when converted, see [`ShadowSpec::resolve`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShadowSpec {
+    pub x: f32,
+    pub y: f32,
+    pub blur: f32,
+    pub spread: f32,
+    pub color: String,
+    pub inset: bool,
+}
+
 #[derive(Clone)]
 pub(crate) struct ModuleComponentSpec {
     pub(crate) module: SharedString,

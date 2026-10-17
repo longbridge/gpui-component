@@ -138,6 +138,12 @@ pub(in crate::materialize) fn virtual_list(
     // role or hit state for any of this to land on.
     warn_unhonoured_a11y(&behavior, name, &[]);
     warn_lazy_list_misuse(name, &children, &states);
+    if behavior.on_visible_range_change.is_some() {
+        tracing::warn!(
+            "on_visible_range_change is ignored on a {name}: it is list that reports its \
+             visible range after the frame"
+        );
+    }
 
     let identity = ElementId::Name(SharedString::from(spec.id().to_owned()));
     let scroll = scroll_position(runtime, &behavior, &identity, window, cx);

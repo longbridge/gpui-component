@@ -76,7 +76,10 @@ fn mount(
 
 fn draw(context: &mut VisualTestContext) {
     context.run_until_parked();
-    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.update(|window, cx| {
+        window.refresh();
+        window.draw(cx).clear(cx)
+    });
 }
 
 #[test]

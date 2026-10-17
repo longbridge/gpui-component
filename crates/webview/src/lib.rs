@@ -43,6 +43,8 @@ pub struct WebView {
     webview: Rc<wry::WebView>,
     visible: Cell<bool>,
     bounds: Bounds<Pixels>,
+    /// The page zoom the script asked for, before any display scale compensation.
+    zoom: Cell<f64>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     composition: Option<NativeWebViewSurface>,
     /// The GPUI scale factor the page zoom was last matched to.
@@ -81,7 +83,7 @@ impl WebView {
         #[cfg(target_os = "linux")]
         linux::forward_mouse_down(&webview, origin.clone(), window, cx);
         #[cfg(target_os = "linux")]
-        linux::match_scale_factor(&webview, window.scale_factor());
+        linux::match_scale_factor(&webview, window.scale_factor(), 1.0);
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = window;
 
@@ -89,6 +91,7 @@ impl WebView {
             focus_handle: cx.focus_handle(),
             visible: Cell::new(true),
             bounds: Bounds::default(),
+            zoom: Cell::new(1.0),
             webview: Rc::new(webview),
             #[cfg(target_os = "macos")]
             composition,
@@ -261,6 +264,42 @@ impl WebView {
         let _ = self.webview.load_url(url);
     }
 
+    /// Set the colour scheme the page sees in `prefers-color-scheme` and draws its
+    /// native controls in. `Theme::Auto` follows the system again.
+    ///
+    /// On Linux this is GTK's process-wide `gtk-application-prefer-dark-theme`, so it
+    /// applies to every webview in the application.
+    pub fn set_theme(&self, theme: wry::Theme) -> wry::Result<()> {
+        #[cfg(target_os = "linux")]
+        linux::set_theme(theme);
+        #[cfg(target_os = "macos")]
+        composition::set_theme(&self.webview, theme);
+        #[cfg(target_os = "windows")]
+        wry::WebViewExtWindows::set_theme(&*self.webview, theme)?;
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        let _ = theme;
+        Ok(())
+    }
+
+    /// Zoom the page, where `1.0` is its natural size. The engine scales the page
+    /// itself, without the relayout and repaint a CSS `zoom` causes, and keeps the
+    /// factor across navigations.
+    pub fn set_zoom(&self, zoom: f64) -> wry::Result<()> {
+        self.zoom.set(zoom);
+        // WebKitGTK's zoom also makes up for the gap between GPUI's scale factor and
+        // GTK's integer one, so the page zoom is applied on top of it.
+        #[cfg(target_os = "linux")]
+        linux::match_scale_factor(&self.webview, self.scale_factor.get(), zoom);
+        #[cfg(not(target_os = "linux"))]
+        self.webview.zoom(zoom)?;
+        Ok(())
+    }
+
+    /// The page zoom last set with [`WebView::set_zoom`].
+    pub fn zoom(&self) -> f64 {
+        self.zoom.get()
+    }
+
     /// Get the raw wry webview.
     pub fn raw(&self) -> &wry::WebView {
         &self.webview
@@ -388,7 +427,7 @@ impl Element for WebViewElement {
         }
         #[cfg(target_os = "linux")]
         if parent.scale_factor.replace(window.scale_factor()) != window.scale_factor() {
-            linux::match_scale_factor(&parent.webview, window.scale_factor());
+            linux::match_scale_factor(&parent.webview, window.scale_factor(), parent.zoom.get());
         }
         #[cfg(target_os = "linux")]
         parent.origin.set(bounds.origin);

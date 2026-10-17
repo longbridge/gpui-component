@@ -4,7 +4,7 @@ use std::rc::Rc;
 use gpui::{
     App, Axis, BorderStyle, Bounds, ContentMask, Edges, Element, ElementId, GlobalElementId,
     Hitbox, Hsla, InteractiveElement as _, IntoElement, IsZero as _, LayoutId, OngoingScroll,
-    PaintQuad, ParentElement as _, Point, Position, ScrollHandle, ScrollWheelEvent,
+    PaintQuad, ParentElement as _, Point, Position, ScrollDelta, ScrollHandle, ScrollWheelEvent,
     StatefulInteractiveElement as _, Style, StyleRefinement, Styled as _, Window, div, px,
     relative,
 };
@@ -297,10 +297,17 @@ fn corner_notch_path(
 /// `overscroll-behavior: auto` chaining), while a horizontal mask keeps
 /// consuming it — a bubbled horizontal delta would get mapped onto a
 /// vertical-only ancestor by gpui's own wheel listener (see #2468).
+///
+/// A mouse wheel has no horizontal axis, so a horizontal mask leaves it to the
+/// parent. Over a native horizontal scroller, [`Self::vertical_wheel`] scrolls
+/// sideways with it instead.
 pub struct ScrollableMask<H: ScrollbarHandle + Clone = ScrollHandle> {
     axis: Axis,
     id: ElementId,
     scroll_handle: H,
+    /// Only turn a plain wheel's vertical lines into horizontal scrolling,
+    /// leaving every other event to the scroller below.
+    vertical_wheel: bool,
     debug: Option<Hsla>,
 }
 
@@ -312,7 +319,25 @@ impl<H: ScrollbarHandle + Clone> ScrollableMask<H> {
             scroll_handle: scroll_handle.clone(),
             axis,
             id: caller_id(),
+            vertical_wheel: false,
             debug: None,
+        }
+    }
+
+    /// Create a mask over a native horizontal scroller — one with
+    /// `overflow_x_scroll` and a locked scroll axis, such as a strip of tabs —
+    /// that scrolls it sideways with a plain mouse wheel's vertical lines, the
+    /// only axis such a wheel has.
+    ///
+    /// Once the scroller cannot move that way, the wheel goes on to the parent,
+    /// so a page still scrolls past the strip. Trackpad gestures and
+    /// horizontal wheels are left to the scroller, with its own axis lock and
+    /// bounce.
+    #[track_caller]
+    pub fn vertical_wheel(scroll_handle: &H) -> Self {
+        Self {
+            vertical_wheel: true,
+            ..Self::new(Axis::Horizontal, scroll_handle)
         }
     }
 
@@ -368,8 +393,12 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
-        // Set the layout style relative to the table view to get same size.
+        // Cover the parent whatever its layout: pinned to its top-left corner
+        // rather than left at a static position that depends on whether the
+        // parent stacks its children in a column or a row.
         style.position = Position::Absolute;
+        style.inset.top = px(0.).into();
+        style.inset.left = px(0.).into();
         style.flex_grow = 1.0;
         style.flex_shrink = 1.0;
         style.size.width = relative(1.).into();
@@ -387,16 +416,7 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
         window: &mut Window,
         _: &mut App,
     ) -> Self::PrepaintState {
-        // Move y to bounds height to cover the parent view.
-        let cover_bounds = Bounds {
-            origin: Point {
-                x: bounds.origin.x,
-                y: bounds.origin.y - bounds.size.height,
-            },
-            size: bounds.size,
-        };
-
-        window.insert_hitbox(cover_bounds, gpui::HitboxBehavior::Normal)
+        window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
     }
 
     fn paint(
@@ -410,6 +430,7 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
         _: &mut App,
     ) {
         let is_horizontal = self.axis.is_horizontal();
+        let vertical_wheel = self.vertical_wheel;
         let line_height = window.line_height();
         let bounds = hitbox.bounds;
         let ongoing_scroll = global_id
@@ -456,6 +477,32 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
 
                     let mut offset = scroll_handle.offset();
                     let mut delta = event.delta.pixel_delta(line_height);
+
+                    // A plain mouse wheel's vertical lines move the scroller
+                    // sideways; once it is at its edge the parent scrolls
+                    // instead, as for a vertical mask.
+                    if vertical_wheel {
+                        let ScrollDelta::Lines(lines) = event.delta else {
+                            return;
+                        };
+                        if lines.x != 0. || lines.y == 0. || !lines.y.is_finite() {
+                            return;
+                        }
+                        let axis_max = (scroll_handle.content_size().width
+                            - scroll_handle.viewport_bounds().size.width)
+                            .max(px(0.));
+                        let current = offset.x.clamp(-axis_max, px(0.));
+                        let new_offset = (current + delta.y).clamp(-axis_max, px(0.));
+                        if new_offset == current {
+                            return;
+                        }
+
+                        offset.x = new_offset;
+                        scroll_handle.set_offset(offset);
+                        cx.notify(view_id);
+                        cx.stop_propagation();
+                        return;
+                    }
 
                     // Lock the gesture to the axis it started on, so a diagonal
                     // trackpad swipe cannot flip which mask consumes it from one
@@ -1174,5 +1221,102 @@ mod tests {
         assert_eq!(scroll_handle.offset().y, px(-40.));
         let scroll_top = list_state.logical_scroll_top();
         assert_eq!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));
+    }
+
+    /// A 100px strip of 300px content, locked to its axis like a tab strip,
+    /// with a vertical-wheel mask, inside a vertical scroller.
+    struct VerticalWheelTest {
+        strip: ScrollHandle,
+        page: ScrollHandle,
+    }
+
+    impl Render for VerticalWheelTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("page")
+                .w(px(100.))
+                .h(px(60.))
+                .overflow_y_scroll()
+                .track_scroll(&self.page)
+                .child(
+                    div()
+                        .relative()
+                        .w(px(100.))
+                        .h(px(40.))
+                        .child(
+                            div()
+                                .id("strip")
+                                .size_full()
+                                .flex()
+                                .overflow_x_scroll()
+                                .restrict_scroll_to_axis()
+                                .track_scroll(&self.strip)
+                                .child(div().flex_none().w(px(300.)).h(px(40.))),
+                        )
+                        .child(ScrollableMask::vertical_wheel(&self.strip)),
+                )
+                .child(div().h(px(200.)))
+        }
+    }
+
+    fn vertical_wheel_test(
+        cx: &mut TestAppContext,
+    ) -> (&mut VisualTestContext, ScrollHandle, ScrollHandle) {
+        let (strip, page) = (ScrollHandle::new(), ScrollHandle::new());
+        let (_, cx) = cx.add_window_view({
+            let (strip, page) = (strip.clone(), page.clone());
+            move |_, _| VerticalWheelTest { strip, page }
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, strip, page)
+    }
+
+    fn wheel(cx: &mut VisualTestContext, delta: ScrollDelta) {
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta,
+            ..Default::default()
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn vertical_wheel_scrolls_the_strip_and_then_the_parent(cx: &mut TestAppContext) {
+        let (cx, strip, page) = vertical_wheel_test(cx);
+        let line_height = cx.update(|window, _| window.line_height());
+
+        wheel(cx, ScrollDelta::Lines(point(0., -1.)));
+        assert_eq!(strip.offset().x, -line_height);
+        assert_eq!(page.offset().y, px(0.));
+
+        // Past the strip's end, the wheel scrolls the page.
+        wheel(cx, ScrollDelta::Lines(point(0., -100.)));
+        assert_eq!(strip.offset().x, px(-200.));
+        assert_eq!(page.offset().y, px(0.));
+        wheel(cx, ScrollDelta::Lines(point(0., -1.)));
+        assert_eq!(strip.offset().x, px(-200.));
+        assert!(page.offset().y < px(0.));
+
+        // A delta that is no number does not move the strip.
+        wheel(cx, ScrollDelta::Lines(point(0., f32::NAN)));
+        assert_eq!(strip.offset().x, px(-200.));
+    }
+
+    #[gpui::test]
+    fn vertical_wheel_leaves_trackpads_and_horizontal_wheels_to_the_scroller(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, strip, page) = vertical_wheel_test(cx);
+        let line_height = cx.update(|window, _| window.line_height());
+
+        // A vertical trackpad swipe keeps the strip's axis lock.
+        wheel(cx, ScrollDelta::Pixels(point(px(0.), px(-20.))));
+        assert_eq!(strip.offset().x, px(0.));
+        assert_eq!(page.offset().y, px(-20.));
+
+        // A horizontal wheel reaches the strip's own listener.
+        wheel(cx, ScrollDelta::Lines(point(-1., 0.)));
+        assert_eq!(strip.offset().x, -line_height);
     }
 }

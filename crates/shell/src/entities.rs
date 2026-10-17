@@ -1057,6 +1057,16 @@ impl EntityStore {
             })
     }
 
+    #[cfg(test)]
+    pub(crate) fn first_textarea(&self) -> Option<Entity<TextareaState>> {
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Textarea { state, .. } => Some(state.clone()),
+                _ => None,
+            })
+    }
+
     /// Splits a handle into its entity id, refusing one that names another store.
     ///
     /// A cross-store handle is a host bug rather than a script mistake — a
