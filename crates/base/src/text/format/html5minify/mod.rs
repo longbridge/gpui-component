@@ -204,7 +204,16 @@ where
                     });
 
                 if skip_collapse_whitespace {
-                    return self.w.write_all(contents.as_bytes());
+                    // The parser drops a line feed right after `<pre>` or
+                    // `<textarea>`, so one that starts the text needs another
+                    // in front of it to survive the next parse.
+                    let first = ctx.as_ref().is_some_and(|ctx| ctx.left.is_none());
+                    if first && contents.starts_with('\n') {
+                        self.w.write_all(b"\n")?;
+                    }
+                    // The text is decoded: `&lt;b&gt;` is `<b>` here, and
+                    // would come back as markup if written as it is.
+                    return self.write(contents.as_bytes(), reserved_entity);
                 }
 
                 if contains_code {
