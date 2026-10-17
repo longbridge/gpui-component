@@ -203,7 +203,9 @@ Seven things are deliberately absent, and will stay absent:
    Standard Runtime deliberately exposes selected bare modules plus a
    WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
    compatibility. The shell's narrow `window` and `process` globals expose only
-   GPUI/host capabilities.
+   GPUI/host capabilities. `WebView` (§14.8) does not change this: it embeds a
+   web page as one element, and the script around it still runs in QuickJS
+   with no DOM.
 
 ---
 
@@ -837,6 +839,14 @@ The event names a script can subscribe to are `change`, `submit`, `focus`, and
 `blur` — named for what they mean rather than for the key that produced them, so
 `submit` covers base's `InputEvent::PressEnter`. An unknown name reports the
 full valid set.
+
+Base emits `PressEnter` for every Enter, including one a textarea has just
+turned into a line break, so a textarea's `submit` arrives after the break is
+in the text. `TextareaState.set_submit_on_enter(true)` passes through to base's
+`set_submit_on_enter`: Enter then inserts nothing and only submits, and
+Shift+Enter still inserts a line break and is still reported, with
+`shift: true`. The shell does not filter that second `submit`, because base
+reports it and a script may want it; the handler checks `event.shift`.
 
 ### 7.4 Cycles across two garbage collectors
 
@@ -1792,7 +1802,7 @@ each.
 
 ### 13.2 Styles that take arguments
 
-Fifty-seven methods are bound by hand in `style.rs`, and they are indistinguishable
+Sixty methods are bound by hand in `style.rs`, and they are indistinguishable
 from the reflected ones at the call site:
 
 ```js
@@ -1807,15 +1817,27 @@ function panel(cx) {
 }
 ```
 
-They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 6 paint, 8
-border, and 9 radius. Five families are deliberately unbound, with the reason
-recorded at the head of the array: `shadow` takes a `Vec<BoxShadow>` and belongs
-with the animation and token work rather than as a positional argument list;
-`cursor`, `text_align`, `text_overflow`, and `font_weight` take GPUI enums and
+They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 9 paint, 8
+border, and 9 radius. Two of the paint methods take a structured value rather
+than a primitive. `bg` accepts a `Background` from the script's `Background`
+builder as well as a colour, so a rounded element can be filled with a linear
+gradient; it reuses the `BackgroundSpec` that `window.paint_path` records, and
+both convert through one function. `shadow` takes an array of CSS-like records,
+`{ x, y, blur, spread, color, inset }`, where `blur` keeps CSS semantics and is
+halved into GPUI's gaussian deviation, and the list is reversed so the first
+shadow paints on top as in CSS; `[]` removes the shadows, and the
+`shadow_*` presets stay nullary and reflected. Both cross the bridge as
+`Bridged::Background` and `Bridged::Shadows`, so they replay through the same
+`SpecOp::ParamStyle` path as every other style, including state styles such as
+`.hover(...)` and template slots.
+
+Three families are deliberately unbound, with the reason recorded at the head
+of the array: `cursor`, `text_align`, and `text_overflow` take GPUI enums and
 would each need a name mapping when every variant already has a nullary form
-(`cursor_pointer`, `text_center`, `font_bold`); and `scrollbar_width` is
-not exposed because the shell owns native overflow behavior but does not yet
-offer configurable scrollbar presentation.
+(`cursor_pointer`, `text_center`); `font_weight` is bound only because GPUI
+represents it as a number; and `scrollbar_width` is not exposed because the
+shell owns native overflow behavior but does not yet offer configurable
+scrollbar presentation.
 
 Overflow itself is an element behavior rather than a `StyleRefinement` entry:
 `.overflow_scroll()`, `.overflow_x_scroll()`, and `.overflow_y_scroll()` wrap a
@@ -2029,7 +2051,10 @@ dependency runs upward only — `"gpui-base"` imports the element and
 component-factory types it is built out of from `"gpui-kit"`, and `"gpui-kit"` refers
 down only where one shared element prototype forces it: `track_scroll`, `mode`,
 `axis` and `cx.theme()` name their argument types with an inline
-`import("gpui-base").X`.
+`import("gpui-base").X`. The component catalog's block is declared under the
+specifier its registry carries (§14.7) — `"gpui-component"` for the shipped
+catalog — and a directory whose scripts import only that specifier gets the
+file too.
 
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
@@ -2120,7 +2145,13 @@ the one command, and Cargo forbids the dependency cycle a feature on a separate
 crate would have needed. `gpui_shell::init` installs the base layer;
 `gpui_shell::components::init` installs the catalog and then the runtime. A
 host that wants the protocol without the catalog builds `gpui-shell` without
-the feature and gets an empty registry, which declares no module at all.
+the feature and gets an empty registry, which declares no module at all. A host
+that wants the catalog and components of its own calls
+`gpui_shell::components::registry()`, which returns the catalog before it is
+frozen, registers into it, and freezes it; `components()` is that call followed
+by `freeze`. The registry already carries the catalog's initializer and window
+opener. A host whose components need startup of their own replaces the
+initializer with a function that calls `gpui_component::init` first.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
@@ -2197,7 +2228,11 @@ proof the module stamps on it. The proof comes from `RandomState`'s OS-seeded
 keys: anything a script can observe — a process id, a clock, a counter — would
 be reconstructible, and a forged handle would reach another application's state.
 Retained values are owned by the application generation that created them and
-are released with it.
+are released with it, or earlier when the script calls `release()` on the state
+object. `release()` drops the value and its event subscriptions, returns whether
+the state was still live, and is refused during render and layout like any other
+change to retained state. A method called on it afterwards throws.
+A registered state method may not be named `release`.
 
 A retained state built on the text engine — an `Entity<InputBaseState<M>>`,
 which is what both `gpui-component`'s `InputState` and `TextareaState` are —
@@ -2236,6 +2271,41 @@ from the public exports. Each entry is either registered — naming its
 descriptor, its exports, and any companion parts — or explicitly deferred with a
 reason. That file is the single answer to "why is X not bound"; a prose list
 beside the source would be a second answer, and the one nothing checks.
+
+### 14.8 WebView
+
+`WebViewState` and `WebView` are registered in the catalog by the default
+`webview` feature, over `gpui-webview`. They follow the retained-state shape
+of `EditorState` and `Editor`: the state owns the native webview, so the
+document, its history and its scroll position survive renders, and the element
+places it in the layout.
+
+**Traffic in both directions is text.** The script reaches the page with
+`evaluate_script(js)`, which returns nothing; the page answers with
+`window.ipc.postMessage(text)`, delivered to `WebView.on_message`.
+`WebView.on_load(url)` reports each document that finishes loading, whoever
+navigated, because that is the first moment a page can be spoken to. A JSON
+protocol between the two is the application's to define.
+
+The native handlers have no `App`, so they push into a bounded channel
+(1,024 events; a message over 1 MiB is dropped) that a window task drains,
+invoking the listeners of the most recent render. The listeners live in the
+state rather than on the element, the way an input's `on_change` does, and a
+render that drops one stops its delivery. The channel's senders live in the
+native webview, so the task ends when the state is released.
+
+**Only `http` and `https` load.** The rule applies to `load_url`, the initial
+URL, and the page's own navigation, through wry's navigation handler; `about:`
+is let through because the engines use `about:blank` while setting up. Without
+it a page or a script could open `file:` URLs and read the disk past every
+`fs` grant. Beyond the scheme, loading is not a capability: browsing a page is
+not treated as network access by the script, which never sees the bytes.
+
+**Platform limits come from `gpui-webview`.** It is built on GPUI Fast, so the
+feature selects GPUI Fast for the whole runtime. On Linux the page needs an X11
+window; on a Wayland window `WebViewState` throws with that reason, and the
+host does not force X11 on applications that never create a page. On Windows
+the native page draws above GPUI content it overlaps.
 
 ---
 
@@ -4409,7 +4479,7 @@ Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
 `ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
-host. `ShellRoot` with the dialog stack, one sheet, the
+host. `WebView` with page messages and load events (§14.8). `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
 capabilities for asynchronous `fs`, storage, clipboard, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect

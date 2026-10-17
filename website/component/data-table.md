@@ -325,6 +325,20 @@ let state = cx.new(|cx| {
 });
 ```
 
+### Modified Clicks
+
+A row click with ⌘ (Ctrl on Windows and Linux) or Shift held selects the row,
+as a plain click does. A delegate that keeps its own multi-row selection
+handles those clicks itself, usually on mouse down. Turn the table's selection
+off for them, so it does not undo the delegate's:
+
+```rust
+let state = cx.new(|cx| {
+    TableState::new(delegate, window, cx)
+        .select_on_modifier_click(false)
+});
+```
+
 ### Reading and Writing the Selection
 
 A table holds one selection at a time: nothing, a row, a column, or a cell.

@@ -82,6 +82,8 @@ function swapLocale(path: string) {
 const langSwitchHref = langSwitchOverride ?? swapLocale(currentPath);
 const langLabel = isZh ? 'EN' : '中';
 const resourcesLabel = isZh ? '资源' : 'Resources';
+const projectsLabel = isZh ? '切换项目' : 'Switch project';
+const nativeShellUrl = isZh ? 'https://native-shell.com/zh-CN' : 'https://native-shell.com';
 const versionsLabel = isZh ? '版本' : 'Versions';
 const currentVersionLabel = siteVersions.find((version) => version.id === currentVersion)?.label ?? currentVersion;
 ---
@@ -95,6 +97,22 @@ const currentVersionLabel = siteVersions.find((version) => version.id === curren
       </svg>
       <span>GPUI Kit</span>
     </a>
+
+    <details class="site-nav__projects">
+      <summary aria-label={projectsLabel} title={projectsLabel}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <div class="site-nav__projects-menu">
+        <a href={base} class="is-current" aria-current="true">
+          <strong>GPUI Kit</strong>
+          <span>{isZh ? 'GPUI 桌面应用的组件与工具集' : 'Components and tools for GPUI desktop apps'}</span>
+        </a>
+        <a href={nativeShellUrl} target="_blank" rel="noopener noreferrer">
+          <strong>Native Shell</strong>
+          <span>{isZh ? '由 AI 生成、原生渲染的 UI' : 'AI-generated UI, rendered natively'}</span>
+        </a>
+      </div>
+    </details>
 
     <div class="site-nav__links" id="site-nav-links">
       {navLinks.map(link => (
@@ -197,6 +215,16 @@ const currentVersionLabel = siteVersions.find((version) => version.id === curren
 </nav>
 
 <script>
+  const projects = document.querySelector<HTMLDetailsElement>('.site-nav__projects');
+  document.addEventListener('click', (event) => {
+    if (projects?.open && !projects.contains(event.target as Node)) projects.open = false;
+  });
+  projects?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    projects.open = false;
+    projects.querySelector('summary')?.focus();
+  });
+
   // Visibility is owned by CSS (`:hover`, `:focus-within`), so `aria-expanded`
   // is derived from the element rather than tracked separately — two sources of
   // truth drift apart. Escape adds the one state CSS cannot express: dismissed
