@@ -206,8 +206,16 @@ where
                 if skip_collapse_whitespace {
                     // The parser drops a line feed right after `<pre>` or
                     // `<textarea>`, so one that starts the text needs another
-                    // in front of it to survive the next parse.
-                    let first = ctx.as_ref().is_some_and(|ctx| ctx.left.is_none());
+                    // in front of it to survive the next parse. Comments
+                    // before it are left out, so they do not count.
+                    let first = ctx.as_ref().is_some_and(|ctx| {
+                        ctx.left.is_none_or(|left| {
+                            !self.preserve_comments
+                                && left
+                                    .iter()
+                                    .all(|node| matches!(node.data, NodeData::Comment { .. }))
+                        })
+                    });
                     if first && contents.starts_with('\n') {
                         self.w.write_all(b"\n")?;
                     }
