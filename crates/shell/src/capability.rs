@@ -1042,6 +1042,35 @@ mod symlink_tests {
     }
 
     #[test]
+    fn open_link_names_a_link_out_of_the_root_that_open_refuses_to_follow() {
+        let sandbox = Sandbox::new("link-outside");
+        let outside = sandbox.outside();
+        sandbox.link("secret", &outside.join("secret.txt"));
+        let capabilities = sandbox.granted();
+        let secret = sandbox.root.join("inside/secret");
+
+        let link = capabilities
+            .open_link(&secret, Access::Write)
+            .expect("the link is inside the root");
+        assert_eq!(link.path(), Path::new("secret"));
+        assert!(
+            link.dir()
+                .symlink_metadata(link.path())
+                .expect("the link")
+                .is_symlink()
+        );
+
+        assert!(
+            capabilities.open(&secret, Access::Read).is_err(),
+            "following a link out of the root was accepted"
+        );
+        assert_eq!(
+            std::fs::read_to_string(outside.join("secret.txt")).expect("the target"),
+            "secret"
+        );
+    }
+
+    #[test]
     fn open_link_refuses_a_parent_that_leads_out_of_the_root() {
         let sandbox = Sandbox::new("link-parent");
         let outside = sandbox.outside();
