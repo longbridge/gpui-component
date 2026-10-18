@@ -4,6 +4,15 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: Copy uses the current TextView gesture before paint
+
+TextView Copy now projects the current selection onto immutable native geometry
+from its completed paint. Starting, extending or retracting a drag and immediately
+copying no longer returns the previous frame's range. Rendered Unicode,
+inline-code spacing, Markdown source, custom inline/block nodes, and virtualized
+partial endpoints keep their existing semantics. Copy does not force a render,
+change focus, or discard offscreen logical selections.
+
 #### Root owns window overlays
 
 `gpui_component::Root` now always mounts the dialog, sheet and notification

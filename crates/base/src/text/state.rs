@@ -431,6 +431,12 @@ impl TextViewState {
         }
     }
 
+    /// A pending full replacement leaves the previous document on screen, but
+    /// that document must no longer supply clipboard content.
+    pub(super) fn has_current_copy_document(&self) -> bool {
+        self.committed_revision >= self.full_update_revision
+    }
+
     /// Return the selected text, with `blocks` bounding which top-level blocks
     /// the selection covers.
     ///
@@ -504,6 +510,10 @@ impl TextViewState {
         if !append {
             self.full_update_revision = self.revision;
             self.selection_revision = self.selection_revision.wrapping_add(1);
+            // Old native layouts must not project a still-active gesture back
+            // into replaced content, including while a large parse is pending.
+            self.selection_adapter.clear_copy_projections();
+            self.parsed_content.document.clear_selection();
         }
         let parse_synchronously = !append && text.len() <= MAX_SYNC_FULL_REPLACE_BYTES;
         let update_options = UpdateOptions {
