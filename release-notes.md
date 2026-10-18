@@ -4,6 +4,14 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: custom Find starts near the visible text
+
+`InputBaseState::set_search_query` now anchors a changed query or case mode to
+the current viewport, so an immediate Replace targets the nearby occurrence
+instead of the first match elsewhere in the document. Reusing the same query
+and case mode retains the navigated occurrence, including after closing and
+resuming search. This does not open the built-in search panel.
+
 #### Root owns window overlays
 
 `gpui_component::Root` now always mounts the dialog, sheet and notification
