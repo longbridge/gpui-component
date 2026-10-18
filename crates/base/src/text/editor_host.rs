@@ -26,6 +26,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, App, Bounds, Hsla, Pixels, Point, SharedString, TextLayout, Window, point, px,
 };
+use unicode_segmentation::UnicodeSegmentation as _;
 
 use super::{
     TextViewDefaults, TextViewStyle,
@@ -416,8 +417,15 @@ impl LeafGeometry {
             // Fragments are one line: take the caret position nearest to the
             // point (`closest_index_for_position` rounds up at an exact
             // boundary inside scaled code text).
+            // Only grapheme boundaries are candidates: an interior byte of a
+            // multi-byte character maps to the next glyph's x, so it could
+            // tie with (and beat) the real boundary and split the character.
             Piece::Text { start, layout } => {
-                let nearest = (0..=layout.len())
+                let text = layout.text();
+                let nearest = text
+                    .grapheme_indices(true)
+                    .map(|(i, _)| i)
+                    .chain(std::iter::once(text.len()))
                     .filter_map(|i| {
                         layout
                             .position_for_index(i)
@@ -759,6 +767,58 @@ mod tests {
             leaf.len()
         );
         assert_eq!(leaf.index_for_position(point(px(-40.), inside.y)), 0);
+    }
+
+    #[gpui::test]
+    fn mixed_flow_hits_land_on_grapheme_boundaries(cx: &mut TestAppContext) {
+        // Accented, CJK and emoji text (a skin-tone sequence is one grapheme
+        // of two chars) on both sides of atoms, so the leaf is a mixed flow.
+        let parts = ["éa", "\u{FFFC}", "中文", "\u{FFFC}", "👍🏽x"];
+        let mut paragraph = Paragraph::default();
+        for part in parts {
+            if part == "\u{FFFC}" {
+                paragraph.push(atom());
+            } else {
+                paragraph.push(InlineNode::new(part));
+            }
+        }
+        let text = parts.concat();
+        let blocks = vec![BlockNode::Paragraph(paragraph.with_leaf_key(1))];
+        let geometries = draw(cx, blocks, HashMap::new(), atom_plugin(), px(400.));
+        let leaf = &geometries[&1];
+        assert_eq!(leaf.len(), text.len());
+        let boundaries: Vec<usize> = text
+            .grapheme_indices(true)
+            .map(|(i, _)| i)
+            .chain(std::iter::once(text.len()))
+            .collect();
+
+        // Sweep the whole line: every hit is a grapheme boundary that an
+        // edit can use.
+        let bounds = leaf.bounds();
+        let y = bounds.top() + leaf.line_height() / 2.;
+        let mut x = bounds.left() - px(4.);
+        while x <= bounds.right() + px(4.) {
+            let index = leaf.index_for_position(point(x, y));
+            assert!(
+                boundaries.contains(&index),
+                "hit at {x:?} returned {index}, inside a grapheme of {text:?}"
+            );
+            let mut edited = text.clone();
+            edited.insert(index, '|');
+            x += px(0.5);
+        }
+
+        // The caret x of each boundary hits that boundary, never a byte
+        // inside the character before it (`é`: offsets 1 and 2 share an x).
+        for &index in &boundaries {
+            let at = leaf.position_for_index(index);
+            assert_eq!(
+                leaf.index_for_position(point(at.x, y)),
+                index,
+                "caret position of {index} in {text:?}"
+            );
+        }
     }
 
     #[gpui::test]
