@@ -220,24 +220,26 @@ impl SettingItem {
                 Box::new(BoolField::new(field_type.is_switch(), title))
             }
             t if t == TypeId::of::<f64>() && field_type.is_number_input() => {
-                Box::new(NumberField::new(field_type.number_input_options()))
+                Box::new(NumberField::new(field_type.number_input_options(), title))
             }
             t if t == TypeId::of::<SharedString>() && field_type.is_input() => {
-                Box::new(StringField::<SharedString>::new())
+                Box::new(StringField::<SharedString>::new(title))
             }
             t if t == TypeId::of::<String>() && field_type.is_input() => {
-                Box::new(StringField::<String>::new())
+                Box::new(StringField::<String>::new(title))
             }
             t if t == TypeId::of::<SharedString>() && field_type.is_dropdown() => {
                 Box::new(DropdownField::<SharedString>::new(
                     field_type.dropdown_options(),
                     field_type.dropdown_scrollable(),
+                    title,
                 ))
             }
             t if t == TypeId::of::<String>() && field_type.is_dropdown() => {
                 Box::new(DropdownField::<String>::new(
                     field_type.dropdown_options(),
                     field_type.dropdown_scrollable(),
+                    title,
                 ))
             }
             _ if field_type.is_element() => Box::new(ElementField::new(field_type.element())),
