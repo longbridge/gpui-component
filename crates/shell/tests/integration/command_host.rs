@@ -138,9 +138,11 @@ export default class App extends View {
     };
     let mount_builds = command::command_probe::take();
     assert_builds("mount", &mount_builds, 1, 1, 5);
+    context.update(|window, _| window.refresh());
     draw(&mut context);
     let first_draw_builds = command::command_probe::take();
     assert_builds("first draw", &first_draw_builds, 1, 1, 5);
+    context.update(|window, _| window.refresh());
     draw(&mut context);
     let second_draw_builds = command::command_probe::take();
     assert_builds("second draw", &second_draw_builds, 1, 1, 5);
