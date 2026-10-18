@@ -672,22 +672,43 @@ fn consume_children_nodes(
 }
 
 fn consume_paragraph(children: &mut Vec<BlockNode>, paragraph: &mut Paragraph) {
-    // A `<br>` that ends a block breaks no line, as in a browser. A `<br>`
-    // on its own still stands for the break: markdown parses inline HTML one
-    // tag at a time and takes it from here.
-    if paragraph.children.len() > 1
-        && paragraph
-            .children
-            .last()
-            .is_some_and(|node| node.text == "\n" && node.marks.is_empty())
-    {
-        paragraph.children.pop();
-    }
+    trim_trailing_break(paragraph);
     if paragraph.is_empty() {
         return;
     }
 
     children.push(BlockNode::Paragraph(paragraph.take()));
+}
+
+/// Drops the line feed of a `<br>` that ends `paragraph`: a break that ends a
+/// block breaks no line, as in a browser. The feed is a node of its own, or
+/// the end of a run inside inline markup (`<b>one<br></b>`), which
+/// `merge_children_with_mark` joins into one node with the text before it;
+/// the minifier leaves no other line feed in a paragraph's text. A `<br>` on
+/// its own still stands for the break: markdown parses inline HTML one tag at
+/// a time and takes it from here.
+fn trim_trailing_break(paragraph: &mut Paragraph) {
+    if let [only] = paragraph.children.as_slice()
+        && only.text == "\n"
+    {
+        return;
+    }
+    let Some(last) = paragraph.children.last_mut() else {
+        return;
+    };
+    let Some(text) = last.text.strip_suffix('\n').map(str::to_string) else {
+        return;
+    };
+    if text.is_empty() {
+        paragraph.children.pop();
+        return;
+    }
+    let len = text.len();
+    last.text = text.into();
+    last.marks.retain_mut(|(range, _)| {
+        range.end = range.end.min(len);
+        range.start < range.end
+    });
 }
 
 #[cfg(test)]
@@ -810,6 +831,47 @@ mod tests {
         assert_eq!(paragraph_text("<p>one<br><br></p>"), "one\n");
         // Markdown parses inline HTML one tag at a time and needs the break.
         assert_eq!(paragraph_text("<br>"), "\n");
+    }
+
+    #[test]
+    fn test_br_that_ends_inline_markup() {
+        // Inside inline markup the break joins the text before it in one
+        // run; at the end of the block it still adds no line.
+        for tag in ["b", "span"] {
+            assert_eq!(
+                paragraph_text(&format!("<p><{tag}>one<br></{tag}></p>")),
+                "one",
+                "{tag}"
+            );
+            assert_eq!(
+                paragraph_text(&format!("<p><{tag}>one<br><br></{tag}></p>")),
+                "one\n",
+                "{tag}"
+            );
+            assert_eq!(
+                paragraph_text(&format!("<p><{tag}>one<br>two</{tag}></p>")),
+                "one\ntwo",
+                "{tag}"
+            );
+        }
+        assert_eq!(paragraph_text("<p>one<b><br></b></p>"), "one");
+        assert_eq!(paragraph_text("<p><b>one<br></b><br></p>"), "one\n");
+
+        // The marks end with the text they kept.
+        let mut cx = NodeContext::default();
+        let document = super::parse("<p><b>one<br></b></p>", &mut cx).unwrap();
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected one paragraph, got {:?}", document.blocks);
+        };
+        let [node] = paragraph.children.as_slice() else {
+            panic!("expected one node, got {:?}", paragraph.children);
+        };
+        assert!(
+            node.marks.iter().all(|(range, _)| *range == (0..3)),
+            "{:?}",
+            node.marks
+        );
+        assert!(node.marks.iter().any(|(_, mark)| mark.bold));
     }
 
     #[test]
