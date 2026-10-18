@@ -125,6 +125,11 @@ cargo test -p gpui-kit --features test-support --test ui --locked
 TabBar 内的 Tab 使用下标 ID。Select 已有的 `"input"` 子元素是触发区域：
 `window.within("language").click("input", cx)`。
 
+Input、Textarea 和 Editor 的构造函数 ID 标识外框，包含前后附加控件。
+文本语义和焦点由内部编辑器持有。使用 `find_by_label("Profile name")` 或
+作用域内的角色查询读取编辑器的角色、值和焦点，不要从外框读取这些属性。
+附加按钮获得焦点时，文本语义节点不应报告焦点。
+
 原生 div 只注册观察，不再填写另一份测试状态：
 
 ```rust
@@ -296,7 +301,7 @@ cx.update_window(handle.into(), |_, window, cx| {
     window.click("name", cx);
     window.input("Ada", cx);
     window.press("backspace", cx);
-    assert_eq!(window.find("name").value(), Some("Ad"));
+    assert_eq!(window.find_by_label("Profile name").value(), Some("Ad"));
 }).unwrap();
 ```
 

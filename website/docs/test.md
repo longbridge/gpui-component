@@ -154,6 +154,12 @@ their defaults include the state entity ID. Tabs inside a TabBar use their
 index as ID. Select's existing `"input"` child identifies its trigger:
 `window.within("language").click("input", cx)`.
 
+For Input, Textarea and Editor, the constructor ID identifies the outer frame,
+including its prefix/suffix controls. Text semantics and focus belong to the
+editor inside it. Use `find_by_label("Profile name")` or scoped role queries to
+read that editor's role, value and focus; do not read those properties from the
+frame. Focusing an addon does not focus the semantic text node.
+
 Native divs opt in without supplying a second description of their state:
 
 ```rust
@@ -393,7 +399,7 @@ cx.update_window(handle.into(), |_, window, cx| {
     window.click("name", cx);
     window.input("Ada", cx);
     window.press("backspace", cx);
-    assert_eq!(window.find("name").value(), Some("Ad"));
+    assert_eq!(window.find_by_label("Profile name").value(), Some("Ad"));
 }).unwrap();
 ```
 

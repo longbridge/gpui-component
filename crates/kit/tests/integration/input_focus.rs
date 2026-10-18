@@ -10,7 +10,7 @@ use gpui_kit::{
     div, point,
     prelude::*,
     px, size,
-    test::TestWindowExt,
+    test::{TestQueryExt, TestWindowExt},
 };
 
 const INPUT_IDS: [&str; 3] = ["first", "second", "third"];
@@ -29,6 +29,7 @@ impl Render for InputFocus {
                 Input::new(&self.inputs[ix])
                     .id(id)
                     .w_96()
+                    .aria_label(id)
                     .prefix(div().child("Prefix"))
                     .suffix(div().child("Suffix"))
                     .when(self.buttons && id == "second", |input| {
@@ -105,6 +106,39 @@ fn assert_focus(
 }
 
 #[gpui_kit::test]
+fn semantic_owner_follows_the_keyboard_editor(cx: &mut TestAppContext) {
+    let (handle, view) = open_inputs(cx, true);
+    cx.update_window(handle.into(), |_, window, cx| window.click("third", cx))
+        .unwrap();
+    cx.run_until_parked();
+
+    for (key, expected) in [
+        ("shift-tab", "suffix-button"),
+        ("shift-tab", "second"),
+        ("shift-tab", "prefix-button"),
+        ("shift-tab", "first"),
+        ("tab", "prefix-button"),
+        ("tab", "second"),
+        ("tab", "suffix-button"),
+        ("tab", "third"),
+    ] {
+        press(handle, key, cx);
+        assert_focus(handle, &view, expected, cx);
+        cx.update_window(handle.into(), |_, window, _cx| {
+            for id in INPUT_IDS {
+                // A text node reports editor focus, not focus in an independent
+                // prefix/suffix control inside the enclosing input frame.
+                let named = window.find_by_label(id);
+                assert_eq!(named.role(), Some(gpui_kit::Role::TextInput));
+                assert_eq!(named.focused(), Some(id == expected), "{id}");
+                assert_eq!(window.find_all_by_label(id).len(), 1);
+            }
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
 fn reverse_tab_cycles_three_inputs_with_passive_addons(cx: &mut TestAppContext) {
     let order = INPUT_IDS;
     let (handle, view) = open_inputs(cx, false);
@@ -134,7 +168,7 @@ fn reverse_tab_cycles_three_inputs_with_passive_addons(cx: &mut TestAppContext) 
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         for (ix, id) in INPUT_IDS.into_iter().enumerate() {
-            assert_eq!(window.find(id).value(), Some("xxxx"), "{id}");
+            assert_eq!(common::input(window, id).value(), Some("xxxx"), "{id}");
             assert_eq!(view.read(cx).inputs[ix].read(cx).value(), "xxxx", "{id}");
         }
     })
@@ -178,7 +212,7 @@ fn tab_cycles_keep_prefix_and_suffix_buttons_focused(cx: &mut TestAppContext) {
         assert_eq!(view.prefix_clicks, 2);
         assert_eq!(view.suffix_clicks, 2);
         for (ix, id) in INPUT_IDS.into_iter().enumerate() {
-            assert_eq!(window.find(id).value(), Some("xx"), "{id}");
+            assert_eq!(common::input(window, id).value(), Some("xx"), "{id}");
             assert_eq!(view.inputs[ix].read(cx).value(), "xx", "{id}");
         }
     })
@@ -214,12 +248,16 @@ impl Render for MultilineFocus {
             .gap_4()
             .child(Input::new(&self.previous).id("previous").w_96())
             .child(match &self.field {
-                MultilineField::Textarea(state) => {
-                    Textarea::new(state).w_96().h(px(160.)).into_any_element()
-                }
-                MultilineField::Editor(state) => {
-                    Editor::new(state).w_96().h(px(160.)).into_any_element()
-                }
+                MultilineField::Textarea(state) => Textarea::new(state)
+                    .aria_label("Multiline field")
+                    .w_96()
+                    .h(px(160.))
+                    .into_any_element(),
+                MultilineField::Editor(state) => Editor::new(state)
+                    .aria_label("Multiline field")
+                    .w_96()
+                    .h(px(160.))
+                    .into_any_element(),
             })
     }
 }
@@ -271,6 +309,10 @@ fn exercise_multiline_body_focus(cx: &mut TestAppContext, code_editor: bool) {
         assert!(state.focus_handle(cx).is_focused(window));
         assert!(!view.read(cx).previous.focus_handle(cx).is_focused(window));
         assert_eq!(window.find(id.clone()).focused(), Some(true));
+        let editor = window.find_by_label("Multiline field");
+        assert_eq!(editor.role(), Some(gpui_kit::Role::MultilineTextInput));
+        assert_eq!(editor.label(), Some("Multiline field"));
+        assert_eq!(editor.focused(), Some(true));
         window.input("abcd", cx);
         assert_eq!(state.value(cx), "abcd");
     })
@@ -285,7 +327,7 @@ fn exercise_multiline_body_focus(cx: &mut TestAppContext, code_editor: bool) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.input("Z", cx);
         assert_eq!(state.value(cx), "aZc");
-        assert_eq!(window.find(id.clone()).value(), Some("aZc"));
+        assert_eq!(common::input(window, id.clone()).value(), Some("aZc"));
         assert!(state.focus_handle(cx).is_focused(window));
         // Multiline Shift-Tab is OutdentInline. Exercise the same public
         // traversal primitive Root uses without overriding that key binding.

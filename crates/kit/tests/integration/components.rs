@@ -63,7 +63,10 @@ fn kit_controls_use_native_events_and_report_state(cx: &mut TestAppContext) {
         window.click("search", cx);
         assert_eq!(window.find("search").focused(), Some(true));
         window.input("GPUI 中文 🦀", cx);
-        assert_eq!(window.find("search").value(), Some("GPUI 中文 🦀"));
+        assert_eq!(
+            common::input(window, "search").value(),
+            Some("GPUI 中文 🦀")
+        );
         assert!(window.try_find("popover-content").is_none());
         window.click("open", cx);
         let content = window.find("popover-content");

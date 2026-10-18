@@ -115,7 +115,7 @@ fn nested_json_pairs_skip_their_generated_closers(cx: &mut TestAppContext) {
         assert_eq!(state.read(cx).selected_range(), 4..4);
         window.input("!", cx);
         assert_eq!(
-            window.find(("input", state.entity_id())).value(),
+            common::input(window, ("input", state.entity_id())).value(),
             Some("[{}]!")
         );
     })
@@ -262,7 +262,7 @@ fn readonly_editor_rejects_indentation_and_keeps_multiline_text_copyable(cx: &mu
             assert_eq!(state.read(cx).value(), value, "read-only {key}");
             assert_eq!(state.read(cx).selected_range(), 0..value.len());
             assert_eq!(
-                window.find(("input", state.entity_id())).value(),
+                common::input(window, ("input", state.entity_id())).value(),
                 Some(value)
             );
         }
@@ -376,7 +376,7 @@ fn multicursor_vertical_selection_replaces_and_undoes_each_range(cx: &mut TestAp
         assert_eq!(state.read(cx).selected_range(), 1..6);
         assert_eq!(state.read(cx).cursor(), 1);
         assert_eq!(
-            window.find(("input", state.entity_id())).value(),
+            common::input(window, ("input", state.entity_id())).value(),
             Some(value)
         );
         window.input("X", cx);
@@ -390,7 +390,7 @@ fn multicursor_vertical_selection_replaces_and_undoes_each_range(cx: &mut TestAp
         let expected = "aYbcd\nabcd\naYbcd\nabcd";
         assert_eq!(state.read(cx).value(), expected);
         assert_eq!(
-            window.find(("input", state.entity_id())).value(),
+            common::input(window, ("input", state.entity_id())).value(),
             Some(expected)
         );
     })

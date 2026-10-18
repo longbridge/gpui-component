@@ -120,7 +120,7 @@ async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut
         window.within("dialog").click("name", cx);
         window.within("dialog").input("Ada 中文", cx);
         assert_eq!(
-            window.within("dialog").find("name").value(),
+            common::input_in(&window.within("dialog").within("name")).value(),
             Some("Ada 中文")
         );
         window.within("dialog").click("ok", cx);
@@ -133,7 +133,7 @@ async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut
     // Toast entrance also uses GPUI's wall-clock Animation (400 ms).
     std::thread::sleep(Duration::from_millis(410));
     cx.update_window(handle.into(), |_, window, cx| {
-        assert_eq!(window.find("name").value(), Some("Ada 中文"));
+        assert_eq!(common::input(window, "name").value(), Some("Ada 中文"));
         assert!(window.find("notification").visible());
         window.hover("notification", cx);
         window.within("notification").click("close", cx);

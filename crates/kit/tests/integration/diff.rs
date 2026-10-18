@@ -340,7 +340,7 @@ fn annotation_input_retains_focus_and_handles_its_own_text_commands(cx: &mut Tes
         window.within("editable-comment").press("secondary-c", cx);
         assert_clipboard(cx, "review note 🦀");
         assert_eq!(
-            window.find("annotation-input").value(),
+            common::input(window, "annotation-input").value(),
             Some("review note 🦀")
         );
         assert!(view.read(cx).state.read(cx).selected_lines().is_none());

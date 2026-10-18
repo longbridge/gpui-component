@@ -166,7 +166,7 @@ fn enter_and_shift_enter_insert_plain_newlines(cx: &mut TestAppContext) {
             window.press(key, cx);
             assert_eq!(text.read(cx).value(), expected);
             assert_eq!(text.read(cx).cursor(), expected.len());
-            assert_eq!(window.find(target(&text)).value(), Some(expected));
+            assert_eq!(common::input(window, target(&text)).value(), Some(expected));
         })
         .unwrap();
         cx.run_until_parked();
@@ -323,7 +323,10 @@ fn selection_across_soft_wraps_copies_and_replaces_buffer_text(cx: &mut TestAppC
         let expected = format!("X{}", &value[selected.end..]);
         assert_eq!(text.read(cx).value(), expected);
         assert_eq!(text.read(cx).selected_range(), 1..1);
-        assert_eq!(window.find(target(&text)).value(), Some(expected.as_str()));
+        assert_eq!(
+            common::input(window, target(&text)).value(),
+            Some(expected.as_str())
+        );
         window.press("secondary-z", cx);
         assert_eq!(text.read(cx).value(), value);
         assert_eq!(text.read(cx).selected_range(), selected);
@@ -376,7 +379,10 @@ fn wrapped_selection_repeats_and_reverses_across_its_anchor(cx: &mut TestAppCont
             assert_eq!(state.cursor_layout().unwrap().0.top(), rows[row].1.top());
             assert_eq!(state.cursor_position().line, 0);
             assert_caret_visible(state);
-            assert_eq!(window.find(target(&text)).value(), Some(value.as_str()));
+            assert_eq!(
+                common::input(window, target(&text)).value(),
+                Some(value.as_str())
+            );
         }
     })
     .unwrap();
@@ -413,7 +419,7 @@ fn vertical_selection_preserves_column_across_short_and_empty_lines(cx: &mut Tes
                 assert_eq!(state.cursor_layout().unwrap().0.left(), original_x);
             }
             assert_caret_visible(state);
-            assert_eq!(window.find(target(&text)).value(), Some(value));
+            assert_eq!(common::input(window, target(&text)).value(), Some(value));
         }
     })
     .unwrap();

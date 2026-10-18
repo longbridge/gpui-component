@@ -12,6 +12,8 @@ use gpui_kit::{
     test::TestWindowExt,
 };
 
+use crate::common;
+
 pub(super) struct Fields {
     input: Entity<InputState>,
     textarea: Entity<TextareaState>,
@@ -154,7 +156,7 @@ fn switching_between_input_textarea_and_editor_routes_text_to_current_focus(
         }
         assert_eq!(fields.read(cx).values(cx), ["name", "正文", "code"]);
         for (id, expected) in ids.iter().zip(["name", "正文", "code"]) {
-            assert_eq!(window.find(id.clone()).value(), Some(expected));
+            assert_eq!(common::input(window, id.clone()).value(), Some(expected));
         }
     })
     .unwrap();
@@ -175,7 +177,7 @@ fn parent_rerender_preserves_each_controls_focus_and_unicode_selection(cx: &mut 
             window.render_frame(cx);
             assert_eq!(window.find(id.clone()).focused(), Some(true));
             window.input("z", cx);
-            assert_eq!(window.find(id).value(), Some("Az"));
+            assert_eq!(common::input(window, id).value(), Some("Az"));
         })
         .unwrap();
     }
@@ -214,7 +216,7 @@ fn readonly_transition_keeps_selection_copyable_and_reenable_restores_editing(
                 cx.read_from_clipboard().and_then(|item| item.text()),
                 Some("retained".into())
             );
-            assert_eq!(window.find(id.clone()).value(), Some("retained"));
+            assert_eq!(common::input(window, id.clone()).value(), Some("retained"));
             assert_eq!(window.find(id.clone()).focused(), Some(true));
             fields.update(cx, |fields, cx| {
                 fields.readonly = false;
@@ -222,7 +224,7 @@ fn readonly_transition_keeps_selection_copyable_and_reenable_restores_editing(
             });
             window.render_frame(cx);
             window.input("editable", cx);
-            assert_eq!(window.find(id).value(), Some("editable"));
+            assert_eq!(common::input(window, id).value(), Some("editable"));
         })
         .unwrap();
     }
@@ -311,7 +313,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
                 },
                 cx,
             );
-            assert_eq!(window.find(id.clone()).value(), Some("saved🦀"));
+            assert_eq!(common::input(window, id.clone()).value(), Some("saved🦀"));
 
             window.blur(cx);
         })
@@ -321,7 +323,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
             window.click(id.clone(), cx);
             assert_eq!(window.find(id.clone()).focused(), Some(false));
             window.input("still blocked", cx);
-            assert_eq!(window.find(id.clone()).value(), Some("saved🦀"));
+            assert_eq!(common::input(window, id.clone()).value(), Some("saved🦀"));
             fields.update(cx, |fields, cx| {
                 fields.disabled = false;
                 cx.notify();
@@ -331,7 +333,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
             select_all(window, cx);
             window.input("enabled", cx);
             assert_eq!(window.find(id.clone()).focused(), Some(true));
-            assert_eq!(window.find(id).value(), Some("enabled"));
+            assert_eq!(common::input(window, id).value(), Some("enabled"));
         })
         .unwrap();
     }
@@ -367,11 +369,11 @@ fn unmounting_focused_controls_removes_targets_and_remount_keeps_retained_values
                 cx.notify();
             });
             window.render_frame(cx);
-            assert_eq!(window.find(id.clone()).value(), Some("saved"));
+            assert_eq!(common::input(window, id.clone()).value(), Some("saved"));
             window.click(id.clone(), cx);
             select_all(window, cx);
             window.input("restored", cx);
-            assert_eq!(window.find(id.clone()).value(), Some("restored"));
+            assert_eq!(common::input(window, id.clone()).value(), Some("restored"));
         })
         .unwrap();
     }

@@ -276,7 +276,10 @@ fn long_press_in_input_select_all_keeps_the_menu(cx: &mut TestAppContext) {
         let input = window.find("input").bounds();
         long_press(window, cx, point(input.left() + px(24.), input.center().y));
         window.click("Select All", cx);
-        assert_eq!(window.find("input").value(), Some("quick select value"));
+        assert_eq!(
+            common::input(window, "input").value(),
+            Some("quick select value")
+        );
         assert!(
             window.try_find("Select All").is_none(),
             "everything is selected; nothing is left to select"

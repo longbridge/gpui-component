@@ -1,5 +1,6 @@
 //! Fixtures use the production window entry point with deterministic test bounds.
 #![allow(dead_code)]
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Context, Entity, Pixels, Point, Render, Size,
     TestAppContext, Window, WindowBounds, WindowHandle, WindowOptions, base::Root,
@@ -39,4 +40,31 @@ pub fn update_content<V: Render, R>(
     cx.update_window(window.into(), |_, window, cx| {
         content.update(cx, |view, cx| update(view, window, cx))
     })
+}
+
+/// The editable semantic descendant, not the frame that also scopes addons.
+pub fn input(
+    window: &mut Window,
+    frame: impl Into<gpui_kit::ElementId>,
+) -> gpui_kit::test::ElementSnapshot {
+    input_in(&window.within(frame))
+}
+
+pub fn input_in(scope: &gpui_kit::test::ScopedWindow<'_>) -> gpui_kit::test::ElementSnapshot {
+    let mut nodes = scope.elements().into_iter().filter(|node| {
+        matches!(
+            node.role(),
+            Some(
+                gpui_kit::Role::TextInput
+                    | gpui_kit::Role::MultilineTextInput
+                    | gpui_kit::Role::PasswordInput
+            )
+        )
+    });
+    let input = nodes.next().expect("one semantic text input in its frame");
+    assert!(
+        nodes.next().is_none(),
+        "multiple semantic text inputs in one frame"
+    );
+    input
 }

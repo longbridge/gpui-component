@@ -73,13 +73,13 @@ fn text_goes_only_to_the_focused_input(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.click("first", cx);
         window.input("A🦀", cx);
-        let previous = window.find("first");
+        let previous = common::input(window, "first");
         window.click("second", cx);
         window.input("中文", cx);
         assert_eq!(window.find("first").focused(), Some(false));
         assert_eq!(window.find("second").focused(), Some(true));
-        assert_eq!(window.find("first").value(), Some("A🦀"));
-        assert_eq!(window.find("second").value(), Some("中文"));
+        assert_eq!(common::input(window, "first").value(), Some("A🦀"));
+        assert_eq!(common::input(window, "second").value(), Some("中文"));
         assert_eq!(previous.focused(), Some(true));
     })
     .unwrap();
@@ -103,7 +103,7 @@ fn readonly_and_disabled_inputs_reject_native_typing(cx: &mut TestAppContext) {
         cx.update_window(handle.into(), |_, window, cx| {
             window.click("guarded", cx);
             window.input("ignored", cx);
-            let input = window.find("guarded");
+            let input = common::input(window, "guarded");
             assert_eq!(input.disabled(), None);
             assert_eq!(input.value(), Some("fixed"));
         })
@@ -121,7 +121,7 @@ fn masked_input_handles_typing_without_reporting_secret_value(cx: &mut TestAppCo
     cx.update_window(handle.into(), |_, window, cx| {
         window.click("secret", cx);
         window.input("secret", cx);
-        let secret = window.find("secret");
+        let secret = common::input(window, "secret");
         assert_eq!(secret.focused(), Some(true));
         assert_eq!(secret.value(), None);
     })
@@ -167,10 +167,13 @@ fn masked_input_is_a_password_field(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.draw(cx).clear(cx);
         assert_eq!(
-            window.find("secret").role(),
+            common::input(window, "secret").role(),
             Some(gpui_kit::Role::PasswordInput)
         );
-        assert_eq!(window.find("first").role(), Some(gpui_kit::Role::TextInput));
+        assert_eq!(
+            common::input(window, "first").role(),
+            Some(gpui_kit::Role::TextInput)
+        );
     })
     .unwrap();
 }
@@ -205,7 +208,7 @@ fn existing_gpui_keyboard_editing_updates_observed_value(cx: &mut TestAppContext
     cx.update_window(handle.into(), |_, window, cx| {
         window.refresh();
         window.draw(cx).clear(cx);
-        assert_eq!(window.find("first").value(), Some("a"));
+        assert_eq!(common::input(window, "first").value(), Some("a"));
     })
     .unwrap();
     common::update_content(handle, &handle_content, cx, |view, _, cx| {
@@ -258,14 +261,26 @@ fn scoped_keyboard_uses_the_focused_input_in_the_selected_scope(cx: &mut TestApp
         dialog.click("name", cx);
         dialog.input("Ada中", cx);
         dialog.press("backspace", cx);
-        assert_eq!(dialog.find("name").value(), Some("Ada"));
+        assert_eq!(
+            common::input_in(&dialog.within("name")).value(),
+            Some("Ada")
+        );
         // Printable keys retain GPUI's text fallback, while named control
         // keys use the same scoped command routing without synthetic text.
         dialog.press("shift-a", cx);
-        assert_eq!(dialog.find("name").value(), Some("AdaA"));
+        assert_eq!(
+            common::input_in(&dialog.within("name")).value(),
+            Some("AdaA")
+        );
         window.press("space", cx);
-        assert_eq!(window.within("right").find("name").value(), Some("AdaA "));
-        assert_eq!(window.within("left").find("name").value(), Some(""));
+        assert_eq!(
+            common::input_in(&window.within("right").within("name")).value(),
+            Some("AdaA ")
+        );
+        assert_eq!(
+            common::input_in(&window.within("left").within("name")).value(),
+            Some("")
+        );
     })
     .unwrap();
 }
@@ -289,8 +304,14 @@ fn scoped_keyboard_rejects_focus_outside_the_selected_scope(cx: &mut TestAppCont
             let message = error.downcast_ref::<String>().unwrap();
             assert!(message.contains("no observed keyboard focus inside scope"));
         }
-        assert_eq!(window.within("left").find("name").value(), Some(""));
-        assert_eq!(window.within("right").find("name").value(), Some(""));
+        assert_eq!(
+            common::input_in(&window.within("left").within("name")).value(),
+            Some("")
+        );
+        assert_eq!(
+            common::input_in(&window.within("right").within("name")).value(),
+            Some("")
+        );
     })
     .unwrap();
 }

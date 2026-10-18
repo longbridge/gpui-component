@@ -242,3 +242,16 @@ bindings.
 
 The `Root` and `WindowExt` text-selection methods are removed. Use
 `gpui_base::TextSelection::{selected_text, has_selection, clear, end}`.
+
+#### Input accessibility follows the text editor's keyboard focus
+
+`Input`, `Textarea` and `Editor` now expose their role, name, value and
+accessibility actions on the existing editor focus boundary. Assistive
+technology can identify the focused text field without an extra Tab stop;
+prefix and suffix controls retain independent focus and keyboard activation.
+Disabled/read-only action guards and secret-value suppression are unchanged.
+
+Custom element IDs still identify the surrounding input frame. In UI tests,
+query the named text field or its semantic descendant for value and focus;
+the frame no longer duplicates the editor's text semantics. Author-supplied
+accessibility IDs identify the editor.

@@ -64,6 +64,13 @@ remain necessary.
   modal forms, notifications, nested menus and Dock drag/zoom workflows. See the guide's
   per-suite contract matrix; this is not exhaustive option coverage or packaged-app automation.
 
+Input, Textarea and Editor keep their `.id(...)` on the outer frame for hit
+testing, layout and addon scopes. Text role, accessible name, value and actions
+belong to the editor's existing keyboard-focus boundary instead. Query that
+semantic node with `find_by_label`, or `within(frame).find_all_by_role(...)`;
+the frame itself does not duplicate text semantics. An addon may have focus
+inside the frame while the semantic text node correctly reports no focus.
+
 ## Inspect accessibility targets and individual events
 
 Import `gpui_kit::test::{TestQueryExt, TestEventExt}` for additional observation
