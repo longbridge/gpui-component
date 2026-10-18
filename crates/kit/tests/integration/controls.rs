@@ -499,22 +499,23 @@ fn radio_group_keeps_a_disabled_item_disabled(cx: &mut TestAppContext) {
 struct BoolSettings;
 impl Render for BoolSettings {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let items = vec![
+            SettingItem::new(
+                "Autosave",
+                SettingField::checkbox(|_: &App| true, |_: bool, _: &mut App| {}),
+            ),
+            SettingItem::new(
+                "Line numbers",
+                SettingField::switch(|_: &App| false, |_: bool, _: &mut App| {}),
+            ),
+        ];
+        let page = SettingPage::new("General")
+            .default_open(true)
+            .group(SettingGroup::new().items(items));
+
         div()
             .size_full()
-            .child(Settings::new("settings").pages(vec![
-            SettingPage::new("General").default_open(true).group(
-                SettingGroup::new().items(vec![
-                    SettingItem::new(
-                        "Autosave",
-                        SettingField::checkbox(|_: &App| true, |_: bool, _: &mut App| {}),
-                    ),
-                    SettingItem::new(
-                        "Line numbers",
-                        SettingField::switch(|_: &App| false, |_: bool, _: &mut App| {}),
-                    ),
-                ]),
-            ),
-        ]))
+            .child(Settings::new("settings").pages(vec![page]))
     }
 }
 
