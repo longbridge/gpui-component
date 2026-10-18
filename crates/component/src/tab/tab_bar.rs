@@ -924,15 +924,21 @@ mod tests {
     struct MenuHarness {
         group_handler: bool,
         clicks: Rc<RefCell<Vec<String>>>,
+        events: Rc<RefCell<Vec<ClickEvent>>>,
     }
 
     impl Render for MenuHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let events = self.events.clone();
             let tab = |label: &'static str, clicks: Rc<RefCell<Vec<String>>>| {
+                let events = events.clone();
                 Tab::new()
                     .debug_selector(move || format!("{label}-tab"))
                     .label(label)
-                    .on_click(move |_, _, _| clicks.borrow_mut().push(format!("tab {label}")))
+                    .on_click(move |event, _, _| {
+                        clicks.borrow_mut().push(format!("tab {label}"));
+                        events.borrow_mut().push(event.clone());
+                    })
             };
             let clicks = self.clicks.clone();
             div().size_full().child(
@@ -949,14 +955,21 @@ mod tests {
     }
 
     /// Opens the overflow menu and activates its first item.
-    fn choose_first_menu_item(group_handler: bool, cx: &mut TestAppContext) -> Vec<String> {
+    fn choose_first_menu_item(
+        group_handler: bool,
+        activate: impl FnOnce(&mut gpui::VisualTestContext),
+        cx: &mut TestAppContext,
+    ) -> (Vec<String>, Vec<ClickEvent>) {
         cx.update(crate::init);
         let clicks = Rc::new(RefCell::new(Vec::new()));
+        let events = Rc::new(RefCell::new(Vec::new()));
         let (_, cx) = cx.add_window_view({
             let clicks = clicks.clone();
+            let events = events.clone();
             move |_, _| MenuHarness {
                 group_handler,
                 clicks,
+                events,
             }
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -972,22 +985,62 @@ mod tests {
         });
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.simulate_keystrokes("down enter");
+        activate(cx);
         cx.run_until_parked();
-        clicks.borrow().clone()
+        (clicks.borrow().clone(), events.borrow().clone())
     }
 
     #[gpui::test]
     fn overflow_menu_runs_the_tab_callback_without_a_bar_callback(cx: &mut TestAppContext) {
         assert_eq!(
-            choose_first_menu_item(false, cx),
+            choose_first_menu_item(false, |cx| cx.simulate_keystrokes("down enter"), cx).0,
             vec!["tab First".to_string()]
         );
     }
 
     #[gpui::test]
     fn overflow_menu_prefers_the_bar_callback(cx: &mut TestAppContext) {
-        assert_eq!(choose_first_menu_item(true, cx), vec!["bar 0".to_string()]);
+        assert_eq!(
+            choose_first_menu_item(true, |cx| cx.simulate_keystrokes("down enter"), cx).0,
+            vec!["bar 0".to_string()]
+        );
+    }
+
+    #[cfg(feature = "test-support")]
+    #[gpui::test]
+    fn overflow_menu_preserves_pointer_events_and_keyboard_activation(cx: &mut TestAppContext) {
+        let position = Cell::new(point(px(0.), px(0.)));
+        let (clicks, events) = choose_first_menu_item(
+            false,
+            |cx| {
+                let item = cx.update(|window, _| {
+                    gpui_base::test_support::find_all(window, &[], &ElementId::from(0usize))
+                        .into_iter()
+                        .find(|item| item.role() == Some(gpui::Role::MenuItem))
+                        .expect("first overflow menu item")
+                });
+                position.set(item.bounds().center());
+                cx.simulate_click(
+                    position.get(),
+                    Modifiers {
+                        shift: true,
+                        ..Modifiers::default()
+                    },
+                );
+            },
+            cx,
+        );
+        assert_eq!(clicks, vec!["tab First"]);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], ClickEvent::Mouse(_)));
+        assert!(events[0].modifiers().shift);
+        assert_eq!(events[0].mouse_position(), Some(position.get()));
+
+        let (clicks, events) =
+            choose_first_menu_item(false, |cx| cx.simulate_keystrokes("down enter"), cx);
+        assert_eq!(clicks, vec!["tab First"]);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], ClickEvent::Keyboard(_)));
     }
 
     struct ContentHarness;
