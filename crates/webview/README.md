@@ -15,15 +15,16 @@ Supported platforms:
 | Linux (X11 / XWayland) | WebKitGTK | With `gpui-fast` |
 | Linux (Wayland) | — | Not supported; run on XWayland |
 
-To render GPUI overlays above the page on macOS and Linux, enable the `gpui-fast` feature:
+To render GPUI overlays above the page on macOS and Linux, run the application on GPUI Fast and enable the `gpui-fast` feature of both crates:
 
 ```toml
 [dependencies]
+gpui-kit = { version = "0.7", features = ["gpui-fast"] }
 gpui-webview = { version = "0.7", features = ["gpui-fast"] }
 ```
 
-- The crate uses the default gpui-pre backend unless its `gpui-fast` feature is enabled. That feature also enables `gpui-fast` on `gpui-kit`, so the whole application runs on GPUI Fast. If something else in the dependency graph enables `gpui-kit/gpui-fast` without it, the crate fails to compile with an error that asks for `gpui-webview/gpui-fast`.
-- On gpui-pre, the native view is attached to the window directly. It covers GPUI content in its bounds, including popovers, dialogs, menus and tooltips. On macOS and Linux, a view that its container clips only partly is hidden until it is fully visible again.
+- `gpui-kit` selects the GPUI backend, and this crate's `gpui-fast` feature follows it. The two must agree: enabling only one of them fails to compile, with an error that names the feature to enable.
+- On gpui-pre, the native view is attached to the window directly. It covers GPUI content in its bounds, including popovers, dialogs, menus and tooltips. It cannot be clipped either: when its container clips it only partly, for example in a scrolled region, it keeps its full bounds and extends past the container. It is hidden only when it is scrolled out of view entirely or hidden by the application.
 - With `gpui-fast` on macOS, `WebView::new()` registers the native view with window composition so GPUI overlays can render above it. Composition failures are logged and fall back to the plain native attachment.
 - With `gpui-fast` on Linux, `WebView::build()` builds the native view in a window composition surface, with the same fallback.
 - Use `WebView::set_bounds()` and `WebView::set_visible()` to keep the managed container and Wry child synchronized. Raw Wry handles bypass this coordination.

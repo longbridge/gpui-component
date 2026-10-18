@@ -24,6 +24,7 @@ gpui-fast = [
     "gpui-base/gpui-fast",
     "gpui-fps/gpui-fast",
     "gpui-component?/gpui-fast",
+    "gpui-kit/gpui-fast",
     "gpui-webview?/gpui-fast",
 ]
 default = ["quickjs", "components", "webview"]
@@ -56,6 +57,10 @@ gpui-base = { workspace = true, features = ["inspector"] }
 gpui-fps.workspace = true
 gpui-component = { workspace = true, features = ["syntect"], optional = true }
 gpui-webview = { workspace = true, optional = true }
+# Not named in the source: `gpui-webview` takes its GPUI types from the Kit, whose backend
+# follows the runtime's `gpui-fast`. It stays non-optional because GPUI's macros route their
+# paths through `gpui_kit` whenever the manifest lists it, enabled or not.
+gpui-kit = { path = "../kit", version = "0.7.3", default-features = false }
 wry = { version = "0.53.3", package = "lb-wry", optional = true }
 
 # Keep the bindings, runtime, and LLRT compatibility facade on the same release.
@@ -115,6 +120,9 @@ windows = { workspace = true, features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
 ] }
+
+[package.metadata.cargo-machete]
+ignored = ["gpui-kit"]
 
 [lints]
 workspace = true

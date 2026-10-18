@@ -58,12 +58,12 @@ jobs:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       # Lints every member and, as a side effect, type-checks the example
       # crates that the `test` job leaves out. The WebView example enables
-      # `gpui-webview/gpui-fast`, which feature unification would spread to
-      # every member, so it is linted on its own.
+      # `gpui-kit/gpui-fast`, which feature unification would spread to every
+      # member, so it is linted on its own.
       - name: Lint
         run: cargo clippy --workspace --exclude gpui-shell --exclude webview --locked -- --deny warnings
       - name: Lint WebView (GPUI Fast)
-        run: cargo clippy -p gpui-webview -p webview --features gpui-webview/gpui-fast --locked -- --deny warnings
+        run: cargo clippy -p gpui-webview -p webview --features gpui-kit/gpui-fast,gpui-webview/gpui-fast --locked -- --deny warnings
 
   no-default-features:
     name: No default features
@@ -182,7 +182,7 @@ jobs:
           cargo test -p gpui-component --features gpui-fast,test-support
           --lib tooltip::tests:: --locked
       - name: Test WebView
-        run: cargo test -p gpui-webview --features gpui-fast --locked
+        run: cargo test -p gpui-webview --features gpui-fast,gpui-kit/gpui-fast --locked
 
   # `gpui-webview` defaults to gpui-pre, where the native view is attached to
   # the window directly; this keeps that build compiling on every platform.

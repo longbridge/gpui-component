@@ -12,10 +12,10 @@ publish = true
 version = "0.7.3"
 
 [features]
-# Selects GPUI Fast for `gpui-kit` too and hosts the native view in window composition, so
-# GPUI overlays render above the page on macOS and Linux. Without it, the default gpui-pre
-# backend is used and the native view covers GPUI content in its bounds.
-gpui-fast = ["gpui-kit/gpui-fast", "dep:objc2", "dep:objc2-foundation"]
+# Hosts the native view in GPUI Fast's window composition, so GPUI overlays render above the
+# page on macOS and Linux. `gpui-kit/gpui-fast` selects the backend; enable both together, a
+# mismatch fails to compile. Without either, the native view covers GPUI content in its bounds.
+gpui-fast = ["dep:objc2", "dep:objc2-foundation"]
 inspector = ["wry/devtools"]
 
 [lib]

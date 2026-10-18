@@ -46,18 +46,19 @@ div().flex_1().child(webview.clone())
 
 ## GPUI Fast 原生合成
 
-除非启用 `gpui-webview` 自身的 `gpui-fast` feature，它使用默认的 gpui-pre [后端](./getting-started.md#使用-gpui-fast)：
+GPUI [后端](./getting-started.md#使用-gpui-fast)由 `gpui-kit` 决定，`gpui-webview` 跟随它。要使用 GPUI Fast，两个 crate 的 `gpui-fast` feature 都要启用：
 
 ```toml
 [dependencies]
+gpui-kit = { version = "{{gpui_kit_version}}", features = ["gpui-fast"] }
 gpui-webview = { version = "{{gpui_kit_version}}", features = ["gpui-fast"] }
 ```
 
-这个 feature 会同时启用 `gpui-kit` 的 `gpui-fast`，整个应用随之运行在 GPUI Fast 上。两者必须一致：依赖图中任何地方启用了 `gpui-kit/gpui-fast`，而 `gpui-webview/gpui-fast` 没有启用时，`gpui-webview` 会编译失败，并在错误信息中提示启用这个 feature，而不是在 GPUI Fast 上沿用 gpui-pre 的挂载方式。
+`gpui-webview/gpui-fast` 本身不切换后端，只启用合成路径。两个 feature 必须一致，不一致会编译失败：只启用 `gpui-kit/gpui-fast` 时，`gpui-webview` 提示启用 `gpui-webview/gpui-fast`；只启用 `gpui-webview/gpui-fast` 时，提示启用 `gpui-kit/gpui-fast`。
 
 启用 `gpui-fast` 后，macOS 上的 `WebView::new()` 会自动把 WKWebView 注册到窗口合成树。Linux 上，`WebView::build()` 会把视图建在合成 surface 中，即一个 X11 子窗口，GPUI 会把位于其上方的浮层区域从中挖空。这样延后绘制的 GPUI 浮层就能显示在网页上方。Windows 在两个后端下都保留原生子视图的行为。
 
-在 gpui-pre 下，原生视图与 Windows 一样直接挂在窗口上，会遮住其 bounds 内的 GPUI 内容，包括 popover、dialog、menu 和 tooltip。容器只裁掉一部分的视图（例如位于滚动区域中）在 macOS 和 Linux 上会被隐藏，直到重新完整可见，因为不改变页面尺寸的裁剪需要合成 surface。
+在 gpui-pre 下，原生视图与 Windows 一样直接挂在窗口上，会遮住其 bounds 内的 GPUI 内容，包括 popover、dialog、menu 和 tooltip。原生视图也无法被裁剪：容器只裁掉一部分时（例如位于滚动区域中），它仍保持完整的 bounds，溢出到容器外，盖住相邻的界面；只有完全移出可视区或被应用隐藏时才会隐藏。GPUI Fast 无法创建合成 surface 时也是如此。
 
 在 Linux 上，GPUI Fast 会把阴影和半透明内容（例如 dialog 的遮罩）画进网页上方的透明窗口，由窗口合成器叠加到网页上；XWayland 下始终有合成器。在没有窗口合成器的 X11 桌面上，浮层改为从网页中挖空，网页上方的阴影不会绘制。Hyprland 会把置顶窗口画在所有窗口之上，因此在置顶窗口（Omarchy 的弹出窗口）中，浮层仍会显示，但网页上方没有阴影和遮罩压暗。
 
@@ -152,7 +153,7 @@ WebView 及其 handle 应在父窗口销毁前结束生命周期。销毁所属 
 | --- | --- |
 | 平台 | macOS、Windows 和 X11 上的 Linux 为实验性支持。不支持 Wayland；Linux 应用必须以 X11 或 XWayland 启动。 |
 | Overlay 层级 | 原生 WebView 位于 GPUI surface 上方，会遮住同一矩形范围内的 GPUI 内容，包括 popover、dialog、menu 和 tooltip。在 Windows 上以及 gpui-pre 下，GPUI overlay 无法可靠地显示在它上方。启用 `gpui-fast` 后，macOS 和 Linux 上延后绘制的浮层通过原生合成显示在网页上方。 |
-| 裁剪 | 启用 `gpui-fast` 后，macOS 和 Linux 会按容器裁剪原生视图，且不改变页面尺寸。在 gpui-pre 下，这两个平台上被部分裁剪的视图会被隐藏；Windows 不裁剪。 |
+| 裁剪 | 启用 `gpui-fast` 后，macOS 和 Linux 会按容器裁剪原生视图，且不改变页面尺寸。在 gpui-pre 下和 Windows 上，被部分裁剪的原生视图会溢出到容器外。 |
 | Windows renderer | 仓库示例在启动 GPUI 前设置 `GPUI_DISABLE_DIRECT_COMPOSITION=true`，以便当前子视图方案正常渲染。这是此示例的要求，不是 GPUI 的通用设置建议。 |
 
 需要显示 overlay 时，可以将 WebView 放在单独窗口，或安排布局使 overlay 不跨过 WebView 的 bounds。这一限制适用于 Windows 和 gpui-pre；启用 `gpui-fast` 后，macOS 和 Linux 通过原生合成支持延后绘制的 GPUI 浮层。

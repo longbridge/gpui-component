@@ -22,13 +22,20 @@ use gpui::{
     ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window, canvas, div,
 };
 
-// Composition sits behind this crate's own feature, so a Kit built on GPUI Fast without it
-// would silently keep the gpui-pre attachment, with overlays hidden behind the page.
-const _: () = assert!(
-    !gpui::GPUI_FAST || cfg!(feature = "gpui-fast"),
-    "gpui-kit is built with `gpui-fast`, but gpui-webview is not: enable the \
-     `gpui-webview/gpui-fast` feature so the WebView uses GPUI Fast's window composition"
-);
+// `gpui-kit` selects the GPUI backend; this crate's `gpui-fast` feature only follows it, so
+// the two must agree. A mismatch would otherwise keep the gpui-pre attachment on GPUI Fast.
+const _: () = {
+    assert!(
+        !gpui::GPUI_FAST || cfg!(feature = "gpui-fast"),
+        "gpui-kit is built with `gpui-fast`, but gpui-webview is not: enable the \
+         `gpui-webview/gpui-fast` feature so the WebView uses GPUI Fast's window composition"
+    );
+    assert!(
+        gpui::GPUI_FAST || !cfg!(feature = "gpui-fast"),
+        "gpui-webview is built with `gpui-fast`, but gpui-kit is not: enable the \
+         `gpui-kit/gpui-fast` feature, which selects the GPUI backend"
+    );
+};
 
 /// An owned, UI-thread-local handle to the raw wry webview.
 ///
@@ -49,7 +56,7 @@ impl WebViewHandle {
 ///
 /// With the `gpui-fast` feature, macOS and Linux host the native view in a window
 /// composition surface, so deferred GPUI overlays render above the page. Without it, the
-/// native view covers GPUI content in its bounds, and a partly clipped view is hidden.
+/// native view covers GPUI content in its bounds and extends past a container that clips it.
 ///
 /// [experimental]
 pub struct WebView {
@@ -170,8 +177,8 @@ impl WebView {
 
     /// Apply full document bounds and an inherited clip without changing the DOM viewport.
     /// Empty clips hide the native surface while preserving the loaded document.
-    /// On macOS and Linux, partial clipping requires native window composition;
-    /// fully visible documents also work without composition.
+    /// Partial clipping requires native window composition; without it, the native view
+    /// takes the full document bounds and extends past the clip.
     pub fn set_geometry(
         &self,
         document: Bounds<Pixels>,
@@ -196,11 +203,6 @@ impl WebView {
             self.webview.set_visible(true)?;
             return Ok(());
         }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        anyhow::ensure!(
-            visible == document,
-            "Inline WebView clipping requires native window composition"
-        );
         #[cfg(target_os = "linux")]
         let rect = linux::device_bounds(document, self.scale_factor.get());
         #[cfg(not(target_os = "linux"))]
