@@ -52,8 +52,11 @@ pub(crate) enum PrevBlock {
 /// that shows anything, and the visible block before it. Link definitions
 /// and other blocks that render nothing are skipped, so a document opening
 /// with `[ref]: url` still starts flush.
-pub(crate) fn flow_position(blocks: &[BlockNode], ix: usize) -> (bool, PrevBlock) {
-    let prev = blocks[..ix].iter().rev().find(|block| {
+pub(crate) fn flow_position<B: std::borrow::Borrow<BlockNode>>(
+    blocks: &[B],
+    ix: usize,
+) -> (bool, PrevBlock) {
+    let prev = blocks[..ix].iter().rev().map(B::borrow).find(|block| {
         !matches!(
             block,
             BlockNode::Definition { .. } | BlockNode::Break { .. } | BlockNode::Unknown

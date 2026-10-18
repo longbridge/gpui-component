@@ -248,3 +248,17 @@ cargo run -p gpui-base-examples -- text-view
 ## 显示变化后的选区保持
 
 样式、语法高亮、继承字体或宽度变化时，已完成的选区默认保持相同的逻辑文本范围和复制内容，同时应用新的显示样式和换行布局。移动已挂载的视图不会用旧的鼠标矩形重新计算选区。新的选择操作或显式清除会正常更新选区；替换原文或 Markdown 解析配置仍会清除选区。拥有视图的代码必须保持状态和选择参与者挂载；这个行为不会固定外层虚拟列表中已卸载的行。
+
+
+## 构建外部富文本组件
+
+`gpui_kit::base::text::editor_host` 对外提供 TextView 的渲染能力，外部组件可以保留自己的编辑模型。将文档投影为 `BlockNode`，由组件管理命令、历史记录、选区、焦点和原生输入。
+
+- 通过 `Paragraph::with_leaf_key` 或 `CodeBlock::with_leaf_key` 标记叶节点。同一收集范围内的 key 必须唯一。克隆最初共享运行时状态；为克隆设置 key 时，会将其叶节点状态与原节点分离。
+- 使用 `RenderContext::new(style)` 设置局部样式，或使用 `from_app(cx)` 读取 TextView 默认值。通过 `with_code_block_highlighter`、`with_image_source`、`on_link_click` 和 `with_link_reference` 局部配置高亮、图片来源、链接操作及引用链接。
+- 使用 `render_with_id` 渲染块，并传入稳定的业务 ID。叶节点的几何 key 与 GPUI element ID 分别承担不同职责。
+- 在自定义 element 的 prepaint 阶段调用 `collect_leaf_geometry(decorations, || child.prepaint(window, cx))`。它只返回当前范围内执行过 prepaint 的叶节点，嵌套范围相互隔离。
+- 内容、字体、宽度或滚动位置变化后，应替换几何结果。`LeafGeometry` 是不可变快照，坐标使用窗口逻辑像素；索引使用 UTF-8 字节，每个行内原子节点以 U+FFFC 表示，占三个字节。
+- Decoration 使用有序的半开区间。文本背景绘制在字形下方；原子节点的 decoration 覆盖整个节点并绘制在内容上方。原子节点的选区颜色应使用半透明色。
+
+这个 API 复用 TextView 的水平块流渲染器。宿主仍需管理原生输入的 UTF-16 转换、无障碍集成和虚拟化。当前的字节索引几何无法表达双向文本中的光标 affinity，也无法区分软换行边界的两侧，因此还不是完整的视觉光标导航 API。

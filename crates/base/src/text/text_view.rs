@@ -47,6 +47,16 @@ impl TextViewDefaults {
         self
     }
 
+    /// The style every text view starts from, when set.
+    pub(crate) fn style(&self) -> Option<&TextViewStyle> {
+        self.style.as_ref()
+    }
+
+    /// The syntax highlighter for fenced code blocks, when set.
+    pub(crate) fn code_block_highlighter(&self) -> Option<Arc<CodeBlockHighlighterFn>> {
+        self.code_block_highlighter.clone()
+    }
+
     /// Sets the syntax highlighter used for fenced code blocks.
     pub fn with_code_block_highlighter<F>(mut self, highlighter: F) -> Self
     where
