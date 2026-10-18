@@ -12,8 +12,8 @@ inspector = []
 gpui-kit.workspace = true
 anyhow.workspace = true
 
-# WebView dependencies
-gpui-webview = { path = "../../crates/webview" }
+# WebView dependencies. GPUI Fast lets the example's menu render above the page.
+gpui-webview = { path = "../../crates/webview", features = ["gpui-fast"] }
 wry = { version = "0.53.3", package = "lb-wry" }
 
 [lints]
