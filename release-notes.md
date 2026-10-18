@@ -11,6 +11,14 @@ layers above application content. Opening a dialog, sheet or notification no
 longer depends on the application's view rendering its layer. Notifications use
 the Root's full bounds, and cached content does not duplicate or suppress layers.
 
+#### Text selection does not revive after unmount
+
+Removing a selection endpoint now retires its shared window gesture as well as
+its painted selection. Retaining and later remounting the same TextView state
+does not make old text copyable again without a fresh selection. Cached views
+that remain rendered, and selections unrelated to a removed participant, keep
+their existing selection.
+
 #### Questionnaire: choosing a single answer confirms the item
 
 ```rust

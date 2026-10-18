@@ -1290,6 +1290,10 @@ impl WindowSelectionState {
     /// same place without running any of its elements. Such a participant keeps
     /// the registration it last reported, which still describes what is on
     /// screen; only one whose element GPUI has dropped is swept.
+    ///
+    /// Removing an endpoint also retires the window's gesture. Clearing only
+    /// the participant snapshot would restore that selection if its retained
+    /// entity were registered again.
     pub fn finish_frame(&mut self, cx: &mut App) -> Vec<ClearHandler> {
         self.finish_frame_scheduled.set(false);
         let generation = self.frame_generation.get();
@@ -1302,7 +1306,21 @@ impl WindowSelectionState {
                     .then(|| (*id, registration.participant.clone()))
             })
             .collect::<Vec<_>>();
-        let mut handlers = Vec::new();
+        let endpoint_departed = stale.iter().any(|(id, _)| {
+            [
+                self.anchor.as_ref(),
+                self.cursor.as_ref(),
+                self.pending_extension_anchor.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|endpoint| endpoint.entity_id() == Some(*id))
+        });
+        let mut handlers = if endpoint_departed {
+            self.clear_state(cx)
+        } else {
+            Vec::new()
+        };
         for (id, participant) in stale {
             self.participants.get_mut().remove(&id);
             if let Some(participant) = participant.upgrade()
@@ -4149,7 +4167,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn stale_live_participants_are_removed_when_the_next_frame_begins(cx: &mut TestAppContext) {
+    fn unmounted_selection_does_not_revive_when_the_participant_returns(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let mut selection_state = WindowSelectionState::default();
             let participant = FakeParticipant::new("stale", cx);
@@ -4163,36 +4181,12 @@ mod tests {
             selection_state.begin(point(px(1.), px(1.)), false, cx);
             selection_state.update(point(px(8.), px(1.)), cx);
             selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "stale");
 
             selection_state.finish_frame(cx);
             selection_state.finish_frame(cx);
             assert_eq!(selection_state.selected_text(cx), "");
             assert!(participant.selection.snapshot(cx).is_none());
-        });
-    }
-
-    #[gpui::test]
-    fn clear_stops_anchor_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
-        let commands = Rc::new(RefCell::new(Vec::new()));
-        let observed = commands.clone();
-        let (mut selection_state, participant) = cx.update(|cx| {
-            let selection_state = WindowSelectionState::default();
-            let participant = FakeParticipant::new("scroll", cx);
-            participant
-                .selection
-                .subscribe(
-                    move |event, _| {
-                        if let TextSelectionEvent::AutoScroll(delta) = event {
-                            observed.borrow_mut().push(*delta);
-                        }
-                    },
-                    cx,
-                )
-                .detach();
-            (selection_state, participant)
-        });
-        cx.run_until_parked();
-        cx.update(|cx| {
             participant.register(
                 &mut selection_state,
                 0.,
@@ -4200,14 +4194,113 @@ mod tests {
                 0,
                 cx,
             );
+            assert_eq!(selection_state.selected_text(cx), "");
+            assert!(participant.selection.snapshot(cx).is_none());
 
             selection_state.begin(point(px(1.), px(1.)), false, cx);
-            selection_state.update(point(px(1.), px(25.)), cx);
-            selection_state.clear(cx);
+            selection_state.update(point(px(8.), px(1.)), cx);
+            selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "stale");
         });
-        cx.run_until_parked();
-        assert!(commands.borrow().iter().any(Option::is_some));
-        assert_eq!(commands.borrow().last(), Some(&None));
+    }
+
+    #[gpui::test]
+    fn removing_an_unselected_participant_preserves_the_current_selection(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut selection_state = WindowSelectionState::default();
+            let selected = FakeParticipant::new("selected", cx);
+            let unrelated = FakeParticipant::new("unrelated", cx);
+            let scope = TextSelectionScopeId::default();
+            selected.register(&mut selection_state, 0., scope, 0, cx);
+            unrelated.register(&mut selection_state, 20., scope, 1, cx);
+            selection_state.begin(point(px(1.), px(1.)), false, cx);
+            selection_state.update(point(px(8.), px(1.)), cx);
+            selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+
+            selection_state.finish_frame(cx);
+            selected.register(&mut selection_state, 0., scope, 0, cx);
+            selection_state.finish_frame(cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+            unrelated.register(&mut selection_state, 20., scope, 1, cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+        });
+    }
+
+    #[gpui::test]
+    fn removing_either_range_endpoint_discards_the_shared_selection(cx: &mut TestAppContext) {
+        for remove_anchor in [true, false] {
+            cx.update(|cx| {
+                let mut selection_state = WindowSelectionState::default();
+                let anchor = FakeParticipant::new("anchor", cx);
+                let cursor = FakeParticipant::new("cursor", cx);
+                let scope = TextSelectionScopeId::default();
+                anchor.register(&mut selection_state, 0., scope, 0, cx);
+                cursor.register(&mut selection_state, 20., scope, 1, cx);
+                selection_state.begin(point(px(1.), px(1.)), false, cx);
+                selection_state.update(point(px(8.), px(21.)), cx);
+                selection_state.end(cx);
+                assert_eq!(selection_state.selected_text(cx), "anchor\ncursor");
+                selection_state.finish_frame(cx);
+
+                if remove_anchor {
+                    cursor.register(&mut selection_state, 20., scope, 1, cx);
+                } else {
+                    anchor.register(&mut selection_state, 0., scope, 0, cx);
+                }
+                selection_state.finish_frame(cx);
+                assert_eq!(selection_state.selected_text(cx), "");
+                anchor.register(&mut selection_state, 0., scope, 0, cx);
+                cursor.register(&mut selection_state, 20., scope, 1, cx);
+                assert_eq!(selection_state.selected_text(cx), "");
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn clear_or_unmount_stops_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
+        for unmount in [false, true] {
+            let commands = Rc::new(RefCell::new(Vec::new()));
+            let observed = commands.clone();
+            let (mut selection_state, participant) = cx.update(|cx| {
+                let selection_state = WindowSelectionState::default();
+                let participant = FakeParticipant::new("scroll", cx);
+                participant
+                    .selection
+                    .subscribe(
+                        move |event, _| {
+                            if let TextSelectionEvent::AutoScroll(delta) = event {
+                                observed.borrow_mut().push(*delta);
+                            }
+                        },
+                        cx,
+                    )
+                    .detach();
+                (selection_state, participant)
+            });
+            cx.run_until_parked();
+            cx.update(|cx| {
+                participant.register(
+                    &mut selection_state,
+                    0.,
+                    TextSelectionScopeId::default(),
+                    0,
+                    cx,
+                );
+
+                selection_state.begin(point(px(1.), px(1.)), false, cx);
+                selection_state.update(point(px(1.), px(25.)), cx);
+                if unmount {
+                    selection_state.finish_frame(cx);
+                    selection_state.finish_frame(cx);
+                } else {
+                    selection_state.clear(cx);
+                }
+            });
+            cx.run_until_parked();
+            assert!(commands.borrow().iter().any(Option::is_some));
+            assert_eq!(commands.borrow().last(), Some(&None));
+        }
     }
 
     #[gpui::test]
@@ -4516,7 +4609,6 @@ mod tests {
             assert!(!TextSelection::has_selection(window, cx));
             assert_eq!(TextSelection::selected_text(window, cx), "");
             assert!(!selection.has_local_selection(cx));
-            TextSelection::clear(window, cx);
         });
 
         view.update(cx, |view, cx| {
