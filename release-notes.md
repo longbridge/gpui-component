@@ -4,6 +4,15 @@
 
 ### 0.7.0 (unreleased)
 
+#### Input caret visibility in constrained viewports
+
+Text inputs keep the caret's complete visual row visible even in a one-row
+viewport. Typing and keyboard movement share the same bounded reveal geometry.
+A focused, visible caret's row stays vertically visible when its textarea
+shrinks or reflows; deliberately scrolling away does not snap the viewport back.
+Resize-follow preserves horizontal scrolling and soft-wrap end affinity.
+No public API or dependency changes are required.
+
 #### Root owns window overlays
 
 `gpui_component::Root` now always mounts the dialog, sheet and notification
