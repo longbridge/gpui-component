@@ -291,3 +291,36 @@ cargo run -p gpui-base-examples -- text-view
 ## Selection across presentation changes
 
 Completed selections retain their logical text range and Copy payload when styles, syntax highlighting, inherited fonts, or width change. Current presentation and wrapping still apply. Moving the mounted view does not reinterpret the old pointer rectangle. A new selection gesture or explicit clear updates the selection normally. Replacing the source or Markdown parser configuration clears the selection. The owning view must keep the state and selection participant mounted; this behavior does not pin rows in an outer virtual list.
+
+
+## Build an external rich-text component
+
+`gpui_kit::base::text::editor_host` exposes the TextView renderer without
+requiring an external component to adopt its editing model. Project your own
+document into `BlockNode` values; keep commands, history, selection, focus and
+native input in your component.
+
+- Build leaves with `Paragraph::with_leaf_key` or `CodeBlock::with_leaf_key`.
+  Keys must be unique within a collection scope. Clones initially share runtime
+  state; rekeying a clone detaches its leaf state from the original.
+- Use `RenderContext::new(style)` for local presentation or `from_app(cx)`
+  for TextView defaults. Local overrides include
+  `with_code_block_highlighter`, `with_image_source`, `on_link_click` and
+  `with_link_reference`.
+- Render blocks with `render_with_id` using stable domain IDs. Leaf geometry
+  keys and GPUI element IDs serve separate purposes.
+- In a custom element's prepaint, call
+  `collect_leaf_geometry(decorations, || child.prepaint(window, cx))`.
+  It returns only leaves prepainted in that scope. Nested scopes are isolated.
+- Replace geometry after content, typography, width or scrolling changes.
+  `LeafGeometry` is an immutable snapshot in window logical pixels; offsets
+  are UTF-8 bytes with three bytes per inline atom (U+FFFC).
+- Decorations are ordered half-open ranges. Text backgrounds paint behind
+  glyphs; atom decorations cover the whole atom and paint over its content.
+  Use translucent colors for atom selection.
+
+This API shares TextView's horizontal block-flow renderer. The host still owns
+UTF-16 conversion for native input, accessibility integration and virtualization.
+The current byte-index geometry does not represent bidirectional caret affinity
+or both sides of a soft-wrap boundary; do not treat it as a complete visual
+navigation API.

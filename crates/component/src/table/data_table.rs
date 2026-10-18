@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme, FocusableExt, Sizable, Size, ThemeStyled as _,
+    ActiveTheme, Sizable, Size, ThemeStyled as _,
     actions::{
         Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown,
         SelectPageUp, SelectPrevColumn, SelectUp,
@@ -42,8 +42,6 @@ pub(super) struct TableOptions {
     pub(super) size: Size,
     /// Height of each header row. `None` uses [`Size::table_row_height`].
     pub(super) header_row_height: Option<Pixels>,
-    /// Whether to draw a focus ring when focused.
-    pub(super) focus_ring_enabled: bool,
 }
 
 impl Default for TableOptions {
@@ -56,7 +54,6 @@ impl Default for TableOptions {
             fixed_cols_border: true,
             size: Size::default(),
             header_row_height: None,
-            focus_ring_enabled: true,
         }
     }
 }
@@ -102,6 +99,7 @@ impl Default for TableOptions {
 pub struct DataTable<D: TableDelegate> {
     state: Entity<TableState<D>>,
     options: TableOptions,
+    focus_ring_enabled: bool,
 }
 
 impl<D> DataTable<D>
@@ -113,6 +111,7 @@ where
         Self {
             state: state.clone(),
             options: TableOptions::default(),
+            focus_ring_enabled: true,
         }
     }
 
@@ -178,17 +177,17 @@ where
     }
 }
 
-impl<D> FocusableExt for DataTable<D>
+impl<D> crate::FocusableExt for DataTable<D>
 where
     D: TableDelegate,
 {
     fn focus_ring(mut self, enabled: bool) -> Self {
-        self.options.focus_ring_enabled = enabled;
+        self.focus_ring_enabled = enabled;
         self
     }
 
     fn is_focus_ring_enabled(&self) -> bool {
-        self.options.focus_ring_enabled
+        self.focus_ring_enabled
     }
 }
 
@@ -198,7 +197,7 @@ where
 {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let bordered = self.options.bordered;
-        let focus_ring_enabled = self.options.focus_ring_enabled;
+        let focus_ring_enabled = self.focus_ring_enabled;
         let focus_handle = self.state.focus_handle(cx);
         self.state.update(cx, |state, _| {
             state.options = self.options;
@@ -229,9 +228,9 @@ where
             // Clicking a row focuses the table too, so only keyboard focus
             // shows it, as CSS `:focus-visible` does.
             .when(
-                focus_handle.is_focused(window)
-                    && window.last_input_was_keyboard()
-                    && focus_ring_enabled,
+                focus_ring_enabled
+                    && focus_handle.is_focused(window)
+                    && window.last_input_was_keyboard(),
                 |this| this.focus_ring_style(window, cx),
             )
     }
@@ -239,45 +238,118 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use gpui::{
+        AppContext as _, Context, Entity, Render, TestAppContext, VisualTestContext, Window, div,
+        px,
+    };
 
-    struct TestDelegate;
-    impl TableDelegate for TestDelegate {
+    use super::*;
+    use crate::{
+        FocusableExt as _,
+        table::{Column, TableState},
+    };
+
+    struct RowsDelegate;
+
+    impl TableDelegate for RowsDelegate {
         fn columns_count(&self, _: &App) -> usize {
-            0
+            1
         }
         fn rows_count(&self, _: &App) -> usize {
-            0
+            3
         }
-        fn column(&self, _: usize, _: &App) -> crate::table::Column {
-            crate::table::Column::new("col", "Col")
+        fn column(&self, _: usize, _: &App) -> Column {
+            Column::new("name", "Name")
         }
         fn render_td(
             &mut self,
-            _: usize,
+            row: usize,
             _: usize,
             _: &mut Window,
-            _: &mut gpui::Context<TableState<Self>>,
+            _: &mut Context<TableState<Self>>,
         ) -> impl IntoElement {
-            div()
+            div().child(row.to_string())
         }
     }
 
-    #[gpui::test]
-    fn test_data_table_builder(cx: &mut gpui::TestAppContext) {
-        cx.update(|cx| {
-            crate::init(cx);
+    struct FocusRingHarness {
+        state: Entity<TableState<RowsDelegate>>,
+        focus_ring: bool,
+    }
+
+    impl Render for FocusRingHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(240.))
+                .h(px(160.))
+                .child(DataTable::new(&self.state).focus_ring(self.focus_ring))
+        }
+    }
+
+    /// Focuses the table and moves the selection with the keyboard, the way
+    /// a user arriving with up/down sees the ring.
+    fn keyboard_focused_table(cx: &mut TestAppContext, focus_ring: bool) -> &mut VisualTestContext {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(move |window, cx| FocusRingHarness {
+            state: cx.new(|cx| TableState::new(RowsDelegate, window, cx)),
+            focus_ring,
         });
-        let window = cx.add_window(|window, cx| TableState::new(TestDelegate, window, cx));
-        let state: Entity<TableState<TestDelegate>> =
-            window.update(cx, |_, _, cx| cx.entity()).unwrap();
-        let table = DataTable::new(&state);
-        assert!(table.is_focus_ring_enabled());
+        let state = view.read_with(cx, |view, _| view.state.clone());
+        cx.update(|window, cx| {
+            let handle = state.focus_handle(cx);
+            window.focus(&handle, cx);
+        });
+        cx.simulate_keystrokes("down");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx
+    }
 
-        let table = DataTable::new(&state).focus_ring(false);
+    #[gpui::test]
+    fn test_data_table_builder(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| FocusRingHarness {
+            state: cx.new(|cx| TableState::new(RowsDelegate, window, cx)),
+            focus_ring: true,
+        });
+        let state = view.read_with(cx, |view, _| view.state.clone());
+        assert!(DataTable::new(&state).is_focus_ring_enabled());
+
+        let table = DataTable::new(&state)
+            .stripe(true)
+            .bordered(false)
+            .scroll_bounce(false)
+            .header_row_height(px(32.))
+            .fixed_cols_border(false)
+            .scrollbar_visible(false, true)
+            .with_size(Size::Small)
+            .focus_ring(false);
+        assert!(table.options.stripe);
+        assert!(!table.options.bordered);
+        assert_eq!(table.options.scroll_bounce, Some(false));
+        assert_eq!(table.options.header_row_height, Some(px(32.)));
+        assert!(!table.options.fixed_cols_border);
+        assert!(!table.options.scrollbar_visible.right);
+        assert!(table.options.scrollbar_visible.bottom);
+        assert_eq!(table.options.size, Size::Small);
         assert!(!table.is_focus_ring_enabled());
+        assert!(table.focus_ring(true).is_focus_ring_enabled());
+    }
 
-        let table = DataTable::new(&state).focus_ring(true);
-        assert!(table.is_focus_ring_enabled());
+    #[gpui::test]
+    fn data_table_draws_the_focus_ring_by_default(cx: &mut TestAppContext) {
+        let cx = keyboard_focused_table(cx, true);
+        assert!(
+            cx.debug_bounds("focus-ring").is_some(),
+            "a keyboard-focused table draws its focus ring"
+        );
+    }
+
+    #[gpui::test]
+    fn data_table_focus_ring_can_be_turned_off(cx: &mut TestAppContext) {
+        let cx = keyboard_focused_table(cx, false);
+        assert!(
+            cx.debug_bounds("focus-ring").is_none(),
+            "`focus_ring(false)` must not draw a ring"
+        );
     }
 }
