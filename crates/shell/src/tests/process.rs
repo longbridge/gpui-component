@@ -255,6 +255,8 @@ export default class Probe extends View {
     let rendered = snapshot_text(&mut context, &view);
 
     let home = crate::runtime::home_dir().expect("a test machine has a home directory");
+    // The snapshot quotes text the way `Debug` does, so Windows backslashes come back escaped.
+    let quoted = |path: &std::path::Path| path.to_string_lossy().escape_debug().to_string();
     let fields: Vec<&str> = rendered
         .lines()
         .find(|line| line.contains("file://"))
@@ -267,15 +269,12 @@ export default class Probe extends View {
         fields[1].starts_with("file://") && fields[1].ends_with("/lib/helper.js"),
         "{rendered}"
     );
-    assert_eq!(fields[2], data.to_string_lossy(), "{rendered}");
+    assert_eq!(fields[2], quoted(&data), "{rendered}");
     let names: Vec<&str> = fields[3].split(',').collect();
     assert!(names.contains(&"HOME"), "{rendered}");
     assert!(names.contains(&"CARGO_PKG_NAME"), "{rendered}");
     assert!(!names.contains(&"CARGO_MANIFEST_DIR"), "{rendered}");
-    assert!(
-        fields[4].starts_with(&*home.to_string_lossy()),
-        "{rendered}"
-    );
+    assert!(fields[4].starts_with(&quoted(&home)), "{rendered}");
 
     crate::policy::update_default(|policy| policy.with_capabilities(Capabilities::new()));
     let _ = std::fs::remove_dir_all(&directory);

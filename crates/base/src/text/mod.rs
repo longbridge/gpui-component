@@ -1,4 +1,6 @@
 mod document;
+pub mod editor_host;
+mod editor_seam;
 mod format;
 mod inline;
 mod inline_element;
