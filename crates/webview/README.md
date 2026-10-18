@@ -22,7 +22,7 @@ To render GPUI overlays above the page on macOS and Linux, enable the `gpui-fast
 gpui-webview = { version = "0.7", features = ["gpui-fast"] }
 ```
 
-- The crate uses the default gpui-pre backend unless its `gpui-fast` feature is enabled. That feature also enables `gpui-fast` on `gpui-kit`, so the whole application runs on GPUI Fast. Enabling `gpui-kit/gpui-fast` alone runs the application on GPUI Fast but keeps the WebView on the gpui-pre attachment described below.
+- The crate uses the default gpui-pre backend unless its `gpui-fast` feature is enabled. That feature also enables `gpui-fast` on `gpui-kit`, so the whole application runs on GPUI Fast. If something else in the dependency graph enables `gpui-kit/gpui-fast` without it, the crate fails to compile with an error that asks for `gpui-webview/gpui-fast`.
 - On gpui-pre, the native view is attached to the window directly. It covers GPUI content in its bounds, including popovers, dialogs, menus and tooltips. On macOS and Linux, a view that its container clips only partly is hidden until it is fully visible again.
 - With `gpui-fast` on macOS, `WebView::new()` registers the native view with window composition so GPUI overlays can render above it. Composition failures are logged and fall back to the plain native attachment.
 - With `gpui-fast` on Linux, `WebView::build()` builds the native view in a window composition surface, with the same fallback.

@@ -53,7 +53,7 @@ div().flex_1().child(webview.clone())
 gpui-webview = { version = "{{gpui_kit_version}}", features = ["gpui-fast"] }
 ```
 
-这个 feature 会同时启用 `gpui-kit` 的 `gpui-fast`，整个应用随之运行在 GPUI Fast 上。要在 `gpui-webview` 上启用它：只启用 `gpui-kit/gpui-fast` 时，应用运行在 GPUI Fast 上，WebView 却仍按 gpui-pre 的方式挂载。
+这个 feature 会同时启用 `gpui-kit` 的 `gpui-fast`，整个应用随之运行在 GPUI Fast 上。两者必须一致：依赖图中任何地方启用了 `gpui-kit/gpui-fast`，而 `gpui-webview/gpui-fast` 没有启用时，`gpui-webview` 会编译失败，并在错误信息中提示启用这个 feature，而不是在 GPUI Fast 上沿用 gpui-pre 的挂载方式。
 
 启用 `gpui-fast` 后，macOS 上的 `WebView::new()` 会自动把 WKWebView 注册到窗口合成树。Linux 上，`WebView::build()` 会把视图建在合成 surface 中，即一个 X11 子窗口，GPUI 会把位于其上方的浮层区域从中挖空。这样延后绘制的 GPUI 浮层就能显示在网页上方。Windows 在两个后端下都保留原生子视图的行为。
 

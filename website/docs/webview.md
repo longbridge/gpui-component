@@ -53,7 +53,7 @@ div().flex_1().child(webview.clone())
 gpui-webview = { version = "{{gpui_kit_version}}", features = ["gpui-fast"] }
 ```
 
-The feature also enables `gpui-fast` on `gpui-kit`, so the whole application runs on GPUI Fast. Enable it on `gpui-webview` itself: with `gpui-kit/gpui-fast` alone, the application runs on GPUI Fast but the WebView keeps the gpui-pre attachment.
+The feature also enables `gpui-fast` on `gpui-kit`, so the whole application runs on GPUI Fast. The two must agree: when `gpui-kit/gpui-fast` is enabled anywhere in the dependency graph but `gpui-webview/gpui-fast` is not, `gpui-webview` fails to compile with an error that asks for the feature, rather than running on GPUI Fast with the gpui-pre attachment.
 
 With `gpui-fast` on macOS, `WebView::new()` automatically registers the WKWebView in the window composition tree. On Linux, `WebView::build()` builds the view in a composition surface, an X11 child window that GPUI cuts the overlays above it out of. Deferred GPUI overlays can then render above the page. Windows retains the native child-view behavior on both backends.
 

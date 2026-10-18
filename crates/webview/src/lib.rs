@@ -22,6 +22,14 @@ use gpui::{
     ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window, canvas, div,
 };
 
+// Composition sits behind this crate's own feature, so a Kit built on GPUI Fast without it
+// would silently keep the gpui-pre attachment, with overlays hidden behind the page.
+const _: () = assert!(
+    !gpui::GPUI_FAST || cfg!(feature = "gpui-fast"),
+    "gpui-kit is built with `gpui-fast`, but gpui-webview is not: enable the \
+     `gpui-webview/gpui-fast` feature so the WebView uses GPUI Fast's window composition"
+);
+
 /// An owned, UI-thread-local handle to the raw wry webview.
 ///
 /// Cloning this handle prolongs the native webview's lifetime. Dropping the owning [`WebView`]
@@ -51,6 +59,8 @@ pub struct WebView {
     bounds: Bounds<Pixels>,
     /// The page zoom the script asked for, before any display scale compensation.
     zoom: Cell<f64>,
+    /// Whether the last geometry update failed, so each failure is logged once until it recovers.
+    geometry_failed: Cell<bool>,
     #[cfg(all(feature = "gpui-fast", any(target_os = "macos", target_os = "linux")))]
     composition: Option<NativeWebViewSurface>,
     /// The GPUI scale factor the page zoom was last matched to.
@@ -98,6 +108,7 @@ impl WebView {
             visible: Cell::new(true),
             bounds: Bounds::default(),
             zoom: Cell::new(1.0),
+            geometry_failed: Cell::new(false),
             webview: Rc::new(webview),
             #[cfg(all(feature = "gpui-fast", target_os = "macos"))]
             composition,
@@ -440,10 +451,13 @@ impl Element for WebViewElement {
         parent.origin.set(bounds.origin);
         let clip = window.content_mask().bounds;
         if let Err(error) = parent.set_geometry(bounds, clip) {
-            log::warn!("WebView geometry update failed: {error:#}");
+            if !parent.geometry_failed.replace(true) {
+                log::warn!("WebView geometry update failed: {error:#}");
+            }
             let _ = parent.set_native_visible(false);
             return None;
         }
+        parent.geometry_failed.set(false);
         let visible = bounds.intersect(&clip);
         if visible.is_empty() {
             return None;
