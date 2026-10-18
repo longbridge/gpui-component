@@ -711,6 +711,60 @@ mod tests {
     }
 
     #[test]
+    fn test_pre_text_stays_text() {
+        let mut cx = NodeContext::default();
+        for (html, text) in [
+            // Escaped markup is text, not elements.
+            (
+                "<pre>&lt;b&gt;bold&lt;/b&gt; &amp;amp;</pre>",
+                "<b>bold</b> &amp;",
+            ),
+            // Spaces, tabs and line feeds stay as they are.
+            ("<pre>  one\n\n\ttwo  </pre>", "  one\n\n\ttwo  "),
+            // The parser drops only the line feed right after `<pre>`.
+            ("<pre>\none</pre>", "one"),
+            ("<pre>\n\none</pre>", "\none"),
+            // A comment is left out, and the line feed after it kept.
+            ("<pre><!-- note -->\none</pre>", "\none"),
+        ] {
+            let document = super::parse(html, &mut cx).unwrap();
+            let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+                panic!("expected one paragraph, got {:?}", document.blocks);
+            };
+            assert_eq!(paragraph.text(), text, "{html}");
+        }
+    }
+
+    #[test]
+    fn test_pre_keeps_whitespace_in_nested_elements() {
+        let mut cx = NodeContext::default();
+        for (html, text) in [
+            // Code in `<pre><code>` keeps its line feeds and indent.
+            (
+                "<pre><code>fn main() {\n    one();\n}</code></pre>",
+                "fn main() {\n    one();\n}",
+            ),
+            // So does text deeper down, and the space between elements.
+            (
+                "<pre><code><b>one</b>  <i>two\n\tthree</i></code></pre>",
+                "one  two\n\tthree",
+            ),
+            // The parser keeps a line feed after `<code>`, unlike `<pre>`.
+            ("<pre><code>\none</code></pre>", "\none"),
+            // Escaped markup is still text.
+            ("<pre><code>&lt;b&gt; &amp;amp;</code></pre>", "<b> &amp;"),
+            // Outside `<pre>`, whitespace is collapsed as before.
+            ("<p><code>one\n   two</code></p>", "one two"),
+        ] {
+            let document = super::parse(html, &mut cx).unwrap();
+            let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+                panic!("expected one paragraph, got {:?}", document.blocks);
+            };
+            assert_eq!(paragraph.text(), text, "{html}");
+        }
+    }
+
+    #[test]
     fn test_trim_text() {
         assert_eq!(trim_text("  \n\tHello world \t\r "), " Hello world ",);
     }

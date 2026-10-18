@@ -5873,6 +5873,95 @@ export default class Bad extends View {
     );
 }
 
+/// A textarea set to submit on Enter keeps the line break out of the text,
+/// and Shift+Enter still starts a new line.
+///
+/// Without the setting base inserts the break first and then reports
+/// `submit`, so the first handler call would read `send` followed by a break.
+/// The handler records the text it reads with each break shown as `|`.
+///
+/// The test sends base's `Enter` action rather than the key. When nothing
+/// handles a key, the test window types its character, and it gives Enter the
+/// character `\n`; the macOS, Windows and Linux windows type nothing for it.
+/// Base hands a submitting Enter on to the parent, so the key would put the
+/// break back in here and only here.
+#[gpui::test]
+fn a_textarea_that_submits_on_enter_keeps_the_line_break_for_shift_enter(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { Textarea, TextareaState } from "gpui-base";
+
+export default class Composer extends View {
+  init() {
+    this.draft = TextareaState.new({ rows: 4 });
+    this.draft.set_submit_on_enter(true);
+    this.submits = [];
+    this.draft.on("submit", (event, cx) => {
+      const text = this.draft.value().replace(/\n/g, "|");
+      this.submits.push(`${event.shift ? "shift" : "enter"}=${text}`);
+      cx.notify();
+    });
+  }
+  render(cx) {
+    return div()
+      .child(Textarea.new(this.draft).w(300).h(100))
+      .child(`submits:${this.submits.join(",")};`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("composer.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+    let state = runtime
+        .entities()
+        .first_textarea()
+        .expect("the script's textarea state");
+    context.update(|window, cx| state.update(cx, |state, cx| state.focus(window, cx)));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let enter = |shift| gpui_base::input::Enter {
+        secondary: false,
+        shift,
+    };
+
+    context.simulate_input("send");
+    context.dispatch_action(enter(false));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let entered = described(&mut context, &view);
+    assert!(
+        entered.contains("submits:enter=send;"),
+        "Enter must submit the text without a line break: {entered}"
+    );
+
+    context.dispatch_action(enter(true));
+    context.simulate_input("two");
+    context.dispatch_action(enter(false));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after = described(&mut context, &view);
+    assert!(
+        after.contains("submits:enter=send,shift=send|,enter=send|two;"),
+        "Shift+Enter must insert the break and report `submit` with `shift`: {after}"
+    );
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "send\ntwo"
+    );
+}
+
 /// Hot reload has to pick up a change in an imported module, not only in the
 /// entry point. QuickJS caches an evaluated module by name and an ES module
 /// cannot be unloaded, so a naive reload re-evaluates `main.js` against the
@@ -11277,4 +11366,225 @@ export default class Transcript extends View {
         message.contains(r#"with_follow_mode(mode) expects "normal" or "tail""#),
         "the message has to name the method and the modes it takes: {message}"
     );
+}
+
+/// A `list` of a hundred twenty-pixel rows in a 200px box, a `Scrollbar` paired
+/// with it by name, and a control under it that adds one row. What the list
+/// last reported through `on_visible_range_change` is written into the tree.
+fn reporting_list_source() -> &'static str {
+    r#"
+import { div, View, list } from "gpui-kit";
+import { Scrollbar, v_flex } from "gpui-base";
+
+export default class Rows extends View {
+  init() {
+    this.count = 100;
+    this.reported = "none";
+  }
+
+  render(cx) {
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .relative()
+          .h(200)
+          .child(
+            list("rows", this.count, (index) => `r${index}`, (index) =>
+              div().h(20).child(`row ${index}`),
+            ).on_visible_range_change((range, count, cx) => {
+              this.reported = `${range.start}..${range.end} of ${count}`;
+              cx.notify();
+            }),
+          )
+          .child(Scrollbar.vertical("rows").mode("always").absolute().inset_0()),
+      )
+      .child(
+        div()
+          .h(40)
+          .on_click((_event, cx) => {
+            this.count += 1;
+            cx.notify();
+          })
+          .child("one more"),
+      )
+      .child(`reported ${this.reported}`);
+  }
+}
+"#
+}
+
+/// Draws until a report made after one frame has been rendered by the next,
+/// and reads `start..end of count` out of the tree.
+fn reported_visible_range(
+    context: &mut VisualTestContext,
+    view: &gpui::Entity<ScriptView>,
+) -> (usize, usize, usize) {
+    for _ in 0..3 {
+        context.run_until_parked();
+        context.update(|window, cx| window.draw(cx).clear(cx));
+    }
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    let text = tree
+        .split("reported ")
+        .nth(1)
+        .unwrap_or_else(|| panic!("no report in: {tree}"));
+    let numbers: Vec<usize> = text
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .take(3)
+        .map(|part| part.parse().expect("a number"))
+        .collect();
+    assert_eq!(numbers.len(), 3, "no `start..end of count` in: {tree}");
+    (numbers[0], numbers[1], numbers[2])
+}
+
+#[gpui::test]
+fn a_list_reports_its_visible_range_however_it_changed(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, reporting_list_source());
+
+    // The first frame is reported, and the handler's `cx.notify()` is
+    // honoured, which it would not be from inside layout.
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 10, 100));
+
+    // A wheel scroll, which is the one case GPUI's own scroll handler sees.
+    scroll_by(&mut context, -100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 100));
+
+    // A new item count with the same items in view.
+    click_at(&mut context, 220.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 101));
+
+    // A press on the scrollbar's track below the thumb, which moves the list
+    // without a scroll event.
+    context.simulate_click(point(px(295.), px(190.)), Modifiers::default());
+    let (start, end, count) = reported_visible_range(&mut context, &view);
+    assert!(
+        start > 5 && end - start == 10 && count == 101,
+        "a jump on the scrollbar must be reported: {start}..{end} of {count}"
+    );
+}
+
+/// Tail following and after-frame reports share the same retained list state.
+#[gpui::test]
+fn a_list_reports_its_visible_range_while_following_its_tail(cx: &mut TestAppContext) {
+    let source = reporting_list_source().replace(
+        ").on_visible_range_change",
+        ").with_follow_mode(\"tail\").on_visible_range_change",
+    );
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &source);
+    assert_eq!(reported_visible_range(&mut context, &view), (90, 100, 100));
+
+    click_at(&mut context, 220.);
+    assert_eq!(reported_visible_range(&mut context, &view), (91, 101, 101));
+
+    scroll_by(&mut context, 60.);
+    let reading = reported_visible_range(&mut context, &view);
+    assert!(reading.1 < reading.2, "scrolling up pauses following");
+    click_at(&mut context, 220.);
+    assert_eq!(
+        reported_visible_range(&mut context, &view),
+        (reading.0, reading.1, 102),
+    );
+
+    scroll_by(&mut context, -1000.);
+    click_at(&mut context, 220.);
+    assert_eq!(reported_visible_range(&mut context, &view), (93, 103, 103));
+}
+
+#[gpui::test]
+fn a_list_reports_only_items_visible_after_its_padding(cx: &mut TestAppContext) {
+    let source = reporting_list_source().replace(
+        ").on_visible_range_change",
+        ").pt(20).on_visible_range_change",
+    );
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &source);
+
+    // The tenth row starts exactly at the bottom, below the top padding.
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 9, 100));
+    scroll_by(&mut context, -100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 14, 100));
+
+    // A row that intersects the bottom edge must still be reported.
+    scroll_by(&mut context, -10.);
+    assert_eq!(reported_visible_range(&mut context, &view), (5, 15, 100));
+
+    // GPUI paints no items when padding consumes the whole viewport.
+    let source = reporting_list_source().replace(
+        ").on_visible_range_change",
+        ").pt(100).pb(100).on_visible_range_change",
+    );
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, &source);
+    assert_eq!(reported_visible_range(&mut context, &view), (0, 0, 100));
+}
+
+/// The case the report exists for: a chat that loads a page of older items
+/// when the reader reaches the top, and must not then be thrown to the top of
+/// the page it loaded, which would load the next one, and the next.
+#[gpui::test]
+fn a_list_can_load_older_items_when_the_reader_reaches_the_top(cx: &mut TestAppContext) {
+    let source = r#"
+import { div, View, list } from "gpui-kit";
+import { v_flex } from "gpui-base";
+
+export default class History extends View {
+  init() {
+    this.items = [];
+    for (let index = 0; index < 100; index++) this.items.push(`m${index}`);
+    this.pages = 0;
+    this.reported = "none";
+    this.clicked = "none";
+  }
+
+  render(cx) {
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .h(200)
+          .child(
+            list("rows", this.items.length, (index) => this.items[index], (index) =>
+              div().h(20).child(this.items[index]),
+            )
+              .on_item_click((key, cx) => {
+                this.clicked = key;
+                cx.notify();
+              })
+              .on_visible_range_change((range, count, cx) => {
+                this.reported = `${range.start}..${range.end} of ${count}`;
+                if (range.start === 0) {
+                  const page = [];
+                  for (let index = 0; index < 10; index++) page.push(`p${this.pages}-${index}`);
+                  this.pages += 1;
+                  this.items = page.concat(this.items);
+                }
+                cx.notify();
+              }),
+          ),
+      )
+      .child(`reported ${this.reported} clicked ${this.clicked}`);
+  }
+}
+"#;
+    let (_runtime, _window, view, mut context) = mount_list_source(cx, source);
+
+    // The list opens at the top, so the first report loads a page, and the
+    // reader stays on `m0` with the page above the fold.
+    assert_eq!(reported_visible_range(&mut context, &view), (10, 20, 110));
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "m0");
+
+    // Scrolling up to the page's first item loads one more page, once. Two
+    // turns of the wheel, because a list scrolls only as far as it has
+    // measured, and it measures 160px above the top as it goes.
+    scroll_by(&mut context, 100.);
+    scroll_by(&mut context, 100.);
+    assert_eq!(reported_visible_range(&mut context, &view), (10, 20, 120));
+    assert_eq!(transcript_key_at(&mut context, &view, 5.), "p0-0");
 }

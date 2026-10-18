@@ -145,6 +145,12 @@ pub(in crate::materialize) fn virtual_list(
              is how a script keeps it at the end"
         );
     }
+    if behavior.on_visible_range_change.is_some() {
+        tracing::warn!(
+            "on_visible_range_change is ignored on a {name}: it is list that reports its \
+             visible range after the frame"
+        );
+    }
 
     let identity = ElementId::Name(SharedString::from(spec.id().to_owned()));
     let scroll = scroll_position(runtime, &behavior, &identity, window, cx);

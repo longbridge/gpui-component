@@ -454,6 +454,9 @@ struct Behavior {
     /// the press itself. Registered on the list for the same reason
     /// `on_item_click` is.
     on_item_secondary_click: Option<CallbackId>,
+    /// Reports which items a `list` shows and how many it has, after a frame
+    /// in which either changed.
+    on_visible_range_change: Option<CallbackId>,
     /// Which item a `VirtualList` measures to infer its cross-axis size.
     /// `None` keeps base's own default, which is the first.
     item_to_measure_index: Option<usize>,
@@ -2608,6 +2611,7 @@ pub(in crate::materialize) fn resolve_ops(
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
                 "on_item_click" => behavior.on_item_click = Some(*id),
                 "on_item_secondary_click" => behavior.on_item_secondary_click = Some(*id),
+                "on_visible_range_change" => behavior.on_visible_range_change = Some(*id),
                 "tab_bar" => behavior.dock_chrome.tab_bar = Some(*id),
                 "empty_group" => behavior.dock_chrome.empty_group = Some(*id),
                 "drop_indicator" => behavior.dock_chrome.drop_indicator = Some(*id),

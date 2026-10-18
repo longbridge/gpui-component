@@ -3786,8 +3786,27 @@ impl ShellRuntime {
         });
     }
 
-    /// The lifetime checks, scope entry and job drain every row-level dispatch
-    /// shares. The call itself is the caller's, because the two row events
+    /// Reports which items a `list` shows, and how many it has, after a layout
+    /// changed either. Called after the frame rather than from inside it, so
+    /// the handler runs as an event handler does and may change state.
+    pub(crate) fn dispatch_visible_range(
+        self: &Rc<Self>,
+        id: CallbackId,
+        range: std::ops::Range<usize>,
+        count: usize,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.dispatch_item(id, "visible range", window, cx, |ctx, handler, context| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("start", range.start)?;
+            payload.set("end", range.end)?;
+            handler.call::<_, ()>((payload, count, context))
+        });
+    }
+
+    /// The lifetime checks, scope entry and job drain every list-level
+    /// dispatch shares. The call itself is the caller's, because the events
     /// hand the handler different argument lists.
     fn dispatch_item(
         self: &Rc<Self>,
@@ -6255,7 +6274,8 @@ globalThis.__gpui = (() => {
   });
 
   // The multi-line state shares almost all of its surface with the single-line
-  // one, and adds the three calls that only mean anything once text can wrap.
+  // one, and adds the calls that only mean anything once text has more than
+  // one line.
   const textareaState = (handle) => ({
     ...tokenStateMethods(handle, __textarea_token_call),
     __handle: handle,
@@ -6270,6 +6290,7 @@ globalThis.__gpui = (() => {
         oneBased(max_rows, "set_auto_grow(min_rows, max_rows) max_rows"),
       ),
     set_soft_wrap: (wrap) => __textarea_set_soft_wrap(handle, Boolean(wrap)),
+    set_submit_on_enter: (submit) => __textarea_set_submit_on_enter(handle, Boolean(submit)),
     release: () => __textarea_release(handle),
   });
 
@@ -7268,6 +7289,7 @@ impl ShellRuntime {
                 "keep_mounted",
                 "on_item_click",
                 "on_item_secondary_click",
+                "on_visible_range_change",
                 "on_change",
                 "token",
                 "on_token_click",
@@ -8226,6 +8248,7 @@ impl ShellRuntime {
             | "on_step"
             | "on_item_click"
             | "on_item_secondary_click"
+            | "on_visible_range_change"
             | "on_mouse_move"
             | "on_hover"
             | "on_key_down"
@@ -10425,6 +10448,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_pinch" => "on_pinch",
         "on_item_click" => "on_item_click",
         "on_item_secondary_click" => "on_item_secondary_click",
+        "on_visible_range_change" => "on_visible_range_change",
         "on_resize" => "on_resize",
         "tab_bar" => "tab_bar",
         "empty_group" => "empty_group",
