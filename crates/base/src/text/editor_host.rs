@@ -16,15 +16,19 @@
 //! Nothing lower is exposed: no `TextLayout`, no layout internals, no sink
 //! trait, no retained-layout or projection caches.
 //!
-//! This is a host API for external editors. It is pre-1.0 and may change
-//! between gpui-kit releases.
+//! The host owns editing semantics, document revisions, accessibility and native
+//! input integration. This module provides horizontal TextView block rendering;
+//! it is not a complete visual-caret navigation or pagination API. Extend the
+//! public boundary additively while keeping rendering internals private.
 //!
 //! [`TextView`]: super::TextView
 
 use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use gpui::{
-    AnyElement, App, Bounds, Hsla, Pixels, Point, SharedString, TextLayout, Window, point, px,
+    AnyElement, App, Bounds, ClickEvent, ElementId, HighlightStyle, Hsla, ImageSource,
+    InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Point, SharedString,
+    SharedUri, TextLayout, Window, WrappedLineLayout, div, point, px,
 };
 use unicode_segmentation::UnicodeSegmentation as _;
 
@@ -64,6 +68,56 @@ pub struct RenderContext {
 }
 
 impl RenderContext {
+    /// Creates a local rendering context without reading application globals.
+    /// The host supplies body typography through its container or
+    /// `with_body_font_size`.
+    pub fn new(style: TextViewStyle) -> Self {
+        Self {
+            node: NodeContext {
+                style: Arc::new(style),
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Replaces code highlighting for this context only.
+    pub fn with_code_block_highlighter<F>(mut self, highlighter: F) -> Self
+    where
+        F: Fn(&CodeBlock) -> Vec<(Range<usize>, HighlightStyle)> + Send + Sync + 'static,
+    {
+        self.node.code_block_highlighter = Some(Arc::new(highlighter));
+        self
+    }
+
+    /// Resolves document image URIs. The host owns resource access policy.
+    pub fn with_image_source<F>(mut self, resolver: F) -> Self
+    where
+        F: Fn(&SharedUri) -> ImageSource + Send + Sync + 'static,
+    {
+        self.node.image_source = Some(Arc::new(resolver));
+        self
+    }
+
+    /// Handles link activation. Without a handler, links use App::open_url.
+    pub fn on_link_click<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
+    {
+        self.node.link_click_handler = Some(Arc::new(handler));
+        self
+    }
+
+    /// Registers a reference-link definition from the host's document.
+    /// Supply definitions for the entire document, including virtualized blocks.
+    pub fn with_link_reference(
+        mut self,
+        identifier: impl Into<SharedString>,
+        link: LinkMark,
+    ) -> Self {
+        self.node.link_refs.insert(identifier.into(), link);
+        self
+    }
+
     /// The context TextView would start from: the global [`TextViewDefaults`]
     /// style and code-block highlighter when set, else the theme's style.
     pub fn from_app(cx: &App) -> Self {
@@ -144,6 +198,23 @@ impl FlowPosition {
 }
 
 impl BlockNode {
+    /// Renders under a stable host-owned identity. Use a domain ID, not a list
+    /// position, when inserting, reordering or virtualizing blocks. Identity
+    /// scopes GPUI element state independently of the leaf keys used for geometry.
+    pub fn render_with_id(
+        &self,
+        id: impl Into<ElementId>,
+        flow: FlowPosition,
+        render_context: &RenderContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        div()
+            .id(id)
+            .child(self.render(0, flow, render_context, window, cx))
+            .into_any_element()
+    }
+
     /// Renders the block as TextView does. `ix` identifies the block among
     /// its siblings (element ids derive from it).
     pub fn render(
@@ -175,7 +246,16 @@ impl BlockNode {
 /// `decorations` maps a leaf key to byte ranges of that leaf's text (atoms
 /// count as one `U+FFFC` each) to paint behind the text: the host's selection,
 /// find matches, anything. Leaves without a key, or without an entry, paint as
-/// usual. Scopes nest, and the previous one is restored even if `f` panics.
+/// usual. Atom decorations cover the whole atom and paint over its content
+/// so selections remain visible over opaque images. Supply translucent colors
+/// for overlays. Ranges are half-open; empty ranges paint nothing.
+/// Scopes nest, and the previous one is restored even if `f` panics.
+///
+/// Keys must be unique within one collection scope. Nested scopes are isolated:
+/// an outer scope does not collect the inner scope's leaves. Only prepainted
+/// leaves are returned; absence is not evidence that a document leaf was removed.
+/// The host owns document revisions, virtualization, focus, native input and
+/// UTF-16/UTF-8 conversion for platform input APIs.
 pub fn collect_leaf_geometry<R>(
     decorations: HashMap<u64, Vec<(Range<usize>, Hsla)>>,
     f: impl FnOnce() -> R,
@@ -203,7 +283,7 @@ impl EditorSink for Collector {
     fn report(&self, key: u64, layout: &TextLayout) {
         self.pieces
             .borrow_mut()
-            .insert(key, vec![Piece::Whole(layout.clone())]);
+            .insert(key, vec![Piece::Whole(LayoutSnapshot::new(layout))]);
     }
 
     fn begin_pieces(&self, key: u64) {
@@ -217,7 +297,7 @@ impl EditorSink for Collector {
             .or_default()
             .push(Piece::Text {
                 start,
-                layout: layout.clone(),
+                layout: LayoutSnapshot::new(layout),
             });
     }
 
@@ -229,8 +309,69 @@ impl EditorSink for Collector {
             .push(Piece::Atom { range, bounds });
     }
 
+    fn report_empty_piece(&self, key: u64, start: usize, bounds: Bounds<Pixels>) {
+        self.pieces
+            .borrow_mut()
+            .entry(key)
+            .or_default()
+            .push(Piece::Empty { start, bounds });
+    }
+
     fn backgrounds(&self, key: u64) -> Vec<(Range<usize>, Hsla)> {
         self.decorations.get(&key).cloned().unwrap_or_default()
+    }
+}
+
+/// Copy mutable frame state, sharing only immutable shaped lines.
+#[derive(Clone)]
+struct LayoutSnapshot {
+    bounds: Bounds<Pixels>,
+    len: usize,
+    line_height: Pixels,
+    text: SharedString,
+    lines: Vec<Arc<WrappedLineLayout>>,
+}
+
+impl LayoutSnapshot {
+    fn new(layout: &TextLayout) -> Self {
+        Self {
+            bounds: layout.bounds(),
+            len: layout.len(),
+            line_height: layout.line_height(),
+            text: layout.text().into(),
+            lines: layout.line_layouts().into_iter().collect(),
+        }
+    }
+
+    fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
+    fn len(&self) -> usize {
+        self.len
+    }
+    fn line_height(&self) -> Pixels {
+        self.line_height
+    }
+    fn text(&self) -> &str {
+        &self.text
+    }
+    fn line_layouts(&self) -> &[Arc<WrappedLineLayout>] {
+        &self.lines
+    }
+
+    fn position_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+        let mut origin = self.bounds.origin;
+        let mut start = 0;
+        for line in &self.lines {
+            if index <= start + line.len() {
+                return line
+                    .position_for_index(index - start, self.line_height)
+                    .map(|p| origin + p);
+            }
+            start += line.len() + 1;
+            origin.y += line.size(self.line_height).height;
+        }
+        None
     }
 }
 
@@ -239,10 +380,14 @@ impl EditorSink for Collector {
 /// leaf byte order.
 #[derive(Clone)]
 enum Piece {
-    Whole(TextLayout),
+    Whole(LayoutSnapshot),
     Text {
         start: usize,
-        layout: TextLayout,
+        layout: LayoutSnapshot,
+    },
+    Empty {
+        start: usize,
+        bounds: Bounds<Pixels>,
     },
     Atom {
         range: Range<usize>,
@@ -254,7 +399,7 @@ impl Piece {
     fn bounds(&self) -> Bounds<Pixels> {
         match self {
             Piece::Whole(layout) | Piece::Text { layout, .. } => layout.bounds(),
-            Piece::Atom { bounds, .. } => *bounds,
+            Piece::Atom { bounds, .. } | Piece::Empty { bounds, .. } => *bounds,
         }
     }
 
@@ -263,6 +408,7 @@ impl Piece {
             Piece::Whole(layout) => 0..layout.len(),
             Piece::Text { start, layout } => *start..start + layout.len(),
             Piece::Atom { range, .. } => range.clone(),
+            Piece::Empty { start, .. } => *start..*start,
         }
     }
 }
@@ -272,14 +418,16 @@ impl Piece {
 /// Indices are byte offsets into the leaf's text, where each inline atom
 /// (image, custom node) is one `U+FFFC` (3 bytes). Coordinates are window
 /// pixels and are valid for the frame that produced them. It is a value, not a
-/// handle: it holds no entity or layout and can be kept until the next frame.
+/// handle: it owns its bounds and shares immutable shaped lines, never the
+/// renderer's mutable layout state. Later frames do not mutate this snapshot.
+/// The host must replace it after content, width, typography or scrolling changes.
 #[derive(Clone)]
 pub struct LeafGeometry {
     pieces: Vec<Piece>,
 }
 
 impl LeafGeometry {
-    fn whole(&self) -> Option<&TextLayout> {
+    fn whole(&self) -> Option<&LayoutSnapshot> {
         match self.pieces.as_slice() {
             [Piece::Whole(layout)] => Some(layout),
             _ => None,
@@ -315,6 +463,7 @@ impl LeafGeometry {
             .iter()
             .find_map(|piece| match piece {
                 Piece::Whole(layout) | Piece::Text { layout, .. } => Some(layout.line_height()),
+                Piece::Empty { bounds, .. } => Some(bounds.size.height),
                 Piece::Atom { .. } => None,
             })
             .unwrap_or_else(|| self.bounds().size.height)
@@ -328,11 +477,11 @@ impl LeafGeometry {
             .iter()
             .find_map(|piece| match piece {
                 Piece::Whole(layout) | Piece::Text { layout, .. } => {
-                    let line = layout.line_layout_for_index(0)?;
+                    let line = layout.lines.first()?;
                     let h = line.unwrapped_layout.ascent + line.unwrapped_layout.descent;
                     (h > Pixels::ZERO).then_some(h)
                 }
-                Piece::Atom { .. } => None,
+                Piece::Atom { .. } | Piece::Empty { .. } => None,
             })
             .unwrap_or(line_height * 0.85)
             .min(line_height)
@@ -363,6 +512,7 @@ impl LeafGeometry {
                     .position_for_index(local)
                     .unwrap_or_else(|| layout.bounds().origin)
             }
+            Piece::Empty { bounds, .. } => bounds.origin,
             Piece::Atom { range, bounds } => {
                 let x = if index >= range.end {
                     bounds.right()
@@ -435,6 +585,7 @@ impl LeafGeometry {
                     .map_or(0, |(i, _)| i);
                 start + nearest
             }
+            Piece::Empty { start, .. } => *start,
             Piece::Atom { range, bounds } => {
                 if at.x < bounds.center().x {
                     range.start
@@ -456,7 +607,7 @@ impl LeafGeometry {
 }
 
 /// The closest index in a whole-leaf layout for a window point.
-fn whole_index_at(layout: &TextLayout, at: Point<Pixels>) -> usize {
+fn whole_index_at(layout: &LayoutSnapshot, at: Point<Pixels>) -> usize {
     let bounds = layout.bounds();
     let line_height = layout.line_height();
     let mut top = bounds.top();
@@ -487,7 +638,7 @@ mod tests {
 
     use gpui::{
         Context, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
-        ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext, div, rgb, rgba,
+        Render, Styled as _, TestAppContext, VisualTestContext, div, rgb, rgba,
     };
 
     use super::*;
@@ -606,6 +757,17 @@ mod tests {
         extensions: Arc<MarkdownExtensions>,
         width: Pixels,
     ) -> HashMap<u64, LeafGeometry> {
+        draw_and_inspect(cx, blocks, decorations, extensions, width, |_| ()).0
+    }
+
+    fn draw_and_inspect<R>(
+        cx: &mut TestAppContext,
+        blocks: Vec<BlockNode>,
+        decorations: HashMap<u64, Vec<(Range<usize>, Hsla)>>,
+        extensions: Arc<MarkdownExtensions>,
+        width: Pixels,
+        inspect: impl FnOnce(&mut Window) -> R,
+    ) -> (HashMap<u64, LeafGeometry>, R) {
         cx.update(crate::init);
         let out = Geometries::default();
         let (_, vcx) = cx.add_window_view({
@@ -620,7 +782,8 @@ mod tests {
             }
         });
         settle(vcx);
-        out.take()
+        let inspected = vcx.update(|window, _| inspect(window));
+        (out.take(), inspected)
     }
 
     fn settle(cx: &mut VisualTestContext) {
@@ -822,6 +985,139 @@ mod tests {
     }
 
     #[gpui::test]
+    fn mixed_flow_keeps_empty_lines_and_trailing_breaks(cx: &mut TestAppContext) {
+        let mut paragraph = Paragraph::default();
+        paragraph.push(atom());
+        paragraph.push(InlineNode::new("a\n\n"));
+        let mut breaks = Paragraph::default();
+        breaks.push(atom());
+        breaks.push(InlineNode::new("\n\n"));
+        let leaves = draw(
+            cx,
+            vec![
+                BlockNode::Paragraph(paragraph.with_leaf_key(1)),
+                BlockNode::Paragraph(breaks.with_leaf_key(2)),
+            ],
+            HashMap::new(),
+            atom_plugin(),
+            px(300.),
+        );
+        let leaf = &leaves[&1];
+        assert_eq!(leaf.len(), 6);
+        let a = leaf.position_for_index(3);
+        let empty = leaf.position_for_index(5);
+        let end = leaf.position_for_index(6);
+        assert!(a.y < empty.y && empty.y < end.y);
+        for index in [5, 6] {
+            let caret = leaf.position_for_index(index);
+            assert_eq!(
+                leaf.index_for_position(point(
+                    caret.x + px(20.),
+                    caret.y + leaf.line_height() / 2.
+                )),
+                index
+            );
+        }
+        assert!(leaf.bounds().bottom() >= end.y + leaf.line_height());
+        let breaks = &leaves[&2];
+        assert_eq!(breaks.len(), 5);
+        assert!(breaks.line_height() < breaks.bounds().size.height);
+        assert!(breaks.position_for_index(5).y > breaks.position_for_index(4).y);
+    }
+
+    #[gpui::test]
+    fn atom_decorations_are_painted_for_custom_nodes_and_images(cx: &mut TestAppContext) {
+        let color: Hsla = rgba(0x12345680).into();
+        let mut custom = Paragraph::default();
+        custom.push(atom());
+        let mut image = Paragraph::default();
+        image.push(InlineNode::image(ImageNode {
+            url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'/>".into(),
+            width: Some(px(20.).into()), height: Some(px(20.).into()),
+            ..Default::default()
+        }));
+        let blocks = vec![
+            BlockNode::Paragraph(custom.with_leaf_key(1)),
+            BlockNode::Paragraph(image.with_leaf_key(2)),
+        ];
+        let decorations = HashMap::from([
+            (1, vec![(0..3, color), (1..1, color)]),
+            (2, vec![(0..3, color), (3..6, color)]),
+        ]);
+        let (_, painted) =
+            draw_and_inspect(cx, blocks, decorations, atom_plugin(), px(300.), |window| {
+                let background: gpui::Background = color.into();
+                window
+                    .painted_quads()
+                    .into_iter()
+                    .filter(|quad| quad.background == background)
+                    .count()
+            });
+        assert_eq!(
+            painted, 2,
+            "one overlay per atom; empty and adjacent ranges paint nothing"
+        );
+    }
+
+    #[gpui::test]
+    fn rekeying_cloned_leaves_preserves_each_identity(cx: &mut TestAppContext) {
+        let original = plain("shared source").with_leaf_key(1);
+        let copy = original.clone().with_leaf_key(2);
+        let code = CodeBlock::new("let x = 1;".into(), None, None::<Span>).with_leaf_key(3);
+        let copy_code = code.clone().with_leaf_key(4);
+        let leaves = draw(
+            cx,
+            vec![
+                BlockNode::Paragraph(original),
+                BlockNode::Paragraph(copy),
+                BlockNode::CodeBlock(code),
+                BlockNode::CodeBlock(copy_code),
+            ],
+            HashMap::new(),
+            Default::default(),
+            px(300.),
+        );
+        assert_eq!(leaves.len(), 4);
+        assert_eq!(leaves[&1].len(), "shared source".len());
+        assert_eq!(leaves[&3].len(), "let x = 1;".len());
+        assert!(leaves[&1].bounds().top() < leaves[&2].bounds().top());
+        assert!(leaves[&3].bounds().top() < leaves[&4].bounds().top());
+    }
+
+    #[gpui::test]
+    fn geometry_is_an_immutable_snapshot(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let out = Geometries::default();
+        let (host, vcx) = cx.add_window_view({
+            let out = out.clone();
+            move |_, _| Host {
+                blocks: vec![BlockNode::Paragraph(
+                    plain("a long sentence that wraps when the viewport gets narrower")
+                        .with_leaf_key(1),
+                )],
+                extensions: Default::default(),
+                decorations: HashMap::new(),
+                out,
+                width: px(600.),
+                sink: None,
+            }
+        });
+        settle(vcx);
+        let old = out.borrow()[&1].clone();
+        let before = old.bounds();
+        vcx.update(|_, cx| {
+            host.update(cx, |host, cx| {
+                host.width = px(80.);
+                cx.notify();
+            })
+        });
+        settle(vcx);
+        assert!(out.borrow()[&1].bounds().size.height > before.size.height);
+        assert_eq!(old.bounds(), before);
+        assert_eq!(old.position_for_index(0), before.origin);
+    }
+
+    #[gpui::test]
     fn empty_keyed_leaf_has_a_line_box_and_empty_unkeyed_leaf_stays_empty(cx: &mut TestAppContext) {
         let blocks = vec![
             BlockNode::Paragraph(Paragraph::default()),
@@ -870,6 +1166,7 @@ mod tests {
         fn begin_pieces(&self, _: u64) {}
         fn report_text_piece(&self, _: u64, _: usize, _: &TextLayout) {}
         fn report_box_piece(&self, _: u64, _: Range<usize>, _: Bounds<Pixels>) {}
+        fn report_empty_piece(&self, _: u64, _: usize, _: Bounds<Pixels>) {}
         fn backgrounds(&self, key: u64) -> Vec<(Range<usize>, Hsla)> {
             self.asked.borrow_mut().push(key);
             vec![(0..1, rgb(0xff0000).into())]

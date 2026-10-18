@@ -27,6 +27,8 @@ pub(crate) trait EditorSink {
     /// An inline atom (image, custom node) of `key` covering the leaf bytes
     /// `range`, drawn in `bounds`.
     fn report_box_piece(&self, key: u64, range: Range<usize>, bounds: Bounds<Pixels>);
+    /// A line with no fragment (e.g. after a trailing hard break).
+    fn report_empty_piece(&self, key: u64, start: usize, bounds: Bounds<Pixels>);
     /// Extra backgrounds to paint behind the leaf `key`, in its text's bytes.
     fn backgrounds(&self, key: u64) -> Vec<(Range<usize>, Hsla)>;
 }
@@ -64,6 +66,7 @@ mod tests {
         fn begin_pieces(&self, _: u64) {}
         fn report_text_piece(&self, _: u64, _: usize, _: &TextLayout) {}
         fn report_box_piece(&self, _: u64, _: Range<usize>, _: Bounds<Pixels>) {}
+        fn report_empty_piece(&self, _: u64, _: usize, _: Bounds<Pixels>) {}
         fn backgrounds(&self, _: u64) -> Vec<(Range<usize>, Hsla)> {
             Vec::new()
         }

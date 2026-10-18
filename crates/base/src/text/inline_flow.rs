@@ -177,6 +177,7 @@ struct InlineFlowTypography {
 #[derive(Default)]
 struct InlineFlowLayout {
     fragments: Vec<PositionedFragment>,
+    empty_lines: Vec<(usize, Bounds<Pixels>)>,
     size: Size<Pixels>,
     wrap_width: Option<Pixels>,
 }
@@ -248,6 +249,13 @@ enum LineFragmentKind {
     Image,
 }
 
+/// Atom decorations are overlays so they remain visible over opaque content.
+pub(super) struct FlowPaintItem {
+    element: AnyElement,
+    background: Option<(Bounds<Pixels>, Hsla)>,
+    overlays: Vec<(Bounds<Pixels>, Hsla)>,
+}
+
 impl InlineFlow {
     pub(super) fn new(
         id: impl Into<ElementId>,
@@ -263,6 +271,9 @@ impl InlineFlow {
     }
 
     pub(super) fn editor_key(mut self, key: Option<u64>) -> Self {
+        if let Some(key) = key {
+            self.id = ("editor-leaf", key).into();
+        }
         self.editor_key = key;
         self
     }
@@ -322,7 +333,7 @@ impl IntoElement for InlineFlow {
 
 impl Element for InlineFlow {
     type RequestLayoutState = InlineFlowLayoutState;
-    type PrepaintState = Vec<(AnyElement, Option<(Bounds<Pixels>, gpui::Hsla)>)>;
+    type PrepaintState = Vec<FlowPaintItem>;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -481,10 +492,9 @@ impl Element for InlineFlow {
         let editor = self
             .editor_key
             .and_then(|key| super::editor_seam::current().map(|sink| (key, sink)));
-        let item_starts: Vec<usize> = {
-            if let Some((key, sink)) = &editor {
-                sink.begin_pieces(*key);
-            }
+        // Ordinary TextViews do not allocate editor bookkeeping.
+        let item_starts: Vec<usize> = if let Some((key, sink)) = &editor {
+            sink.begin_pieces(*key);
             let mut at = 0;
             self.items
                 .iter()
@@ -497,12 +507,50 @@ impl Element for InlineFlow {
                     start
                 })
                 .collect()
+        } else {
+            Vec::new()
         };
+        if let Some((key, sink)) = &editor {
+            for (start, line_bounds) in &layout.empty_lines {
+                // Flow layout uses a one-byte object placeholder; the public
+                // leaf coordinate space uses the three-byte U+FFFC instead.
+                let mut flow_start = 0;
+                let mut leaf_start = 0;
+                for item in &self.items {
+                    let len = match item {
+                        InlineFlowItem::Text { text, .. } => text.len(),
+                        _ => IMAGE_LEN,
+                    };
+                    if flow_start + len > *start {
+                        break;
+                    }
+                    flow_start += len;
+                    leaf_start += match item {
+                        InlineFlowItem::Text { text, .. } => text.len(),
+                        _ => EDITOR_ATOM_LEN,
+                    };
+                }
+                sink.report_empty_piece(
+                    *key,
+                    leaf_start + start - flow_start,
+                    Bounds::new(bounds.origin + line_bounds.origin, line_bounds.size),
+                );
+            }
+        }
+        let decorations = editor.as_ref().map(|(key, sink)| sink.backgrounds(*key));
         let report_box = |item_ix: usize, bounds: Bounds<Pixels>| {
+            let mut overlays = Vec::new();
             if let Some((key, sink)) = &editor {
                 let start = item_starts[item_ix];
-                sink.report_box_piece(*key, start..start + EDITOR_ATOM_LEN, bounds);
+                let end = start + EDITOR_ATOM_LEN;
+                sink.report_box_piece(*key, start..end, bounds);
+                for (range, color) in decorations.as_deref().unwrap_or_default() {
+                    if range.start < range.end && range.start < end && range.end > start {
+                        overlays.push((bounds, *color));
+                    }
+                }
             }
+            overlays
         };
 
         let mut text_fragment_count = 0;
@@ -526,7 +574,8 @@ impl Element for InlineFlow {
                         continue;
                     };
                     let object_size = object.metrics.size;
-                    report_box(*item_ix, Bounds::new(bounds.origin + *origin, object_size));
+                    let overlays =
+                        report_box(*item_ix, Bounds::new(bounds.origin + *origin, object_size));
                     let mut element = InlineObject::new(
                         ("inline-object", *id),
                         text.clone(),
@@ -553,7 +602,11 @@ impl Element for InlineFlow {
                         window,
                         cx,
                     );
-                    elements.push((element, None));
+                    elements.push(FlowPaintItem {
+                        element,
+                        background: None,
+                        overlays,
+                    });
                 }
                 PositionedFragment::Text {
                     item_ix,
@@ -655,7 +708,11 @@ impl Element for InlineFlow {
                             },
                         );
                     });
-                    elements.push((element, background));
+                    elements.push(FlowPaintItem {
+                        element,
+                        background,
+                        overlays: Vec::new(),
+                    });
                 }
                 PositionedFragment::Image {
                     item_ix,
@@ -672,7 +729,8 @@ impl Element for InlineFlow {
                         continue;
                     };
                     let (origin, fragment_size) = (*origin, *fragment_size);
-                    report_box(*item_ix, Bounds::new(bounds.origin + origin, fragment_size));
+                    let overlays =
+                        report_box(*item_ix, Bounds::new(bounds.origin + origin, fragment_size));
                     let mut element = Self::image_element(
                         elements.len(),
                         source,
@@ -690,7 +748,11 @@ impl Element for InlineFlow {
                         window,
                         cx,
                     );
-                    elements.push((element, None));
+                    elements.push(FlowPaintItem {
+                        element,
+                        background: None,
+                        overlays,
+                    });
                 }
             }
         }
@@ -725,11 +787,19 @@ impl Element for InlineFlow {
             }
         }
         let radius = crate::Theme::global(cx).tokens.radius.sm;
-        for (element, background) in prepaint {
+        for FlowPaintItem {
+            element,
+            background,
+            overlays,
+        } in prepaint
+        {
             if let Some((bounds, color)) = background {
                 window.paint_quad(gpui::fill(*bounds, *color).corner_radii(radius));
             }
             element.paint(window, cx);
+            for (bounds, color) in overlays {
+                window.paint_quad(gpui::fill(*bounds, *color));
+            }
         }
     }
 }
@@ -936,6 +1006,7 @@ fn layout_measured_flow(
     let line_ranges = line_ranges(items, image_sizes, &objects, text_style, wrap_width, window);
     let font_size = text_style.font_size.to_pixels(rem_size);
     let mut fragments = Vec::new();
+    let mut empty_lines = Vec::new();
     let mut max_width = Pixels::ZERO;
     let mut y = Pixels::ZERO;
 
@@ -1081,6 +1152,15 @@ fn layout_measured_flow(
             item_start = item_end;
         }
 
+        if line_range.is_empty() {
+            empty_lines.push((
+                line_range.start,
+                Bounds::new(
+                    point(Pixels::ZERO, y),
+                    size(Pixels::ZERO, line_ascent + line_descent),
+                ),
+            ));
+        }
         let mut x = Pixels::ZERO;
         for mut fragment in line_fragments {
             // Give a text run's glyph box equal leading on both sides, as
@@ -1150,6 +1230,7 @@ fn layout_measured_flow(
 
     InlineFlowLayout {
         fragments,
+        empty_lines,
         size: size(max_width, y),
         wrap_width,
     }
@@ -1230,6 +1311,10 @@ fn line_ranges(
     let mut ranges = Vec::new();
 
     for hard_line in hard_lines {
+        if hard_line.is_empty() {
+            ranges.push(hard_line);
+            continue;
+        }
         let mut item_start = 0;
         let mut wrap_fragments = Vec::new();
         for (ix, item) in items.iter().enumerate() {

@@ -855,10 +855,18 @@ impl PartialEq for InlineNode {
     }
 }
 
-fn set_leaf_key(state: &Arc<Mutex<InlineState>>, key: u64) {
-    if let Ok(mut state) = state.lock() {
-        state.editor_key = Some(key);
-    }
+fn set_leaf_key(state: &mut Arc<Mutex<InlineState>>, key: u64) {
+    let text = state
+        .lock()
+        .map(|state| state.text.clone())
+        .unwrap_or_default();
+    // Rekeying creates a new rendered identity. Do not mutate the state of
+    // another AST clone (or carry its transient selection into this instance).
+    *state = Arc::new(Mutex::new(InlineState {
+        text,
+        editor_key: Some(key),
+        ..Default::default()
+    }));
 }
 
 /// Wrap `text` with the Markdown syntax implied by `mark`.
@@ -2068,9 +2076,9 @@ impl Paragraph {
     /// Marks this paragraph as a leaf of an external editor: while a
     /// [`collect_leaf_geometry`](super::editor_host::collect_leaf_geometry)
     /// scope is active, it reports its geometry under `key` and paints the
-    /// decorations given for `key`.
-    pub fn with_leaf_key(self, key: u64) -> Self {
-        set_leaf_key(&self.state, key);
+    /// decorations given for `key`. Rekeying detaches runtime state from clones.
+    pub fn with_leaf_key(mut self, key: u64) -> Self {
+        set_leaf_key(&mut self.state, key);
         self
     }
 
@@ -2159,9 +2167,9 @@ impl CodeBlock {
     }
 
     /// Marks this code block as a leaf of an external editor, like
-    /// [`Paragraph::with_leaf_key`].
-    pub fn with_leaf_key(self, key: u64) -> Self {
-        set_leaf_key(&self.state, key);
+    /// [`Paragraph::with_leaf_key`]. Rekeying detaches runtime state from clones.
+    pub fn with_leaf_key(mut self, key: u64) -> Self {
+        set_leaf_key(&mut self.state, key);
         self
     }
 
