@@ -43,7 +43,7 @@ impl Render for Host {
         div()
             .size_full()
             .p_4()
-            .child(self.mounted.build(window, cx))
+            .child(self.mounted.build(None, window, cx))
             // Measuring lays the element out as a root, which GPUI allows
             // only while drawing, as in NSH's surface.
             .when(self.measured.is_none(), |this| {

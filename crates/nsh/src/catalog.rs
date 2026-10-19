@@ -21,6 +21,7 @@ use gpui_kit::{
     StyleRefinement, Styled, Window,
     base::{StyledExt as _, Theme},
     inspector_reflection::FunctionReflection,
+    px,
 };
 use nsh_platform_gpui::{ComponentContext, Components, NativeComponent};
 use serde_json::{Map, Value};
@@ -625,7 +626,14 @@ impl Mounted {
 
     /// The element for this frame. Its text takes GPUI Base's foreground
     /// until the control's own style says otherwise.
-    pub(crate) fn build(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
+    /// `min_width` keeps the element from being squeezed into a box NSH has
+    /// not widened yet ([`Sizing::min_width`]).
+    pub(crate) fn build(
+        &mut self,
+        min_width: Option<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
         let element = (self.control.build)(&mut self.state, &self.props, &self.events, window, cx);
         self.props.changed.clear();
         // Asked on every frame: a control may replace the entity it focuses,
@@ -637,10 +645,11 @@ impl Mounted {
             _ => None,
         };
         let foreground = Theme::global(cx).tokens.colors.foreground;
-        gpui_kit::div()
-            .text_color(foreground)
-            .child(element)
-            .into_any_element()
+        let mut root = gpui_kit::div().text_color(foreground);
+        if let Some(width) = min_width {
+            root = root.min_w(width);
+        }
+        root.child(element).into_any_element()
     }
 
     /// The element's natural size: at its max-content width (labels on one
@@ -652,7 +661,7 @@ impl Mounted {
         window: &mut Window,
         cx: &mut App,
     ) -> Size<Pixels> {
-        self.build(window, cx).layout_as_root(
+        self.build(None, window, cx).layout_as_root(
             Size {
                 width: width.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite),
                 height: AvailableSpace::MinContent,
@@ -663,18 +672,92 @@ impl Mounted {
     }
 }
 
+/// How a control's size follows its box. NSH uses the reported size where
+/// the app's style leaves the box's size open. The width is always the
+/// natural one (the content on one line), whatever the box: a width taken
+/// from the box would follow NSH's asynchronous layout a frame late and swing
+/// between two values. Only the height follows a box narrower than the
+/// content, which wraps.
+#[derive(Default)]
+struct Sizing {
+    /// The box's width as last drawn.
+    width: Option<Pixels>,
+    /// The natural width, as last measured.
+    natural: Option<Pixels>,
+    /// The size last reported to NSH.
+    reported: Option<(f32, f32)>,
+    /// Measures in a row that changed the size.
+    changes: u8,
+    /// Frames left in which the element keeps its natural width while NSH
+    /// applies a reported size (a frame or two late).
+    catch_up: u8,
+}
+
+/// Frames a newly reported size may take to reach the box.
+const CATCH_UP_FRAMES: u8 = 4;
+
+/// Measures in a row that may change the size before it is taken as it is.
+const MAX_SIZE_CHANGES: u8 = 8;
+
+impl Sizing {
+    fn wraps(&self, width: Pixels) -> bool {
+        self.natural
+            .is_some_and(|natural| width + px(0.5) < natural)
+    }
+
+    /// Records the width the box was drawn at; whether to measure again
+    /// (the content wraps at it, or did at the old one).
+    fn placed(&mut self, width: Pixels) -> bool {
+        if self.catch_up > 0 {
+            let caught_up = self
+                .natural
+                .is_some_and(|natural| width + px(0.5) >= natural);
+            self.catch_up = if caught_up { 0 } else { self.catch_up - 1 };
+        }
+        if width <= Pixels::ZERO || self.width == Some(width) {
+            return false;
+        }
+        let wrapped = self.width.is_some_and(|old| self.wraps(old));
+        self.width = Some(width);
+        wrapped || self.wraps(width)
+    }
+
+    /// Records a size to report: `None` if it is the one NSH has, else the
+    /// size and whether to measure again next frame. Some controls know
+    /// their size only once drawn (a text view lays its blocks out while
+    /// painting), so a size that changed is measured until it holds.
+    fn report(&mut self, size: (f32, f32)) -> Option<bool> {
+        if self.reported == Some(size) {
+            self.changes = 0;
+            return None;
+        }
+        self.reported = Some(size);
+        self.catch_up = CATCH_UP_FRAMES;
+        self.changes += 1;
+        Some(self.changes < MAX_SIZE_CHANGES)
+    }
+
+    /// The width the element keeps while NSH catches up with a reported
+    /// size, so its content is not squeezed into the old box for a frame.
+    fn min_width(&self) -> Option<Pixels> {
+        self.natural.filter(|_| self.catch_up > 0)
+    }
+
+    /// Records a measured natural width; the width to measure the height
+    /// at, when the box is narrower.
+    fn wrap_width(&mut self, natural: Pixels) -> Option<Pixels> {
+        self.natural = Some(natural);
+        self.width.filter(|width| self.wraps(*width))
+    }
+}
+
 /// One control in an NSH app.
 struct Instance {
     mounted: Mounted,
     context: ComponentContext,
-    /// Set when the props or the box's width changed: the natural size is
-    /// measured again.
+    /// Set when the props, or whether the content wraps, changed.
     measure: bool,
-    /// The box's width when something other than the control's own size
-    /// decides it (the app's style, a flex parent); `None` until then.
-    width: Option<Pixels>,
-    /// The width last reported to NSH.
-    reported: Option<f32>,
+    sizing: Sizing,
 }
 
 impl Instance {
@@ -683,8 +766,7 @@ impl Instance {
             mounted: Mounted::new(control, Rc::new(context.clone())),
             context,
             measure: true,
-            width: None,
-            reported: None,
+            sizing: Sizing::default(),
         }
     }
 }
@@ -699,30 +781,27 @@ fn next_instance() -> u64 {
 impl NativeComponent for Instance {
     fn render(&mut self, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         if std::mem::take(&mut self.measure) {
-            // The element's natural size, where the app's style leaves the
-            // box's size open.
-            let size = self.mounted.measure(self.width, window, cx);
-            let width = f32::from(size.width).ceil();
-            self.reported = Some(width);
-            self.context.set_size(width, f32::from(size.height).ceil());
+            let natural = self.mounted.measure(None, window, cx);
+            let height = match self.sizing.wrap_width(natural.width) {
+                Some(width) => self.mounted.measure(Some(width), window, cx).height,
+                None => natural.height,
+            };
+            let size = (f32::from(natural.width).ceil(), f32::from(height).ceil());
+            if let Some(again) = self.sizing.report(size) {
+                log::debug!("{} size {}x{}", self.mounted.control.name, size.0, size.1);
+                self.context.set_size(size.0, size.1);
+                if again {
+                    self.measure = true;
+                    self.context.redraw();
+                }
+            }
         }
-        Some(self.mounted.build(window, cx))
+        let min_width = self.sizing.min_width();
+        Some(self.mounted.build(min_width, window, cx))
     }
 
     fn placed(&mut self, bounds: Option<Bounds<Pixels>>) {
-        // A box drawn at another width than the one reported has a width of
-        // its own: the height is measured at it, so wrapped text fits. A box
-        // not laid out yet (zero wide, or at the reported width, since NSH
-        // applies sizes asynchronously) changes nothing.
-        let Some(width) = bounds.map(|bounds| bounds.size.width) else {
-            return;
-        };
-        let own = width > Pixels::ZERO
-            && self
-                .reported
-                .is_some_and(|reported| (f32::from(width) - reported).abs() >= 1.0);
-        if own && self.width != Some(width) {
-            self.width = Some(width);
+        if bounds.is_some_and(|bounds| self.sizing.placed(bounds.size.width)) {
             self.measure = true;
             self.context.redraw();
         }
@@ -765,6 +844,47 @@ mod tests {
             .emit("change", serde_json::json!({ "value": "ab" }));
         assert_eq!(mounted.props.string("value").as_deref(), Some("ab"));
         assert!(!mounted.props.changed("value"));
+    }
+
+    /// NSH applies a reported size a frame late: the box is drawn at the
+    /// old width first. The reported width never follows the box, so the
+    /// sizes settle instead of swinging between two widths.
+    #[test]
+    fn test_sizing_settles() {
+        let mut sizing = Sizing::default();
+        assert_eq!(sizing.wrap_width(px(100.)), None);
+        // Drawn at a stale, narrower width: measured again, height at it.
+        assert!(sizing.placed(px(80.)));
+        assert_eq!(sizing.wrap_width(px(100.)), Some(px(80.)));
+        // Drawn at the natural width: measured once more, then settled.
+        assert!(sizing.placed(px(100.)));
+        assert_eq!(sizing.wrap_width(px(100.)), None);
+        assert!(!sizing.placed(px(100.)));
+        // While NSH catches up, the element keeps its natural width.
+        assert_eq!(sizing.report((100., 20.)), Some(true));
+        assert_eq!(sizing.min_width(), Some(px(100.)));
+        assert!(!sizing.placed(px(100.)));
+        assert_eq!(sizing.min_width(), None);
+        // A wider box (`w_full`) never wraps.
+        assert!(!sizing.placed(px(300.)));
+        // Not laid out yet.
+        assert!(!sizing.placed(Pixels::ZERO));
+    }
+
+    /// A size that changes is measured again until it holds, a bounded
+    /// number of times.
+    #[test]
+    fn test_sizing_measures_until_the_size_holds() {
+        let mut sizing = Sizing::default();
+        assert_eq!(sizing.report((100., 115.)), Some(true));
+        assert_eq!(sizing.report((100., 137.)), Some(true));
+        assert_eq!(sizing.report((100., 137.)), None);
+        for height in 0..u8::MAX {
+            if sizing.report((100., f32::from(height))) == Some(false) {
+                return;
+            }
+        }
+        panic!("a size that keeps changing is measured forever");
     }
 
     #[gpui_kit::test]

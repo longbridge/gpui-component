@@ -82,7 +82,10 @@ const calendarLook = {
 const checkboxLook = {
   rootClass: "flex items_center gap_2 text_sm",
   hoverClass: "text_primary",
-  indicatorClass: "size_4 rounded_sm border_1 border_primary",
+  indicatorClass: "size_4 flex items_center justify_center rounded_sm border_1 border_primary",
+  checkedIcon: "icons/check.svg",
+  indeterminateIcon: "icons/minus.svg",
+  iconClass: "size_3 text_primary_foreground",
   indicatorCheckedClass: "bg_primary",
   indicatorIndeterminateClass: "bg_muted_foreground",
 };
@@ -335,7 +338,7 @@ function Fields() {
           decrementLabel="−"
           incrementLabel="+"
           rootClass="flex items_center h_8 w_32 rounded_md border_1 border_input bg_background"
-          inputClass="flex_1 px_2 text_sm"
+          inputClass="flex_1 px_2 text_sm text_center"
           decrementClass="size_8 flex items_center justify_center"
           incrementClass="size_8 flex items_center justify_center"
           stepHoverClass="bg_accent"

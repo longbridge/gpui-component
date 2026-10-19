@@ -4,6 +4,7 @@ use gpui_kit::{
     IntoElement as _, ParentElement as _,
     base::{Checkbox, CheckboxIndicator, CheckboxState, Radio, Switch, SwitchThumb, SwitchTrack},
     prelude::FluentBuilder as _,
+    svg,
 };
 use serde_json::json;
 
@@ -128,14 +129,25 @@ fn checkbox() -> Control {
                                 props.styled_by("indicatorIndeterminateClass", style, cx)
                             })
                             .disabled(|style| props.styled_by("indicatorDisabledClass", style, cx))
-                    }),
+                    })
+                    // Base leaves the mark to the composer: an SVG from the
+                    // host's assets, named by the app.
+                    .when_some(
+                        match state {
+                            CheckboxState::Checked => props.string("checkedIcon"),
+                            CheckboxState::Indeterminate => props.string("indeterminateIcon"),
+                            CheckboxState::Unchecked => None,
+                        },
+                        |this, icon| this.child(props.styled_by("iconClass", svg().path(icon), cx)),
+                    ),
             )
             .when_some(props.string("label"), |this, label| this.child(label))
             .into_any_element()
     })
     .documentation(
         "GPUI Base's Checkbox, an indicator and a label: toggled by a click or Space; \
-         an indeterminate checkbox becomes checked.",
+         an indeterminate checkbox becomes checked. `checkedIcon` and `indeterminateIcon` \
+         name SVGs in the host's assets (`icons/check.svg`) drawn in the indicator.",
     )
     .prop("checked", PropType::Boolean)
     .prop("indeterminate", PropType::Boolean)
@@ -151,6 +163,9 @@ fn checkbox() -> Control {
     .prop("indicatorCheckedClass", PropType::String)
     .prop("indicatorIndeterminateClass", PropType::String)
     .prop("indicatorDisabledClass", PropType::String)
+    .prop("checkedIcon", PropType::String)
+    .prop("indeterminateIcon", PropType::String)
+    .prop("iconClass", PropType::String)
     .event(
         "change",
         &[
@@ -297,6 +312,9 @@ mod tests {
                 "indicatorCheckedClass": "bg_primary",
                 "indicatorIndeterminateClass": "bg_muted",
                 "indicatorDisabledClass": "opacity_50",
+                "checkedIcon": "icons/check.svg",
+                "indeterminateIcon": "icons/minus.svg",
+                "iconClass": "size_3 text_primary_foreground",
             }),
         );
         assert_measured(&checkbox, cx);

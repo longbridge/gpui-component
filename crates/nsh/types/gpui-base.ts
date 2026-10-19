@@ -26,9 +26,9 @@ export const Switch = nativeComponent<{ checked?: boolean; disabled?: boolean; l
   events: ["change"],
 });
 
-/** GPUI Base's Checkbox, an indicator and a label: toggled by a click or Space; an indeterminate checkbox becomes checked. */
-export const Checkbox = nativeComponent<{ checked?: boolean; indeterminate?: boolean; disabled?: boolean; label?: string; accessibilityLabel?: string; rootClass?: string; hoverClass?: string; activeClass?: string; focusClass?: string; checkedClass?: string; indeterminateClass?: string; disabledClass?: string; indicatorClass?: string; indicatorCheckedClass?: string; indicatorIndeterminateClass?: string; indicatorDisabledClass?: string }, { change: { checked: boolean; indeterminate: boolean } }>("gpui-base.Checkbox", {
-  props: ["checked", "indeterminate", "disabled", "label", "accessibilityLabel", "rootClass", "hoverClass", "activeClass", "focusClass", "checkedClass", "indeterminateClass", "disabledClass", "indicatorClass", "indicatorCheckedClass", "indicatorIndeterminateClass", "indicatorDisabledClass"],
+/** GPUI Base's Checkbox, an indicator and a label: toggled by a click or Space; an indeterminate checkbox becomes checked. `checkedIcon` and `indeterminateIcon` name SVGs in the host's assets (`icons/check.svg`) drawn in the indicator. */
+export const Checkbox = nativeComponent<{ checked?: boolean; indeterminate?: boolean; disabled?: boolean; label?: string; accessibilityLabel?: string; rootClass?: string; hoverClass?: string; activeClass?: string; focusClass?: string; checkedClass?: string; indeterminateClass?: string; disabledClass?: string; indicatorClass?: string; indicatorCheckedClass?: string; indicatorIndeterminateClass?: string; indicatorDisabledClass?: string; checkedIcon?: string; indeterminateIcon?: string; iconClass?: string }, { change: { checked: boolean; indeterminate: boolean } }>("gpui-base.Checkbox", {
+  props: ["checked", "indeterminate", "disabled", "label", "accessibilityLabel", "rootClass", "hoverClass", "activeClass", "focusClass", "checkedClass", "indeterminateClass", "disabledClass", "indicatorClass", "indicatorCheckedClass", "indicatorIndeterminateClass", "indicatorDisabledClass", "checkedIcon", "indeterminateIcon", "iconClass"],
   events: ["change"],
 });
 
