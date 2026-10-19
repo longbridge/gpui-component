@@ -415,6 +415,14 @@ where
         self
     }
 
+    /// Change cell-selection capability without replacing the retained table state.
+    pub fn set_cell_selectable(&mut self, cell_selectable: bool, cx: &mut Context<Self>) {
+        if self.cell_selectable != cell_selectable {
+            self.cell_selectable = cell_selectable;
+            cx.notify();
+        }
+    }
+
     /// Set whether the row header column is shown, default is `true`.
     ///
     /// Only effective when `cell_selectable` is `true` — otherwise the row header

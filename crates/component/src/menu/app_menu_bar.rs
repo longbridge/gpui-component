@@ -1,5 +1,5 @@
 use crate::{
-    InteractiveElementExt as _, Selectable, Sizable,
+    Disableable, InteractiveElementExt as _, Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     global_state::GlobalState,
@@ -46,6 +46,18 @@ impl AppMenuBar {
         })
     }
 
+    /// The enabled menu buttons in visual order, for embedding hosts that
+    /// coordinate keyboard traversal with another UI tree.
+    pub fn focus_handles(&self, cx: &App) -> Vec<FocusHandle> {
+        self.menus
+            .iter()
+            .filter_map(|menu| {
+                let menu = menu.read(cx);
+                (!menu.menu.disabled).then(|| menu.focus.clone())
+            })
+            .collect()
+    }
+
     /// Reload the menus from the app.
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         let menu_bar = cx.entity();
@@ -69,12 +81,11 @@ impl AppMenuBar {
             return;
         };
 
-        let new_ix = if selected_index == 0 {
-            self.menus.len().saturating_sub(1)
-        } else {
-            selected_index.saturating_sub(1)
-        };
-        self.set_selected_index(Some(new_ix), window, cx);
+        let count = self.menus.len();
+        let new_ix = (1..=count)
+            .map(|step| (selected_index + count - step) % count)
+            .find(|index| !self.menus[*index].read(cx).menu.disabled);
+        self.set_selected_index(new_ix, window, cx);
     }
 
     fn on_move_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
@@ -82,12 +93,11 @@ impl AppMenuBar {
             return;
         };
 
-        let new_ix = if selected_index + 1 >= self.menus.len() {
-            0
-        } else {
-            selected_index + 1
-        };
-        self.set_selected_index(Some(new_ix), window, cx);
+        let count = self.menus.len();
+        let new_ix = (1..=count)
+            .map(|step| (selected_index + step) % count)
+            .find(|index| !self.menus[*index].read(cx).menu.disabled);
+        self.set_selected_index(new_ix, window, cx);
     }
 
     fn on_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -148,6 +158,7 @@ pub(super) struct AppMenu {
     menu_bar: Entity<AppMenuBar>,
     ix: usize,
     name: SharedString,
+    focus: FocusHandle,
     menu: OwnedMenu,
     popup_menu: Option<Entity<PopupMenu>>,
 
@@ -162,10 +173,11 @@ impl AppMenu {
         cx: &mut App,
     ) -> Entity<Self> {
         let name = menu.name.clone();
-        cx.new(|_| Self {
+        cx.new(|cx| Self {
             ix,
             menu_bar,
             name,
+            focus: cx.focus_handle(),
             menu: menu.clone(),
             popup_menu: None,
             _subscription: None,
@@ -242,6 +254,9 @@ impl AppMenu {
     }
 
     fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.menu.disabled {
+            return;
+        }
         let is_open = self.is_open(cx);
         _ = self.menu_bar.update(cx, |state, cx| {
             let new_ix = if is_open { None } else { Some(self.ix) };
@@ -250,7 +265,7 @@ impl AppMenu {
     }
 
     fn handle_hover(&mut self, hovered: &bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !*hovered {
+        if !*hovered || self.menu.disabled {
             return;
         }
 
@@ -274,11 +289,13 @@ impl Render for AppMenu {
             .relative()
             .child(
                 Button::new("menu")
+                    .track_focus(&self.focus)
                     .small()
                     .py_0p5()
                     .compact()
                     .ghost()
                     .label(self.name.clone())
+                    .disabled(self.menu.disabled)
                     .open(is_open)
                     .on_mouse_down(
                         MouseButton::Left,

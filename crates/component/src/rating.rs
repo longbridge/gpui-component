@@ -1,5 +1,6 @@
 use crate::theme::ActiveTheme;
 use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt, h_flex};
+use gpui_base::TestSupportExt as _;
 use std::rc::Rc;
 
 use gpui::{
@@ -16,6 +17,7 @@ pub struct Rating {
     size: Size,
     disabled: bool,
     value: usize,
+    controlled: bool,
     max: usize,
     color: Option<Hsla>,
     on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
@@ -30,6 +32,7 @@ impl Rating {
             size: Size::Medium,
             disabled: false,
             value: 0,
+            controlled: false,
             max: 5,
             color: None,
             on_click: None,
@@ -56,10 +59,20 @@ impl Rating {
 
     /// Set initial value (0..=max).
     pub fn value(mut self, value: usize) -> Self {
+        self.controlled = false;
         self.value = value;
         if self.value > self.max {
             self.value = self.max;
         }
+        self
+    }
+
+    /// Uses an owner-controlled rating. Activation requests a value through
+    /// `on_click`; the displayed value changes only when the owner supplies it.
+    /// The ordinary `value` builder retains its existing internal-state behavior.
+    pub fn controlled_value(mut self, value: usize) -> Self {
+        self.controlled = true;
+        self.value = value.min(self.max);
         self
     }
 
@@ -133,10 +146,15 @@ impl RenderOnce for Rating {
                 state.value = default_value;
             });
         }
-        let value = state.read(cx).value;
+        let value = if self.controlled {
+            default_value
+        } else {
+            state.read(cx).value
+        };
 
         h_flex()
             .id(id)
+            .test_support()
             .flex_nowrap()
             .refine_style(&self.style)
             .on_hover(window.listener_for(&state, move |state, hovered, _, cx| {
@@ -153,6 +171,7 @@ impl RenderOnce for Rating {
                     this = this.child(
                         div()
                             .id(ix)
+                            .test_support()
                             .p_0p5()
                             .flex_none()
                             .flex_shrink_0()
@@ -201,5 +220,76 @@ impl RenderOnce for Rating {
 
                 this
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Context, Modifiers, Render, TestAppContext, point, px};
+    use std::cell::RefCell;
+
+    struct RatingHarness {
+        controlled: bool,
+        disabled: bool,
+        changes: Rc<RefCell<Vec<usize>>>,
+    }
+    impl Render for RatingHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let changes = self.changes.clone();
+            Rating::new("rating")
+                .h(px(40.))
+                .w(px(220.))
+                .max(7)
+                .map(|rating| {
+                    if self.controlled {
+                        rating.controlled_value(6)
+                    } else {
+                        rating.value(6)
+                    }
+                })
+                .disabled(self.disabled)
+                .on_click(move |next, _, _| changes.borrow_mut().push(*next))
+        }
+    }
+    fn activate_twice(cx: &mut TestAppContext, controlled: bool, disabled: bool) -> Vec<usize> {
+        cx.update(crate::init);
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let changes = changes.clone();
+            move |_, _| RatingHarness {
+                controlled,
+                disabled,
+                changes,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_click(point(px(10.), px(20.)), Modifiers::default());
+        cx.simulate_click(point(px(10.), px(20.)), Modifiers::default());
+        let result = changes.borrow().clone();
+        result
+    }
+    #[gpui::test]
+    fn controlled_rating_keeps_the_owner_value_until_accepted(cx: &mut TestAppContext) {
+        assert_eq!(activate_twice(cx, true, false), vec![0, 0]);
+    }
+    #[gpui::test]
+    fn ordinary_rating_preserves_its_internal_selection(cx: &mut TestAppContext) {
+        assert_eq!(activate_twice(cx, false, false), vec![0, 1]);
+    }
+    #[gpui::test]
+    fn disabled_controlled_rating_does_not_request_changes(cx: &mut TestAppContext) {
+        assert!(activate_twice(cx, true, true).is_empty());
+    }
+    #[gpui::test]
+    fn test_rating_builder(_cx: &mut TestAppContext) {
+        let rating = Rating::new("rating")
+            .max(7)
+            .controlled_value(9)
+            .large()
+            .disabled(true);
+        assert_eq!(rating.value, 7);
+        assert!(rating.controlled);
+        assert!(rating.disabled);
     }
 }

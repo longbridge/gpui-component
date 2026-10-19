@@ -34,6 +34,7 @@ pub struct Radio {
     position_in_set: Option<usize>,
     size_of_set: Option<usize>,
     focus_ring_enabled: bool,
+    tracked_focus_handle: Option<gpui::FocusHandle>,
 }
 
 impl Radio {
@@ -57,7 +58,14 @@ impl Radio {
             position_in_set: None,
             size_of_set: None,
             focus_ring_enabled: true,
+            tracked_focus_handle: None,
         }
+    }
+
+    /// Uses an owner-retained focus handle for native host keyboard traversal.
+    pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
     }
 
     /// Set tooltip text for the radio.
@@ -179,10 +187,12 @@ impl RenderOnce for Radio {
             Size::Large => 1.125,
             _ => 1.,
         });
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone();
+        let focus_handle = self.tracked_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        });
         let is_focused = focus_handle.is_focused(window);
         let disabled = self.disabled;
         let accessibility_label = self

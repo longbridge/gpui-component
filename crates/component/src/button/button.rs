@@ -227,6 +227,7 @@ pub struct Button {
     loading: bool,
     loading_icon: Option<Icon>,
     focus_ring_enabled: bool,
+    tracked_focus_handle: Option<gpui::FocusHandle>,
 
     tab_index: isize,
     tab_stop: bool,
@@ -272,6 +273,7 @@ impl Button {
             tooltip_builder: None,
             on_click: None,
             focus_ring_enabled: true,
+            tracked_focus_handle: None,
             on_hover: None,
             loading: false,
             compact: false,
@@ -323,6 +325,14 @@ impl Button {
     /// Whether the button shows only its icon.
     pub(crate) fn is_icon_only(&self) -> bool {
         self.icon.is_some() && self.label.is_none() && self.children.is_empty()
+    }
+
+    /// Uses a host-owned focus handle for keyboard navigation and focus restoration.
+    ///
+    /// Without this, the control retains its own handle by element identity.
+    pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
     }
 
     pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
@@ -637,10 +647,12 @@ impl RenderOnce for Button {
             FocusLine::Inside(normal_style.fg.opacity(FOCUS_LINE_OPACITY))
         };
 
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone();
+        let focus_handle = self.tracked_focus_handle.unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        });
         let is_focused = focus_handle.is_focused(window);
 
         let rounding = match self.rounded {

@@ -1,5 +1,6 @@
 use crate::{
     ActiveTheme as _, Collapsible, Icon, IconName, Placement, Sizable as _, StyledExt,
+    ThemeStyled as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
@@ -8,7 +9,7 @@ use crate::{
     v_flex,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
+    AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window, div, percentage, prelude::FluentBuilder,
 };
@@ -95,11 +96,14 @@ pub struct SidebarMenuItem {
     icon: Option<Icon>,
     label: SharedString,
     accessibility_label: Option<SharedString>,
+    tracked_focus_handle: Option<FocusHandle>,
     label_style: StyleRefinement,
     style: StyleRefinement,
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
     active: bool,
     default_open: bool,
+    open: Option<bool>,
+    on_open_change: Option<Rc<dyn Fn(bool, &mut Window, &mut App)>>,
     click_to_open: bool,
     collapsed: bool,
     click_to_toggle: bool,
@@ -116,12 +120,15 @@ impl SidebarMenuItem {
             icon: None,
             label: label.into(),
             accessibility_label: None,
+            tracked_focus_handle: None,
             label_style: StyleRefinement::default(),
             style: StyleRefinement::default(),
             handler: Rc::new(|_, _, _| {}),
             active: false,
             collapsed: false,
             default_open: false,
+            open: None,
+            on_open_change: None,
             click_to_open: false,
             click_to_toggle: false,
             children: Vec::new(),
@@ -146,6 +153,12 @@ impl SidebarMenuItem {
     /// Set the accessibility label of the item row.
     ///
     /// Defaults to the visible label text.
+    /// Uses a host-owned handle for focus and native keyboard activation.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
+    }
+
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessibility_label = Some(label.into());
         self
@@ -175,6 +188,21 @@ impl SidebarMenuItem {
     /// Set the default open state of the Submenu, default is `false`.
     ///
     /// This only used on initial render, the internal state will be used afterwards.
+    /// Controls submenu disclosure. Omit this to keep internal disclosure state.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    /// Reports a requested submenu disclosure change from pointer or keyboard.
+    pub fn on_open_change(
+        mut self,
+        handler: impl Fn(bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_open_change = Some(Rc::new(handler));
+        self
+    }
+
     pub fn default_open(mut self, open: bool) -> Self {
         self.default_open = open;
         self
@@ -287,7 +315,9 @@ impl SidebarItem for SidebarMenuItem {
         let is_disabled = self.disabled;
         let is_open = open_state
             .as_ref()
-            .map_or(false, |s| !is_collapsed && *s.read(cx));
+            .map_or(false, |s| !is_collapsed && self.open.unwrap_or(*s.read(cx)));
+        let on_open_change = self.on_open_change.clone();
+        let controlled_open = self.open;
 
         div()
             .id(id.clone())
@@ -297,9 +327,45 @@ impl SidebarItem for SidebarMenuItem {
                 h_flex()
                     .size_full()
                     .id("item")
+                    .test_support()
                     .role(Role::TreeItem)
+                    .when_some(
+                        self.tracked_focus_handle.clone().filter(|_| !is_disabled),
+                        |this, handle| this.track_focus(&handle),
+                    )
+                    .when(
+                        !is_disabled
+                            && self
+                                .tracked_focus_handle
+                                .as_ref()
+                                .is_some_and(|handle| handle.is_focused(window)),
+                        |this| this.focus_ring_style(window, cx),
+                    )
                     .aria_label(accessibility_label.unwrap_or_else(|| label_text.clone()))
                     .aria_selected(is_active)
+                    .when(!is_disabled && open_state.is_some(), |this| {
+                        let open_state = open_state.clone().unwrap();
+                        let on_open_change = on_open_change.clone();
+                        this.on_key_down(move |event, window, cx| {
+                            let next = match event.keystroke.key.as_str() {
+                                "right" => true,
+                                "left" => false,
+                                _ => return,
+                            };
+                            if next == controlled_open.unwrap_or(*open_state.read(cx)) {
+                                return;
+                            }
+                            open_state.update(cx, |open, cx| {
+                                *open = next;
+                                cx.notify();
+                            });
+                            if let Some(handler) = &on_open_change {
+                                handler(next, window, cx);
+                            }
+                            window.prevent_default();
+                            cx.stop_propagation();
+                        })
+                    })
                     .overflow_x_hidden()
                     .flex_shrink_0()
                     .p_2()
@@ -358,13 +424,19 @@ impl SidebarItem for SidebarMenuItem {
                                                 }),
                                         )
                                         .on_click({
-                                            move |_, _, cx| {
+                                            let on_open_change = on_open_change.clone();
+                                            move |_, window, cx| {
                                                 // Avoid trigger item click, just expand/collapse submenu
                                                 cx.stop_propagation();
-                                                open_state.update(cx, |is_open, cx| {
-                                                    *is_open = !*is_open;
+                                                let next = !controlled_open
+                                                    .unwrap_or(*open_state.read(cx));
+                                                open_state.update(cx, |open, cx| {
+                                                    *open = next;
                                                     cx.notify();
-                                                })
+                                                });
+                                                if let Some(handler) = &on_open_change {
+                                                    handler(next, window, cx);
+                                                }
                                             }
                                         }),
                                 )
@@ -376,20 +448,28 @@ impl SidebarItem for SidebarMenuItem {
                     .when(!is_disabled, |this| {
                         this.on_click({
                             let open_state = open_state.clone();
+                            let on_open_change = on_open_change.clone();
                             move |ev, window, cx| {
                                 if click_to_open {
                                     if let Some(ref s) = open_state {
-                                        s.update(cx, |is_open: &mut bool, cx| {
-                                            *is_open = true;
+                                        s.update(cx, |open: &mut bool, cx| {
+                                            *open = true;
                                             cx.notify();
                                         });
+                                        if let Some(handler) = &on_open_change {
+                                            handler(true, window, cx);
+                                        }
                                     }
                                 } else if click_to_toggle {
                                     if let Some(ref s) = open_state {
-                                        s.update(cx, |is_open: &mut bool, cx| {
-                                            *is_open = !*is_open;
+                                        let next = !controlled_open.unwrap_or(*s.read(cx));
+                                        s.update(cx, |open: &mut bool, cx| {
+                                            *open = next;
                                             cx.notify();
                                         });
+                                        if let Some(handler) = &on_open_change {
+                                            handler(next, window, cx);
+                                        }
                                     }
                                 }
                                 handler(ev, window, cx)

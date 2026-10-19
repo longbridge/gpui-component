@@ -11,7 +11,7 @@ use crate::{
 };
 use gpui::{
     App, AppContext, Bounds, Context, DefiniteLength, DispatchPhase, ElementId, Entity,
-    FocusHandle, GlobalElementId, InteractiveElement, IntoElement, MouseMoveEvent,
+    EventEmitter, FocusHandle, GlobalElementId, InteractiveElement, IntoElement, MouseMoveEvent,
     ParentElement as _, Pixels, Render, RenderOnce, Styled, WeakFocusHandle, Window, canvas, div,
     prelude::FluentBuilder as _,
 };
@@ -38,7 +38,13 @@ pub(crate) struct WindowState {
     touch_selection_overlay: Entity<WindowTouchSelectionOverlay>,
     sheet_size: Option<DefiniteLength>,
     pending_focus_restore: Option<WeakFocusHandle>,
+    focus_restore_generation: u64,
 }
+
+/// Logical removal from the window, independently of an exit animation.
+pub(crate) struct OverlayClosed(pub(crate) FocusHandle);
+
+impl EventEmitter<OverlayClosed> for WindowState {}
 
 #[derive(Clone)]
 pub(crate) struct ActiveSheet {
@@ -91,10 +97,11 @@ impl WindowState {
             touch_selection_overlay: cx.new(|cx| WindowTouchSelectionOverlay::new(window, cx)),
             sheet_size: None,
             pending_focus_restore: None,
+            focus_restore_generation: 0,
         }
     }
 
-    fn entity(window: &Window, cx: &App) -> Option<Entity<Self>> {
+    pub(crate) fn entity(window: &Window, cx: &App) -> Option<Entity<Self>> {
         window.root::<gpui_base::Root>()??.read(cx).plugin::<Self>()
     }
 
@@ -250,14 +257,15 @@ impl WindowState {
         build: F,
         window: &mut Window,
         cx: &mut Context<'_, WindowState>,
-    ) where
+    ) -> FocusHandle
+    where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     {
         let mut previous_focused_handle = window.focused(cx).map(|h| h.downgrade());
 
         // Use pending focus restore if available to maintain correct focus chain
         // when a new dialog is opened immediately after closing another dialog.
-        if let Some(pending_handle) = self.pending_focus_restore.take() {
+        if let Some(pending_handle) = self.take_pending_focus_restore() {
             previous_focused_handle = Some(pending_handle);
         }
 
@@ -266,7 +274,7 @@ impl WindowState {
 
         let selection_scope = self.allocate_text_selection_scope();
         self.active_dialogs.push(ActiveDialog::new(
-            focus_handle,
+            focus_handle.clone(),
             previous_focused_handle,
             selection_scope,
             build,
@@ -275,18 +283,42 @@ impl WindowState {
         // selection so it cannot linger (or be copied) under the modal.
         gpui_base::TextSelection::clear(window, cx);
         cx.notify();
+        focus_handle
     }
 
-    fn close_dialog_internal(&mut self) -> Option<FocusHandle> {
+    // Every overlay-stack mutation invalidates older deferred restorations.
+    // Taking the pending opener lets an immediate replacement inherit it
+    // without keeping a removed focus handle alive until a timer fires.
+    fn take_pending_focus_restore(&mut self) -> Option<WeakFocusHandle> {
+        self.focus_restore_generation += 1;
+        self.pending_focus_restore.take()
+    }
+
+    fn finish_pending_focus_restore(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(handle) = self
+            .take_pending_focus_restore()
+            .and_then(|handle| handle.upgrade())
+        {
+            window.focus(&handle, cx);
+        }
+    }
+
+    fn close_dialog_internal(&mut self, cx: &mut Context<Self>) -> Option<FocusHandle> {
         self.focused_input = None;
         self.active_dialogs
             .pop()
-            .and_then(|d| d.previous_focused_handle)
+            .and_then(|dialog| {
+                cx.emit(OverlayClosed(dialog.focus_handle));
+                dialog.previous_focused_handle
+            })
             .and_then(|h| h.upgrade())
     }
 
     pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, WindowState>) {
-        if let Some(handle) = self.close_dialog_internal() {
+        if !self.active_dialogs.is_empty() {
+            self.take_pending_focus_restore();
+        }
+        if let Some(handle) = self.close_dialog_internal(cx) {
             window.focus(&handle, cx);
         }
         gpui_base::TextSelection::clear(window, cx);
@@ -298,21 +330,21 @@ impl WindowState {
         window: &mut Window,
         cx: &mut Context<'_, WindowState>,
     ) {
-        if let Some(handle) = self.close_dialog_internal() {
-            let dialogs_count = self.active_dialogs.len();
-
-            // Save for new dialogs opened during animation to maintain focus chain
+        if !self.active_dialogs.is_empty() {
+            self.take_pending_focus_restore();
+        }
+        if let Some(handle) = self.close_dialog_internal(cx) {
             self.pending_focus_restore = Some(handle.downgrade());
-
+            let generation = self.focus_restore_generation;
             cx.spawn_in(window, async move |this, cx| {
                 cx.background_executor().timer(*ANIMATION_DURATION).await;
                 let _ = this.update_in(cx, |this, window, cx| {
-                    let current_dialogs_count = this.active_dialogs.len();
-                    // Only restore focus if no new dialogs were opened during animation
-                    if current_dialogs_count == dialogs_count {
-                        window.focus(&handle, cx);
+                    // Stack length can return to its old value after several
+                    // closes and opens. Only this exact pending restoration
+                    // may focus its opener or clear the pending slot.
+                    if this.focus_restore_generation == generation {
+                        this.finish_pending_focus_restore(window, cx);
                     }
-                    this.pending_focus_restore = None;
                 });
             })
             .detach();
@@ -323,11 +355,15 @@ impl WindowState {
 
     pub fn close_all_dialogs(&mut self, window: &mut Window, cx: &mut Context<'_, WindowState>) {
         self.focused_input = None;
-        let previous_focused_handle = self
-            .active_dialogs
-            .first()
-            .and_then(|d| d.previous_focused_handle.clone());
-        self.active_dialogs.clear();
+        let pending = self.take_pending_focus_restore();
+        let previous_focused_handle = if let Some(dialog) = self.active_dialogs.first() {
+            dialog.previous_focused_handle.clone()
+        } else {
+            pending
+        };
+        for dialog in self.active_dialogs.drain(..) {
+            cx.emit(OverlayClosed(dialog.focus_handle));
+        }
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
@@ -341,44 +377,142 @@ impl WindowState {
         build: F,
         window: &mut Window,
         cx: &mut Context<'_, WindowState>,
-    ) where
+    ) -> FocusHandle
+    where
         F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
     {
-        let previous_focused_handle = self
-            .active_sheet
-            .take()
-            .and_then(|s| s.previous_focused_handle)
-            .or_else(|| window.focused(cx).map(|h| h.downgrade()));
+        let pending = self.take_pending_focus_restore();
+        if !self.active_dialogs.is_empty() {
+            if let Some(handle) = pending.as_ref().and_then(WeakFocusHandle::upgrade) {
+                window.focus(&handle, cx);
+            }
+        }
+        let previous_focused_handle = if let Some(sheet) = self.active_sheet.take() {
+            cx.emit(OverlayClosed(sheet.focus_handle));
+            sheet.previous_focused_handle
+        } else if let Some(dialog) = self.active_dialogs.first() {
+            // A sheet sits below every dialog. Capture the background owner,
+            // not the dialog's focus, so closing the two cannot form a cycle.
+            dialog.previous_focused_handle.clone()
+        } else {
+            pending.or_else(|| window.focused(cx).map(|handle| handle.downgrade()))
+        };
 
         let focus_handle = cx.focus_handle();
-        focus_handle.focus(window, cx);
+        if let Some(dialog) = self.active_dialogs.first_mut() {
+            // Replacing the sheet must not steal focus from the dialog above
+            // it, and that dialog must return to the replacement when closed.
+            dialog.previous_focused_handle = Some(focus_handle.downgrade());
+        } else {
+            focus_handle.focus(window, cx);
+        }
         let selection_scope = self.allocate_text_selection_scope();
         self.active_sheet = Some(ActiveSheet {
-            focus_handle,
+            focus_handle: focus_handle.clone(),
             previous_focused_handle,
             placement,
             selection_scope,
             builder: Rc::new(build),
         });
-        // Opening a modal confines selection to it; drop any background
-        // selection so it cannot linger (or be copied) under the modal.
-        gpui_base::TextSelection::clear(window, cx);
+        // A background sheet does not change the top dialog's selection scope.
+        if self.active_dialogs.is_empty() {
+            gpui_base::TextSelection::clear(window, cx);
+        }
         cx.notify();
+        focus_handle
     }
 
     pub fn close_sheet(&mut self, window: &mut Window, cx: &mut Context<'_, WindowState>) {
-        self.focused_input = None;
-        if let Some(previous_handle) = self
-            .active_sheet
-            .as_ref()
-            .and_then(|s| s.previous_focused_handle.as_ref())
-            .and_then(|h| h.upgrade())
-        {
-            window.focus(&previous_handle, cx);
+        if self.active_sheet.is_none() {
+            return;
         }
-        self.active_sheet = None;
-        gpui_base::TextSelection::clear(window, cx);
+        let pending = self.take_pending_focus_restore();
+        if !self.active_dialogs.is_empty() {
+            if let Some(handle) = pending.and_then(|handle| handle.upgrade()) {
+                window.focus(&handle, cx);
+            }
+        }
+        if let Some(sheet) = self.active_sheet.take() {
+            if let Some(dialog) = self.active_dialogs.first_mut() {
+                dialog.previous_focused_handle = sheet.previous_focused_handle;
+            } else {
+                self.focused_input = None;
+                if let Some(handle) = sheet
+                    .previous_focused_handle
+                    .and_then(|handle| handle.upgrade())
+                {
+                    window.focus(&handle, cx);
+                }
+                gpui_base::TextSelection::clear(window, cx);
+            }
+            cx.emit(OverlayClosed(sheet.focus_handle));
+        }
         cx.notify();
+    }
+
+    pub(crate) fn dialog_is_open(&self, handle: &FocusHandle) -> bool {
+        self.active_dialogs
+            .iter()
+            .any(|dialog| &dialog.focus_handle == handle)
+    }
+
+    pub(crate) fn sheet_is_open(&self, handle: &FocusHandle) -> bool {
+        self.active_sheet
+            .as_ref()
+            .is_some_and(|sheet| &sheet.focus_handle == handle)
+    }
+
+    pub(crate) fn close_dialog_for(
+        &mut self,
+        handle: &FocusHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(ix) = self
+            .active_dialogs
+            .iter()
+            .position(|dialog| &dialog.focus_handle == handle)
+        else {
+            return;
+        };
+        if ix + 1 == self.active_dialogs.len() {
+            self.close_dialog(window, cx);
+        } else {
+            self.finish_pending_focus_restore(window, cx);
+            let removed = self.active_dialogs.remove(ix);
+            // The next dialog may have captured a field inside the removed
+            // dialog. Its eventual close must return to the surviving owner.
+            self.active_dialogs[ix].previous_focused_handle = removed.previous_focused_handle;
+            cx.emit(OverlayClosed(removed.focus_handle));
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn close_sheet_for(
+        &mut self,
+        handle: &FocusHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.sheet_is_open(handle) {
+            self.close_sheet(window, cx);
+        }
+    }
+
+    pub(crate) fn set_sheet_placement_for(
+        &mut self,
+        handle: &FocusHandle,
+        placement: Placement,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(sheet) = self
+            .active_sheet
+            .as_mut()
+            .filter(|sheet| &sheet.focus_handle == handle)
+        {
+            sheet.placement = placement;
+            cx.notify();
+        }
     }
 
     pub fn push_notification(

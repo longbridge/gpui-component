@@ -32,6 +32,7 @@ pub struct DropdownButton {
     selected: bool,
     disabled: bool,
     menu_accessibility_label: Option<SharedString>,
+    menu_focus_handle: Option<gpui::FocusHandle>,
     // The button props, applied to both halves. Unset means the inner
     // [`Button`] keeps whatever it was given.
     outline: bool,
@@ -51,6 +52,7 @@ impl DropdownButton {
             selected: false,
             disabled: false,
             menu_accessibility_label: None,
+            menu_focus_handle: None,
             outline: false,
             variant: None,
             size: None,
@@ -98,6 +100,12 @@ impl DropdownButton {
     ) -> Self {
         self.menu = Some(Box::new(menu));
         self.anchor = anchor.into();
+        self
+    }
+
+    /// Uses an owner-retained focus handle for the attached menu trigger.
+    pub fn track_menu_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.menu_focus_handle = Some(handle.clone());
         self
     }
 
@@ -205,6 +213,9 @@ impl RenderOnce for DropdownButton {
             .when_some(self.menu, |this, menu| {
                 this.child(
                     Button::new("popup")
+                        .when_some(self.menu_focus_handle, |button, handle| {
+                            button.track_focus(&handle)
+                        })
                         .dropdown_caret(true)
                         .accessibility_label(
                             self.menu_accessibility_label

@@ -41,6 +41,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: gpui-pre is pinned exactly
         run: bun script/check-gpui-pin.ts
+      - name: Check NSH component inventory
+        run: bun script/check-nsh-catalog.ts
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-machete@0.9.1
@@ -206,6 +208,65 @@ jobs:
         run: script/bootstrap
       - name: Lint WebView on gpui-pre
         run: cargo clippy -p gpui-webview --all-targets --locked -- --deny warnings
+
+  nsh:
+    # Keep both source repositories side by side; NSH is pinned, never vendored.
+    name: NSH (${{ matrix.run_on }})
+    strategy:
+      fail-fast: false
+      matrix:
+        run_on: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.run_on }}
+    env:
+      # The adapter has its own resolver and lockfile. Use the runner's normal
+      # target directory so setup-rust-toolchain can cache its dependencies.
+      CARGO_TARGET_DIR: target
+    defaults:
+      run:
+        shell: bash
+        working-directory: gpui-kit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gpui-kit
+      - uses: actions/checkout@v4
+        with:
+          repository: longbridge/nsh
+          ref: 823ccaf701a669c03bf2d19c4feb1e3b76306eae
+          path: nsh
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy, rustfmt
+          rust-src-dir: gpui-kit
+          cache-workspaces: gpui-kit -> target
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-shared-key: gpui-nsh
+      - uses: rui314/setup-mold@v1
+      - name: Install system dependencies
+        if: ${{ matrix.run_on != 'windows-latest' }}
+        run: script/bootstrap
+      - name: Format NSH adapter
+        run: |
+          cargo fmt --manifest-path crates/nsh/Cargo.toml --check
+          cargo fmt --manifest-path crates/nsh-base/Cargo.toml --check
+      - name: Lint NSH adapter and hosts
+        run: >-
+          cargo clippy --manifest-path crates/nsh/Cargo.toml
+          --features test-support,dev,cli --all-targets --locked --no-deps -- --deny warnings
+      - name: Lint Base NSH adapter and hosts
+        run: >-
+          cargo clippy --manifest-path crates/nsh-base/Cargo.toml
+          --features test-support,dev,cli --all-targets --locked --no-deps -- --deny warnings
+      # GPUI has no Windows headless renderer. macOS runs the real engine and
+      # offscreen interaction fixture; Linux and Windows still compile it.
+      - name: Verify NSH signal and native component interaction
+        if: ${{ matrix.run_on == 'macos-latest' }}
+        run: >-
+          cargo run --manifest-path crates/nsh/Cargo.toml
+          --features test-support --example verify --locked
+      - name: Verify Base NSH controls and task workflow
+        if: ${{ matrix.run_on == 'macos-latest' }}
+        run: script/test-nsh-base-ui
 
   gpui-fast-web:
     name: GPUI Fast (WebAssembly)

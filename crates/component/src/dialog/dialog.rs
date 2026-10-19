@@ -390,7 +390,7 @@ impl Dialog {
     }
 
     /// Sets the header of the dialog, rendered above the title and content.
-    pub(crate) fn header(mut self, header: impl IntoElement) -> Self {
+    pub fn header(mut self, header: impl IntoElement) -> Self {
         self.header = Some(header.into_any_element());
         self
     }

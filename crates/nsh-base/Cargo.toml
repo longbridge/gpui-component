@@ -1,0 +1,48 @@
+[package]
+name = "gpui-kit-nsh-base"
+version = "0.7.3"
+edition = "2024"
+publish = false
+description = "Unstyled GPUI Base controls for applications driven by NSH."
+
+[features]
+default = []
+test-support = ["gpui-kit/test-support"]
+dev = ["nsh-platform-gpui/dev"]
+cli = ["dep:nsh-cli"]
+
+[dependencies]
+gpui-kit = { path = "../kit", version = "0.7.3", default-features = false, features = ["gpui-fast"] }
+nsh-platform-gpui = { path = "../../../nsh/crates/gpui/nsh-platform-gpui", version = "0.1.1", default-features = false, features = ["js"] }
+nsh-core = { path = "../../../nsh/crates/nsh-core", version = "0.1.1" }
+nsh-cli = { path = "../../../nsh/crates/nsh-cli", version = "0.1.1", optional = true }
+nsh-ui-mobile = { path = "../../../nsh/crates/nsh-ui-mobile", version = "0.1.1" }
+serde_json = "1"
+
+[[bin]]
+name = "gpui-kit-nsh-base"
+path = "src/bin/gpui-kit-nsh-base.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "nsh-gpui-host"
+path = "src/bin/nsh-gpui-host.rs"
+required-features = ["dev"]
+
+[[bin]]
+name = "nsh-gpui-app"
+path = "src/bin/nsh-gpui-app.rs"
+
+[[example]]
+name = "verify"
+path = "examples/verify.rs"
+required-features = ["test-support"]
+
+# Independently selects Kit's unstyled layer; the Component adapter remains a
+# separate application dependency and cannot enable Component in this graph.
+[workspace]
+resolver = "2"
+
+[profile.dev]
+debug = "limited"
+split-debuginfo = "unpacked"

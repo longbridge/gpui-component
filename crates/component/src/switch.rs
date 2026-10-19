@@ -28,6 +28,7 @@ pub struct Switch {
     tab_stop: bool,
     tab_index: isize,
     focus_ring_enabled: bool,
+    tracked_focus_handle: Option<gpui::FocusHandle>,
 }
 
 impl Switch {
@@ -49,7 +50,16 @@ impl Switch {
             tab_stop: true,
             tab_index: 0,
             focus_ring_enabled: true,
+            tracked_focus_handle: None,
         }
+    }
+
+    /// Uses a host-owned focus handle for keyboard navigation and focus restoration.
+    ///
+    /// Without this, the control retains its own handle by element identity.
+    pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
     }
 
     /// Set the checked state of the switch.
@@ -172,10 +182,12 @@ impl RenderOnce for Switch {
             .accessibility_label
             .clone()
             .or_else(|| self.label.as_ref().map(|label| label.get_text(cx)));
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone();
+        let focus_handle = self.tracked_focus_handle.unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        });
         let is_focused = focus_handle.is_focused(window);
 
         let checked_bg = self

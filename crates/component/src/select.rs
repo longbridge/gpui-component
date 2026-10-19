@@ -307,6 +307,18 @@ where
         self
     }
 
+    /// Changes whether the dropdown shows its search input without replacing
+    /// the retained selection, list or focus handles.
+    pub fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        if self.searchable != searchable {
+            self.searchable = searchable;
+            self.state
+                .list
+                .update(cx, |list, cx| list.set_searchable(searchable, cx));
+            cx.notify();
+        }
+    }
+
     /// Set the selected index for the select.
     pub fn set_selected_index(
         &mut self,

@@ -1,5 +1,8 @@
 [workspace]
 default-members = ["crates/story"]
+# NSH requires GPUI Fast; keep its mandatory features out of workspace-wide
+# unification so the existing crates retain their default GPUI backend.
+exclude = ["crates/nsh", "crates/nsh-base"]
 members = [
     "crates/kit",
     "crates/base",

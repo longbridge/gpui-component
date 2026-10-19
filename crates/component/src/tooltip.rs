@@ -231,7 +231,7 @@ impl ComponentTooltip {
     }
 }
 
-// ── Internal managed tooltip trait ──────────────────────────────────────────
+// ── Managed tooltip extension ───────────────────────────────────────────────
 
 #[derive(Default)]
 struct TooltipLifetime(Rc<()>);
@@ -243,9 +243,11 @@ struct TooltipTrigger {
     bounds: Bounds<Pixels>,
 }
 
-pub(crate) trait ManagedTooltipExt:
-    StatefulInteractiveElement + crate::ElementExt + Sized
-{
+/// Attaches Component tooltips using the window's managed overlay host.
+///
+/// Custom triggers share the same placement, dismissal and unmount lifecycle
+/// as the built-in controls.
+pub trait ManagedTooltipExt: StatefulInteractiveElement + crate::ElementExt + Sized {
     fn managed_tooltip(
         self,
         build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,

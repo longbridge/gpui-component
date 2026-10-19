@@ -22,6 +22,8 @@ use crate::{
 
 pub(crate) fn init(_: &mut App) {}
 
+pub use crate::window_ext::SheetHandle;
+
 /// The settings for sheets.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SheetSettings {

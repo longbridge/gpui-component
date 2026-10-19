@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "nsh",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "nsh": ["./.nsh/types/nsh/index.d.ts"],
+      "nsh/*": ["./.nsh/types/nsh/*.d.ts"],
+      "*": ["./.nsh/types/*.d.ts"]
+    }
+  },
+  "include": ["App.tsx", "../../js/**/*.ts", ".nsh/types/nsh/globals.d.ts", ".nsh/types/nsh/assets.d.ts"]
+}

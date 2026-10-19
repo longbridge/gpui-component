@@ -108,6 +108,8 @@ impl RenderOnce for StepperTrigger {
         div()
             .id(("trigger", self.step))
             .test_support()
+            .min_w_0()
+            .max_w_full()
             .when(self.layout.is_horizontal(), |this| this.v_flex().gap_1())
             .when(self.layout.is_vertical(), |this| this.h_flex().gap_2())
             .items_start()

@@ -304,6 +304,68 @@ impl DatePickerState {
         self
     }
 
+    /// Update the displayed date format without replacing picker state.
+    pub fn set_date_format(&mut self, format: Option<SharedString>, cx: &mut Context<Self>) {
+        if self.date_format == format {
+            return;
+        }
+        self.date_format = format;
+        cx.notify();
+    }
+
+    /// Change whether the picker edits times, preserving its entity and focus.
+    pub fn set_time_precision(&mut self, precision: Option<TimePrecision>, cx: &mut Context<Self>) {
+        if self.time_precision == precision {
+            return;
+        }
+        self.time_precision = precision;
+        self.default_time = self.truncate_time(self.default_time);
+        self.start_time = self.truncate_time(self.start_time);
+        self.end_time = self.truncate_time(self.end_time);
+        self.time_field_pushed = false;
+        cx.notify();
+    }
+
+    /// Update the hour cycle used by the popup's retained time editor.
+    pub fn set_hour_cycle(&mut self, cycle: HourCycle, cx: &mut Context<Self>) {
+        if self.hour_cycle == cycle {
+            return;
+        }
+        self.hour_cycle = cycle;
+        self.time_field_pushed = false;
+        cx.notify();
+    }
+
+    /// Update the default time for subsequently selected dates.
+    pub fn set_default_time(&mut self, time: NaiveTime, cx: &mut Context<Self>) {
+        let time = self.truncate_time(time);
+        if self.default_time == time {
+            return;
+        }
+        self.default_time = time;
+        if !self.date.is_some() {
+            self.start_time = time;
+            self.end_time = time;
+            self.time_field_pushed = false;
+        }
+        cx.notify();
+    }
+
+    /// Update the first weekday without replacing the retained calendar.
+    pub fn set_first_day_of_week(&mut self, day: Weekday, cx: &mut Context<Self>) {
+        if self.first_day_of_week == day {
+            return;
+        }
+        self.first_day_of_week = day;
+        cx.notify();
+    }
+
+    /// Replace or clear the disabled-date rule without replacing picker state.
+    pub fn set_disabled_matcher(&mut self, matcher: Option<Matcher>, cx: &mut Context<Self>) {
+        self.disabled_matcher = matcher.map(Rc::new);
+        cx.notify();
+    }
+
     /// Get the date part of the value.
     pub fn date(&self) -> Date {
         self.date

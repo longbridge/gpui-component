@@ -26,6 +26,11 @@ An application normally depends on `gpui-kit` for GPUI, Base, Component, and
 assets. Add `gpui-shell` separately when the application hosts JavaScript
 extensions; it remains part of the framework's core architecture.
 
+For an application whose TSX composition, state and JavaScript runtime are
+owned by NSH, use the experimental [NSH](./nsh) integration. It connects GPUI
+Component to NSH and provides Kit-backed runners; its documentation records
+current coverage and verified workflows.
+
 Use `gpui-component` for polished controls with one coherent visual language,
 or build your own design system on the reusable behavior and infrastructure in
 `gpui-base`. This section covers GPUI Kit setup, shared design and coding guides, and

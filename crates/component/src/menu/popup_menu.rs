@@ -703,11 +703,36 @@ impl PopupMenu {
         self.submenu_with_icon(None, label, window, cx, f)
     }
 
+    /// Adds a submenu with an explicit disabled state, preserving parent-menu
+    /// dismissal, focus and layer priority.
+    pub fn submenu_with_disabled(
+        self,
+        label: impl Into<SharedString>,
+        disabled: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.build_submenu(None, label, disabled, window, cx, f)
+    }
+
     /// Add a Submenu item with icon
     pub fn submenu_with_icon(
+        self,
+        icon: Option<Icon>,
+        label: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.build_submenu(icon, label, false, window, cx, f)
+    }
+
+    fn build_submenu(
         mut self,
         icon: Option<Icon>,
         label: impl Into<SharedString>,
+        disabled: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
@@ -721,7 +746,9 @@ impl PopupMenu {
         });
 
         self.menu_items.push(
-            PopupMenuItem::submenu(label, submenu).when_some(icon, |this, icon| this.icon(icon)),
+            PopupMenuItem::submenu(label, submenu)
+                .disabled(disabled)
+                .when_some(icon, |this, icon| this.icon(icon)),
         );
         self
     }
@@ -812,9 +839,15 @@ impl PopupMenu {
                     self = self.separator();
                 }
                 OwnedMenuItem::Submenu(submenu) => {
-                    self = self.submenu(submenu.name, window, cx, move |menu, window, cx| {
-                        menu.with_menu_items(submenu.items.clone(), window, cx)
-                    })
+                    self = self.submenu_with_disabled(
+                        submenu.name,
+                        submenu.disabled,
+                        window,
+                        cx,
+                        move |menu, window, cx| {
+                            menu.with_menu_items(submenu.items.clone(), window, cx)
+                        },
+                    )
                 }
                 OwnedMenuItem::SystemMenu(_) => {}
             }
@@ -831,7 +864,11 @@ impl PopupMenu {
         if let Some(ix) = self.selected_index {
             if let Some(item) = self.menu_items.get(ix) {
                 return match item {
-                    PopupMenuItem::Submenu { menu, .. } => Some(menu.clone()),
+                    PopupMenuItem::Submenu {
+                        menu,
+                        disabled: false,
+                        ..
+                    } => Some(menu.clone()),
                     _ => None,
                 };
             }
@@ -861,7 +898,10 @@ impl PopupMenu {
     fn confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
         match self.selected_index {
             Some(index) => {
-                let item = self.menu_items.get(index);
+                let item = self
+                    .menu_items
+                    .get(index)
+                    .filter(|item| item.is_clickable());
                 match item {
                     Some(PopupMenuItem::Item {
                         handler, action, ..
@@ -935,13 +975,18 @@ impl PopupMenu {
         }
 
         let last_clickable_ix = self.clickable_menu_items().last().map(|(ix, _)| ix);
-        self.set_selected_index(last_clickable_ix.unwrap_or(0), cx);
+        if let Some(last) = last_clickable_ix {
+            self.set_selected_index(last, cx);
+        }
     }
 
     fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
         let Some(ix) = self.selected_index else {
-            self.set_selected_index(0, cx);
+            let first = self.clickable_menu_items().next().map(|(ix, _)| ix);
+            if let Some(first) = first {
+                self.set_selected_index(first, cx);
+            }
             return;
         };
 
@@ -955,7 +1000,10 @@ impl PopupMenu {
             return;
         }
 
-        self.set_selected_index(0, cx);
+        let first = self.clickable_menu_items().next().map(|(ix, _)| ix);
+        if let Some(first) = first {
+            self.set_selected_index(first, cx);
+        }
     }
 
     fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
@@ -1221,7 +1269,8 @@ impl PopupMenu {
             None
         };
 
-        let selected = self.selected_index == Some(ix);
+        let clickable = item.is_clickable();
+        let selected = clickable && self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(4.);
         const INNER_PADDING: Pixels = px(8.);
 
@@ -1251,7 +1300,7 @@ impl PopupMenu {
                     {
                         this.focus_handle.focus(window, cx);
                     }
-                    this.selected_index = Some(ix);
+                    this.selected_index = clickable.then_some(ix);
                 } else if !is_submenu
                     && this.selected_index == Some(ix)
                     // A key press ends hover under a still pointer; keep the
@@ -1532,6 +1581,49 @@ impl Render for PopupMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn disabled_submenu_keeps_parent_chain_and_priority(cx: &mut gpui::TestAppContext) {
+        struct Fixture {
+            menu: Entity<PopupMenu>,
+        }
+        impl Render for Fixture {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+            }
+        }
+        let (root, cx) = cx.add_window_view(|window, cx| Fixture {
+            menu: PopupMenu::build(window, cx, |menu, window, cx| {
+                menu.submenu_with_disabled("Unavailable", true, window, cx, |menu, _, _| {
+                    menu.item(PopupMenuItem::new("Child"))
+                })
+            }),
+        });
+        root.update(cx, |root, cx| {
+            root.menu.update(cx, |menu, _| {
+                menu.selected_index = Some(0);
+                assert!(menu.active_submenu().is_none());
+            });
+        });
+        root.read_with(cx, |root, cx| {
+            let parent = root.menu.read(cx);
+            let PopupMenuItem::Submenu { menu, disabled, .. } = &parent.menu_items[0] else {
+                panic!("expected submenu");
+            };
+            assert!(*disabled);
+            assert!(!parent.menu_items[0].is_clickable());
+            let child = menu.read(cx);
+            assert_eq!(
+                child
+                    .parent_menu
+                    .as_ref()
+                    .and_then(|parent| parent.upgrade())
+                    .as_ref(),
+                Some(&root.menu)
+            );
+            assert_eq!(child.priority, parent.priority + 1);
+        });
+    }
 
     #[gpui::test]
     fn popup_menu_item_a11y_label_uses_visible_label(cx: &mut gpui::TestAppContext) {

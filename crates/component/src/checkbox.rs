@@ -32,6 +32,7 @@ pub struct Checkbox {
     tooltip: ComponentTooltip,
     role: RoleOverride,
     focus_ring_enabled: bool,
+    tracked_focus_handle: Option<gpui::FocusHandle>,
 }
 
 impl Checkbox {
@@ -54,7 +55,16 @@ impl Checkbox {
             tooltip: ComponentTooltip::default(),
             role: RoleOverride::default(),
             focus_ring_enabled: true,
+            tracked_focus_handle: None,
         }
+    }
+
+    /// Uses a host-owned focus handle for keyboard navigation and focus restoration.
+    ///
+    /// Without this, the control retains its own handle by element identity.
+    pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
     }
 
     pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
@@ -239,10 +249,12 @@ impl RenderOnce for Checkbox {
             .accessibility_label
             .or_else(|| self.label.as_ref().map(|label| label.get_text(cx)));
         let on_click = self.on_click.clone();
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone();
+        let focus_handle = self.tracked_focus_handle.unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        });
         let is_focused = focus_handle.is_focused(window);
 
         let unchecked_border = cx.theme().input;

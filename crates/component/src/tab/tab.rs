@@ -1,13 +1,15 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::animation::{Lerp, ease_in_out_cubic};
-use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
+use crate::{
+    ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, ThemeStyled, h_flex,
+};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Edges, ElementId,
-    FillOptions, Hsla, InteractiveElement, IntoElement, ParentElement, PathBuilder, PathStyle,
-    Pixels, Point, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
-    div, point, px, relative,
+    FillOptions, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, PathBuilder,
+    PathStyle, Pixels, Point, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
+    canvas, div, point, px, relative,
 };
 
 /// Room between two [`TabVariant::Folder`] tabs, holding their separator.
@@ -538,6 +540,7 @@ pub struct Tab {
     base: gpui_base::Tab,
     pub(super) label: Option<SharedString>,
     aria_label: Option<SharedString>,
+    pub(super) tracked_focus_handle: Option<FocusHandle>,
     pub(super) icon: Option<Icon>,
     prefix: Option<AnyElement>,
     pub(super) tab_bar_prefix: Option<bool>,
@@ -599,6 +602,7 @@ impl Default for Tab {
             base: gpui_base::Tab::new(0usize),
             label: None,
             aria_label: None,
+            tracked_focus_handle: None,
             icon: None,
             tab_bar_prefix: None,
             children: Vec::new(),
@@ -632,6 +636,12 @@ impl Tab {
     }
 
     /// Set the accessible label for the tab.
+    /// Uses a host-owned handle for focus and native keyboard activation.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
+    }
+
     pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
         self.aria_label = Some(label.into());
         self
@@ -769,7 +779,7 @@ impl Sizable for Tab {
 }
 
 impl RenderOnce for Tab {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let mut normal_style = self.variant.normal(cx);
         let mut selected_style = self.variant.selected(cx);
         let mut disabled_style = self.variant.disabled(self.selected, cx);
@@ -916,8 +926,17 @@ impl RenderOnce for Tab {
             inner_content.into_any_element()
         };
 
+        let pointer_focus = self.tracked_focus_handle.clone();
+        let focused = self
+            .tracked_focus_handle
+            .as_ref()
+            .is_some_and(|handle| handle.is_focused(window));
         self.base
             .id(self.ix)
+            .when_some(
+                self.tracked_focus_handle.filter(|_| !self.disabled),
+                |this, handle| this.track_focus(&handle),
+            )
             .selected(self.selected)
             .disabled(self.disabled)
             .when_some(aria_label, |this, label| this.accessibility_label(label))
@@ -1055,6 +1074,9 @@ impl RenderOnce for Tab {
                 )
             })
             .child(inner_element)
+            .when(focused && !self.disabled, |this| {
+                this.focus_ring_style(window, cx)
+            })
             .when_some(self.suffix, |this, suffix| {
                 this.child(
                     div()
@@ -1063,7 +1085,15 @@ impl RenderOnce for Tab {
                 )
             })
             .when_some(self.on_click.clone(), |this, on_click| {
-                this.on_click(move |event, window, cx| on_click(event, window, cx))
+                this.on_click(move |event, window, cx| {
+                    // Base Tab intentionally stops mouse-down propagation.
+                    // A host-provided keyboard target must still become the
+                    // pointer activation's focused tab.
+                    if let Some(handle) = &pointer_focus {
+                        window.focus(handle, cx);
+                    }
+                    on_click(event, window, cx);
+                })
             })
     }
 }

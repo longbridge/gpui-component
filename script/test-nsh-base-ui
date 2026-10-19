@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+
+# Build the original TSX example and exercise real Base controls in GPUI.
+manifest=crates/nsh-base/Cargo.toml
+cargo build --manifest-path "$manifest" --locked \
+  --features dev,cli,test-support --bins --example verify
+base_target_dir="$(cargo metadata --manifest-path "$manifest" --no-deps \
+  --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+"$base_target_dir/debug/gpui-kit-nsh-base" build crates/nsh-base/examples/app \
+  -o target/nsh-base-task-app
+"$base_target_dir/debug/examples/verify"

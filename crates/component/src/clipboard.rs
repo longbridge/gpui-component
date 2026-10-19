@@ -22,6 +22,7 @@ pub struct Clipboard {
     tooltip_show_delay: Option<Duration>,
     accessibility_label: Option<SharedString>,
     size: Size,
+    tracked_focus_handle: Option<gpui::FocusHandle>,
 }
 
 impl Sizable for Clipboard {
@@ -43,7 +44,14 @@ impl Clipboard {
             tooltip_show_delay: None,
             accessibility_label: None,
             size: Size::XSmall,
+            tracked_focus_handle: None,
         }
+    }
+
+    /// Uses an owner-retained focus handle for native host keyboard traversal.
+    pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
     }
 
     /// Set tooltip text for the clipboard button.
@@ -106,6 +114,9 @@ impl RenderOnce for Clipboard {
         let value_fn = self.value_fn.clone();
 
         Button::new(clipboard_id)
+            .when_some(self.tracked_focus_handle, |button, handle| {
+                button.track_focus(&handle)
+            })
             .icon(if copied {
                 IconName::Check
             } else {

@@ -18,6 +18,10 @@ GPUI Kit 的核心架构包含五个层次：
 
 普通应用通过 `gpui-kit` 使用 GPUI、Base、Component 与默认资源；需要承载 JavaScript 扩展时另行依赖 `gpui-shell`。它仍是框架核心架构的一层。
 
+如果应用以 NSH 管理 TSX 组合、状态与 JavaScript 运行时，可使用实验性的
+[NSH](./nsh) 接入，通过 Kit 运行器接入 GPUI Component。该页面列出
+当前覆盖范围及已验证的工作流。
+
 使用 `gpui-component` 可以获得统一、成熟的视觉风格；基于 `gpui-base` 则可以复用可靠的行为与基础设施，同时创建并拥有自己的设计系统。本节文档介绍 GPUI Kit 的入门配置、公共设计与编码指南，以及应用开发。各层 API 请参阅 [GPUI Component](../component/index.md)、[GPUI Base](../base/index.md) 与 [GPUI Shell](../shell/index.md)。
 
 先读 [Focus](./focus)，理解 `FocusHandle`、Tab 顺序与键盘目标，再读 [Action](./action) 理解命令派发；[KeyBinding](./keybinding) 介绍 Action 的绑定与当前快捷键的展示。[Event](./event) 解释类型化通知以及 Action 与 Event 的关系。

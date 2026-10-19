@@ -295,6 +295,25 @@ where
         self
     }
 
+    /// Set whether item activation toggles multiple values without replacing the state.
+    pub fn set_multiple(&mut self, multiple: bool, cx: &mut Context<Self>) {
+        if self.multiple != multiple {
+            self.multiple = multiple;
+            cx.notify();
+        }
+    }
+
+    /// Show or hide the search field without replacing selection or focus state.
+    pub fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        if self.searchable != searchable {
+            self.searchable = searchable;
+            self.state
+                .list
+                .update(cx, |list, cx| list.set_searchable(searchable, cx));
+            cx.notify();
+        }
+    }
+
     /// Return the currently selected values.
     pub fn selected_values(&self) -> Vec<<D::Item as SearchableListItem>::Value> {
         self.state.selected_values()

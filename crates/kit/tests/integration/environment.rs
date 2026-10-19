@@ -1,17 +1,76 @@
 use crate::common;
 
 use gpui_kit::{
-    AppContext, Context, Entity, Render, TestAppContext, Window,
+    AppContext, Context, Entity, FocusHandle, Render, TestAppContext, Window,
     component::{
         button::Button,
+        checkbox::Checkbox,
         input::{Input, InputState},
         link::Link,
+        switch::Switch,
     },
     div,
     prelude::*,
     px, size,
     test::{TestSupportExt, TestWindowExt},
 };
+
+struct HostedControls {
+    handles: [FocusHandle; 3],
+    activations: [usize; 3],
+}
+
+impl Render for HostedControls {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .child(
+                Button::new("hosted-button")
+                    .track_focus(&self.handles[0])
+                    .label("Run")
+                    .on_click(cx.listener(|this, _, _, _| this.activations[0] += 1)),
+            )
+            .child(
+                Checkbox::new("hosted-checkbox")
+                    .track_focus(&self.handles[1])
+                    .label("Enabled")
+                    .on_change(cx.listener(|this, _, _, _| this.activations[1] += 1)),
+            )
+            .child(
+                Switch::new("hosted-switch")
+                    .track_focus(&self.handles[2])
+                    .label("Enabled")
+                    .on_change(cx.listener(|this, _, _, _| this.activations[2] += 1)),
+            )
+    }
+}
+
+#[gpui_kit::test]
+fn host_owned_focus_handles_activate_the_actual_controls(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (handle, controls) = common::open_window(cx, None, |_, cx| {
+        cx.new(|cx| HostedControls {
+            handles: std::array::from_fn(|_| cx.focus_handle()),
+            activations: [0; 3],
+        })
+    });
+    for (index, id) in ["hosted-button", "hosted-checkbox", "hosted-switch"]
+        .into_iter()
+        .enumerate()
+    {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            let focus = controls.read(cx).handles[index].clone();
+            window.focus(&focus, cx);
+            window.render_frame(cx);
+            assert_eq!(window.find(id).focused(), Some(true));
+            window.press("space", cx);
+        })
+        .unwrap();
+    }
+    cx.update(|cx| assert_eq!(controls.read(cx).activations, [1; 3]));
+}
 
 struct Editor {
     input: Entity<InputState>,

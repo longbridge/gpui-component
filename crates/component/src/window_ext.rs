@@ -1,4 +1,4 @@
-use crate::root::WindowState;
+use crate::root::{OverlayClosed, WindowState};
 use crate::{
     Placement,
     dialog::{AlertDialog, Dialog},
@@ -6,8 +6,115 @@ use crate::{
     notification::Notification,
     sheet::Sheet,
 };
-use gpui::{App, ElementId, Entity, Window};
+use gpui::{App, ElementId, Entity, FocusHandle, Subscription, Window};
 use std::rc::Rc;
+
+/// Identifies one window dialog without owning its lifetime.
+///
+/// Dropping a handle does not close the dialog. Keep the subscription returned
+/// by [`Self::on_closed`] for as long as close notifications are needed.
+#[derive(Clone, Debug)]
+pub struct DialogHandle {
+    focus: FocusHandle,
+}
+
+impl DialogHandle {
+    /// Whether this dialog is still in this window's dialog stack.
+    pub fn is_open(&self, window: &Window, cx: &App) -> bool {
+        WindowState::try_read(window, cx).is_some_and(|root| root.dialog_is_open(&self.focus))
+    }
+
+    /// Closes only this dialog, preserving dialogs above it and their focus.
+    /// Already closed handles do nothing. This does not call `Dialog::on_close`.
+    pub fn close(&self, window: &mut Window, cx: &mut App) {
+        WindowState::try_update(window, cx, |root, window, cx| {
+            root.close_dialog_for(&self.focus, window, cx)
+        });
+    }
+
+    /// Rebuilds the window's overlays after captured presentation state changes.
+    pub fn refresh(&self, window: &mut Window, cx: &mut App) {
+        WindowState::try_update(window, cx, |root, _, cx| {
+            if root.dialog_is_open(&self.focus) {
+                cx.notify();
+            }
+        });
+    }
+
+    /// Observes removal from the live window's dialog stack, including close-all
+    /// and scoped removal. It does not replay a past removal or observe window destruction.
+    pub fn on_closed(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+        callback: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Subscription {
+        on_overlay_closed(&self.focus, window, cx, callback)
+    }
+}
+
+/// Identifies one window sheet; replacing it makes this handle inactive.
+#[derive(Clone, Debug)]
+pub struct SheetHandle {
+    focus: FocusHandle,
+}
+
+impl SheetHandle {
+    /// Whether this is the window's current sheet.
+    pub fn is_open(&self, window: &Window, cx: &App) -> bool {
+        WindowState::try_read(window, cx).is_some_and(|root| root.sheet_is_open(&self.focus))
+    }
+
+    /// Closes this sheet if still current. A replaced handle never closes its
+    /// replacement. This does not call `Sheet::on_close`.
+    pub fn close(&self, window: &mut Window, cx: &mut App) {
+        WindowState::try_update(window, cx, |root, window, cx| {
+            root.close_sheet_for(&self.focus, window, cx)
+        });
+    }
+
+    /// Rebuilds the window's overlays after captured presentation state changes.
+    pub fn refresh(&self, window: &mut Window, cx: &mut App) {
+        WindowState::try_update(window, cx, |root, _, cx| {
+            if root.sheet_is_open(&self.focus) {
+                cx.notify();
+            }
+        });
+    }
+
+    /// Moves this sheet to another edge while retaining focus and content state.
+    pub fn set_placement(&self, placement: Placement, window: &mut Window, cx: &mut App) {
+        WindowState::try_update(window, cx, |root, _, cx| {
+            root.set_sheet_placement_for(&self.focus, placement, cx)
+        });
+    }
+
+    /// Observes removal from the live window, including replacement by another
+    /// sheet. Keep the subscription; past removal and window destruction are not reported.
+    pub fn on_closed(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+        callback: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Subscription {
+        on_overlay_closed(&self.focus, window, cx, callback)
+    }
+}
+
+fn on_overlay_closed(
+    focus: &FocusHandle,
+    window: &mut Window,
+    cx: &mut App,
+    callback: impl Fn(&mut Window, &mut App) + 'static,
+) -> Subscription {
+    let root = WindowState::entity(window, cx).expect("component window state is not initialized");
+    let focus = focus.clone();
+    window.subscribe(&root, cx, move |_, event: &OverlayClosed, window, cx| {
+        if event.0 == focus {
+            callback(window, cx);
+        }
+    })
+}
 
 /// Extension trait for [`Window`] to add dialog, sheet .. functionality.
 pub trait WindowExt: Sized {
@@ -75,6 +182,55 @@ pub trait WindowExt: Sized {
     fn open_dialog<F>(&mut self, cx: &mut App, build: F)
     where
         F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static;
+
+    /// Opens a dialog and returns its stable instance handle. The rendering
+    /// contract is the same as [`Self::open_dialog`].
+    fn open_dialog_with_handle<F>(&mut self, cx: &mut App, build: F) -> DialogHandle
+    where
+        Self: std::borrow::BorrowMut<Window>,
+        F: Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
+    {
+        let focus = WindowState::update(self.borrow_mut(), cx, |root, window, cx| {
+            root.open_dialog(build, window, cx)
+        });
+        DialogHandle { focus }
+    }
+
+    /// Opens an alert dialog with a handle for scoped removal and close observation.
+    fn open_alert_dialog_with_handle<F>(&mut self, cx: &mut App, build: F) -> DialogHandle
+    where
+        Self: std::borrow::BorrowMut<Window>,
+        F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
+    {
+        let focus = WindowState::update(self.borrow_mut(), cx, |root, window, cx| {
+            root.open_dialog(
+                move |_, window, cx| {
+                    build(AlertDialog::new(cx), window, cx).build_surface(window, cx)
+                },
+                window,
+                cx,
+            )
+        });
+        DialogHandle { focus }
+    }
+
+    /// Opens a sheet at an edge and returns a handle that remains safe after
+    /// replacement. The rendering contract is the same as [`Self::open_sheet_at`].
+    fn open_sheet_at_with_handle<F>(
+        &mut self,
+        placement: Placement,
+        cx: &mut App,
+        build: F,
+    ) -> SheetHandle
+    where
+        Self: std::borrow::BorrowMut<Window>,
+        F: Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static,
+    {
+        let focus = WindowState::update(self.borrow_mut(), cx, |root, window, cx| {
+            root.open_sheet_at(placement, build, window, cx)
+        });
+        SheetHandle { focus }
+    }
 
     /// Opens an AlertDialog.
     ///

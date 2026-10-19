@@ -377,6 +377,13 @@ impl Sizable for TabBar {
 
 impl RenderOnce for TabBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let keyboard_handles = self
+            .children
+            .iter()
+            .enumerate()
+            .filter(|(_, tab)| !tab.disabled)
+            .filter_map(|(ix, tab)| tab.tracked_focus_handle.clone().map(|handle| (ix, handle)))
+            .collect::<Vec<_>>();
         let default_gap = match self.size {
             Size::Small | Size::XSmall => px(8.),
             Size::Large => px(16.),
@@ -621,6 +628,28 @@ impl RenderOnce for TabBar {
         }
 
         tabs.group("tab-bar")
+            .when(!keyboard_handles.is_empty(), |this| {
+                this.on_key_down(move |event, window, cx| {
+                    let Some(current) = keyboard_handles
+                        .iter()
+                        .position(|(_, handle)| handle.is_focused(window))
+                    else {
+                        return;
+                    };
+                    let next = match event.keystroke.key.as_str() {
+                        "right" | "down" => (current + 1) % keyboard_handles.len(),
+                        "left" | "up" => {
+                            (current + keyboard_handles.len() - 1) % keyboard_handles.len()
+                        }
+                        "home" => 0,
+                        "end" => keyboard_handles.len() - 1,
+                        _ => return,
+                    };
+                    window.focus(&keyboard_handles[next].1, cx);
+                    cx.stop_propagation();
+                    window.prevent_default();
+                })
+            })
             .relative()
             .flex()
             .items_center()

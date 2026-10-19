@@ -104,6 +104,17 @@ impl NativeMenu {
         self.menu_with(label, false, checked, None, Some(action))
     }
 
+    /// Append an item with a check mark and an independently disabled state.
+    pub fn menu_with_check_and_disabled(
+        self,
+        label: impl Into<SharedString>,
+        checked: bool,
+        action: Box<dyn Action>,
+        disabled: bool,
+    ) -> Self {
+        self.menu_with(label, disabled, checked, None, Some(action))
+    }
+
     /// Append an item showing `icon` next to its label.
     ///
     /// Native platform menus load absolute paths ([`Path::is_absolute`]) from the filesystem,
@@ -179,10 +190,20 @@ impl NativeMenu {
     }
 
     /// Append a submenu built from another [`NativeMenu`].
-    pub fn submenu(mut self, label: impl Into<SharedString>, submenu: NativeMenu) -> Self {
+    pub fn submenu(self, label: impl Into<SharedString>, submenu: NativeMenu) -> Self {
+        self.submenu_with_disabled(label, false, submenu)
+    }
+
+    /// Append a submenu with an independently disabled parent item.
+    pub fn submenu_with_disabled(
+        mut self,
+        label: impl Into<SharedString>,
+        disabled: bool,
+        submenu: NativeMenu,
+    ) -> Self {
         self.items.push(NativeMenuItem::Submenu {
             label: label.into(),
-            disabled: false,
+            disabled,
             items: submenu.items,
         });
         self
@@ -363,6 +384,42 @@ mod tests {
     #[derive(Action, Clone, PartialEq, Deserialize)]
     #[action(namespace = native_menu_tests, no_json)]
     struct TestAction;
+
+    #[test]
+    fn test_native_menu_preserves_checked_and_disabled_state() {
+        let menu = NativeMenu::new().submenu_with_disabled(
+            "Unavailable actions",
+            true,
+            NativeMenu::new().menu_with_check_and_disabled(
+                "Current setting",
+                true,
+                Box::new(TestAction),
+                true,
+            ),
+        );
+        let NativeMenuItem::Submenu {
+            disabled, items, ..
+        } = &menu.items[0]
+        else {
+            panic!("expected a submenu");
+        };
+        assert!(*disabled);
+        let NativeMenuItem::Item {
+            disabled, checked, ..
+        } = &items[0]
+        else {
+            panic!("expected a checked disabled item");
+        };
+        assert!(*disabled && *checked);
+        let menu = NativeMenu::new().submenu("Actions", NativeMenu::new());
+        assert!(matches!(
+            menu.items[0],
+            NativeMenuItem::Submenu {
+                disabled: false,
+                ..
+            }
+        ));
+    }
 
     #[test]
     fn test_native_menu_builder_accepts_icon() {

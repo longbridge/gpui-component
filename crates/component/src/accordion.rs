@@ -1,12 +1,14 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    percentage, prelude::FluentBuilder as _, rems,
+    AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    div, percentage, prelude::FluentBuilder as _, rems,
 };
 
-use crate::{ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, h_flex};
+use crate::{
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, ThemeStyled as _, h_flex,
+};
 use gpui_base::{
     Accordion as BaseAccordion, AccordionHeader as BaseAccordionHeader,
     AccordionItem as BaseAccordionItem, AccordionPanel as BaseAccordionPanel, AccordionTrigger,
@@ -99,6 +101,13 @@ impl RenderOnce for Accordion {
         let open_indices = Rc::new(RefCell::new(HashSet::new()));
         let multiple = self.multiple;
         let last_ix = self.children.len().saturating_sub(1);
+        let keyboard_handles = self
+            .children
+            .iter()
+            .filter(|item| !self.disabled && !item.disabled)
+            .filter_map(|item| item.tracked_focus_handle.clone())
+            .collect::<Vec<_>>();
+        let on_toggle = self.on_toggle_click.clone();
 
         BaseAccordion::new(self.id)
             .v_flex()
@@ -123,13 +132,15 @@ impl RenderOnce for Accordion {
                         let disabled = self.disabled || accordion.disabled;
 
                         accordion
+                            .keyboard_handles(keyboard_handles.clone())
                             .index(ix)
                             .last(ix == last_ix)
                             .with_size(self.size)
                             .disabled(disabled)
                             .on_toggle_click({
                                 let open_indices = open_indices.clone();
-                                move |open, _, _| {
+                                let on_toggle = on_toggle.clone();
+                                move |open, window, cx| {
                                     let mut open_indices = open_indices.borrow_mut();
                                     if *open {
                                         if !multiple {
@@ -139,19 +150,16 @@ impl RenderOnce for Accordion {
                                     } else {
                                         open_indices.remove(&ix);
                                     }
+                                    let mut indices =
+                                        open_indices.iter().copied().collect::<Vec<_>>();
+                                    indices.sort_unstable();
+                                    drop(open_indices);
+                                    if let Some(on_toggle) = &on_toggle {
+                                        on_toggle(&indices, window, cx);
+                                    }
                                 }
                             })
                     }),
-            )
-            .when_some(
-                self.on_toggle_click.filter(|_| !self.disabled),
-                |this, on_toggle| {
-                    this.on_click(move |_, window, cx| {
-                        let open_indices =
-                            open_indices.borrow().iter().copied().collect::<Vec<_>>();
-                        on_toggle(&open_indices, window, cx)
-                    })
-                },
             )
     }
 }
@@ -167,6 +175,9 @@ pub struct AccordionItem {
     content_style: StyleRefinement,
     icon: Option<Icon>,
     title: AnyElement,
+    accessibility_label: Option<SharedString>,
+    tracked_focus_handle: Option<FocusHandle>,
+    keyboard_handles: Vec<FocusHandle>,
     children: Vec<AnyElement>,
     open: bool,
     size: Size,
@@ -186,6 +197,9 @@ impl AccordionItem {
             content_style: StyleRefinement::default(),
             icon: None,
             title: SharedString::default().into_any_element(),
+            accessibility_label: None,
+            tracked_focus_handle: None,
+            keyboard_handles: Vec::new(),
             children: Vec::new(),
             open: false,
             disabled: false,
@@ -203,6 +217,19 @@ impl AccordionItem {
     /// Set the title for the accordion item.
     pub fn title(mut self, title: impl IntoElement) -> Self {
         self.title = title.into_any_element();
+        self
+    }
+
+    /// Sets the accessible name of the disclosure trigger independently of
+    /// its potentially custom title content.
+    /// Uses a host-owned handle for focus and native keyboard activation.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.tracked_focus_handle = Some(handle.clone());
+        self
+    }
+
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -235,6 +262,11 @@ impl AccordionItem {
     /// Set extra style for the content below the title.
     pub fn content_style(mut self, style: StyleRefinement) -> Self {
         self.content_style = style;
+        self
+    }
+
+    fn keyboard_handles(mut self, handles: Vec<FocusHandle>) -> Self {
+        self.keyboard_handles = handles;
         self
     }
 
@@ -293,6 +325,36 @@ impl RenderOnce for AccordionItem {
         let trigger = AccordionTrigger::new(("trigger", self.index))
             .open(self.open)
             .disabled(self.disabled)
+            .when_some(
+                self.tracked_focus_handle.clone().filter(|_| !self.disabled),
+                |this, handle| this.track_focus(&handle),
+            )
+            .when(
+                !self.disabled && !self.keyboard_handles.is_empty(),
+                |this| {
+                    this.on_key_down(move |event, window, cx| {
+                        let handles = &self.keyboard_handles;
+                        let Some(current) =
+                            handles.iter().position(|handle| handle.is_focused(window))
+                        else {
+                            return;
+                        };
+                        let next = match event.keystroke.key.as_str() {
+                            "down" => (current + 1) % handles.len(),
+                            "up" => (current + handles.len() - 1) % handles.len(),
+                            "home" => 0,
+                            "end" => handles.len() - 1,
+                            _ => return,
+                        };
+                        window.focus(&handles[next], cx);
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
+                },
+            )
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .h_flex()
             .justify_between()
             .gap_3()
@@ -305,6 +367,14 @@ impl RenderOnce for AccordionItem {
             })
             .when(self.open, |this| this.text_color(cx.theme().foreground))
             .refine_style(&self.title_style)
+            .when(
+                !self.disabled
+                    && self
+                        .tracked_focus_handle
+                        .as_ref()
+                        .is_some_and(|handle| handle.is_focused(window)),
+                |this| this.focus_ring_style(window, cx),
+            )
             .child(
                 h_flex()
                     .flex_1()

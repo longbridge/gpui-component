@@ -8,6 +8,8 @@ mod footer;
 mod header;
 mod title;
 
+pub use crate::window_ext::DialogHandle;
+
 pub use alert_dialog::*;
 pub use content::DialogContent;
 pub use description::DialogDescription;

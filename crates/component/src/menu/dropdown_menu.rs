@@ -45,7 +45,11 @@ impl<T> DropdownMenuPopover<T>
 where
     T: Selectable + IntoElement + 'static,
 {
-    fn new(
+    /// Creates a menu popover with a custom selectable trigger and stable identity.
+    ///
+    /// The menu retains the same focus, keyboard and dismissal behavior as
+    /// [`DropdownMenu::dropdown_menu`] on a Button.
+    pub fn new(
         id: ElementId,
         anchor: impl Into<Anchor>,
         trigger: T,

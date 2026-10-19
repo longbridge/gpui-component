@@ -1,0 +1,704 @@
+{
+  "schemaVersion": 2,
+  "scope": "Public modules and local re-export module seams in crates/component/src/lib.rs. A partial module does not imply all of its controls, states or APIs are bound.",
+  "modules": [
+    {
+      "module": "accordion",
+      "status": "partial",
+      "bindings": [
+        "Accordion"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "alert",
+      "status": "partial",
+      "bindings": [
+        "Alert"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "attachment",
+      "status": "partial",
+      "bindings": [
+        "Attachment",
+        "AttachmentGroup",
+        "AttachmentMedia",
+        "AttachmentContent",
+        "AttachmentTitle",
+        "AttachmentDescription",
+        "AttachmentActions"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "avatar",
+      "status": "partial",
+      "bindings": [
+        "Avatar",
+        "AvatarGroup"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "badge",
+      "status": "partial",
+      "bindings": [
+        "Badge"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "breadcrumb",
+      "status": "partial",
+      "bindings": [
+        "Breadcrumb"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "bubble",
+      "status": "partial",
+      "bindings": [
+        "Bubble",
+        "BubbleGroup",
+        "BubbleContent",
+        "BubbleReactions"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "button",
+      "status": "partial",
+      "bindings": [
+        "Button",
+        "ButtonGroup",
+        "Toggle",
+        "ToggleGroup",
+        "DropdownButton"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "carousel",
+      "status": "partial",
+      "bindings": [
+        "Carousel"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "chart",
+      "status": "partial",
+      "bindings": [
+        "LineChart",
+        "AreaChart",
+        "BarChart",
+        "PieChart",
+        "RadarChart",
+        "CandlestickChart",
+        "SankeyChart"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "checkbox",
+      "status": "partial",
+      "bindings": [
+        "Checkbox"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "clipboard",
+      "status": "partial",
+      "bindings": [
+        "Clipboard"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "collapsible",
+      "status": "partial",
+      "bindings": [
+        "Collapsible"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "color_picker",
+      "status": "partial",
+      "bindings": [
+        "ColorPicker",
+        "ColorSelect"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "combobox",
+      "status": "partial",
+      "bindings": [
+        "Combobox"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "command",
+      "status": "partial",
+      "bindings": [
+        "Command"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "description_list",
+      "status": "partial",
+      "bindings": [
+        "DescriptionList"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "dialog",
+      "status": "partial",
+      "bindings": [
+        "Dialog",
+        "DialogContent",
+        "DialogDescription",
+        "DialogFooter",
+        "DialogHeader",
+        "DialogTitle",
+        "DialogClose",
+        "DialogAction",
+        "AlertDialog"
+      ]
+    },
+    {
+      "module": "diff",
+      "status": "partial",
+      "bindings": [
+        "Diff"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "dock",
+      "status": "partial",
+      "bindings": [
+        "DockArea"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "element_ext",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "empty",
+      "status": "partial",
+      "bindings": [
+        "Empty",
+        "EmptyHeader",
+        "EmptyMedia",
+        "EmptyTitle",
+        "EmptyDescription",
+        "EmptyContent"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "form",
+      "status": "partial",
+      "bindings": [
+        "Form",
+        "Field"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "global_state",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "group_box",
+      "status": "partial",
+      "bindings": [
+        "GroupBox"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "highlighter",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "history",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "hover_card",
+      "status": "partial",
+      "bindings": [
+        "HoverCard"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "icon",
+      "status": "partial",
+      "bindings": [
+        "Icon"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "index_path",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "input",
+      "status": "partial",
+      "bindings": [
+        "Input",
+        "Textarea",
+        "Editor",
+        "NumberInput",
+        "OtpInput",
+        "InputGroup",
+        "InputGroupInput",
+        "InputGroupAddon",
+        "InputGroupButton",
+        "InputGroupText",
+        "InputGroupTextarea"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "inspector",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "kbd",
+      "status": "partial",
+      "bindings": [
+        "Kbd"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "label",
+      "status": "partial",
+      "bindings": [
+        "Label"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "link",
+      "status": "partial",
+      "bindings": [
+        "Link"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "list",
+      "status": "partial",
+      "bindings": [
+        "List",
+        "ListItem",
+        "ListSeparatorItem",
+        "ListLoading"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "marker",
+      "status": "partial",
+      "bindings": [
+        "Marker",
+        "MarkerIcon",
+        "MarkerContent"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "menu",
+      "status": "partial",
+      "bindings": [
+        "ContextMenu",
+        "DropdownMenu",
+        "PopupMenu",
+        "AppMenuBar"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "message",
+      "status": "partial",
+      "bindings": [
+        "Message",
+        "MessageGroup",
+        "MessageAvatar",
+        "MessageHeader",
+        "MessageContent",
+        "MessageFooter"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "message_scroller",
+      "status": "partial",
+      "bindings": [
+        "MessageScroller"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "native_menu",
+      "status": "partial",
+      "bindings": [
+        "NativeMenu"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "notification",
+      "status": "partial",
+      "bindings": [
+        "Notification"
+      ]
+    },
+    {
+      "module": "pagination",
+      "status": "partial",
+      "bindings": [
+        "Pagination"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "plot",
+      "status": "partial",
+      "bindings": [
+        "Plot"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "popover",
+      "status": "partial",
+      "bindings": [
+        "Popover"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "progress",
+      "status": "partial",
+      "bindings": [
+        "Progress",
+        "ProgressCircle"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "questionnaire",
+      "status": "partial",
+      "bindings": [
+        "Questionnaire"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "radio",
+      "status": "partial",
+      "bindings": [
+        "Radio",
+        "RadioGroup"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "rating",
+      "status": "partial",
+      "bindings": [
+        "Rating"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "resizable",
+      "status": "partial",
+      "bindings": [
+        "Resizable",
+        "ResizeHandle"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "scroll",
+      "status": "partial",
+      "bindings": [
+        "ScrollArea"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "searchable_list",
+      "status": "partial",
+      "bindings": [
+        "SearchableListItemElement"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "select",
+      "status": "partial",
+      "bindings": [
+        "Select"
+      ]
+    },
+    {
+      "module": "separator",
+      "status": "partial",
+      "bindings": [
+        "Separator"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "setting",
+      "status": "partial",
+      "bindings": [
+        "Settings"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "sheet",
+      "status": "partial",
+      "bindings": [
+        "Sheet"
+      ]
+    },
+    {
+      "module": "shimmer",
+      "status": "partial",
+      "bindings": [
+        "ShimmerText"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "sidebar",
+      "status": "partial",
+      "bindings": [
+        "Sidebar",
+        "SidebarHeader",
+        "SidebarFooter",
+        "SidebarToggleButton"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "skeleton",
+      "status": "partial",
+      "bindings": [
+        "Skeleton"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "slider",
+      "status": "partial",
+      "bindings": [
+        "Slider"
+      ]
+    },
+    {
+      "module": "speech",
+      "status": "partial",
+      "bindings": [
+        "SpeechButton",
+        "SpeechWaveform"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "spinner",
+      "status": "partial",
+      "bindings": [
+        "Spinner"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "status_bar",
+      "status": "partial",
+      "bindings": [
+        "StatusBar"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "stepper",
+      "status": "partial",
+      "bindings": [
+        "Stepper"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "styled",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "switch",
+      "status": "partial",
+      "bindings": [
+        "Switch"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "tab",
+      "status": "partial",
+      "bindings": [
+        "TabBar",
+        "Tabs"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "table",
+      "status": "partial",
+      "bindings": [
+        "DataTable",
+        "Table",
+        "TableBody",
+        "TableCaption",
+        "TableCell",
+        "TableFooter",
+        "TableHead",
+        "TableHeader",
+        "TableRow"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "tag",
+      "status": "partial",
+      "bindings": [
+        "Tag"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "text",
+      "status": "partial",
+      "bindings": [
+        "TextView",
+        "Markdown",
+        "Html",
+        "CodeBlock"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "theme",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    },
+    {
+      "module": "time",
+      "status": "partial",
+      "bindings": [
+        "Calendar",
+        "DatePicker",
+        "TimeField"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "title_bar",
+      "status": "partial",
+      "bindings": [
+        "TitleBar"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "toolbar",
+      "status": "partial",
+      "bindings": [
+        "Toolbar",
+        "ToolbarGroup"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "tooltip",
+      "status": "partial",
+      "bindings": [
+        "Tooltip"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "tree",
+      "status": "partial",
+      "bindings": [
+        "Tree"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "virtual_list",
+      "status": "partial",
+      "bindings": [
+        "VirtualList",
+        "HorizontalVirtualList"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "window_border",
+      "status": "partial",
+      "bindings": [
+        "WindowBorder"
+      ],
+      "reason": "Usable bindings are available. Full Rust API parity and all-platform behavior have not been established; see docs/NSH-INTEGRATION.md for targeted verification."
+    },
+    {
+      "module": "window_ext",
+      "status": "infrastructure",
+      "bindings": [],
+      "reason": "Shared infrastructure or extension API; not counted as a bound UI component."
+    }
+  ],
+  "platformBindings": [
+    {
+      "binding": "Image",
+      "source": "gpui_kit::img",
+      "status": "partial",
+      "reason": "GPUI image element; not counted as a GPUI Component module."
+    }
+  ]
+}
