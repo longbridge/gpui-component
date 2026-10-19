@@ -7,7 +7,7 @@ use gpui_kit::{
     div,
     prelude::*,
     px, size,
-    test::TestWindowExt,
+    test::{TestQueryExt, TestWindowExt},
 };
 
 use crate::common;
@@ -19,10 +19,12 @@ struct EditorFixture {
 
 impl Render for EditorFixture {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .p_4()
-            .child(Editor::new(&self.state).readonly(self.readonly).size_full())
+        div().size_full().p_4().child(
+            Editor::new(&self.state)
+                .aria_label("Source code")
+                .readonly(self.readonly)
+                .size_full(),
+        )
     }
 }
 
@@ -114,10 +116,7 @@ fn nested_json_pairs_skip_their_generated_closers(cx: &mut TestAppContext) {
         assert_eq!(state.read(cx).value(), "[{}]");
         assert_eq!(state.read(cx).selected_range(), 4..4);
         window.input("!", cx);
-        assert_eq!(
-            common::input(window, ("input", state.entity_id())).value(),
-            Some("[{}]!")
-        );
+        assert_eq!(window.find_by_label("Source code").value(), Some("[{}]!"));
     })
     .unwrap();
 }
@@ -261,10 +260,7 @@ fn readonly_editor_rejects_indentation_and_keeps_multiline_text_copyable(cx: &mu
             window.press(key, cx);
             assert_eq!(state.read(cx).value(), value, "read-only {key}");
             assert_eq!(state.read(cx).selected_range(), 0..value.len());
-            assert_eq!(
-                common::input(window, ("input", state.entity_id())).value(),
-                Some(value)
-            );
+            assert_eq!(window.find_by_label("Source code").value(), Some(value));
         }
         window.click(("input", state.entity_id()), cx);
         window.press("secondary-a", cx);
@@ -375,10 +371,7 @@ fn multicursor_vertical_selection_replaces_and_undoes_each_range(cx: &mut TestAp
         window.press("shift-up", cx);
         assert_eq!(state.read(cx).selected_range(), 1..6);
         assert_eq!(state.read(cx).cursor(), 1);
-        assert_eq!(
-            common::input(window, ("input", state.entity_id())).value(),
-            Some(value)
-        );
+        assert_eq!(window.find_by_label("Source code").value(), Some(value));
         window.input("X", cx);
         assert_eq!(state.read(cx).value(), "aXbcd\nabcd\naXbcd\nabcd");
         window.press("secondary-z", cx);
@@ -389,10 +382,7 @@ fn multicursor_vertical_selection_replaces_and_undoes_each_range(cx: &mut TestAp
         window.input("Y", cx);
         let expected = "aYbcd\nabcd\naYbcd\nabcd";
         assert_eq!(state.read(cx).value(), expected);
-        assert_eq!(
-            common::input(window, ("input", state.entity_id())).value(),
-            Some(expected)
-        );
+        assert_eq!(window.find_by_label("Source code").value(), Some(expected));
     })
     .unwrap();
 }

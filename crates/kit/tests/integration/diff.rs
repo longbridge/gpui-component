@@ -46,6 +46,7 @@ impl Render for Review {
                             .child(match &editor {
                                 Some(editor) => Input::new(editor)
                                     .id("annotation-input")
+                                    .aria_label("Review comment")
                                     .w_full()
                                     .into_any_element(),
                                 None => div().child("Review the original line").into_any_element(),
@@ -340,7 +341,10 @@ fn annotation_input_retains_focus_and_handles_its_own_text_commands(cx: &mut Tes
         window.within("editable-comment").press("secondary-c", cx);
         assert_clipboard(cx, "review note 🦀");
         assert_eq!(
-            common::input(window, "annotation-input").value(),
+            window
+                .within("editable-comment")
+                .find_by_label("Review comment")
+                .value(),
             Some("review note 🦀")
         );
         assert!(view.read(cx).state.read(cx).selected_lines().is_none());

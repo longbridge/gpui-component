@@ -7,7 +7,6 @@
 use gpui_kit::{App, AppContext, InputHandler, TestAppContext, Window, test::TestWindowExt};
 
 use super::lifecycle::mount;
-use crate::common;
 
 fn undo(window: &mut Window, cx: &mut App) {
     window.press(
@@ -43,7 +42,13 @@ fn composition_replaces_marked_text_in_utf16_and_commits_as_one_undo_step(cx: &m
             // Replace the astral character: UTF-16 1..3, UTF-8 1..5.
             handler.replace_and_mark_text_in_range(Some(1..3), "に🦀", Some(1..3), window, cx);
             window.render_frame(cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("Aに🦀Z"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("Aに🦀Z")
+            );
             assert_eq!(handler.marked_text_range(window, cx), Some(1..4));
             assert_eq!(selection(&mut *handler, window, cx), 2..4);
             let mut adjusted = None;
@@ -57,21 +62,51 @@ fn composition_replaces_marked_text_in_utf16_and_commits_as_one_undo_step(cx: &m
             // even when only part of it is selected.
             handler.replace_and_mark_text_in_range(None, "日本", Some(2..2), window, cx);
             window.render_frame(cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A日本Z"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A日本Z")
+            );
             assert_eq!(handler.marked_text_range(window, cx), Some(1..3));
             assert_eq!(selection(&mut *handler, window, cx), 3..3);
             handler.replace_text_in_range(None, "日本語", window, cx);
             window.render_frame(cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A日本語Z"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A日本語Z")
+            );
             assert_eq!(handler.marked_text_range(window, cx), None);
             assert_eq!(selection(&mut *handler, window, cx), 4..4);
 
             window.input("x", cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A日本語xZ"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A日本語xZ")
+            );
             undo(window, cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A日本語Z"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A日本語Z")
+            );
             undo(window, cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A🦀Z"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A🦀Z")
+            );
         })
         .unwrap();
     }
@@ -93,14 +128,29 @@ fn cancelling_preedit_leaves_no_undo_entry_and_does_not_swallow_later_typing(
             // its text and is covered separately below.
             handler.replace_and_mark_text_in_range(None, "", None, window, cx);
             window.render_frame(cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A🦀"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A🦀")
+            );
             assert_eq!(handler.marked_text_range(window, cx), None);
             assert_eq!(selection(&mut *handler, window, cx), 3..3);
             window.input("x", cx);
             undo(window, cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("A🦀"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("A🦀")
+            );
             undo(window, cx);
-            assert_eq!(common::input(window, id).value(), Some(""));
+            assert_eq!(
+                window.within(id).find_by_label("Document content").value(),
+                Some("")
+            );
         })
         .unwrap();
     }
@@ -119,12 +169,27 @@ fn unmark_retains_preedit_and_separates_its_history_from_later_typing(cx: &mut T
             window.render_frame(cx);
             assert_eq!(handler.marked_text_range(window, cx), None);
             assert_eq!(selection(&mut *handler, window, cx), 2..2);
-            assert_eq!(common::input(window, id.clone()).value(), Some("日本"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("日本")
+            );
             window.input("x", cx);
             undo(window, cx);
-            assert_eq!(common::input(window, id.clone()).value(), Some("日本"));
+            assert_eq!(
+                window
+                    .within(id.clone())
+                    .find_by_label("Document content")
+                    .value(),
+                Some("日本")
+            );
             undo(window, cx);
-            assert_eq!(common::input(window, id).value(), Some(""));
+            assert_eq!(
+                window.within(id).find_by_label("Document content").value(),
+                Some("")
+            );
         })
         .unwrap();
     }

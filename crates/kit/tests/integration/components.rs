@@ -7,7 +7,7 @@ use gpui_component::{
     popover::Popover,
     progress::{Progress, ProgressCircle},
 };
-use gpui_kit::test::{TestSupportExt, TestWindowExt};
+use gpui_kit::test::{TestQueryExt, TestSupportExt, TestWindowExt};
 use gpui_kit::{AppContext, Context, Entity, TestAppContext, Window, div, prelude::*, px, size};
 
 struct Controls {
@@ -30,7 +30,12 @@ impl Render for Controls {
                         cx.notify();
                     })),
             )
-            .child(Input::new(&self.input).id("search").w(px(240.)))
+            .child(
+                Input::new(&self.input)
+                    .id("search")
+                    .aria_label("Search components")
+                    .w(px(240.)),
+            )
             .child(
                 Popover::new("popover-host")
                     .trigger(Button::new("open").label("Open"))
@@ -64,7 +69,7 @@ fn kit_controls_use_native_events_and_report_state(cx: &mut TestAppContext) {
         assert_eq!(window.find("search").focused(), Some(true));
         window.input("GPUI 中文 🦀", cx);
         assert_eq!(
-            common::input(window, "search").value(),
+            window.find_by_label("Search components").value(),
             Some("GPUI 中文 🦀")
         );
         assert!(window.try_find("popover-content").is_none());

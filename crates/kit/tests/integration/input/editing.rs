@@ -7,7 +7,7 @@ use gpui_kit::{
     div, point,
     prelude::*,
     px, size,
-    test::TestWindowExt,
+    test::{TestQueryExt, TestWindowExt},
 };
 use std::ops::Range;
 
@@ -33,12 +33,18 @@ impl Render for EditingForm {
             .gap_4()
             .child(
                 Input::new(&self.first)
+                    .aria_label("Primary text")
                     .id("editing-first")
                     .w_80()
                     .prefix(div().child("Name"))
                     .suffix(div().child("Required")),
             )
-            .child(Input::new(&self.second).id("editing-second").w_80())
+            .child(
+                Input::new(&self.second)
+                    .aria_label("Secondary text")
+                    .id("editing-second")
+                    .w_80(),
+            )
     }
 }
 
@@ -92,7 +98,7 @@ fn shift_arrows_reverse_selection_and_typing_replaces_it(cx: &mut TestAppContext
         assert_edit(&input, "abcd", 3..4, 3, cx);
         window.input("X", cx);
         assert_edit(&input, "abcX", 4..4, 4, cx);
-        assert_eq!(common::input(window, "editing-first").value(), Some("abcX"));
+        assert_eq!(window.find_by_label("Primary text").value(), Some("abcX"));
 
         window.press("home", cx);
         window.press("shift-right", cx);
@@ -123,7 +129,7 @@ fn home_end_and_shift_select_line_boundaries(cx: &mut TestAppContext) {
         window.press("end", cx);
         assert_edit(&input, "a!", 2..2, 2, cx);
         window.input("?", cx);
-        assert_eq!(common::input(window, "editing-first").value(), Some("a!?"));
+        assert_eq!(window.find_by_label("Primary text").value(), Some("a!?"));
     })
     .unwrap();
 }
@@ -153,7 +159,7 @@ fn backspace_and_delete_remove_opposite_sides_and_stop_at_boundaries(cx: &mut Te
         assert_edit(&input, "", 0..0, 0, cx);
         window.press("backspace", cx);
         window.press("delete", cx);
-        assert_eq!(common::input(window, "editing-first").value(), Some(""));
+        assert_eq!(window.find_by_label("Primary text").value(), Some(""));
         window.input("abcd", cx);
         window.press("left", cx);
         window.press("shift-left", cx);
@@ -186,10 +192,7 @@ fn copy_preserves_selection_and_pastes_only_selected_text_into_another_input(
         );
         window.click("editing-second", cx);
         window.press("secondary-v", cx);
-        assert_eq!(
-            common::input(window, "editing-second").value(),
-            Some("copy")
-        );
+        assert_eq!(window.find_by_label("Secondary text").value(), Some("copy"));
         assert_eq!(input.read(cx).value(), "keep copy");
         assert_eq!(form.read(cx).second.read(cx).value(), "copy");
     })
@@ -217,11 +220,8 @@ fn cut_removes_selection_and_paste_replaces_destination_selection(cx: &mut TestA
         window.press("secondary-a", cx);
         window.press("secondary-v", cx);
         assert_edit(&form.read(cx).second, "cut", 3..3, 3, cx);
-        assert_eq!(
-            common::input(window, "editing-first").value(),
-            Some("keep ")
-        );
-        assert_eq!(common::input(window, "editing-second").value(), Some("cut"));
+        assert_eq!(window.find_by_label("Primary text").value(), Some("keep "));
+        assert_eq!(window.find_by_label("Secondary text").value(), Some("cut"));
     })
     .unwrap();
 }
@@ -238,7 +238,7 @@ fn copy_and_cut_without_selection_preserve_clipboard_and_text(cx: &mut TestAppCo
         for key in ["secondary-c", "secondary-x"] {
             window.press(key, cx);
             assert_edit(&input, "keep", 3..3, 3, cx);
-            assert_eq!(common::input(window, "editing-first").value(), Some("keep"));
+            assert_eq!(window.find_by_label("Primary text").value(), Some("keep"));
             assert_eq!(
                 cx.read_from_clipboard()
                     .and_then(|item| item.text())
@@ -249,7 +249,7 @@ fn copy_and_cut_without_selection_preserve_clipboard_and_text(cx: &mut TestAppCo
         window.click("editing-second", cx);
         window.press("secondary-v", cx);
         assert_eq!(
-            common::input(window, "editing-second").value(),
+            window.find_by_label("Secondary text").value(),
             Some("saved 🦀")
         );
     })
@@ -274,7 +274,7 @@ fn multiline_clipboard_normalization_preserves_surrounding_text(cx: &mut TestApp
             window.press("secondary-v", cx);
             assert_edit(&input, "[onetwo]", 7..7, 7, cx);
             assert_eq!(
-                common::input(window, "editing-first").value(),
+                window.find_by_label("Primary text").value(),
                 Some("[onetwo]")
             );
             assert_eq!(
@@ -302,7 +302,7 @@ fn double_click_selects_a_word_for_replacement(cx: &mut TestAppContext) {
         window.input("replacement", cx);
         assert_edit(&input, "replacement", 11..11, 11, cx);
         assert_eq!(
-            common::input(window, "editing-second").value(),
+            window.find_by_label("Secondary text").value(),
             Some("replacement")
         );
     })
@@ -329,10 +329,7 @@ fn pointer_drag_selects_text_and_click_collapses_selection(cx: &mut TestAppConte
         assert_edit(&input, "drag me", 0..7, 0, cx);
         window.input("done", cx);
         assert_edit(&input, "done", 4..4, 4, cx);
-        assert_eq!(
-            common::input(window, "editing-second").value(),
-            Some("done")
-        );
+        assert_eq!(window.find_by_label("Secondary text").value(), Some("done"));
     })
     .unwrap();
 }
@@ -357,10 +354,7 @@ fn enter_reports_modifiers_without_inserting_newlines_or_replacing_selection(
         cx.update_window(handle.into(), |_, window, cx| {
             window.press(key, cx);
             assert_edit(&form.read(cx).first, "submit", 5..6, 5, cx);
-            assert_eq!(
-                common::input(window, "editing-first").value(),
-                Some("submit")
-            );
+            assert_eq!(window.find_by_label("Primary text").value(), Some("submit"));
         })
         .unwrap();
         cx.run_until_parked();
@@ -405,12 +399,9 @@ fn tab_moves_between_inputs_with_passive_prefix_and_suffix(cx: &mut TestAppConte
         assert_eq!(window.find("editing-second").focused(), Some(false));
         window.press("end", cx);
         window.input("!", cx);
+        assert_eq!(window.find_by_label("Primary text").value(), Some("first!"));
         assert_eq!(
-            common::input(window, "editing-first").value(),
-            Some("first!")
-        );
-        assert_eq!(
-            common::input(window, "editing-second").value(),
+            window.find_by_label("Secondary text").value(),
             Some("second")
         );
         assert_eq!(form.read(cx).first.read(cx).value(), "first!");
@@ -488,7 +479,7 @@ fn word_deletion_respects_selection_and_empty_boundaries(cx: &mut TestAppContext
         }
         window.input("recovered", cx);
         assert_eq!(
-            common::input(window, "editing-first").value(),
+            window.find_by_label("Primary text").value(),
             Some("recovered")
         );
     })
@@ -517,10 +508,7 @@ fn shift_home_and_end_cross_the_anchor_without_resetting_it(cx: &mut TestAppCont
             assert_edit(&input, "abcde", range, cursor, cx);
         }
         window.input("X", cx);
-        assert_eq!(
-            common::input(window, "editing-first").value(),
-            Some("abcXe")
-        );
+        assert_eq!(window.find_by_label("Primary text").value(), Some("abcXe"));
     })
     .unwrap();
 }
@@ -548,7 +536,7 @@ fn clipboard_normalization_preserves_tabs_and_unicode_graphemes(cx: &mut TestApp
         assert_eq!(input.read(cx).selected_value(), "👩‍💻");
         window.input("X", cx);
         assert_eq!(
-            common::input(window, "editing-first").value(),
+            window.find_by_label("Primary text").value(),
             Some("[e\u{301}\tX中]")
         );
         window.press("home", cx);
@@ -559,7 +547,7 @@ fn clipboard_normalization_preserves_tabs_and_unicode_graphemes(cx: &mut TestApp
         assert_eq!(input.read(cx).selected_value(), "e\u{301}");
         window.press("delete", cx);
         assert_eq!(
-            common::input(window, "editing-first").value(),
+            window.find_by_label("Primary text").value(),
             Some("[\tX中]")
         );
     })

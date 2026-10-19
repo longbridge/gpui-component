@@ -8,7 +8,7 @@ use gpui_component::{
     input::{Input, InputState},
     text::{TextView, TextViewState},
 };
-use gpui_kit::test::{TestSupportExt as _, TestWindowExt};
+use gpui_kit::test::{TestQueryExt, TestSupportExt as _, TestWindowExt};
 use gpui_kit::{
     AppContext, Context, DispatchPhase, Entity, InputEvent as _, LongPressEvent, Modifiers,
     MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollWheelEvent,
@@ -29,7 +29,12 @@ impl Render for Screen {
             .flex_col()
             .gap_4()
             .p_4()
-            .child(Input::new(&self.input).id("input").w(px(320.)))
+            .child(
+                Input::new(&self.input)
+                    .id("input")
+                    .aria_label("Selectable text")
+                    .w(px(320.)),
+            )
             .child(
                 div()
                     .id("text")
@@ -277,7 +282,7 @@ fn long_press_in_input_select_all_keeps_the_menu(cx: &mut TestAppContext) {
         long_press(window, cx, point(input.left() + px(24.), input.center().y));
         window.click("Select All", cx);
         assert_eq!(
-            common::input(window, "input").value(),
+            window.find_by_label("Selectable text").value(),
             Some("quick select value")
         );
         assert!(

@@ -70,6 +70,11 @@ belong to the editor's existing keyboard-focus boundary instead. Query that
 semantic node with `find_by_label`, or `within(frame).find_all_by_role(...)`;
 the frame itself does not duplicate text semantics. An addon may have focus
 inside the frame while the semantic text node correctly reports no focus.
+Give fixture editors meaningful `.aria_label(...)` names and select the intended
+editor explicitly at each assertion. If names repeat, scope the query to the
+owning frame. Do not hide these selectors behind a helper that guesses an input
+from a fixed list of text roles: password, email, phone and URL inputs need not
+share the same role.
 
 ## Inspect accessibility targets and individual events
 

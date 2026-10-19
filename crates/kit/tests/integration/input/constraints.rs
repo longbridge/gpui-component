@@ -10,7 +10,7 @@ use gpui_kit::{
     component::input::{Input, InputContentType, InputEvent, InputState},
     div, point,
     prelude::*,
-    test::TestWindowExt,
+    test::{TestQueryExt, TestWindowExt},
 };
 
 use std::{cell::RefCell, rc::Rc};
@@ -39,6 +39,7 @@ impl Render for Constraints {
             })
             .child(
                 Input::new(&self.input)
+                    .aria_label("Constrained value")
                     .id("constrained")
                     .w_64()
                     .readonly(self.readonly)
@@ -162,7 +163,10 @@ fn protected_after_focus(cx: &mut TestAppContext, disabled: bool) {
             } else {
                 window.press(key, cx);
             }
-            assert_eq!(common::input(window, "constrained").value(), Some("edit"));
+            assert_eq!(
+                window.find_by_label("Constrained value").value(),
+                Some("edit")
+            );
             assert_clipboard(cx, "sentinel");
         });
         assert_owner(handle, &view, cx, "edit", 1);
@@ -179,9 +183,9 @@ fn protected_after_focus(cx: &mut TestAppContext, disabled: bool) {
     ui(handle, cx, |window, cx| {
         window.click("constrained", cx);
         shortcut(window, "z", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
         window.input("R", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("R"));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some("R"));
     });
     assert_owner(handle, &view, cx, "R", 3);
 }
@@ -226,7 +230,10 @@ fn readonly_allows_selection_copy_and_silent_owner_replacement(cx: &mut TestAppC
         })
         .unwrap();
         ui(handle, cx, |window, cx| {
-            assert_eq!(common::input(window, "constrained").value(), Some(expected));
+            assert_eq!(
+                window.find_by_label("Constrained value").value(),
+                Some(expected)
+            );
             window.input("ignored", cx);
         });
         assert_owner(handle, &view, cx, expected, 0);
@@ -250,11 +257,11 @@ fn masking_blocks_clipboard_until_revealed_and_preserves_the_value(cx: &mut Test
         for key in ["c", "x"] {
             shortcut(window, key, cx);
             assert_clipboard(cx, "sentinel");
-            assert_eq!(common::input(window, "constrained").value(), None);
+            assert_eq!(window.find_by_label("Constrained value").value(), None);
         }
         window.within("constrained").click("toggle-mask", cx);
         assert_eq!(
-            common::input(window, "constrained").value(),
+            window.find_by_label("Constrained value").value(),
             Some("sëcret🦀")
         );
         window.click("constrained", cx);
@@ -262,7 +269,7 @@ fn masking_blocks_clipboard_until_revealed_and_preserves_the_value(cx: &mut Test
         shortcut(window, "c", cx);
         assert_clipboard(cx, "sëcret🦀");
         window.within("constrained").click("toggle-mask", cx);
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
     });
     assert_owner(handle, &view, cx, "sëcret🦀", 1);
 }
@@ -279,12 +286,12 @@ fn password_content_types_hide_accessibility_values_even_when_revealed(cx: &mut 
         .unwrap();
         ui(handle, cx, |window, cx| {
             assert_eq!(
-                common::input(window, "constrained").role(),
+                window.find_by_label("Constrained value").role(),
                 Some(gpui_kit::Role::PasswordInput)
             );
-            assert_eq!(common::input(window, "constrained").value(), None);
+            assert_eq!(window.find_by_label("Constrained value").value(), None);
             window.within("constrained").click("toggle-mask", cx);
-            assert_eq!(common::input(window, "constrained").value(), None);
+            assert_eq!(window.find_by_label("Constrained value").value(), None);
             window.click("constrained", cx);
             shortcut(window, "a", cx);
             shortcut(window, "c", cx);
@@ -296,7 +303,7 @@ fn password_content_types_hide_accessibility_values_even_when_revealed(cx: &mut 
             shortcut(window, "a", cx);
             shortcut(window, "c", cx);
             assert_clipboard(cx, "sentinel");
-            assert_eq!(common::input(window, "constrained").value(), None);
+            assert_eq!(window.find_by_label("Constrained value").value(), None);
         });
         assert_owner(handle, &view, cx, "secret", 0);
     }
@@ -315,7 +322,10 @@ fn validation_rejects_typing_without_moving_the_selection_or_notifying_owner(
         window.click("constrained", cx);
         shortcut(window, "a", cx);
         window.input("x", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12")
+        );
     });
     assert_owner(handle, &view, cx, "12", 0);
     common::update_content(handle, &view, cx, |view, _, cx| {
@@ -324,7 +334,7 @@ fn validation_rejects_typing_without_moving_the_selection_or_notifying_owner(
     .unwrap();
     ui(handle, cx, |window, cx| {
         window.input("7", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("7"));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some("7"));
     });
     assert_owner(handle, &view, cx, "7", 1);
 }
@@ -345,14 +355,17 @@ fn invalid_paste_is_atomic_and_does_not_add_an_undo_entry(cx: &mut TestAppContex
         ui(handle, cx, |window, cx| {
             clipboard(cx, rejected);
             shortcut(window, "v", cx);
-            assert_eq!(common::input(window, "constrained").value(), Some("12"));
+            assert_eq!(
+                window.find_by_label("Constrained value").value(),
+                Some("12")
+            );
             assert_clipboard(cx, rejected);
         });
         assert_owner(handle, &view, cx, "12", 1);
     }
     ui(handle, cx, |window, cx| {
         shortcut(window, "z", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
     });
     assert_owner(handle, &view, cx, "", 2);
 }
@@ -364,7 +377,10 @@ fn mask_formats_paste_rejects_overflow_and_round_trips_history(cx: &mut TestAppC
         window.click("constrained", cx);
         clipboard(cx, "1234");
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12-34"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12-34")
+        );
     });
     assert_owner(handle, &view, cx, "12-34", 1);
     common::update_content(handle, &view, cx, |view, _, cx| {
@@ -374,12 +390,15 @@ fn mask_formats_paste_rejects_overflow_and_round_trips_history(cx: &mut TestAppC
     .unwrap();
     ui(handle, cx, |window, cx| {
         window.input("5x", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12-34"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12-34")
+        );
     });
     assert_owner(handle, &view, cx, "12-34", 1);
     ui(handle, cx, |window, cx| {
         shortcut(window, "z", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
     });
     assert_owner(handle, &view, cx, "", 2);
     ui(handle, cx, |window, cx| {
@@ -392,7 +411,10 @@ fn mask_formats_paste_rejects_overflow_and_round_trips_history(cx: &mut TestAppC
             },
             cx,
         );
-        assert_eq!(common::input(window, "constrained").value(), Some("12-34"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12-34")
+        );
     });
     assert_owner(handle, &view, cx, "12-34", 3);
 }
@@ -408,15 +430,15 @@ fn invalid_initial_value_can_be_repaired_then_validation_applies(cx: &mut TestAp
         window.click("constrained", cx);
         shortcut(window, "a", cx);
         window.input("7", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("7"));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some("7"));
     });
     assert_owner(handle, &view, cx, "7", 1);
     ui(handle, cx, |window, cx| {
         window.input("x", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("7"));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some("7"));
         shortcut(window, "a", cx);
         window.press("backspace", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
     });
     assert_owner(handle, &view, cx, "", 2);
 }
@@ -443,7 +465,7 @@ fn clear_affordance_tracks_editability_and_emits_one_change(cx: &mut TestAppCont
         ui(handle, cx, |window, _| {
             assert!(window.within("constrained").try_find("clean").is_none());
             assert_eq!(
-                common::input(window, "constrained").value(),
+                window.find_by_label("Constrained value").value(),
                 Some("clear me")
             );
         });
@@ -457,14 +479,14 @@ fn clear_affordance_tracks_editability_and_emits_one_change(cx: &mut TestAppCont
     .unwrap();
     ui(handle, cx, |window, cx| {
         window.within("constrained").click("clean", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
         assert_eq!(window.find("constrained").focused(), Some(true));
         assert!(window.within("constrained").try_find("clean").is_none());
     });
     assert_owner(handle, &view, cx, "", 1);
     ui(handle, cx, |window, cx| {
         window.input("A", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("A"));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some("A"));
         assert!(window.within("constrained").find("clean").visible());
     });
     assert_owner(handle, &view, cx, "A", 2);
@@ -605,20 +627,20 @@ fn masked_mouse_selection_replaces_whole_secret_and_reveal_keeps_history(cx: &mu
         assert_clipboard(cx, "sentinel");
         clipboard(cx, "new secret");
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
         window.within("constrained").click("toggle-mask", cx);
         assert_eq!(
-            common::input(window, "constrained").value(),
+            window.find_by_label("Constrained value").value(),
             Some("new secret")
         );
         window.click("constrained", cx);
         shortcut(window, "z", cx);
         assert_eq!(
-            common::input(window, "constrained").value(),
+            window.find_by_label("Constrained value").value(),
             Some("first second third")
         );
         window.within("constrained").click("toggle-mask", cx);
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
     });
     assert_owner(handle, &view, cx, "first second third", 2);
 }
@@ -640,24 +662,30 @@ fn validation_rejects_partial_deletion_but_allows_clear_and_reentry(cx: &mut Tes
         shortcut(window, "a", cx);
         window.press("right", cx);
         window.press("backspace", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12")
+        );
         shortcut(window, "a", cx);
         window.press("left", cx);
         window.press("delete", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12")
+        );
     });
     assert_owner(handle, &view, cx, "12", 0);
     ui(handle, cx, |window, cx| {
         // Empty is deliberately accepted independently of the validator.
         window.within("constrained").click("clean", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
         assert_eq!(window.find("constrained").focused(), Some(true));
         assert!(window.within("constrained").try_find("clean").is_none());
     });
     assert_owner(handle, &view, cx, "", 1);
     ui(handle, cx, |window, cx| {
         window.input("1", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some(""));
+        assert_eq!(window.find_by_label("Constrained value").value(), Some(""));
         clipboard(cx, "34");
         shortcut(window, "v", cx);
     });
@@ -695,7 +723,10 @@ fn validation_policy_changes_apply_to_the_existing_selection(cx: &mut TestAppCon
         clipboard(cx, "bad");
         shortcut(window, "v", cx);
         // Existing invalid text stays editable so the user can repair it.
-        assert_eq!(common::input(window, "constrained").value(), Some("bad"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("bad")
+        );
     });
     assert_owner(handle, &view, cx, "bad", 8);
     ui(handle, cx, |window, cx| {
@@ -708,7 +739,10 @@ fn validation_policy_changes_apply_to_the_existing_selection(cx: &mut TestAppCon
         shortcut(window, "a", cx);
         clipboard(cx, "bad");
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("34"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("34")
+        );
     });
     common::update_content(handle, &view, cx, |view, _, cx| {
         assert_eq!(view.input.read(cx).selected_range(), 0..2);
@@ -739,7 +773,10 @@ fn paste_hook_consumption_preserves_selection_and_redo_then_fallback_normalizes(
     ui(handle, cx, |window, cx| {
         clipboard(cx, payload);
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("old"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("old")
+        );
         assert_clipboard(cx, payload);
     });
     assert_owner(handle, &view, cx, "old", 2);
@@ -758,7 +795,10 @@ fn paste_hook_consumption_preserves_selection_and_redo_then_fallback_normalizes(
             },
             cx,
         );
-        assert_eq!(common::input(window, "constrained").value(), Some("new"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("new")
+        );
         shortcut(window, "z", cx);
     });
     common::update_content(handle, &view, cx, |view, _, cx| {
@@ -768,9 +808,15 @@ fn paste_hook_consumption_preserves_selection_and_redo_then_fallback_normalizes(
     .unwrap();
     ui(handle, cx, |window, cx| {
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("中\t文"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("中\t文")
+        );
         shortcut(window, "z", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("old"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("old")
+        );
     });
     assert_owner(handle, &view, cx, "old", 6);
     common::update_content(handle, &view, cx, |view, _, cx| {
@@ -802,7 +848,10 @@ fn protected_input_does_not_invoke_paste_hook_and_reenable_restores_it(cx: &mut 
         .unwrap();
         ui(handle, cx, |window, cx| {
             shortcut(window, "v", cx);
-            assert_eq!(common::input(window, "constrained").value(), Some("keep"));
+            assert_eq!(
+                window.find_by_label("Constrained value").value(),
+                Some("keep")
+            );
         });
         assert_owner(handle, &view, cx, "keep", 0);
         common::update_content(handle, &view, cx, |view, _, cx| {
@@ -818,7 +867,7 @@ fn protected_input_does_not_invoke_paste_hook_and_reenable_restores_it(cx: &mut 
         shortcut(window, "a", cx);
         shortcut(window, "v", cx);
         assert_eq!(
-            common::input(window, "constrained").value(),
+            window.find_by_label("Constrained value").value(),
             Some("replacement")
         );
     });
@@ -841,7 +890,7 @@ fn masked_word_delete_takes_the_secret_and_undo_preserves_privacy(cx: &mut TestA
             "ctrl"
         };
         window.press(&format!("{modifier}-backspace"), cx);
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
     });
     assert_owner(handle, &view, cx, "", 1);
     ui(handle, cx, |window, cx| {
@@ -853,7 +902,7 @@ fn masked_word_delete_takes_the_secret_and_undo_preserves_privacy(cx: &mut TestA
             "ctrl"
         };
         window.press(&format!("{modifier}-delete"), cx);
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
     });
     assert_owner(handle, &view, cx, "", 3);
     ui(handle, cx, |window, cx| {
@@ -862,7 +911,7 @@ fn masked_word_delete_takes_the_secret_and_undo_preserves_privacy(cx: &mut TestA
         shortcut(window, "a", cx);
         shortcut(window, "c", cx);
         assert_clipboard(cx, "public");
-        assert_eq!(common::input(window, "constrained").value(), None);
+        assert_eq!(window.find_by_label("Constrained value").value(), None);
     });
     assert_owner(handle, &view, cx, "first second", 4);
 }
@@ -884,7 +933,10 @@ fn validation_rejection_preserves_redo_and_replacement_selection(cx: &mut TestAp
         window.input("x", cx);
         clipboard(cx, "4567");
         shortcut(window, "v", cx);
-        assert_eq!(common::input(window, "constrained").value(), Some("12"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("12")
+        );
     });
     assert_owner(handle, &view, cx, "12", 2);
     common::update_content(handle, &view, cx, |view, _, cx| {
@@ -902,7 +954,10 @@ fn validation_rejection_preserves_redo_and_replacement_selection(cx: &mut TestAp
             },
             cx,
         );
-        assert_eq!(common::input(window, "constrained").value(), Some("123"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("123")
+        );
         shortcut(window, "z", cx);
         shortcut(window, "a", cx);
         clipboard(cx, "45");
@@ -916,7 +971,10 @@ fn validation_rejection_preserves_redo_and_replacement_selection(cx: &mut TestAp
             },
             cx,
         );
-        assert_eq!(common::input(window, "constrained").value(), Some("45"));
+        assert_eq!(
+            window.find_by_label("Constrained value").value(),
+            Some("45")
+        );
     });
     assert_owner(handle, &view, cx, "45", 5);
 }
