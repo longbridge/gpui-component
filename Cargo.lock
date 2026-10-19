@@ -5107,7 +5107,7 @@ dependencies = [
  "smol",
  "tar",
  "tracing",
- "tungstenite 0.29.0",
+ "tungstenite",
  "usvg 0.46.0",
  "wait-timeout",
  "windows 0.58.0",
@@ -7163,19 +7163,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nsh-dev"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6755035e56e269dd3e0a5124ff77275274997bfbe26d9c1ea350ff2ab1e03df6"
-dependencies = [
- "dunce",
- "log",
- "serde",
- "serde_json",
- "tungstenite 0.30.0",
-]
-
-[[package]]
 name = "nsh-engine"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7259,7 +7246,6 @@ dependencies = [
  "log",
  "nsh-animation",
  "nsh-core",
- "nsh-dev",
  "nsh-engine",
  "nsh-ui-mobile",
  "raw-window-handle",
@@ -11937,22 +11923,6 @@ dependencies = [
  "thiserror 2.0.20",
  "url",
  "webpki-roots 0.26.11",
-]
-
-[[package]]
-name = "tungstenite"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
-dependencies = [
- "bytes",
- "data-encoding",
- "http",
- "httparse",
- "log",
- "rand 0.10.2",
- "sha1 0.11.0",
- "thiserror 2.0.20",
 ]
 
 [[package]]
