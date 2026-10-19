@@ -32,6 +32,9 @@ use gpui_kit::base::{Popup};
 
 应用负责打开状态和关闭策略；Popup 负责锚定及浮层结构。
 
+`.on_dismiss(...)` 会报告落在 trigger 与展开内容之外的鼠标按下，用于请求关闭下拉层。
+落在 trigger 上的按下交给 trigger 自己处理，由它切换弹出层。
+
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 
 ## 完整 Rust 示例

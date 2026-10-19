@@ -36,6 +36,10 @@ The parent owns selected index/value; each tab reflects it and click handlers up
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 
+## Keyboard
+
+`Tabs` owns the keyboard for the `Tab`s below it, wherever a skin places them. The list is one Tab stop: Tab lands on the focused tab, otherwise the selected one, otherwise the first enabled tab. The arrow keys of its `axis` (Left and Right by default, Up and Down with `.axis(Axis::Vertical)`) move focus to the previous or next enabled tab, wrapping at either end, and Home and End move to the first and last. Moving focus selects the tab through its `on_click`, as platform tab views do; with `.activate_on_focus(false)` the arrows only move focus and Space or Enter selects. A click selects a tab without taking focus, so a document tab bar never takes focus from the document. `Tabs::track_focus(&handle)` gives the list one handle of its own: focusing it moves focus on to the tab holding the Tab stop.
+
 ## Complete Rust example
 
 The complete implementation used by the runnable showcase is embedded directly from Rust source:

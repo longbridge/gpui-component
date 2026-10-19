@@ -36,6 +36,10 @@ The group coordinates one selected value and keyboard movement; `Radio` renders 
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 
+## Keyboard
+
+`RadioGroup` owns the keyboard for the `Radio`s below it, wherever a skin places them, as platform radio groups do. The group is one Tab stop: Tab lands on the focused radio, otherwise the checked one, otherwise the first enabled radio. Every arrow key moves focus to the previous (Left, Up) or next (Right, Down) enabled radio, wrapping at either end, and requests its check through the radio's `on_change` with a keyboard click event. `RadioGroup::track_focus(&handle)` gives the group one handle of its own: focusing it moves focus on to the radio holding the Tab stop. An owner that moves between radios itself turns this off with `.keyboard_navigation(false)`; each enabled radio is then its own Tab stop.
+
 ## Complete Rust example
 
 The complete implementation used by the runnable showcase is embedded directly from Rust source:

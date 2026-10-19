@@ -8,7 +8,11 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
+use crate::{
+    StateStyle, StyledExt as _, TestSupportExt as _,
+    a11y_disabled::A11yDisabledExt as _,
+    roving_focus::{Member, RovingItem},
+};
 
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
@@ -159,16 +163,20 @@ impl StatefulInteractiveElement for Toggle {}
 
 impl RenderOnce for Toggle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let pressed = self.pressed;
+        let disabled = self.disabled;
         let focus_handle = self
             .tracked_focus
             .clone()
-            .unwrap_or_else(|| self.focus_handle(window, cx));
-        let pressed = self.pressed;
-        let disabled = self.disabled;
+            .unwrap_or_else(|| self.focus_handle(window, cx))
+            .tab_index(self.tab_index)
+            .tab_stop(self.tab_stop);
+        let focus_handle = (!disabled).then_some(focus_handle);
         let style = self.resolved_style();
         let on_change = self.on_change;
 
-        self.base
+        let toggle = self
+            .base
             .test_support()
             .role(Role::Button)
             // Match Button's neutral control geometry: a fixed-size toggle
@@ -186,12 +194,8 @@ impl RenderOnce for Toggle {
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
-            .when(!disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_index(self.tab_index)
-                        .tab_stop(self.tab_stop),
-                )
+            .when_some(focus_handle.as_ref(), |this, focus_handle| {
+                this.track_focus(focus_handle)
             })
             .when(disabled, |this| {
                 this.on_mouse_down(MouseButton::Left, |_, _, cx| {
@@ -208,7 +212,9 @@ impl RenderOnce for Toggle {
             )
             .children(self.children)
             .refine_style(&style)
-            .a11y_disabled(disabled)
+            .a11y_disabled(disabled);
+
+        RovingItem::new(Member::Toggle, toggle, focus_handle, pressed, None)
     }
 }
 

@@ -44,6 +44,15 @@ The complete implementation used by the runnable showcase is embedded directly f
 
 The command above supplies application initialization, window creation, and shared `BaseShowcase` state.
 
+## Keyboard
+
+Supply the matching `.options(labels)` to let the root move the highlighted
+option with Up, Down, Page Up and Page Down while the query field keeps the
+focus; a closed combobox opens first. Home, End and typed letters stay with the query field. The
+application keeps `.highlighted_index(...)` in step from `.on_highlight(...)`
+and commits it in `.on_confirm(...)`. Enter confirms, Escape dismisses, and Tab or
+Shift-Tab closes without choosing and moves focus on, as in `Select`.
+
 ## Accessibility
 
 Synchronize input, popup, active option, and selected value; make every option keyboard reachable.

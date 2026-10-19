@@ -669,6 +669,8 @@ impl RenderOnce for QuestionnaireChoices {
                 .into_any_element()
         } else {
             RadioGroup::new(element_id(&self.state, format!("choices-{}", self.item)))
+                // The questionnaire moves between answers with its own arrow keys.
+                .keyboard_navigation(false)
                 .flex()
                 .flex_col()
                 .gap(metrics.choices_gap)

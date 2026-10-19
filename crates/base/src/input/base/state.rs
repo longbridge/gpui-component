@@ -4833,7 +4833,9 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
         let element = div()
             .id("input-state")
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
+            // Like other disabled Base controls, a disabled field is neither
+            // focused by a press nor a Tab stop.
+            .when(!self.disabled, |this| this.track_focus(&self.focus_handle))
             .when(self.is_editable(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::backspace))
                     .on_action(window.listener_for(&entity, InputBaseState::delete))
@@ -6664,6 +6666,27 @@ mod tests {
             })
         });
         assert_eq!(cursor.get(), Some(2));
+    }
+
+    #[gpui::test]
+    fn disabled_input_does_not_take_focus_on_click(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let view = InputView::build(cx, |state| state.disabled(true));
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_click(point(px(5.), px(5.)), gpui::Modifiers::default());
+        cx.update(|window, cx| {
+            assert!(!view.input.read(cx).focus_handle.is_focused(window));
+        });
+
+        view.input
+            .update(&mut cx, |state, cx| state.set_disabled(false, cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_click(point(px(5.), px(5.)), gpui::Modifiers::default());
+        cx.update(|window, cx| {
+            assert!(view.input.read(cx).focus_handle.is_focused(window));
+        });
     }
 
     #[gpui::test]

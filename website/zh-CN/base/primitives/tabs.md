@@ -34,6 +34,10 @@ use gpui_kit::base::{Tab, Tabs};
 
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 
+## 键盘
+
+`Tabs` 负责其下各个 `Tab` 的键盘操作，不论皮肤把它们放在哪一层。整个列表只占一个 Tab stop：Tab 键先落在已获得焦点的 Tab 上，其次是已选中的 Tab，最后是第一个可用的 Tab。沿 `axis` 方向的方向键（默认是 Left 和 Right，`.axis(Axis::Vertical)` 时是 Up 和 Down）把焦点移到上一个或下一个可用的 Tab，到两端时循环；Home 和 End 移到第一个和最后一个。与平台的标签视图一样，移动焦点时会通过该 Tab 的 `on_click` 选中它；设置 `.activate_on_focus(false)` 后，方向键只移动焦点，由 Space 或 Enter 选中。点击会选中 Tab，但不会夺走焦点，因此文档标签栏不会抢走文档的焦点。`Tabs::track_focus(&handle)` 为列表提供一个自身的焦点句柄：聚焦它时，焦点会转到持有 Tab stop 的 Tab 上。
+
 ## 完整 Rust 示例
 
 <<< ../../../../crates/base/examples/showcase/components/tabs.rs{rust}

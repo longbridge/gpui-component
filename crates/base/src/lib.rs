@@ -60,6 +60,7 @@ mod radio_group;
 mod reduce_motion;
 mod resizable;
 mod root;
+mod roving_focus;
 mod scroll_bounce;
 mod scrollable_mask;
 mod scrollbar;
@@ -149,7 +150,7 @@ pub use observe::{ObservedElement, TestSupportExt};
 pub use otp_input::{OtpEvent, OtpInput, OtpState};
 pub use pagination::{Pagination, PaginationItem, PaginationState};
 pub use plot::PlotMotion;
-pub use popover::{Popover, PopoverState};
+pub use popover::{ArrowGeometry, Popover, PopoverState, PopupArrow};
 pub use popup::{POPUP_PRIORITY, Popup};
 pub use positioner::{Align, Positioner, ResolvedPosition};
 pub use progress::{Progress, ProgressIndicator, ProgressTrack};
@@ -215,7 +216,9 @@ pub use tooltip::{
     Tooltip, TooltipDefaults, TooltipOverlay, TooltipPositioner, TooltipRequest, TooltipTransition,
 };
 pub use touch_selection::{SelectionEdge, TouchHandle, TouchSelectionSnapshot};
-pub use tree::{Tree, TreeEntry, TreeEntryState, TreeEvent, TreeItem, TreeState};
+pub use tree::{
+    Tree, TreeEntry, TreeEntryState, TreeEvent, TreeItem, TreeSelectionEvent, TreeState,
+};
 #[doc(hidden)]
 pub use tree::{init as init_tree, key_context as tree_key_context};
 pub use undo_history::UndoHistory;
@@ -244,11 +247,14 @@ pub fn init(cx: &mut App) {
     sheet::init(cx);
     combobox::init(cx);
     color_picker::init(cx);
+    date_picker::init(cx);
     select::init(cx);
     number_input::init(cx);
+    slider::init(cx);
     time_field::init(cx);
     input::init(cx);
     tree::init(cx);
+    calendar::init(cx);
     text::init(cx);
     root::init(cx);
 }

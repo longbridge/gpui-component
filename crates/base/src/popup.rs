@@ -1,9 +1,9 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    Anchor, AnyElement, App, Bounds, Div, ElementId, InteractiveElement, Interactivity,
-    IntoElement, ParentElement, Pixels, Point, RenderOnce, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, canvas, deferred, div, point, px,
+    Anchor, AnyElement, App, Bounds, DispatchPhase, Div, ElementId, InteractiveElement,
+    Interactivity, IntoElement, MouseDownEvent, ParentElement, Pixels, Point, RenderOnce,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, canvas, deferred, div, point, px,
 };
 
 use crate::{Positioner, ResolvedPosition, StyledExt as _};
@@ -23,7 +23,8 @@ struct PopupAnchorState {
 /// An unstyled trigger and anchored popup host.
 ///
 /// `Popup` owns trigger measurement, anchor-point calculation, first-frame
-/// synchronization, deferred rendering, and window-edge snapping. Callers own
+/// synchronization, deferred rendering, window-edge snapping, and noticing a
+/// press outside the open popup ([`on_dismiss`](Self::on_dismiss)). Callers own
 /// open state, interaction, popup content, appearance, and motion.
 #[derive(IntoElement)]
 pub struct Popup {
@@ -33,6 +34,7 @@ pub struct Popup {
     anchor: Anchor,
     offset: Pixels,
     on_position: Option<Box<dyn Fn(ResolvedPosition, Bounds<Pixels>)>>,
+    on_dismiss: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     trigger: AnyElement,
     content: Option<AnyElement>,
 }
@@ -47,6 +49,7 @@ impl Popup {
             anchor: Anchor::TopLeft,
             offset: px(0.),
             on_position: None,
+            on_dismiss: None,
             trigger: trigger.into_any_element(),
             content: None,
         }
@@ -69,6 +72,17 @@ impl Popup {
         callback: impl Fn(ResolvedPosition, Bounds<Pixels>) + 'static,
     ) -> Self {
         self.on_position = Some(Box::new(callback));
+        self
+    }
+
+    /// Handles a mouse press outside both the trigger and the open content,
+    /// which asks a dropdown to close.
+    ///
+    /// The trigger is left out because it toggles the popup itself: a press
+    /// there closing the popup first would have the click open it again. The
+    /// press still reaches whatever is under it.
+    pub fn on_dismiss(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_dismiss = Some(Rc::new(handler));
         self
     }
 
@@ -143,6 +157,27 @@ impl RenderOnce for Popup {
         // A closed popup places nothing: it notes its trigger's bounds, for when
         // it opens, without asking for another frame.
         let has_content = self.content.is_some();
+        // The open content's bounds, once placed this frame.
+        let content_bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let on_dismiss = self.on_dismiss.filter(|_| has_content).map(|handler| {
+            let trigger_bounds = trigger_bounds.clone();
+            let content_bounds = content_bounds.clone();
+            move |event: &MouseDownEvent,
+                  phase: DispatchPhase,
+                  window: &mut Window,
+                  cx: &mut App| {
+                let position = event.position;
+                if phase == DispatchPhase::Capture
+                    && !window.has_active_prompt()
+                    && !trigger_bounds.get().contains(&position)
+                    && !content_bounds
+                        .get()
+                        .is_some_and(|bounds| bounds.contains(&position))
+                {
+                    handler(window, cx);
+                }
+            }
+        });
         let root = self
             .base
             .child(self.trigger)
@@ -166,7 +201,11 @@ impl RenderOnce for Popup {
                             }
                         }
                     },
-                    |_, _, _, _| {},
+                    move |_, _, window, _| {
+                        if let Some(on_dismiss) = on_dismiss {
+                            window.on_mouse_event(on_dismiss);
+                        }
+                    },
                 )
                 .absolute()
                 .size_full()
@@ -182,13 +221,15 @@ impl RenderOnce for Popup {
             return root;
         }
 
-        let positioner =
-            Positioner::corner(anchor, position.get()).tracked_corner_position(position);
-        let positioner = if let Some(callback) = self.on_position {
-            positioner.on_position(move |position| callback(position, trigger_bounds.get()))
-        } else {
-            positioner
-        };
+        let on_position = self.on_position;
+        let positioner = Positioner::corner(anchor, position.get())
+            .tracked_corner_position(position)
+            .on_position(move |position| {
+                content_bounds.set(Some(position.bounds));
+                if let Some(callback) = on_position.as_ref() {
+                    callback(position, trigger_bounds.get());
+                }
+            });
         root.child(
             deferred(
                 positioner
@@ -371,5 +412,52 @@ mod tests {
             window.debug_bounds("popup-content").unwrap().size,
             gpui::Size::new(px(20.), px(20.))
         );
+    }
+    /// An open popup over a panel, noting each dismissal it asks for.
+    struct DismissHarness {
+        dismissals: Rc<Cell<usize>>,
+    }
+
+    impl Render for DismissHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let dismissals = self.dismissals.clone();
+            div().size(px(400.)).child(
+                Popup::new("popup", div().size(px(100.)))
+                    .on_dismiss(move |_, _| dismissals.set(dismissals.get() + 1))
+                    .content(div().size(px(40.))),
+            )
+        }
+    }
+
+    /// Only a press outside both the trigger and the content asks to dismiss:
+    /// the trigger toggles the popup itself.
+    #[gpui::test]
+    fn a_press_outside_the_trigger_and_content_dismisses(cx: &mut gpui::TestAppContext) {
+        let dismissals = Rc::new(Cell::new(0));
+        let (_, window) = cx.add_window_view({
+            let dismissals = dismissals.clone();
+            move |_, _| DismissHarness { dismissals }
+        });
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        window.update(|window, cx| window.draw(cx).clear(cx));
+
+        let press = |window: &mut gpui::VisualTestContext, x: f32, y: f32| {
+            window.simulate_mouse_down(
+                gpui::point(px(x), px(y)),
+                gpui::MouseButton::Left,
+                gpui::Modifiers::default(),
+            );
+            window.simulate_mouse_up(
+                gpui::point(px(x), px(y)),
+                gpui::MouseButton::Left,
+                gpui::Modifiers::default(),
+            );
+        };
+        // The trigger, then the content just below it.
+        press(window, 50., 50.);
+        press(window, 20., 120.);
+        assert_eq!(dismissals.get(), 0);
+        press(window, 300., 300.);
+        assert_eq!(dismissals.get(), 1);
     }
 }

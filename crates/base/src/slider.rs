@@ -3,13 +3,47 @@ use std::ops::Range;
 
 use gpui::{
     AccessibleAction, Along, AnyElement, App, AppContext as _, Axis, Bounds, Context, Div,
-    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, HitboxBehavior, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, Orientation, ParentElement, Pixels, Point, Render,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    TouchDragEvent, TouchPhase, Window, div, prelude::FluentBuilder as _, px,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, FocusHandle, HitboxBehavior,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, MouseDownEvent, Orientation,
+    ParentElement, Pixels, Point, Render, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, TouchDragEvent, TouchPhase, Window,
+    actions, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{a11y_disabled::A11yDisabledExt as _, element_ext::ElementExt, geometry::AxisExt};
+
+actions!(
+    slider,
+    [
+        Increment,
+        Decrement,
+        IncrementPage,
+        DecrementPage,
+        MoveToMinimum,
+        MoveToMaximum
+    ]
+);
+
+const CONTEXT: &str = "Slider";
+
+/// The steps one Page Up or Page Down moves.
+const PAGE_STEPS: f32 = 10.;
+
+/// Binds the slider keys: Right and Up increase by a step, Left and Down
+/// decrease, Page Up and Page Down move ten steps, Home and End go to the
+/// minimum and maximum.
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("right", Increment, Some(CONTEXT)),
+        KeyBinding::new("up", Increment, Some(CONTEXT)),
+        KeyBinding::new("left", Decrement, Some(CONTEXT)),
+        KeyBinding::new("down", Decrement, Some(CONTEXT)),
+        KeyBinding::new("pageup", IncrementPage, Some(CONTEXT)),
+        KeyBinding::new("pagedown", DecrementPage, Some(CONTEXT)),
+        KeyBinding::new("home", MoveToMinimum, Some(CONTEXT)),
+        KeyBinding::new("end", MoveToMaximum, Some(CONTEXT)),
+    ]);
+}
 
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
@@ -182,6 +216,9 @@ pub struct SliderState {
     dragging: bool,
     /// The touch drag this slider claimed, while one is live.
     touch_drag: Option<TouchDrag>,
+    /// Whether the keyboard moves the range start thumb: the thumb the
+    /// pointer moved last, the end thumb until then.
+    keyboard_start: bool,
 }
 
 /// A touch drag claimed by a slider.
@@ -206,6 +243,7 @@ impl SliderState {
             scale: SliderScale::default(),
             dragging: false,
             touch_drag: None,
+            keyboard_start: false,
         }
     }
 
@@ -381,6 +419,7 @@ impl SliderState {
         let value = self.percentage_to_value(percentage);
         let value = (value / step).round() * step;
 
+        self.keyboard_start = is_start;
         if is_start {
             self.percentage.start = percentage;
             self.value.set_start(value);
@@ -403,6 +442,54 @@ impl SliderState {
         let center =
             ((self.percentage.end - self.percentage.start) / 2. + self.percentage.start) * size;
         along < center
+    }
+
+    /// Whether the keyboard moves the range start thumb: the thumb the
+    /// pointer moved last, the end thumb until then. Applications use it to
+    /// show which thumb the arrow keys move while the slider has focus.
+    pub fn is_keyboard_on_start(&self) -> bool {
+        self.keyboard_start && self.value.is_range()
+    }
+
+    /// The value of the thumb the keyboard moves.
+    fn keyboard_value(&self) -> f32 {
+        if self.is_keyboard_on_start() {
+            self.value.start()
+        } else {
+            self.value.end()
+        }
+    }
+
+    /// Moves the thumb the keyboard moves to `value`, snapped to the step and
+    /// kept within the slider and on its side of the other thumb. A key press
+    /// is a whole interaction, so it reports [`SliderEvent::Change`] and then
+    /// [`SliderEvent::Release`], and nothing when the value stays.
+    fn move_keyboard_thumb(&mut self, value: f32, cx: &mut Context<Self>) {
+        let value = if self.step > 0. {
+            (value / self.step).round() * self.step
+        } else {
+            value
+        };
+        let value = value.clamp(self.min, self.max);
+        let previous = self.value;
+        if self.is_keyboard_on_start() {
+            self.value.set_start(value);
+        } else {
+            self.value.set_end(value);
+        }
+        if self.value == previous {
+            return;
+        }
+        self.update_thumb_pos();
+        cx.emit(SliderEvent::Change(self.value));
+        cx.emit(SliderEvent::Release(self.value));
+        cx.notify();
+    }
+
+    /// Moves the thumb the keyboard moves by `steps` steps.
+    fn step_keyboard_thumb(&mut self, steps: f32, cx: &mut Context<Self>) {
+        let value = self.keyboard_value() + steps * self.step;
+        self.move_keyboard_thumb(value, cx);
     }
 
     /// Emit [`SliderEvent::Release`] if the user was actively interacting
@@ -444,6 +531,9 @@ pub struct Slider {
     axis: Axis,
     disabled: bool,
     accessibility_label: Option<SharedString>,
+    tab_index: isize,
+    tab_stop: bool,
+    provided_focus_handle: Option<FocusHandle>,
     base: Div,
     children: Vec<AnyElement>,
 }
@@ -455,6 +545,9 @@ impl Slider {
             axis: Axis::Horizontal,
             disabled: false,
             accessibility_label: None,
+            tab_index: 0,
+            tab_stop: true,
+            provided_focus_handle: None,
             base: div(),
             children: Vec::new(),
         }
@@ -485,6 +578,35 @@ impl Slider {
         self.accessibility_label = Some(label.into());
         self
     }
+
+    /// Sets the focus traversal index. Use this within a GPUI tab group.
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
+        self
+    }
+
+    /// Sets whether the slider participates in keyboard focus traversal.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Uses a caller-owned focus handle instead of creating keyed state.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.provided_focus_handle = Some(focus_handle.clone());
+        self
+    }
+
+    fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
+        self.provided_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(("slider-focus", self.state.entity_id()), cx, |_, cx| {
+                    cx.focus_handle()
+                })
+                .read(cx)
+                .clone()
+        })
+    }
 }
 
 impl ParentElement for Slider {
@@ -499,12 +621,20 @@ impl Styled for Slider {
     }
 }
 
+impl InteractiveElement for Slider {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for Slider {}
+
 impl RenderOnce for Slider {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let axis = self.axis;
         let entity_id = self.state.entity_id();
+        let focus_handle = self.focus_handle(window, cx);
         let state = self.state.read(cx);
-        let slider_state = self.state.clone();
 
         self.base
             .id(("slider", entity_id))
@@ -522,28 +652,56 @@ impl RenderOnce for Slider {
             } else {
                 Orientation::Horizontal
             })
-            // A disabled slider takes no value, from the pointer or from
-            // assistive technology.
+            // A disabled slider takes no value, from the pointer, the keyboard
+            // or assistive technology, and is no Tab stop.
             .when(!self.disabled, |this| {
-                this.on_a11y_action(AccessibleAction::Increment, {
-                    let state = slider_state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            let value =
-                                (state.value().end() + state.step_value()).min(state.max_value());
-                            state.set_value(value, window, cx);
-                        });
-                    }
+                this.track_focus(
+                    &focus_handle
+                        .clone()
+                        .tab_index(self.tab_index)
+                        .tab_stop(self.tab_stop),
+                )
+                // The thumb stops its press from reaching the slider, so take
+                // focus before it does.
+                .capture_any_mouse_down(move |_, window, cx| window.focus(&focus_handle, cx))
+                .key_context(CONTEXT)
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &Increment, _, cx| {
+                        state.step_keyboard_thumb(1., cx)
+                    }),
+                )
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &Decrement, _, cx| {
+                        state.step_keyboard_thumb(-1., cx)
+                    }),
+                )
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &IncrementPage, _, cx| {
+                        state.step_keyboard_thumb(PAGE_STEPS, cx)
+                    }),
+                )
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &DecrementPage, _, cx| {
+                        state.step_keyboard_thumb(-PAGE_STEPS, cx)
+                    }),
+                )
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &MoveToMinimum, _, cx| {
+                        state.move_keyboard_thumb(state.min, cx)
+                    }),
+                )
+                .on_action(
+                    window.listener_for(&self.state, |state, _: &MoveToMaximum, _, cx| {
+                        state.move_keyboard_thumb(state.max, cx)
+                    }),
+                )
+                .on_a11y_action(AccessibleAction::Increment, {
+                    let state = self.state.clone();
+                    move |_, _, cx| state.update(cx, |state, cx| state.step_keyboard_thumb(1., cx))
                 })
                 .on_a11y_action(AccessibleAction::Decrement, {
-                    let state = slider_state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            let value =
-                                (state.value().end() - state.step_value()).max(state.min_value());
-                            state.set_value(value, window, cx);
-                        });
-                    }
+                    let state = self.state.clone();
+                    move |_, _, cx| state.update(cx, |state, cx| state.step_keyboard_thumb(-1., cx))
                 })
                 .on_mouse_up(
                     MouseButton::Left,
@@ -861,26 +1019,32 @@ impl RenderOnce for SliderThumb {
             .test_support()
             .children(self.children)
             .when(!self.disabled, |this| {
-                this.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_drag(DragThumb((entity_id, start)), |drag, _, _, cx| {
+                this.on_mouse_down(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, move |state, _, _, cx| {
+                        state.keyboard_start = start;
                         cx.stop_propagation();
-                        cx.new(|_| drag.clone())
-                    })
-                    .on_drag_move(window.listener_for(
-                        &self.state,
-                        move |state, event: &DragMoveEvent<DragThumb>, window, cx| {
-                            let DragThumb((id, start)) = event.drag(cx);
-                            if *id == entity_id {
-                                state.update_value_by_position(
-                                    axis,
-                                    event.event.position,
-                                    *start,
-                                    window,
-                                    cx,
-                                );
-                            }
-                        },
-                    ))
+                    }),
+                )
+                .on_drag(DragThumb((entity_id, start)), |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                })
+                .on_drag_move(window.listener_for(
+                    &self.state,
+                    move |state, event: &DragMoveEvent<DragThumb>, window, cx| {
+                        let DragThumb((id, start)) = event.drag(cx);
+                        if *id == entity_id {
+                            state.update_value_by_position(
+                                axis,
+                                event.event.position,
+                                *start,
+                                window,
+                                cx,
+                            );
+                        }
+                    },
+                ))
             })
     }
 }
@@ -944,6 +1108,163 @@ mod tests {
     #[should_panic(expected = "`min` must be greater than 0")]
     fn legacy_logarithmic_validation_is_preserved() {
         let _ = SliderState::new().scale(SliderScale::Logarithmic);
+    }
+
+    /// A focused slider moved with the keyboard.
+    mod keyboard {
+        use std::{cell::RefCell, rc::Rc};
+
+        use gpui::{
+            AppContext as _, Context, Entity, FocusHandle, IntoElement, Modifiers,
+            ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext, Window,
+            point, px,
+        };
+
+        use super::super::{
+            Slider, SliderEvent, SliderIndicator, SliderState, SliderTrack, SliderValue, init,
+        };
+
+        /// A slider 100px wide, so a pixel is a step from 0 to 100.
+        struct Harness {
+            state: Entity<SliderState>,
+            focus: FocusHandle,
+            disabled: bool,
+        }
+
+        impl Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Slider::new(&self.state)
+                    .track_focus(&self.focus)
+                    .disabled(self.disabled)
+                    .w(px(100.))
+                    .h(px(20.))
+                    .child(
+                        SliderTrack::new(&self.state)
+                            .disabled(self.disabled)
+                            .size_full()
+                            .child(SliderIndicator::new(&self.state).size_full()),
+                    )
+            }
+        }
+
+        type Events = Rc<RefCell<Vec<(&'static str, SliderValue)>>>;
+
+        fn open(
+            cx: &mut TestAppContext,
+            value: impl Into<SliderValue>,
+            disabled: bool,
+        ) -> (
+            Entity<SliderState>,
+            FocusHandle,
+            &mut VisualTestContext,
+            Events,
+        ) {
+            cx.update(init);
+            let state = cx.new(|_| SliderState::new().default_value(value));
+            let events = Events::default();
+            cx.update(|cx| {
+                let events = events.clone();
+                cx.subscribe(&state, move |_, event: &SliderEvent, _| {
+                    events.borrow_mut().push(match event {
+                        SliderEvent::Change(value) => ("change", *value),
+                        SliderEvent::Release(value) => ("release", *value),
+                    })
+                })
+                .detach();
+            });
+            let focus = cx.update(|cx| cx.focus_handle());
+            let (_, cx) = cx.add_window_view({
+                let state = state.clone();
+                let focus = focus.clone();
+                move |_, _| Harness {
+                    state,
+                    focus,
+                    disabled,
+                }
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            (state, focus, cx, events)
+        }
+
+        /// The events since the last call, as `(name, value)` pairs.
+        fn take(events: &Events) -> Vec<(&'static str, SliderValue)> {
+            std::mem::take(&mut *events.borrow_mut())
+        }
+
+        /// Each key press is one whole change: `change` then `release`.
+        fn pressed(value: impl Into<SliderValue>) -> Vec<(&'static str, SliderValue)> {
+            let value = value.into();
+            vec![("change", value), ("release", value)]
+        }
+
+        #[gpui::test]
+        fn keys_step_page_and_jump_to_the_ends(cx: &mut TestAppContext) {
+            let (state, focus, cx, events) = open(cx, 50., false);
+            cx.update(|window, cx| window.focus(&focus, cx));
+
+            for (key, value) in [
+                ("right", 51.),
+                ("up", 52.),
+                ("left", 51.),
+                ("down", 50.),
+                ("pageup", 60.),
+                ("pagedown", 50.),
+                ("home", 0.),
+                ("end", 100.),
+            ] {
+                cx.simulate_keystrokes(key);
+                assert_eq!(take(&events), pressed(value), "{key}");
+            }
+            // At the maximum, a further increase changes nothing.
+            cx.simulate_keystrokes("right pageup end");
+            assert!(take(&events).is_empty());
+            assert_eq!(state.read_with(cx, |state, _| state.percentage()), 0.0..1.0);
+        }
+
+        #[gpui::test]
+        fn a_click_focuses_the_slider(cx: &mut TestAppContext) {
+            let (state, focus, cx, events) = open(cx, 0., false);
+            cx.simulate_click(point(px(30.), px(10.)), Modifiers::default());
+            assert_eq!(take(&events), pressed(30.));
+            cx.update(|window, _| assert!(focus.is_focused(window)));
+            cx.simulate_keystrokes("right");
+            assert_eq!(take(&events), pressed(31.));
+            assert_eq!(
+                state.read_with(cx, |state, _| state.value()),
+                SliderValue::Single(31.)
+            );
+        }
+
+        #[gpui::test]
+        fn keys_move_the_range_thumb_the_pointer_moved_last(cx: &mut TestAppContext) {
+            let (_, focus, cx, events) = open(cx, (20., 80.), false);
+            cx.update(|window, cx| window.focus(&focus, cx));
+            // The end thumb until the pointer moves the start one.
+            cx.simulate_keystrokes("right");
+            assert_eq!(take(&events), pressed((20., 81.)));
+
+            cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+            assert_eq!(take(&events), pressed((10., 81.)));
+            cx.simulate_keystrokes("left");
+            assert_eq!(take(&events), pressed((9., 81.)));
+            // The start thumb stops at the end one.
+            cx.simulate_keystrokes("end");
+            assert_eq!(take(&events), pressed((81., 81.)));
+        }
+
+        #[gpui::test]
+        fn a_disabled_slider_takes_no_keys(cx: &mut TestAppContext) {
+            let (state, focus, cx, events) = open(cx, 50., true);
+            cx.simulate_click(point(px(30.), px(10.)), Modifiers::default());
+            cx.update(|window, _| assert!(!focus.is_focused(window)));
+            cx.update(|window, cx| window.focus(&focus, cx));
+            cx.simulate_keystrokes("right home");
+            assert!(take(&events).is_empty());
+            assert_eq!(
+                state.read_with(cx, |state, _| state.value()),
+                SliderValue::Single(50.)
+            );
+        }
     }
 
     /// A slider's bar beside a view that reads its state, under retained views.

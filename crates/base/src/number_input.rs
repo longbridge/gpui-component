@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use gpui::Focusable;
 use gpui::{
-    AnyElement, App, Entity, EventEmitter, InteractiveElement as _, IntoElement, KeyBinding,
-    ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    AnyElement, App, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
+    KeyBinding, ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, actions, div, prelude::FluentBuilder as _,
 };
 
@@ -96,6 +96,7 @@ type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
 /// An unstyled spinbutton root composed from the foundational [`InputBase`] frame.
 #[derive(IntoElement)]
 pub struct NumberInput {
+    id: Option<ElementId>,
     style: StyleRefinement,
     children: Vec<AnyElement>,
     disabled: bool,
@@ -158,6 +159,7 @@ impl RenderOnce for NumberInputText {
 impl NumberInput {
     pub fn new(state: &Entity<InputState>) -> Self {
         Self {
+            id: None,
             style: StyleRefinement::default(),
             children: Vec::new(),
             disabled: false,
@@ -169,6 +171,16 @@ impl NumberInput {
             controls_right: false,
             accessibility_label: None,
         }
+    }
+
+    /// Sets the element identity of the frame. The default is derived from the
+    /// state's entity.
+    ///
+    /// The step buttons, `"decrement"` and `"increment"`, are scoped under it,
+    /// so each number input's buttons have their own identity.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
     }
 
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -307,8 +319,12 @@ impl RenderOnce for NumberInput {
                 .into_any_element()
         };
 
-        InputBase::new(("number-input", self.state.entity_id()))
-            .track_focus(&self.state.focus_handle(cx))
+        let id = self
+            .id
+            .unwrap_or_else(|| ("number-input", self.state.entity_id()).into());
+        let focus_handle = self.state.focus_handle(cx);
+        InputBase::new(id)
+            .when(!disabled, |this| this.track_focus(&focus_handle))
             .flex()
             .items_center()
             .disabled(disabled)
@@ -474,6 +490,71 @@ mod tests {
                 state.read(cx).focus_handle(cx).is_focused(window),
                 "releasing the step button left focus off the editor"
             );
+        });
+    }
+
+    struct TwoSteppers {
+        first: Entity<InputState>,
+        second: Entity<InputState>,
+    }
+
+    impl Render for TwoSteppers {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let stepper = |id: &'static str, state: &Entity<InputState>| {
+                NumberInput::new(state)
+                    .id(id)
+                    .w(px(120.))
+                    .h(px(20.))
+                    .decrement_button(|button| button.w(px(20.)).h_full())
+                    .input(div().size_full())
+                    .increment_button(|button| button.w(px(20.)).h_full())
+            };
+            div()
+                .child(stepper("first", &self.first))
+                .child(stepper("second", &self.second))
+        }
+    }
+
+    #[gpui::test]
+    fn step_buttons_are_scoped_under_the_number_input_id(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let mut created = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.set_global(Theme::default());
+                let first = cx.new(|cx| InputState::new(window, cx).step(1.));
+                let second = cx.new(|cx| InputState::new(window, cx).step(1.));
+                created = Some((first.clone(), second.clone()));
+                cx.new(|_| TwoSteppers { first, second })
+            })
+            .unwrap()
+        });
+        let (first, second) = created.unwrap();
+        let cx = &mut VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let bounds = cx.update(|window, _| {
+            let scope = crate::test_support::scope(window, &[], &"second".into());
+            let button = crate::test_support::find(window, &scope, &"increment".into())
+                .expect("the second input's increment button is observed");
+            assert_ne!(
+                crate::test_support::find(
+                    window,
+                    &crate::test_support::scope(window, &[], &"first".into()),
+                    &"increment".into(),
+                )
+                .unwrap()
+                .path(),
+                button.path()
+            );
+            button.bounds()
+        });
+        cx.simulate_click(bounds.center(), Modifiers::default());
+
+        cx.update(|_, cx| {
+            assert_eq!(first.read(cx).value(), "");
+            assert_eq!(second.read(cx).value(), "1");
         });
     }
 

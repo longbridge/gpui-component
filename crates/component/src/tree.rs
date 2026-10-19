@@ -12,7 +12,7 @@ use crate::{
     scroll::ScrollableElement,
 };
 
-pub use gpui_base::{TreeEntry, TreeEvent, TreeItem, TreeState};
+pub use gpui_base::{TreeEntry, TreeEvent, TreeItem, TreeSelectionEvent, TreeState};
 
 /// Create a [`Tree`].
 pub fn tree<R>(state: &Entity<TreeState>, render_item: R) -> Tree

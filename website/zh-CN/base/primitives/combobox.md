@@ -38,6 +38,13 @@ use gpui_kit::base::{Combobox};
 
 <<< ../../../../crates/base/examples/showcase/components/combobox.rs{rust}
 
+## 键盘
+
+提供当前匹配的 `.options(labels)` 后，查询输入框保持焦点，根节点用 Up、Down、Page Up 与 Page Down 移动高亮项；
+combobox 收起时会先打开。Home、End 与输入的字符仍交给查询输入框。应用通过
+`.on_highlight(...)` 同步 `.highlighted_index(...)`，并在 `.on_confirm(...)` 中提交。
+Enter 确认、Escape 关闭，Tab 或 Shift-Tab 关闭且不做选择并继续移动焦点，与 `Select` 相同。
+
 ## 可访问性
 
 保留组合框语义、活动后代关系以及上下键、Enter 和 Escape 操作。

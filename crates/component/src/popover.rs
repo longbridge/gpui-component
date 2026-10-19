@@ -1,10 +1,9 @@
 use gpui::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Context, Div, ElementId,
-    FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement, PathBuilder,
-    Pixels, Point, RenderOnce, Stateful, StyleRefinement, Styled, Window, canvas, point,
-    prelude::FluentBuilder as _, px,
+    FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
+    RenderOnce, Stateful, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
 };
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{rc::Rc, time::Duration};
 
 use crate::{ActiveTheme as _, ThemeStyled as _};
 use crate::{
@@ -13,9 +12,9 @@ use crate::{
     styled::{popover_ring, popover_shadow},
     v_flex,
 };
-use gpui_base::Placement;
 use gpui_base::Popover as BasePopover;
 pub use gpui_base::PopoverState;
+use gpui_base::PopupArrow;
 
 pub(crate) fn init(_: &mut App) {}
 
@@ -316,15 +315,12 @@ impl Popover {
 
 impl RenderOnce for Popover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let anchor = self.anchor;
         let arrow_size = if self.arrow {
             window.rem_size() * 0.375
         } else {
             px(0.)
         };
         let offset = self.offset.unwrap_or(window.rem_size() * 0.25) + arrow_size;
-        let resolved = Rc::new(Cell::new(None));
-        let arrow_position = resolved.clone();
         let arrow = self.arrow;
         let background = self
             .style
@@ -343,7 +339,16 @@ impl RenderOnce for Popover {
         BasePopover::new(self.id)
             .anchor(self.anchor)
             .offset(offset)
-            .on_position(move |position, trigger| resolved.set(Some((position, trigger))))
+            .when(arrow, |this| {
+                let arrow = PopupArrow::new(arrow_size)
+                    .corner_radius(radius)
+                    .bg(background);
+                this.arrow(if appearance {
+                    arrow.border_color(ring)
+                } else {
+                    arrow
+                })
+            })
             .mouse_button(self.mouse_button)
             .default_open(self.default_open)
             .overlay_closable(self.overlay_closable)
@@ -358,49 +363,6 @@ impl RenderOnce for Popover {
                     })
                     .children(children)
                     .refine_style(&style)
-                    .when(arrow, |this| {
-                        this.child(
-                            canvas(
-                                |_, _, _| {},
-                                move |bounds, _, window, _| {
-                                    let Some((_, trigger)) = arrow_position.get() else {
-                                        return;
-                                    };
-                                    let (side, target) = arrow_anchor(anchor, trigger);
-                                    let trigger = Bounds::new(target, gpui::size(px(0.), px(0.)));
-                                    let points =
-                                        arrow_points(bounds, trigger, side, arrow_size, radius);
-                                    let mut fill = PathBuilder::fill();
-                                    fill.move_to(points[0]);
-                                    fill.line_to(points[1]);
-                                    fill.line_to(points[2]);
-                                    fill.close();
-                                    if let Ok(path) = fill.build() {
-                                        window.paint_path(path, background);
-                                    }
-                                    // The triangle ends exactly at the surface edge.
-                                    // Cover the ring and the antialiased base on both
-                                    // sides of that edge before drawing its two slopes.
-                                    window.paint_quad(gpui::fill(
-                                        arrow_join_bounds(points, side, px(1.)),
-                                        background,
-                                    ));
-                                    if appearance {
-                                        let mut outline = PathBuilder::stroke(px(1.));
-                                        outline.move_to(points[0]);
-                                        outline.line_to(points[1]);
-                                        outline.line_to(points[2]);
-                                        if let Ok(path) = outline.build() {
-                                            window.paint_path(path, ring);
-                                        }
-                                    }
-                                },
-                            )
-                            .absolute()
-                            .inset_0()
-                            .size_full(),
-                        )
-                    })
             })
             .when_some(self.trigger, |this, trigger| this.trigger_with(trigger))
             .when_some(trigger_style, |this, style| this.refine_style(&style))
@@ -412,83 +374,6 @@ impl RenderOnce for Popover {
                 this.on_open_change(move |open, window, cx| callback(open, window, cx))
             })
             .into_any_element()
-    }
-}
-
-/// The arrow follows the named anchor instead of always aiming at trigger center.
-fn arrow_anchor(anchor: Anchor, trigger: Bounds<Pixels>) -> (Placement, Point<Pixels>) {
-    match anchor {
-        Anchor::TopLeft => (Placement::Bottom, trigger.bottom_left()),
-        Anchor::TopCenter => (Placement::Bottom, trigger.bottom_center()),
-        Anchor::TopRight => (Placement::Bottom, trigger.bottom_right()),
-        Anchor::BottomLeft => (Placement::Top, trigger.origin),
-        Anchor::BottomCenter => (Placement::Top, trigger.top_center()),
-        Anchor::BottomRight => (Placement::Top, trigger.top_right()),
-        Anchor::LeftCenter => (Placement::Right, trigger.right_center()),
-        Anchor::RightCenter => (Placement::Left, trigger.left_center()),
-    }
-}
-
-/// Clamp the arrow base clear of rounded corners while aiming at the trigger.
-fn arrow_points(
-    surface: Bounds<Pixels>,
-    trigger: Bounds<Pixels>,
-    side: Placement,
-    depth: Pixels,
-    radius: Pixels,
-) -> [Point<Pixels>; 3] {
-    let horizontal = side.is_horizontal();
-    let (start, end, target) = if horizontal {
-        (surface.top(), surface.bottom(), trigger.center().y)
-    } else {
-        (surface.left(), surface.right(), trigger.center().x)
-    };
-    let half = depth.min((end - start) * 0.5);
-    let inset = (radius + half).min((end - start) * 0.5);
-    let center = target.clamp(start + inset, end - inset);
-    match side {
-        Placement::Bottom => [
-            point(center - half, surface.top()),
-            point(center, surface.top() - depth),
-            point(center + half, surface.top()),
-        ],
-        Placement::Top => [
-            point(center - half, surface.bottom()),
-            point(center, surface.bottom() + depth),
-            point(center + half, surface.bottom()),
-        ],
-        Placement::Right => [
-            point(surface.left(), center - half),
-            point(surface.left() - depth, center),
-            point(surface.left(), center + half),
-        ],
-        Placement::Left => [
-            point(surface.right(), center - half),
-            point(surface.right() + depth, center),
-            point(surface.right(), center + half),
-        ],
-    }
-}
-
-fn arrow_join_bounds(
-    points: [Point<Pixels>; 3],
-    side: Placement,
-    stroke: Pixels,
-) -> Bounds<Pixels> {
-    // Inset by the stroke width so the patch remains inside the triangle's
-    // slopes at the outer edge of the ring, including on very small surfaces.
-    if side.is_horizontal() {
-        let inset = stroke.min((points[2].y - points[0].y) * 0.5);
-        Bounds::from_corners(
-            point(points[0].x - stroke, points[0].y + inset),
-            point(points[2].x + stroke, points[2].y - inset),
-        )
-    } else {
-        let inset = stroke.min((points[2].x - points[0].x) * 0.5);
-        Bounds::from_corners(
-            point(points[0].x + inset, points[0].y - stroke),
-            point(points[2].x - inset, points[2].y + stroke),
-        )
     }
 }
 
@@ -758,120 +643,6 @@ mod tests {
             window.debug_bounds("positioned-content").unwrap().top(),
             px(8.)
         );
-    }
-
-    #[test]
-    fn arrow_alignment_uses_the_anchor_instead_of_trigger_center() {
-        let trigger = Bounds::new(point(px(120.), px(120.)), size(px(40.), px(20.)));
-        for (anchor, side, target) in [
-            (
-                Anchor::TopLeft,
-                Placement::Bottom,
-                point(px(120.), px(140.)),
-            ),
-            (
-                Anchor::TopCenter,
-                Placement::Bottom,
-                point(px(140.), px(140.)),
-            ),
-            (
-                Anchor::TopRight,
-                Placement::Bottom,
-                point(px(160.), px(140.)),
-            ),
-            (
-                Anchor::BottomLeft,
-                Placement::Top,
-                point(px(120.), px(120.)),
-            ),
-            (
-                Anchor::BottomCenter,
-                Placement::Top,
-                point(px(140.), px(120.)),
-            ),
-            (
-                Anchor::BottomRight,
-                Placement::Top,
-                point(px(160.), px(120.)),
-            ),
-            (
-                Anchor::LeftCenter,
-                Placement::Right,
-                point(px(160.), px(130.)),
-            ),
-            (
-                Anchor::RightCenter,
-                Placement::Left,
-                point(px(120.), px(130.)),
-            ),
-        ] {
-            assert_eq!(arrow_anchor(anchor, trigger), (side, target));
-        }
-    }
-
-    #[test]
-    fn arrows_point_toward_the_trigger_on_every_resolved_side() {
-        let surface = Bounds::new(point(px(100.), px(100.)), size(px(80.), px(60.)));
-        for (side, trigger, tip) in [
-            (
-                Placement::Bottom,
-                Bounds::new(point(px(120.), px(50.)), size(px(40.), px(20.))),
-                point(px(140.), px(94.)),
-            ),
-            (
-                Placement::Top,
-                Bounds::new(point(px(120.), px(180.)), size(px(40.), px(20.))),
-                point(px(140.), px(166.)),
-            ),
-            (
-                Placement::Right,
-                Bounds::new(point(px(40.), px(120.)), size(px(40.), px(20.))),
-                point(px(94.), px(130.)),
-            ),
-            (
-                Placement::Left,
-                Bounds::new(point(px(200.), px(120.)), size(px(40.), px(20.))),
-                point(px(186.), px(130.)),
-            ),
-        ] {
-            assert_eq!(arrow_points(surface, trigger, side, px(6.), px(4.))[1], tip);
-        }
-        let clamped = arrow_points(
-            surface,
-            Bounds::new(point(px(0.), px(50.)), size(px(20.), px(20.))),
-            Placement::Bottom,
-            px(6.),
-            px(4.),
-        );
-        assert_eq!(clamped[0], point(px(104.), px(100.)));
-        assert_eq!(clamped[1], point(px(110.), px(94.)));
-    }
-
-    #[test]
-    fn arrow_join_covers_both_sides_of_the_surface_edge() {
-        let surface = Bounds::new(point(px(100.), px(100.)), size(px(80.), px(60.)));
-        let trigger = Bounds::new(point(px(120.), px(120.)), size(px(40.), px(20.)));
-        for (side, expected) in [
-            (
-                Placement::Bottom,
-                Bounds::new(point(px(135.), px(99.)), size(px(10.), px(2.))),
-            ),
-            (
-                Placement::Top,
-                Bounds::new(point(px(135.), px(159.)), size(px(10.), px(2.))),
-            ),
-            (
-                Placement::Right,
-                Bounds::new(point(px(99.), px(125.)), size(px(2.), px(10.))),
-            ),
-            (
-                Placement::Left,
-                Bounds::new(point(px(179.), px(125.)), size(px(2.), px(10.))),
-            ),
-        ] {
-            let points = arrow_points(surface, trigger, side, px(6.), px(4.));
-            assert_eq!(arrow_join_bounds(points, side, px(1.)), expected);
-        }
     }
 
     impl Render for PopoverHarness {

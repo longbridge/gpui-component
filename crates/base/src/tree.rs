@@ -3,10 +3,10 @@ use gpui::StatefulInteractiveElement as _;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, MouseButton, ParentElement, Render, RenderOnce, SharedString,
-    StyleRefinement, Styled, UniformListScrollHandle, Window, div, prelude::FluentBuilder as _,
-    uniform_list,
+    AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Render, RenderOnce,
+    SharedString, StyleRefinement, Styled, UniformListScrollHandle, Window, div,
+    prelude::FluentBuilder as _, uniform_list,
 };
 
 use crate::{
@@ -23,6 +23,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("right", SelectRight, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
     ]);
 }
 
@@ -93,6 +94,21 @@ impl TreeEntry {
 pub enum TreeEvent {
     Expanded(SharedString),
     Collapsed(SharedString),
+}
+
+/// Event emitted by a tree when the user selects an item, by a click or a
+/// key. Selections made through [`TreeState`]'s methods emit none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeSelectionEvent {
+    id: SharedString,
+}
+
+impl TreeSelectionEvent {
+    /// The id of the selected item.
+    #[inline]
+    pub fn id(&self) -> &SharedString {
+        &self.id
+    }
 }
 
 impl TreeItem {
@@ -199,6 +215,13 @@ pub struct TreeState {
 }
 
 impl EventEmitter<TreeEvent> for TreeState {}
+impl EventEmitter<TreeSelectionEvent> for TreeState {}
+
+impl Focusable for TreeState {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
 
 impl TreeState {
     pub fn new(cx: &mut App) -> Self {
@@ -415,31 +438,63 @@ impl TreeState {
     }
 
     fn on_action_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
-        let mut ix = self.selected_ix.unwrap_or(0);
-        ix = ix
-            .checked_sub(1)
-            .unwrap_or_else(|| self.entries.len().saturating_sub(1));
-        self.selected_ix = Some(ix);
-        self.scroll_handle
-            .scroll_to_item(ix, gpui::ScrollStrategy::Top);
-        cx.notify();
+        self.select_next(false, cx);
     }
 
     fn on_action_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
-        let mut ix = self.selected_ix.unwrap_or(0);
-        ix = if ix + 1 < self.entries.len() {
-            ix + 1
-        } else {
-            0
+        self.select_next(true, cx);
+    }
+
+    /// Selects the next enabled entry after the selection (`forward`) or
+    /// before it, wrapping around. Without a selection, Down selects the
+    /// first enabled entry and Up the last.
+    fn select_next(&mut self, forward: bool, cx: &mut Context<Self>) {
+        let len = self.entries.len();
+        if len == 0 {
+            return;
+        }
+        let start = self
+            .selected_ix
+            .unwrap_or(if forward { len - 1 } else { 0 });
+        let Some(ix) = (1..=len)
+            .map(|step| {
+                if forward {
+                    (start + step) % len
+                } else {
+                    (start + len - step) % len
+                }
+            })
+            .find(|&ix| !self.entries[ix].is_disabled())
+        else {
+            return;
         };
-        self.selected_ix = Some(ix);
-        self.scroll_handle
-            .scroll_to_item(ix, gpui::ScrollStrategy::Bottom);
+        self.select_entry(ix, cx);
+        self.scroll_handle.scroll_to_item(
+            ix,
+            if forward {
+                gpui::ScrollStrategy::Bottom
+            } else {
+                gpui::ScrollStrategy::Top
+            },
+        );
         cx.notify();
     }
 
-    fn on_entry_click(&mut self, ix: usize, cx: &mut Context<Self>) {
+    /// Selects entry `ix` for the user, reporting a change.
+    fn select_entry(&mut self, ix: usize, cx: &mut Context<Self>) {
+        if self.selected_ix == Some(ix) {
+            return;
+        }
         self.selected_ix = Some(ix);
+        if let Some(entry) = self.entries.get(ix) {
+            cx.emit(TreeSelectionEvent {
+                id: entry.item.id.clone(),
+            });
+        }
+    }
+
+    fn on_entry_click(&mut self, ix: usize, cx: &mut Context<Self>) {
+        self.select_entry(ix, cx);
         self.toggle_expand(ix, cx);
         cx.notify();
     }
@@ -571,21 +626,34 @@ mod tests {
         VisualTestContext, point, px,
     };
 
+    /// A tree's events of both types, in the order sent.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum Sent {
+        Tree(TreeEvent),
+        Selected(SharedString),
+    }
+
     struct EventCollector {
-        events: Rc<RefCell<Vec<TreeEvent>>>,
-        _subscription: Subscription,
+        events: Rc<RefCell<Vec<Sent>>>,
+        _subscriptions: [Subscription; 2],
     }
 
     impl EventCollector {
         fn new(state: &Entity<TreeState>, cx: &mut Context<Self>) -> Self {
             let events = Rc::new(RefCell::new(Vec::new()));
             let captured = events.clone();
-            let subscription = cx.subscribe(state, move |_, _, event, _| {
-                captured.borrow_mut().push(event.clone());
+            let tree = cx.subscribe(state, move |_, _, event: &TreeEvent, _| {
+                captured.borrow_mut().push(Sent::Tree(event.clone()));
+            });
+            let captured = events.clone();
+            let selection = cx.subscribe(state, move |_, _, event: &TreeSelectionEvent, _| {
+                captured
+                    .borrow_mut()
+                    .push(Sent::Selected(event.id().clone()));
             });
             Self {
                 events,
-                _subscription: subscription,
+                _subscriptions: [tree, selection],
             }
         }
     }
@@ -792,6 +860,109 @@ mod tests {
         });
     }
 
+    /// Binds the tree's keys and focuses it through its state's handle.
+    fn focus_tree(state: &Entity<TreeState>, cx: &mut VisualTestContext) {
+        cx.update(|window, cx| {
+            init(cx);
+            state.read(cx).focus_handle(cx).focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+    }
+
+    fn events_of(state: &Entity<TreeState>, cx: &mut VisualTestContext) -> Entity<EventCollector> {
+        cx.update(|_, cx| cx.new(|cx| EventCollector::new(state, cx)))
+    }
+
+    fn take(collector: &Entity<EventCollector>, cx: &mut VisualTestContext) -> Vec<Sent> {
+        collector.read_with(cx, |collector, _| collector.events.take())
+    }
+
+    #[gpui::test]
+    fn focusing_the_state_handle_takes_the_keys(cx: &mut TestAppContext) {
+        let (state, cx, _) = open_tree(cx, vec![folder()], false);
+        focus_tree(&state, cx);
+        cx.simulate_keystrokes("down right");
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.selected_index(), Some(0));
+            assert_eq!(state.entries.len(), 2);
+        });
+    }
+
+    #[gpui::test]
+    fn enter_toggles_the_selected_folder(cx: &mut TestAppContext) {
+        let (state, cx, _) = open_tree(cx, vec![folder()], false);
+        focus_tree(&state, cx);
+        let collector = events_of(&state, cx);
+
+        cx.simulate_keystrokes("down enter");
+        state.read_with(cx, |state, _| assert_eq!(state.entries.len(), 2));
+        cx.simulate_keystrokes("enter");
+        state.read_with(cx, |state, _| assert_eq!(state.entries.len(), 1));
+        assert_eq!(
+            take(&collector, cx),
+            vec![
+                Sent::Selected("src".into()),
+                Sent::Tree(TreeEvent::Expanded("src".into())),
+                Sent::Tree(TreeEvent::Collapsed("src".into())),
+            ]
+        );
+    }
+
+    #[gpui::test]
+    fn arrows_start_at_the_ends_and_skip_disabled_entries(cx: &mut TestAppContext) {
+        let items = || {
+            vec![
+                TreeItem::new("a", "a").disabled(true),
+                TreeItem::new("b", "b"),
+                TreeItem::new("c", "c").disabled(true),
+                TreeItem::new("d", "d"),
+                TreeItem::new("e", "e").disabled(true),
+            ]
+        };
+        let (state, cx, _) = open_tree(cx, items(), false);
+        focus_tree(&state, cx);
+        let collector = events_of(&state, cx);
+
+        // Down from no selection takes the first enabled entry, then wraps.
+        cx.simulate_keystrokes("down down down");
+        assert_eq!(
+            take(&collector, cx),
+            vec![
+                Sent::Selected("b".into()),
+                Sent::Selected("d".into()),
+                Sent::Selected("b".into()),
+            ]
+        );
+
+        // Up from no selection takes the last enabled entry.
+        state.update(cx, |state, cx| state.set_items(items(), cx));
+        cx.simulate_keystrokes("up up");
+        assert_eq!(
+            take(&collector, cx),
+            vec![Sent::Selected("d".into()), Sent::Selected("b".into()),]
+        );
+    }
+
+    #[gpui::test]
+    fn only_the_users_selection_is_reported(cx: &mut TestAppContext) {
+        let (state, cx, entry) = open_tree(cx, vec![folder()], false);
+        let collector = events_of(&state, cx);
+
+        cx.simulate_click(entry, Modifiers::default());
+        // Clicking the selected entry again only toggles it.
+        cx.simulate_click(entry, Modifiers::default());
+        state.update(cx, |state, cx| state.set_selected_index(None, cx));
+        assert_eq!(
+            take(&collector, cx),
+            vec![
+                Sent::Selected("src".into()),
+                Sent::Tree(TreeEvent::Expanded("src".into())),
+                Sent::Tree(TreeEvent::Collapsed("src".into())),
+            ]
+        );
+    }
+
     #[gpui::test]
     fn right_click_neither_selects_nor_toggles(cx: &mut TestAppContext) {
         let (state, cx, entry) = open_tree(cx, vec![folder()], false);
@@ -847,8 +1018,8 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                TreeEvent::Expanded("src".into()),
-                TreeEvent::Collapsed("src".into()),
+                Sent::Tree(TreeEvent::Expanded("src".into())),
+                Sent::Tree(TreeEvent::Collapsed("src".into())),
             ]
         );
     }

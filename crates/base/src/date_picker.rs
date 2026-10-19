@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity, IntoElement,
-    ParentElement, RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div,
+    KeyBinding, ParentElement, RenderOnce, Role, StatefulInteractiveElement, StyleRefinement,
+    Styled, Window, div,
 };
 
 use crate::{
@@ -12,6 +12,15 @@ use crate::{
     a11y_disabled::A11yDisabledExt as _,
     actions::{Cancel, Confirm},
 };
+
+const CONTEXT: &str = "DatePicker";
+
+pub(crate) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+    ]);
+}
 
 type OpenChange = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
@@ -85,6 +94,7 @@ impl RenderOnce for DatePicker {
         self.base
             .role(Role::ComboBox)
             .aria_expanded(open)
+            .key_context(CONTEXT)
             .track_focus(&self.focus_handle.tab_stop(!disabled))
             .on_action({
                 let handler = handler.clone();
@@ -100,6 +110,7 @@ impl RenderOnce for DatePicker {
             })
             .on_action(move |_: &Cancel, window, cx| {
                 if open {
+                    cx.stop_propagation();
                     if let Some(handler) = &handler {
                         handler(false, window, cx);
                     }
@@ -110,5 +121,66 @@ impl RenderOnce for DatePicker {
             .refine_style(&self.style)
             .children(self.children)
             .a11y_disabled(disabled)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{Context, Render, TestAppContext, px};
+
+    use super::*;
+
+    struct PickerHarness {
+        open: bool,
+        focus_handle: FocusHandle,
+        changes: Rc<RefCell<Vec<bool>>>,
+    }
+
+    impl Render for PickerHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let entity = cx.entity();
+            let changes = self.changes.clone();
+            DatePicker::new("picker", &self.focus_handle)
+                .open(self.open)
+                .size(px(20.))
+                .on_open_change(move |open, _, cx| {
+                    changes.borrow_mut().push(open);
+                    entity.update(cx, |this, cx| {
+                        this.open = open;
+                        cx.notify();
+                    });
+                })
+        }
+    }
+
+    #[gpui::test]
+    fn enter_toggles_and_escape_dismisses(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        let (state, cx) = cx.add_window_view({
+            let changes = changes.clone();
+            move |_, cx| PickerHarness {
+                open: false,
+                focus_handle: cx.focus_handle(),
+                changes,
+            }
+        });
+        cx.update(|window, cx| {
+            state.read(cx).focus_handle.clone().focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+
+        cx.simulate_keystrokes("enter");
+        assert!(state.read_with(cx, |state, _| state.open));
+
+        cx.simulate_keystrokes("enter");
+        assert!(!state.read_with(cx, |state, _| state.open));
+
+        // Escape on a closed picker is not the picker's to handle.
+        cx.simulate_keystrokes("escape enter escape");
+        assert!(!state.read_with(cx, |state, _| state.open));
+        assert_eq!(&*changes.borrow(), &[true, false, true, false]);
     }
 }

@@ -34,6 +34,9 @@ use gpui_kit::base::{Tooltip};
 
 `TooltipOverlay` 默认等待 500 ms 后显示；关闭时保留 300 ms 宽限期，期间移入另一个触发元素会立即切换。安装 `TooltipDefaults` 可在应用范围内调整这两个时长，`TooltipRequest::with_show_delay` 可覆盖单次请求的显示延迟。
 
+`TooltipRequest::with_on_open_change` 会在该触发元素的 tooltip 显示时报告，也会在它隐藏或被另一个触发元素的 tooltip 替换时报告。
+tooltip 显示期间，同一触发元素边界的重复请求不会报告变化。由于 overlay 可能在没有窗口的情况下隐藏，回调只接收 `&mut App`，并在 overlay 更新完成后运行。
+
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 
 ## 完整 Rust 示例

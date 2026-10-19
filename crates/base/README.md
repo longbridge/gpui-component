@@ -194,16 +194,17 @@ Base controls cannot suppress `hover` or `active` styles while disabled, because
 
 ### Unstyled Controls
 
-| API                                      | Behavior provided                                                                                     |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `Button`                                 | Click and keyboard activation, focus, disabled and selected states, and the Button accessibility role |
-| `Checkbox` / `CheckboxIndicator`         | Checked, unchecked, and indeterminate states with corresponding accessibility semantics               |
-| `Radio` / `RadioGroup`                   | Radio activation, focus, and a grouping container                                                     |
-| `Switch` / `SwitchTrack` / `SwitchThumb` | A controlled switch with independently styled track and thumb parts                                   |
-| `Toggle` / `ToggleGroup`                 | A controlled pressed state and grouping container                                                     |
-| `Link`                                   | Link semantics and activation with an application-provided `open_with` navigation strategy            |
-| `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling |
-| `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion     |
+| API                                      | Behavior provided                                                                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`                                 | Click and keyboard activation, focus, disabled and selected states, and the Button accessibility role                             |
+| `Checkbox` / `CheckboxIndicator`         | Checked, unchecked, and indeterminate states with corresponding accessibility semantics                                           |
+| `Radio` / `RadioGroup`                   | Radio activation and focus; a group that is one Tab stop, where every arrow key moves focus and the check                         |
+| `Switch` / `SwitchTrack` / `SwitchThumb` | A controlled switch with independently styled track and thumb parts                                                               |
+| `Toggle` / `ToggleGroup`                 | A controlled pressed state; a group that is one Tab stop, where its axis' arrow keys and Home/End move focus                      |
+| `Tab` / `Tabs`                           | Selection, focus and tab roles; a tab list that is one Tab stop, where its axis' arrow keys and Home/End move focus and selection |
+| `Link`                                   | Link semantics and activation with an application-provided `open_with` navigation strategy                                        |
+| `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling                             |
+| `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion                                 |
 
 ### Text Editing
 

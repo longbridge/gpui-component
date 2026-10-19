@@ -1,13 +1,88 @@
 use crate::TestSupportExt as _;
 use std::rc::Rc;
 
-use crate::{h_flex, styled::StyledExt as _, v_flex};
-use chrono::{Datelike, Local, NaiveDate, Weekday};
-use gpui::{
-    AnyElement, App, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, px,
+use crate::{
+    a11y_disabled::A11yDisabledExt as _, actions::Confirm, h_flex, styled::StyledExt as _, v_flex,
 };
+use chrono::{Datelike, Local, Months, NaiveDate, Weekday};
+use gpui::{
+    Action, AnyElement, App, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, actions, div, px,
+};
+
+const CONTEXT: &str = "Calendar";
+
+actions!(
+    calendar,
+    [
+        PreviousDay,
+        NextDay,
+        PreviousWeek,
+        NextWeek,
+        PreviousMonth,
+        NextMonth,
+        PreviousYear,
+        NextYear,
+        WeekStart,
+        WeekEnd
+    ]
+);
+
+#[doc(hidden)]
+pub fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("left", PreviousDay, Some(CONTEXT)),
+        KeyBinding::new("right", NextDay, Some(CONTEXT)),
+        KeyBinding::new("up", PreviousWeek, Some(CONTEXT)),
+        KeyBinding::new("down", NextWeek, Some(CONTEXT)),
+        KeyBinding::new("pageup", PreviousMonth, Some(CONTEXT)),
+        KeyBinding::new("pagedown", NextMonth, Some(CONTEXT)),
+        KeyBinding::new("shift-pageup", PreviousYear, Some(CONTEXT)),
+        KeyBinding::new("shift-pagedown", NextYear, Some(CONTEXT)),
+        KeyBinding::new("home", WeekStart, Some(CONTEXT)),
+        KeyBinding::new("end", WeekEnd, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("space", Confirm { secondary: false }, Some(CONTEXT)),
+    ]);
+}
+
+/// How far a key moves the focused day. A move by days or weeks skips the
+/// disabled days in its way; the others settle on the enabled day nearest
+/// their target, back towards where they started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FocusMove {
+    Days(i64),
+    Months(i32),
+    WeekStart,
+    WeekEnd,
+}
+
+impl FocusMove {
+    /// The day the move aims at from `date`, and the step that skips
+    /// disabled days past it (0: none).
+    fn target(self, date: NaiveDate, first_day: Weekday) -> Option<(NaiveDate, i64)> {
+        let week_offset =
+            (date.weekday().num_days_from_sunday() + 7 - first_day.num_days_from_sunday()) % 7;
+        match self {
+            Self::Days(days) => Some((date + chrono::Duration::days(days), days)),
+            Self::Months(months) if months < 0 => Some((
+                date.checked_sub_months(Months::new(months.unsigned_abs()))?,
+                0,
+            )),
+            Self::Months(months) => Some((date.checked_add_months(Months::new(months as u32))?, 0)),
+            Self::WeekStart => Some((date - chrono::Duration::days(week_offset as i64), 0)),
+            Self::WeekEnd => Some((date + chrono::Duration::days(6 - week_offset as i64), 0)),
+        }
+    }
+}
+
+/// The furthest a move skips over disabled days before it gives up.
+const MAX_SKIPPED_DAYS: i64 = 366;
+
+fn month_index(year: i32, month: u32) -> i64 {
+    year as i64 * 12 + month as i64 - 1
+}
 
 /// A controlled calendar value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,13 +252,14 @@ pub struct CalendarState {
     today: NaiveDate,
     number_of_months: usize,
     disabled_matcher: Option<Rc<Matcher>>,
+    focused_date: Option<NaiveDate>,
 }
 
 impl CalendarState {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().date_naive();
         Self {
-            focus_handle: cx.focus_handle(),
+            focus_handle: cx.focus_handle().tab_stop(true),
             view: CalendarView::Day,
             date: Date::Single(None),
             current_year: today.year(),
@@ -193,6 +269,7 @@ impl CalendarState {
             today,
             number_of_months: 1,
             disabled_matcher: None,
+            focused_date: None,
         }
         .year_range((today.year() - 50, today.year() + 50))
     }
@@ -227,10 +304,14 @@ impl CalendarState {
         {
             return false;
         }
+        if date != self.date
+            && let Some(start) = date.start()
+        {
+            self.focused_date = Some(start);
+        }
         self.date = date;
-        if let Some(v) = date.start() {
-            self.current_month = v.month() as u8;
-            self.current_year = v.year();
+        if let Some(start) = date.start() {
+            self.show_month_of(start);
         }
         true
     }
@@ -253,6 +334,7 @@ impl CalendarState {
             }
         };
         self.apply_date(next);
+        self.focused_date = Some(value);
         self.date.is_complete()
     }
     /// Activates a day item and emits [`CalendarEvent::Selected`] once the
@@ -270,8 +352,10 @@ impl CalendarState {
         self.date
     }
     pub fn set_number_of_months(&mut self, n: usize, _: &mut Window, cx: &mut Context<Self>) {
-        self.number_of_months = n;
-        cx.notify();
+        if self.number_of_months != n {
+            self.number_of_months = n;
+            cx.notify();
+        }
     }
     pub fn number_of_months(&self) -> usize {
         self.number_of_months
@@ -386,6 +470,99 @@ impl CalendarState {
         self.current_year = year;
         self.view = CalendarView::Day;
     }
+
+    /// Whether `date` is disabled by the disabled matcher.
+    pub fn is_date_disabled(&self, date: &NaiveDate) -> bool {
+        self.disabled_matcher
+            .as_ref()
+            .is_some_and(|matcher| matcher.matched(date))
+    }
+
+    /// The day the keyboard acts on: the last day focused while its month is
+    /// shown, else the selected day, today, or the first of the first month
+    /// shown.
+    pub fn focused_date(&self) -> NaiveDate {
+        let shown = |date: &NaiveDate| self.is_month_shown(date);
+        self.focused_date
+            .filter(shown)
+            .or(self.date.start().filter(shown))
+            .or(Some(self.today).filter(shown))
+            .unwrap_or_else(|| {
+                NaiveDate::from_ymd_opt(self.current_year, self.current_month as u32, 1)
+                    .unwrap_or(self.today)
+            })
+    }
+
+    /// Focus `date` for the keyboard, paging the months shown to it.
+    pub fn set_focused_date(&mut self, date: NaiveDate) {
+        self.focused_date = Some(date);
+        self.show_month_of(date);
+    }
+
+    fn is_month_shown(&self, date: &NaiveDate) -> bool {
+        let first = month_index(self.current_year, self.current_month as u32);
+        let index = month_index(date.year(), date.month());
+        (first..first + self.number_of_months as i64).contains(&index)
+    }
+
+    /// Pages the months shown as little as it takes to show `date`'s month.
+    fn show_month_of(&mut self, date: NaiveDate) {
+        let first = month_index(self.current_year, self.current_month as u32);
+        let index = month_index(date.year(), date.month());
+        let last = first + self.number_of_months.max(1) as i64 - 1;
+        let first = if index < first {
+            index
+        } else if index > last {
+            index - (last - first)
+        } else {
+            return;
+        };
+        self.current_year = first.div_euclid(12) as i32;
+        self.current_month = first.rem_euclid(12) as u8 + 1;
+    }
+
+    /// Moves the focused day, skipping disabled days. Returns whether it
+    /// moved.
+    fn move_focus(&mut self, movement: FocusMove, first_day: Weekday) -> bool {
+        let origin = self.focused_date();
+        let Some((target, skip)) = movement.target(origin, first_day) else {
+            return false;
+        };
+        match self.nearest_enabled(origin, target, skip) {
+            Some(date) if date != origin => {
+                self.set_focused_date(date);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn nearest_enabled(
+        &self,
+        origin: NaiveDate,
+        target: NaiveDate,
+        skip: i64,
+    ) -> Option<NaiveDate> {
+        let enabled = |date: &NaiveDate| !self.is_date_disabled(date);
+        if skip != 0 {
+            let skipped = std::iter::successors(Some(target), |date| {
+                date.checked_add_signed(chrono::Duration::days(skip))
+            })
+            .take((MAX_SKIPPED_DAYS / skip.abs()) as usize)
+            .find(enabled);
+            if skipped.is_some() {
+                return skipped;
+            }
+        }
+        // Nothing enabled ahead (past `max`): stop at the last enabled day
+        // on the way back.
+        let back = if target > origin { -1 } else { 1 };
+        std::iter::successors(Some(target), |date| {
+            date.checked_add_signed(chrono::Duration::days(back))
+        })
+        .take_while(|date| *date != origin)
+        .find(enabled)
+    }
 }
 impl EventEmitter<CalendarEvent> for CalendarState {}
 impl Render for CalendarState {
@@ -420,6 +597,7 @@ pub struct CalendarItemState {
     muted: bool,
     disabled: bool,
     today: bool,
+    focused: bool,
 }
 
 impl CalendarItemState {
@@ -432,6 +610,7 @@ impl CalendarItemState {
             muted: false,
             disabled: false,
             today: false,
+            focused: false,
         }
     }
 
@@ -463,6 +642,13 @@ impl CalendarItemState {
         self
     }
 
+    /// Set whether the item is the day the keyboard acts on, shown while the
+    /// calendar has focus from the keyboard.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
     pub fn kind(&self) -> CalendarItemKind {
         self.kind
     }
@@ -485,6 +671,10 @@ impl CalendarItemState {
 
     pub fn is_today(&self) -> bool {
         self.today
+    }
+
+    pub fn is_focused(&self) -> bool {
+        self.focused
     }
 }
 
@@ -545,7 +735,12 @@ impl InteractiveElement for CalendarItem {
 impl StatefulInteractiveElement for CalendarItem {}
 impl RenderOnce for CalendarItem {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.children(self.children).refine_style(&self.style)
+        // A weekday header is never interactive, so it is not "disabled".
+        let disabled = self.state.is_disabled() && self.state.kind() != CalendarItemKind::Weekday;
+        self.base
+            .children(self.children)
+            .refine_style(&self.style)
+            .a11y_disabled(disabled)
     }
 }
 
@@ -606,23 +801,6 @@ impl Calendar {
     ) -> Self {
         self.label = Rc::new(label);
         self
-    }
-
-    fn render_item(
-        &self,
-        id: impl Into<ElementId>,
-        state: CalendarItemState,
-        value: i32,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        let label = (self.label)(state.kind(), value);
-        (self.item)(
-            CalendarItem::new(id, state).with_label(label),
-            state,
-            window,
-            cx,
-        )
     }
 }
 impl Styled for Calendar {
@@ -734,45 +912,68 @@ impl RenderOnce for Calendar {
                 div().grid().grid_cols(columns).gap_x(px(horizontal_gap))
             }
         };
+        let focus_handle = self.state.read(cx).focus_handle.clone();
         if view.is_day() {
+            let focused_date = self.state.read(cx).focused_date();
+            let focus_visible = focus_handle.is_focused(window) && window.last_input_was_keyboard();
             for offset in 0..count {
                 let (year, month_number) = self.state.read(cx).offset_year_month(offset);
                 let weeks = days_in_month(year, month_number, self.first_day_of_week);
-                let mut month = v_flex();
-                let mut header_row = h_flex();
+                let mut month = v_flex()
+                    .id(format!("calendar-grid-{offset}"))
+                    .test_support()
+                    .role(Role::Grid)
+                    .aria_label(format!(
+                        "{} {year}",
+                        (self.label)(CalendarItemKind::MonthToggle, month_number as i32)
+                    ));
+                let mut header_row = h_flex()
+                    .id(format!("weekdays-{offset}"))
+                    .test_support()
+                    .role(Role::Row);
                 for weekday in 0..7 {
                     let st = CalendarItemState::new(CalendarItemKind::Weekday)
                         .muted(true)
                         .disabled(true);
-                    header_row = header_row.child(self.render_item(
-                        format!("weekday-{offset}-{weekday}"),
-                        st,
-                        (weekday + self.first_day_of_week.num_days_from_sunday() as i32) % 7,
-                        window,
-                        cx,
-                    ));
+                    let value =
+                        (weekday + self.first_day_of_week.num_days_from_sunday() as i32) % 7;
+                    let label = (self.label)(st.kind(), value);
+                    let item = CalendarItem::new(format!("weekday-{offset}-{weekday}"), st)
+                        .with_label(label)
+                        .role(Role::ColumnHeader);
+                    header_row = header_row.child((self.item)(item, st, window, cx));
                 }
                 month = month.child(header_row);
                 for (week_index, week) in weeks.iter().enumerate() {
-                    let mut week_row = h_flex();
+                    let mut week_row = h_flex()
+                        .id(format!("calendar-week-{offset}-{week_index}"))
+                        .test_support()
+                        .role(Role::Row);
                     for date in week {
                         let date = *date;
+                        // A day of a neighboring month also shows in its own
+                        // month's grid, which holds the focus.
+                        let focused = date == focused_date && date.month() == month_number;
                         let st = {
                             let s = self.state.read(cx);
-                            let (_, m) = s.offset_year_month(offset);
-                            let disabled =
-                                s.disabled_matcher_ref().is_some_and(|x| x.matched(&date));
+                            let disabled = s.is_date_disabled(&date);
                             CalendarItemState::new(CalendarItemKind::Day)
                                 .active(s.date().is_active(&date))
                                 .in_range(s.date().is_in_range(&date))
-                                .muted(date.month() != m || disabled)
+                                .muted(date.month() != month_number || disabled)
                                 .disabled(disabled)
                                 .today(date == s.today())
+                                .focused(focused && focus_visible)
                         };
                         let mut item =
                             CalendarItem::new(format!("calendar-{date}-{offset}-{week_index}"), st)
                                 .with_label((self.label)(st.kind(), date.day() as i32))
-                                .aria_label(date.to_string());
+                                .aria_label(date.to_string())
+                                .role(Role::GridCell)
+                                .aria_selected(st.is_active() || st.is_in_range());
+                        if focused {
+                            item = item.aria_active_descendant();
+                        }
                         if !st.is_disabled() {
                             let entity = self.state.clone();
                             item = item.on_click(move |_, _, cx| {
@@ -819,12 +1020,73 @@ impl RenderOnce for Calendar {
                 body = body.child((self.item)(item, st, window, cx));
             }
         }
+        let state = &self.state;
+        let first_day = self.first_day_of_week;
         v_flex()
             .id(self.id)
-            .track_focus(&self.state.read(cx).focus_handle)
+            .key_context(CONTEXT)
+            .track_focus(&focus_handle)
+            .on_action(on_move::<PreviousDay>(
+                state,
+                FocusMove::Days(-1),
+                first_day,
+            ))
+            .on_action(on_move::<NextDay>(state, FocusMove::Days(1), first_day))
+            .on_action(on_move::<PreviousWeek>(
+                state,
+                FocusMove::Days(-7),
+                first_day,
+            ))
+            .on_action(on_move::<NextWeek>(state, FocusMove::Days(7), first_day))
+            .on_action(on_move::<PreviousMonth>(
+                state,
+                FocusMove::Months(-1),
+                first_day,
+            ))
+            .on_action(on_move::<NextMonth>(state, FocusMove::Months(1), first_day))
+            .on_action(on_move::<PreviousYear>(
+                state,
+                FocusMove::Months(-12),
+                first_day,
+            ))
+            .on_action(on_move::<NextYear>(state, FocusMove::Months(12), first_day))
+            .on_action(on_move::<WeekStart>(state, FocusMove::WeekStart, first_day))
+            .on_action(on_move::<WeekEnd>(state, FocusMove::WeekEnd, first_day))
+            .on_action({
+                let entity = self.state.clone();
+                move |_: &Confirm, _, cx| {
+                    entity.update(cx, |s, cx| {
+                        let date = s.focused_date();
+                        if !s.view().is_day() {
+                            cx.propagate();
+                        } else if !s.is_date_disabled(&date) {
+                            s.activate_date(date, cx);
+                        }
+                    })
+                }
+            })
             .child(header)
             .child(body)
             .refine_style(&self.style)
+    }
+}
+
+/// The handler of action `A`, moving the focused day of `state` in the day
+/// view.
+fn on_move<A: Action>(
+    state: &Entity<CalendarState>,
+    movement: FocusMove,
+    first_day: Weekday,
+) -> impl Fn(&A, &mut Window, &mut App) + 'static {
+    let state = state.clone();
+    move |_, _, cx| {
+        state.update(cx, |state, cx| {
+            if !state.view().is_day() {
+                cx.propagate();
+            } else if state.move_focus(movement, first_day) {
+                cx.notify();
+            }
+        })
     }
 }
 
@@ -1074,5 +1336,236 @@ mod tests {
             harness.read_with(cx, |h, _| h.events.borrow().clone()),
             vec![Date::Range(Some(start), Some(end)), Date::Single(Some(end))]
         );
+    }
+
+    fn ymd(year: i32, month: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    }
+
+    /// A calendar driven through real keystrokes. The item slot records the
+    /// focused day and the selected days of the last frame.
+    struct KeyboardHarness {
+        calendar: Entity<CalendarState>,
+        months: usize,
+        first_day: Weekday,
+        focused: Rc<RefCell<Vec<String>>>,
+        events: Rc<RefCell<Vec<Date>>>,
+        _subscription: Subscription,
+    }
+    impl Render for KeyboardHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            use gpui::{Element as _, accesskit};
+            let focused = self.focused.clone();
+            focused.borrow_mut().clear();
+            Calendar::new("keyboard-calendar", &self.calendar)
+                .number_of_months(self.months)
+                .first_day_of_week(self.first_day)
+                .item(move |item, state, _, _| {
+                    if state.is_focused() {
+                        let mut node = accesskit::Node::new(accesskit::Role::GridCell);
+                        item.base.write_a11y_info(&mut node);
+                        focused
+                            .borrow_mut()
+                            .push(node.label().unwrap_or("").to_string());
+                    }
+                    item.into_any_element()
+                })
+        }
+    }
+
+    fn keyboard(
+        cx: &mut gpui::TestAppContext,
+        date: Date,
+        months: usize,
+        first_day: Weekday,
+    ) -> (Entity<KeyboardHarness>, &mut gpui::VisualTestContext) {
+        cx.update(init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            let calendar = cx.new(|cx| CalendarState::new(window, cx));
+            calendar.update(cx, |state, _| state.apply_date(date));
+            let events = Rc::new(RefCell::new(Vec::new()));
+            let _subscription = cx.subscribe(&calendar, {
+                let events = events.clone();
+                move |_, _, CalendarEvent::Selected(date), _| events.borrow_mut().push(*date)
+            });
+            KeyboardHarness {
+                calendar,
+                months,
+                first_day,
+                focused: Rc::default(),
+                events,
+                _subscription,
+            }
+        });
+        cx.update(|window, cx| {
+            let focus = view.read(cx).calendar.read(cx).focus_handle.clone();
+            focus.focus(window, cx);
+        });
+        cx.run_until_parked();
+        (view, cx)
+    }
+
+    fn focused(view: &Entity<KeyboardHarness>, cx: &mut gpui::VisualTestContext) -> NaiveDate {
+        cx.run_until_parked();
+        view.read_with(cx, |view, cx| view.calendar.read(cx).focused_date())
+    }
+
+    fn shown(view: &Entity<KeyboardHarness>, cx: &mut gpui::VisualTestContext) -> (i32, u8) {
+        view.read_with(cx, |view, cx| {
+            let state = view.calendar.read(cx);
+            (state.current_year(), state.current_month())
+        })
+    }
+
+    #[gpui::test]
+    fn keys_move_the_focused_day_and_the_months_follow(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Single(Some(ymd(2025, 1, 31))), 1, Weekday::Mon);
+        assert_eq!(focused(&view, cx), ymd(2025, 1, 31));
+        cx.simulate_keystrokes("right");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 1));
+        assert_eq!(shown(&view, cx), (2025, 2));
+        cx.simulate_keystrokes("left up");
+        assert_eq!(focused(&view, cx), ymd(2025, 1, 24));
+        assert_eq!(shown(&view, cx), (2025, 1));
+        cx.simulate_keystrokes("down down");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 7));
+        // A month on clamps to its last day; Shift moves by a year.
+        cx.simulate_keystrokes("pageup");
+        assert_eq!(focused(&view, cx), ymd(2025, 1, 7));
+        cx.simulate_keystrokes("shift-pagedown");
+        assert_eq!(focused(&view, cx), ymd(2026, 1, 7));
+        assert_eq!(shown(&view, cx), (2026, 1));
+        cx.simulate_keystrokes("shift-pageup pagedown");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 7));
+        // January 31 in a week that starts on Monday: Home and End.
+        view.update(cx, |view, cx| {
+            view.calendar
+                .update(cx, |state, _| state.set_focused_date(ymd(2025, 1, 31)))
+        });
+        cx.simulate_keystrokes("pagedown");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 28));
+        cx.simulate_keystrokes("home");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 24));
+        cx.simulate_keystrokes("end");
+        assert_eq!(focused(&view, cx), ymd(2025, 3, 2));
+        assert!(view.read_with(cx, |view, _| view.events.borrow().is_empty()));
+    }
+
+    #[gpui::test]
+    fn enter_and_space_select_the_focused_day(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Range(None, None), 1, Weekday::Sun);
+        view.update(cx, |view, cx| {
+            view.calendar
+                .update(cx, |state, _| state.set_focused_date(ymd(2025, 4, 4)))
+        });
+        cx.simulate_keystrokes("enter right right space");
+        cx.run_until_parked();
+        assert_eq!(
+            view.read_with(cx, |view, _| view.events.borrow().clone()),
+            vec![Date::Range(Some(ymd(2025, 4, 4)), Some(ymd(2025, 4, 6)))]
+        );
+        // The focus stays on the day that completed the range.
+        assert_eq!(focused(&view, cx), ymd(2025, 4, 6));
+    }
+
+    #[gpui::test]
+    fn keys_skip_disabled_days_and_stop_at_the_bounds(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Single(Some(ymd(2025, 2, 7))), 1, Weekday::Sun);
+        // Weekends are disabled: Friday's next day is Monday.
+        view.update(cx, |view, cx| {
+            view.calendar.update(cx, |state, _| {
+                state.set_disabled_matcher_shared(Some(Rc::new(Matcher::DayOfWeek(vec![0, 6]))))
+            })
+        });
+        cx.simulate_keystrokes("right");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 10));
+        cx.simulate_keystrokes("left");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 7));
+        // Home lands on Sunday, disabled: the nearest enabled day back.
+        cx.simulate_keystrokes("home");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 3));
+
+        // `min` and `max`: keys stop at them, a page lands on them.
+        view.update(cx, |view, cx| {
+            view.calendar.update(cx, |state, _| {
+                state.set_disabled_matcher_shared(Some(Rc::new(Matcher::interval(
+                    Some(ymd(2025, 2, 1)),
+                    Some(ymd(2025, 2, 20)),
+                ))))
+            })
+        });
+        cx.simulate_keystrokes("pagedown");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 20));
+        cx.simulate_keystrokes("right down");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 20));
+        cx.simulate_keystrokes("shift-pageup");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 1));
+        cx.simulate_keystrokes("left up enter");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 1));
+        assert_eq!(
+            view.read_with(cx, |view, _| view.events.borrow().clone()),
+            vec![Date::Single(Some(ymd(2025, 2, 1)))]
+        );
+    }
+
+    #[gpui::test]
+    fn the_months_shown_page_only_as_far_as_the_focus(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Single(Some(ymd(2025, 1, 20))), 2, Weekday::Sun);
+        cx.simulate_keystrokes("pagedown");
+        assert_eq!(focused(&view, cx), ymd(2025, 2, 20));
+        assert_eq!(shown(&view, cx), (2025, 1));
+        cx.simulate_keystrokes("pagedown");
+        assert_eq!(shown(&view, cx), (2025, 2));
+        // Selecting a day in the second month does not page.
+        cx.simulate_keystrokes("enter");
+        cx.run_until_parked();
+        assert_eq!(shown(&view, cx), (2025, 2));
+        assert_eq!(
+            view.read_with(cx, |view, _| view.events.borrow().clone()),
+            vec![Date::Single(Some(ymd(2025, 3, 20)))]
+        );
+    }
+
+    #[gpui::test]
+    fn the_focused_day_shows_only_with_keyboard_focus(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Single(Some(ymd(2025, 3, 31))), 2, Weekday::Sun);
+        let shown = |view: &Entity<KeyboardHarness>, cx: &mut gpui::VisualTestContext| {
+            cx.run_until_parked();
+            view.read_with(cx, |view, _| view.focused.borrow().clone())
+        };
+        // Focus from a click or the program shows no focused day.
+        assert!(shown(&view, cx).is_empty());
+        // March 31 also shows, muted, in April's first week; only March's
+        // grid holds the focus.
+        cx.simulate_keystrokes("left right");
+        assert_eq!(shown(&view, cx), vec!["2025-03-31".to_string()]);
+        cx.update(|window, cx| window.blur(cx));
+        assert!(shown(&view, cx).is_empty());
+    }
+
+    #[gpui::test]
+    fn days_form_a_grid_for_assistive_technology(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = keyboard(cx, Date::Single(Some(ymd(2025, 2, 10))), 1, Weekday::Sun);
+        view.update(cx, |view, cx| {
+            view.calendar.update(cx, |state, _| {
+                state.set_disabled_matcher_shared(Some(Rc::new(Matcher::DayOfWeek(vec![0]))))
+            })
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            let find = |id: &str| {
+                crate::test_support::find(window, &[], &ElementId::Name(id.to_owned().into()))
+                    .unwrap()
+            };
+            assert_eq!(find("calendar-grid-0").role(), Some(Role::Grid));
+            assert_eq!(find("calendar-week-0-2").role(), Some(Role::Row));
+            assert_eq!(find("weekday-0-0").role(), Some(Role::ColumnHeader));
+            let selected = find("calendar-2025-02-10-0-2");
+            assert_eq!(selected.role(), Some(Role::GridCell));
+            assert_eq!(selected.selected(), Some(true));
+            assert_eq!(find("calendar-2025-02-11-0-2").selected(), Some(false));
+            assert_eq!(find("calendar-2025-02-09-0-2").disabled(), Some(true));
+            assert_ne!(find("calendar-2025-02-11-0-2").disabled(), Some(true));
+        });
     }
 }

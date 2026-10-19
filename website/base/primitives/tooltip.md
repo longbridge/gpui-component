@@ -36,6 +36,12 @@ Hover or focus schedules it and exit or blur dismisses it; content is descriptiv
 
 `TooltipOverlay` waits 500 ms before showing and keeps a closing tooltip for a 300 ms grace period, during which another trigger switches to its tooltip immediately. Install `TooltipDefaults` to change both for the application, and call `TooltipRequest::with_show_delay` to override the show delay for one request.
 
+`TooltipRequest::with_on_open_change` reports when that trigger's tooltip shows
+and when it hides or another trigger's replaces it. A repeated request from the
+same trigger bounds while its tooltip shows reports nothing. The callback takes
+only `&mut App`, because the overlay can hide without a window, and runs after
+the overlay's update.
+
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 
 ## Complete Rust example

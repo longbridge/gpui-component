@@ -32,6 +32,10 @@ The authoritative module is [`components/popup.rs`](https://github.com/longbridg
 
 The caller owns trigger, anchor, open state, content, and dismissal policy.
 
+`.on_dismiss(...)` reports a mouse press outside both the trigger and the open
+content, which asks a dropdown to close. A press on the trigger is left to the
+trigger, which toggles the popup itself.
+
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 
 ## Complete Rust example

@@ -53,6 +53,14 @@ Slider::new(&slider_state)
     .accessibility_label("Corner radius")
 ```
 
+## Keyboard
+
+Slider is a Tab stop. While it has focus, Right and Up increase the value by one step, Left and Down decrease it, Page Up and Page Down move ten steps, and Home and End move to the minimum and maximum. Each key press emits `SliderEvent::Change` and then `SliderEvent::Release`, as a click does, and nothing when the value is already at its limit. Accessible Increment and Decrement emit the same events.
+
+In a range, the keys move the thumb the pointer moved last, the end thumb until then; a thumb never passes the other. `SliderState::is_keyboard_on_start()` tells which thumb that is, so you can mark it while the slider has focus. A disabled slider is not a Tab stop.
+
+Pass `.track_focus(&focus_handle)` to use a focus handle you own, and `.tab_index(...)` or `.tab_stop(false)` to adjust traversal.
+
 ## Notes
 
 Use stable element IDs where accepted. Verify focus, hover, active, selected, disabled, reduced-motion, and high-contrast appearances in the consuming design system.

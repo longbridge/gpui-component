@@ -34,6 +34,10 @@ use gpui_kit::base::{Radio, RadioGroup};
 
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 
+## 键盘
+
+与平台的单选组一样，`RadioGroup` 负责其下各个 `Radio` 的键盘操作，不论皮肤把它们放在哪一层。整组只占一个 Tab stop：Tab 键先落在已获得焦点的 Radio 上，其次是已勾选的 Radio，最后是第一个可用的 Radio。任一方向键都会把焦点移到上一个（Left、Up）或下一个（Right、Down）可用的 Radio，到两端时循环，并以键盘点击事件通过该 Radio 的 `on_change` 请求勾选它。`RadioGroup::track_focus(&handle)` 为整组提供一个自身的焦点句柄：聚焦它时，焦点会转到持有 Tab stop 的 Radio 上。如果所有者自行处理 Radio 之间的移动，可用 `.keyboard_navigation(false)` 关闭这一行为，此时每个可用的 Radio 各自是一个 Tab stop。
+
 ## 完整 Rust 示例
 
 <<< ../../../../crates/base/examples/showcase/components/radio_group.rs{rust}

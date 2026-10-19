@@ -33,6 +33,10 @@ use gpui_kit::base::{HoverCard};
 ## 状态与事件
 
 悬停或聚焦触发器后延迟打开，离开后关闭。
+`on_open_change` 会报告每次变化。传入 `.open(..)` 即为受控模式：卡片显示所有者给出的状态，
+所有者在 `on_open_change` 中更新它；所有者改变状态时，会取消尚未触发的悬停延迟。
+
+`.offset(..)` 设置与触发器的间距，`.arrow(PopupArrow::new(..))` 绘制一个指向触发器的无样式箭头，用法与 [Popover](./popover.md) 相同。
 
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 

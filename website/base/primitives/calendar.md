@@ -44,9 +44,24 @@ The complete implementation used by the runnable showcase is embedded directly f
 
 The command above supplies application initialization, window creation, and shared `BaseShowcase` state.
 
+## Keyboard
+
+The calendar is one Tab stop. In the day view, the keyboard moves a focused day:
+
+| Key | Action |
+| --- | --- |
+| Left / Right | Previous / next day |
+| Up / Down | Previous / next week |
+| PageUp / PageDown | Previous / next month, on the same day where it exists |
+| Shift-PageUp / Shift-PageDown | Previous / next year |
+| Home / End | Start / end of the week, following `first_day_of_week` |
+| Enter / Space | Select the focused day |
+
+The months shown follow the focused day. Moves by a day or a week skip disabled days; the other moves settle on the nearest enabled day, so with a disabled matcher such as `Matcher::interval(min, max)` the focus stops at the bounds. `CalendarItemState::is_focused` marks the focused day while the calendar has keyboard focus, for a focus ring; `CalendarState::focused_date` and `set_focused_date` read and move it. The bindings live in the `Calendar` key context.
+
 ## Accessibility
 
-Label dates and selected, disabled, and today states; retain arrow-key navigation.
+Each month is a grid of rows: weekday names are column headers and days are grid cells labeled with their ISO date, marked selected when picked or within the range and disabled when the matcher rejects them. The focused day is reported to assistive technology as the active descendant while the calendar holds focus.
 
 ## Notes
 

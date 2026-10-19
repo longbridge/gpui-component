@@ -44,6 +44,30 @@ The complete implementation used by the runnable showcase is embedded directly f
 
 The command above supplies application initialization, window creation, and shared `BaseShowcase` state.
 
+## Keyboard
+
+Enter, Space and the arrow keys open a closed select and move focus to
+`content_focus_handle`; Escape closes it and returns focus to the trigger. Tab
+and Shift-Tab close an open select without choosing, as Escape does, then move
+focus on from the trigger as usual.
+
+Supply `.options(labels)` to let the root navigate the open list as well. Up and
+Down move the highlighted option, stopping at either end; Page Up and Page Down
+move it by a page, the rows the list shows (every option without a
+`.scroll_handle(...)` to measure); and Home and End jump to the first and last
+one; on a closed select they open it first, the arrows on
+`.selected_index(...)`. Typing the start of a label highlights the next matching
+option, opening a closed select; repeating one letter steps through the options
+starting with it. Space typed within a second of the last letter goes on with
+the search, so a label containing a space can be typed out; otherwise Space
+activates. The application keeps `.highlighted_index(...)` in step from
+`.on_highlight(...)`, marks that option with `aria_active_descendant()`, and
+commits it in `.on_confirm(...)`, which runs with the content focused so it can
+close the list and focus the trigger. `.scroll_handle(...)` scrolls the
+highlighted option into view, and with it the pointer moving over an option
+highlights it as well. Without options, those keys go on to the focused
+content, which navigates on its own.
+
 ## Accessibility
 
 Set `.accessibility_label(...)` on the controlled root and

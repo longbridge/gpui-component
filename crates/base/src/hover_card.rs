@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use gpui::{
     Anchor, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement,
@@ -7,7 +7,7 @@ use gpui::{
 };
 use instant::Duration;
 
-use crate::Popup;
+use crate::{Popup, PopupArrow};
 
 type ContentBuilder = Box<
     dyn FnOnce(
@@ -24,11 +24,14 @@ type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 pub struct HoverCard {
     id: ElementId,
     anchor: Anchor,
+    offset: gpui::Pixels,
     tap_to_open: bool,
     trigger: Option<AnyElement>,
     content: Option<ContentBuilder>,
     open_delay: Duration,
     close_delay: Duration,
+    open: Option<bool>,
+    arrow: Option<PopupArrow>,
     on_open_change: Option<OpenChangeHandler>,
 }
 
@@ -37,17 +40,27 @@ impl HoverCard {
         Self {
             id: id.into(),
             anchor: Anchor::TopCenter,
+            offset: gpui::px(0.),
             tap_to_open: crate::is_mobile(),
             trigger: None,
             content: None,
             open_delay: Duration::from_secs_f64(0.6),
             close_delay: Duration::from_secs_f64(0.3),
+            open: None,
+            arrow: None,
             on_open_change: None,
         }
     }
 
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
+        self
+    }
+
+    /// Gap from the trigger along the anchor's outward direction, zero by
+    /// default. Include an arrow's depth in it.
+    pub fn offset(mut self, offset: gpui::Pixels) -> Self {
+        self.offset = offset;
         self
     }
 
@@ -84,6 +97,21 @@ impl HoverCard {
         callback: impl Fn(&bool, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_open_change = Some(Rc::new(callback));
+        self
+    }
+
+    /// Controls the open state. The card still asks to open and close on
+    /// hover through [`HoverCard::on_open_change`], and shows what the owner
+    /// passes back here; without it, the card keeps its own state.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    /// Draws `arrow` on the content's edge, aimed at the point of the trigger
+    /// the anchor names.
+    pub fn arrow(mut self, arrow: PopupArrow) -> Self {
+        self.arrow = Some(arrow);
         self
     }
 }
@@ -129,6 +157,16 @@ impl HoverCardState {
         self.open_delay = open_delay;
         self.close_delay = close_delay;
         self.on_open_change = on_open_change;
+    }
+
+    /// Shows `open` from the owner, without announcing it. A change cancels
+    /// the pending hover delay, which would undo it.
+    fn sync_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if self.open != open {
+            self.cancel_tasks();
+            self.open = open;
+            cx.notify();
+        }
     }
 
     fn schedule_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -216,8 +254,11 @@ impl RenderOnce for HoverCard {
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| {
             HoverCardState::new(self.open_delay, self.close_delay)
         });
-        state.update(cx, |state, _| {
-            state.sync(self.open_delay, self.close_delay, self.on_open_change)
+        state.update(cx, |state, cx| {
+            state.sync(self.open_delay, self.close_delay, self.on_open_change);
+            if let Some(open) = self.open {
+                state.sync_open(open, cx);
+            }
         });
         let open = state.read(cx).is_open();
 
@@ -241,11 +282,19 @@ impl RenderOnce for HoverCard {
                     }))
                 }),
         )
-        .anchor(self.anchor);
+        .anchor(self.anchor)
+        .offset(self.offset);
+        let trigger_bounds = Rc::new(Cell::new(None));
+        let popup = popup.when(self.arrow.is_some(), |popup| {
+            let trigger_bounds = trigger_bounds.clone();
+            popup.on_position(move |_, trigger| trigger_bounds.set(Some(trigger)))
+        });
 
         if !open {
             return popup;
         }
+        let anchor = self.anchor;
+        let arrow = self.arrow;
 
         popup.when_some(self.content, |popup, content| {
             let hover = window.listener_for(&state, |state, hovered, window, cx| {
@@ -257,6 +306,9 @@ impl RenderOnce for HoverCard {
             });
             popup.content(state.update(cx, |state, cx| {
                 content(state, window, cx)
+                    .when_some(arrow, |content, arrow| {
+                        content.child(arrow.aimed(anchor, trigger_bounds))
+                    })
                     .when(self.tap_to_open, |content| {
                         content.on_mouse_up_out(gpui::MouseButton::Left, dismiss)
                     })
@@ -402,5 +454,50 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert!(cx.debug_bounds("hover-card-content").is_none());
         assert_eq!(*changes.borrow(), vec![true, false, true, false]);
+    }
+
+    struct ControlledHarness {
+        open: bool,
+    }
+
+    impl Render for ControlledHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            HoverCard::new("controlled-hover-card")
+                .open(self.open)
+                .open_delay(Duration::from_millis(100))
+                .trigger(div().size(px(20.)))
+                .content(|_, _, _| {
+                    div()
+                        .id("controlled-hover-card-content")
+                        .debug_selector(|| "controlled-hover-card-content".into())
+                        .size(px(10.))
+                })
+        }
+    }
+
+    #[gpui::test]
+    fn a_controlled_hover_card_shows_the_owners_state(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| ControlledHarness { open: true });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        // Open without a hover.
+        assert!(cx.debug_bounds("controlled-hover-card-content").is_some());
+
+        // Closed by the owner while the pointer rests on the trigger, it stays
+        // closed: the pending hover delay is cancelled.
+        cx.simulate_mouse_move(point(px(10.), px(10.)), None, gpui::Modifiers::default());
+        cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.open = false;
+                cx.notify();
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.executor().advance_clock(Duration::from_millis(100));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("controlled-hover-card-content").is_none());
     }
 }

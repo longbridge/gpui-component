@@ -66,24 +66,18 @@ fn parse_hex(value: &str) -> Option<Hsla> {
 }
 
 /// Formats a color as `#RRGGBB`, or `#RRGGBBAA` when it is translucent.
+///
+/// Each channel rounds to the nearest byte: `Hsla` holds a parsed hex color
+/// only to within `f32` precision, and truncating would turn `#7C3AED` into
+/// `#7B39EC`.
 fn hex_string(color: Hsla) -> String {
     let rgba = Rgba::from(color);
-    let channel = |value: f32| (value * 255.) as u32;
-    if rgba.a < 1. {
-        format!(
-            "#{:02X}{:02X}{:02X}{:02X}",
-            channel(rgba.r),
-            channel(rgba.g),
-            channel(rgba.b),
-            channel(rgba.a)
-        )
+    let channel = |value: f32| (value.clamp(0., 1.) * 255.).round() as u8;
+    let [r, g, b, a] = [rgba.r, rgba.g, rgba.b, rgba.a].map(channel);
+    if a < u8::MAX {
+        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
     } else {
-        format!(
-            "#{:02X}{:02X}{:02X}",
-            channel(rgba.r),
-            channel(rgba.g),
-            channel(rgba.b)
-        )
+        format!("#{r:02X}{g:02X}{b:02X}")
     }
 }
 
@@ -228,10 +222,17 @@ impl ColorPickerState {
             ]
             .iter()
             .map(|slider| {
-                cx.subscribe_in(slider, window, |this, _, _: &SliderEvent, window, cx| {
-                    let color = this.sliders.read(cx);
-                    this.update_value_from_slider(color, window, cx);
-                })
+                cx.subscribe_in(
+                    slider,
+                    window,
+                    |this, _, event: &SliderEvent, window, cx| {
+                        // A release repeats the last change's value.
+                        if let SliderEvent::Change(_) = event {
+                            let color = this.sliders.read(cx);
+                            this.update_value_from_slider(color, window, cx);
+                        }
+                    },
+                )
             }),
         );
 
@@ -808,7 +809,27 @@ mod tests {
     #[test]
     fn formats_alpha_only_when_translucent() {
         assert_eq!(hex_string(hsla(0., 1., 0.5, 1.)), "#FF0000");
-        assert_eq!(hex_string(hsla(0., 1., 0.5, 0.5)), "#FF00007F");
+        assert_eq!(hex_string(hsla(0., 1., 0.5, 0.5)), "#FF000080");
+        assert_eq!(hex_string(hsla(0., 1., 0.5, 0.999)), "#FF0000");
+    }
+
+    #[test]
+    fn hex_survives_the_hsla_round_trip() {
+        assert_eq!(hex_string(parse_hex("#7C3AED").unwrap()), "#7C3AED");
+        for byte in 0..=u8::MAX {
+            let opaque = [
+                format!("#{byte:02X}3AED"),
+                format!("#7C{byte:02X}ED"),
+                format!("#7C3A{byte:02X}"),
+            ];
+            for hex in opaque {
+                assert_eq!(hex_string(parse_hex(&hex).unwrap()), hex);
+            }
+            if byte < u8::MAX {
+                let translucent = format!("#7C3AED{byte:02X}");
+                assert_eq!(hex_string(parse_hex(&translucent).unwrap()), translucent);
+            }
+        }
     }
 
     fn state(cx: &mut TestAppContext) -> (Entity<ColorPickerState>, &mut gpui::VisualTestContext) {

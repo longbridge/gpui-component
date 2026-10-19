@@ -34,6 +34,10 @@ use gpui_kit::base::{Toggle, ToggleGroup};
 
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 
+## 键盘
+
+`ToggleGroup` 负责其下各个 `Toggle` 的键盘操作，不论皮肤把它们放在哪一层。整组只占一个 Tab stop：Tab 键先落在已获得焦点的 Toggle 上，其次是最近一次获得焦点的 Toggle，再次是第一个已按下的 Toggle，最后是第一个可用的 Toggle。沿 `axis` 方向的方向键把焦点移到上一个或下一个可用的 Toggle，到两端时循环；Home 和 End 移到第一个和最后一个。移动焦点不会按下任何 Toggle；Space 和 Enter 按下获得焦点的 Toggle。`ToggleGroup::track_focus(&handle)` 为整组提供一个自身的焦点句柄：聚焦它时，焦点会转到持有 Tab stop 的 Toggle 上。
+
 ## 完整 Rust 示例
 
 <<< ../../../../crates/base/examples/showcase/components/toggle_group.rs{rust}

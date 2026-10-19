@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _, a11y_disabled::A11yDisabledExt as _};
+use crate::{StateStyle, StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
 
 type ActivationHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type OpenHandler = Rc<dyn Fn(&str, &ClickEvent, &mut Window, &mut App)>;
@@ -23,7 +23,7 @@ type OpenHandler = Rc<dyn Fn(&str, &ClickEvent, &mut Window, &mut App)>;
 #[derive(IntoElement)]
 pub struct Link {
     id: ElementId,
-    base: Stateful<Div>,
+    base: crate::ObservedElement<Stateful<Div>>,
     style: StyleRefinement,
     semantic_styles: LinkStyles,
     href: Option<SharedString>,
@@ -32,6 +32,7 @@ pub struct Link {
     on_activate: Option<ActivationHandler>,
     open_with: Option<OpenHandler>,
     accessibility_label: Option<SharedString>,
+    provided_focus_handle: Option<FocusHandle>,
     tab_index: isize,
     tab_stop: bool,
 }
@@ -54,7 +55,7 @@ impl Link {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
         Self {
-            base: div().id(id.clone()),
+            base: div().id(id.clone()).test_support(),
             id,
             style: StyleRefinement::default(),
             semantic_styles: LinkStyles::default(),
@@ -64,6 +65,7 @@ impl Link {
             on_activate: None,
             open_with: None,
             accessibility_label: None,
+            provided_focus_handle: None,
             tab_index: 0,
             tab_stop: true,
         }
@@ -120,6 +122,12 @@ impl Link {
         self
     }
 
+    /// Uses a caller-owned focus handle instead of creating keyed state.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.provided_focus_handle = Some(focus_handle.clone());
+        self
+    }
+
     /// Sets the focus traversal index. Use this within a GPUI tab group.
     pub fn tab_index(mut self, tab_index: isize) -> Self {
         self.tab_index = tab_index;
@@ -133,10 +141,12 @@ impl Link {
     }
 
     fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-        window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone()
+        self.provided_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        })
     }
 }
 
@@ -350,6 +360,41 @@ mod tests {
         assert_eq!(keyboard_events.get(), 2);
         assert_eq!(&*opened.borrow(), &["app://settings", "app://settings"]);
         assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn a_provided_focus_handle_is_tracked_and_observed(cx: &mut TestAppContext) {
+        struct Tracked(FocusHandle);
+
+        impl Render for Tracked {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Link::new("tracked")
+                    .track_focus(&self.0)
+                    .size(px(100.))
+                    .on_activate(|_, _, _| {})
+            }
+        }
+
+        let mut created = None;
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            let handle = cx.focus_handle();
+            created = Some(handle.clone());
+            Tracked(handle)
+        });
+        let handle = created.unwrap();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let bounds = cx.update(|window, _| {
+            crate::test_support::find(window, &[], &"tracked".into())
+                .expect("the link is observed under its id")
+                .bounds()
+        });
+        cx.simulate_click(bounds.center(), Modifiers::default());
+        cx.update(|window, _| {
+            assert!(handle.is_focused(window));
+            let link = crate::test_support::find(window, &[], &"tracked".into()).unwrap();
+            assert_eq!(link.focused(), Some(true));
+        });
     }
 
     #[gpui::test]

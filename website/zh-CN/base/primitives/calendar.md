@@ -38,9 +38,24 @@ CalendarState 保存可见月份和选择；回调负责同步受控值。
 
 <<< ../../../../crates/base/examples/showcase/components/calendar.rs{rust}
 
+## 键盘
+
+Calendar 是一个 Tab 停靠点。在日视图中，键盘移动当前聚焦的日期：
+
+| 按键 | 操作 |
+| --- | --- |
+| Left / Right | 前一天 / 后一天 |
+| Up / Down | 上一周 / 下一周 |
+| PageUp / PageDown | 上个月 / 下个月，日期相同（不存在时取当月最后一天） |
+| Shift-PageUp / Shift-PageDown | 上一年 / 下一年 |
+| Home / End | 本周第一天 / 最后一天，以 `first_day_of_week` 为准 |
+| Enter / Space | 选中聚焦的日期 |
+
+显示的月份随聚焦日期翻动。按天或按周移动时会跳过禁用日期；其他移动会停在离目标最近的可用日期上，因此使用 `Matcher::interval(min, max)` 这类禁用规则时，焦点会停在边界上。日历持有键盘焦点时，`CalendarItemState::is_focused` 标记聚焦的日期，用于绘制焦点环；`CalendarState::focused_date` 和 `set_focused_date` 用于读取和移动它。按键绑定位于 `Calendar` key context 中。
+
 ## 可访问性
 
-保留日期网格语义、方向键导航、焦点与选中状态。
+每个月是一个由行组成的 grid：星期名称是列标题，日期是以 ISO 日期命名的单元格；被选中或位于范围内的日期标记为已选中，被禁用规则排除的日期标记为禁用。日历持有焦点时，聚焦的日期作为 active descendant 报告给辅助技术。
 
 ## 注意事项
 

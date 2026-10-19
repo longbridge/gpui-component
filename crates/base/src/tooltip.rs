@@ -13,6 +13,7 @@ const TOOLTIP_PRIORITY: usize = 200;
 const WINDOW_MARGIN: Pixels = px(4.);
 
 type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
+type OpenChangeHandler = Rc<dyn Fn(&bool, &mut App)>;
 type TooltipRenderer = Rc<dyn Fn(AnyView, TooltipTransition, &mut Window, &mut App) -> AnyElement>;
 
 /// An unstyled tooltip popup.
@@ -120,6 +121,7 @@ pub struct TooltipRequest {
     trigger_bounds: Bounds<Pixels>,
     preferred_placement: Option<Placement>,
     show_delay: Option<Duration>,
+    on_open_change: Option<OpenChangeHandler>,
 }
 
 impl TooltipRequest {
@@ -132,6 +134,7 @@ impl TooltipRequest {
             trigger_bounds,
             preferred_placement: None,
             show_delay: None,
+            on_open_change: None,
         }
     }
 
@@ -149,6 +152,17 @@ impl TooltipRequest {
     /// Overrides [`TooltipDefaults::show_delay`] for this trigger.
     pub fn with_show_delay(mut self, delay: Duration) -> Self {
         self.show_delay = Some(delay);
+        self
+    }
+
+    /// Reports when this trigger's tooltip shows (`true`) and when it is
+    /// hidden or replaced by another trigger's (`false`). A request from the
+    /// same trigger bounds while its tooltip shows reports nothing.
+    ///
+    /// The overlay can hide without a window ([`TooltipOverlay::hide`]), so
+    /// the callback takes only the app; it runs after the overlay's update.
+    pub fn with_on_open_change(mut self, callback: impl Fn(&bool, &mut App) + 'static) -> Self {
+        self.on_open_change = Some(Rc::new(callback));
         self
     }
 }
@@ -212,6 +226,29 @@ impl TooltipOverlay {
         self.epoch
     }
 
+    /// Shows `content` in place of the current tooltip, reporting the
+    /// change to the triggers whose tooltip hid or showed.
+    fn replace_content(&mut self, content: Option<TooltipRequest>, cx: &mut Context<Self>) {
+        let previous = std::mem::replace(&mut self.content, content);
+        let same_trigger = matches!(
+            (&previous, &self.content),
+            (Some(previous), Some(current)) if previous.trigger_bounds == current.trigger_bounds
+        );
+        if same_trigger {
+            return;
+        }
+        let closed = previous.and_then(|previous| previous.on_open_change);
+        let opened = self
+            .content
+            .as_ref()
+            .and_then(|content| content.on_open_change.clone());
+        for (callback, open) in [(closed, false), (opened, true)] {
+            if let Some(callback) = callback {
+                cx.defer(move |cx| callback(&open, cx));
+            }
+        }
+    }
+
     pub fn request_show(
         &mut self,
         content: TooltipRequest,
@@ -230,7 +267,7 @@ impl TooltipOverlay {
         let was_visible = self.content.is_some();
         if was_visible || self.had_recent_tooltip || show_delay.is_zero() {
             self.previous_bounds = self.content.as_ref().map(|content| content.trigger_bounds);
-            self.content = Some(content);
+            self.replace_content(Some(content), cx);
             self.show_task = None;
             self.is_switching = was_visible;
             self.animation_epoch += 1;
@@ -243,7 +280,7 @@ impl TooltipOverlay {
             cx.background_executor().timer(show_delay).await;
             let _ = this.update_in(cx, |this, _, cx| {
                 if this.epoch == epoch {
-                    this.content = Some(content);
+                    this.replace_content(Some(content), cx);
                     this.previous_bounds = None;
                     this.is_switching = false;
                     this.animation_epoch += 1;
@@ -265,7 +302,7 @@ impl TooltipOverlay {
             cx.background_executor().timer(grace_period).await;
             let _ = this.update_in(cx, |this, _, cx| {
                 if this.epoch == epoch {
-                    this.content = None;
+                    this.replace_content(None, cx);
                     this.previous_bounds = None;
                     this.had_recent_tooltip = false;
                     cx.notify();
@@ -280,7 +317,7 @@ impl TooltipOverlay {
             || self.had_recent_tooltip
             || self.show_task.is_some()
             || self.hide_task.is_some();
-        self.content = None;
+        self.replace_content(None, cx);
         self.previous_bounds = None;
         self.had_recent_tooltip = false;
         self.is_switching = false;
@@ -461,5 +498,42 @@ mod tests {
                 });
             });
         }
+    }
+
+    #[gpui::test]
+    fn open_changes_reach_the_triggers_whose_tooltip_shows_or_hides(cx: &mut gpui::TestAppContext) {
+        let (state, cx) = cx.add_window_view(|_, _| TooltipOverlay::new());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let changes = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let request = |name: &'static str, x: f32| {
+            let changes = changes.clone();
+            TooltipRequest::new(bounds(x, 0., 20., 20.), |_, cx| {
+                cx.new(|_| gpui::Empty).into()
+            })
+            .with_show_delay(Duration::ZERO)
+            .with_on_open_change(move |open, _| changes.borrow_mut().push((name, *open)))
+        };
+        let show = |request: TooltipRequest, cx: &mut gpui::VisualTestContext| {
+            cx.update(|window, cx| {
+                state.update(cx, |tooltip, cx| tooltip.request_show(request, window, cx))
+            });
+            cx.run_until_parked();
+        };
+
+        show(request("a", 0.), cx);
+        assert_eq!(*changes.borrow(), [("a", true)]);
+        // The same trigger again: still open, nothing to report.
+        show(request("a", 0.), cx);
+        assert_eq!(*changes.borrow(), [("a", true)]);
+        // Another trigger takes over.
+        show(request("b", 40.), cx);
+        assert_eq!(*changes.borrow(), [("a", true), ("a", false), ("b", true)]);
+
+        cx.update(|_, cx| state.update(cx, |tooltip, cx| tooltip.hide(cx)));
+        cx.run_until_parked();
+        assert_eq!(
+            *changes.borrow(),
+            [("a", true), ("a", false), ("b", true), ("b", false)]
+        );
     }
 }

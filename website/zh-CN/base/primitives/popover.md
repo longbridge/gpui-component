@@ -35,10 +35,17 @@ Base 的 offset 默认为零。`Top*` 在下方，`Bottom*` 在上方，
 `LeftCenter` 在右侧，`RightCenter` 在左侧。anchor 描述弹层自身的锚点。
 窗口边界限制不会翻转弹层或更改 anchor。
 
+弹层锚定到触发器容器，也就是 `Popover` 自身样式所作用的元素。在块级父元素中，这个容器会撑满父元素宽度；
+将它放在 flex 行中（或为它指定宽度），弹层才会锚定到触发器本身。
+
 `on_position` 在内容 prepaint 前提供最终弹层和触发器边界，供自定义绘制使用。
-Base 不绘制箭头；带样式的 Component Popover 提供 `.arrow(true)`（默认 `false`），箭头跟随 anchor 对齐。
+`.arrow(PopupArrow::new(px(6.)))` 从内容边缘绘制一个箭头，指向 anchor 所指的触发器位置，
+箭头底边避开 `.corner_radius(..)` 指定的圆角。箭头本身不带样式：背景色填充箭头，边框色描出两条斜边。
+箭头位于内容之外，因此 `offset` 需要包含箭头深度。`ArrowGeometry` 提供同一套几何信息（所在边、顶点、边界），
+可用来自行绘制箭头。带样式的 Component Popover 通过 `.arrow(true)` 绘制这个箭头。
 
 触发器切换打开状态；点击外部或 Escape 可按配置关闭。
+`.disabled(true)` 会忽略触发器的点击和按键，并让弹层保持关闭，即使 `open(true)` 要求打开也是如此；触发器元素本身也应同时禁用。
 
 受控状态应保存在父渲染类型或 GPUI entity 中；在回调中更新并调用 `cx.notify()`，不要在每次渲染时重建持久 entity。
 

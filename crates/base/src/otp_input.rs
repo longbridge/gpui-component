@@ -1,8 +1,9 @@
-use crate::{StyledExt as _, input::blink_cursor::BlinkCursor};
+use crate::{StyledExt as _, TestSupportExt as _, input::blink_cursor::BlinkCursor};
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render, RenderOnce,
-    SharedString, StyleRefinement, Styled, Subscription, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, AppContext as _, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
+    RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 /// A semantic notification from a one-time-code state.
@@ -163,6 +164,7 @@ impl Render for OtpState {
 /// Unstyled OTP interaction root. Applications provide the visual cells as children.
 #[derive(IntoElement)]
 pub struct OtpInput {
+    id: Option<ElementId>,
     state: Entity<OtpState>,
     disabled: bool,
     style: StyleRefinement,
@@ -172,12 +174,20 @@ pub struct OtpInput {
 impl OtpInput {
     pub fn new(state: &Entity<OtpState>) -> Self {
         Self {
+            id: None,
             state: state.clone(),
             disabled: false,
             style: StyleRefinement::default(),
             children: vec![],
         }
     }
+    /// Sets the element identity of the root. The default is derived from the
+    /// state's entity.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -196,11 +206,17 @@ impl ParentElement for OtpInput {
 impl RenderOnce for OtpInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state;
+        let id = self
+            .id
+            .unwrap_or_else(|| ("base-otp-input", state.entity_id()).into());
+        // A press focuses the root, so typing goes straight into the code. A
+        // disabled root is neither focused by a press nor a Tab stop.
         div()
-            .id(("base-otp-input", state.entity_id()))
-            .track_focus(&state.read(cx).focus_handle)
+            .id(id)
+            .test_support()
             .when(!self.disabled, |this| {
-                this.on_key_down(window.listener_for(&state, OtpState::on_key_down))
+                this.track_focus(&state.read(cx).focus_handle)
+                    .on_key_down(window.listener_for(&state, OtpState::on_key_down))
             })
             .children(self.children)
             .refine_style(&self.style)
@@ -209,7 +225,57 @@ impl RenderOnce for OtpInput {
 
 #[cfg(test)]
 mod tests {
-    use super::OtpState;
+    use super::{OtpInput, OtpState};
+    use gpui::{
+        AppContext as _, Context, Entity, IntoElement, Modifiers, Render, Styled as _,
+        TestAppContext, VisualTestContext, Window, px,
+    };
+
+    struct OtpHarness {
+        state: Entity<OtpState>,
+        disabled: bool,
+    }
+
+    impl Render for OtpHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            OtpInput::new(&self.state)
+                .id("otp")
+                .disabled(self.disabled)
+                .size(px(100.))
+        }
+    }
+
+    #[gpui::test]
+    fn a_press_focuses_only_an_enabled_code(cx: &mut TestAppContext) {
+        for disabled in [false, true] {
+            let mut created = None;
+            let window = cx.update(|cx| {
+                cx.open_window(Default::default(), |window, cx| {
+                    let state = cx.new(|cx| OtpState::new(4, window, cx));
+                    created = Some(state.clone());
+                    cx.new(|_| OtpHarness { state, disabled })
+                })
+                .unwrap()
+            });
+            let state = created.unwrap();
+            let cx = &mut VisualTestContext::from_window(window.into(), cx);
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            let bounds = cx.update(|window, _| {
+                crate::test_support::find(window, &[], &"otp".into())
+                    .expect("the code is observed under its id")
+                    .bounds()
+            });
+            cx.simulate_click(bounds.center(), Modifiers::default());
+            cx.update(|window, cx| {
+                assert_eq!(
+                    state.read(cx).focus_handle.is_focused(window),
+                    !disabled,
+                    "disabled {disabled}"
+                );
+            });
+        }
+    }
 
     #[test]
     fn keyboard_editing_backspaces_and_stops_at_length() {

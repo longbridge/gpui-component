@@ -35,6 +35,12 @@ The authoritative module is [`components/hover_card.rs`](https://github.com/long
 ## State and events
 
 Pointer or focus entry schedules opening and exit schedules dismissal.
+`on_open_change` reports each change. Pass `.open(..)` to control it: the card
+then shows the owner's state, which the owner updates from `on_open_change`; a
+change from the owner cancels a pending hover delay.
+
+`.offset(..)` sets the gap from the trigger, and `.arrow(PopupArrow::new(..))`
+draws an unstyled arrow toward it, as on [Popover](./popover.md).
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 

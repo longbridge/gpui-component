@@ -2,12 +2,12 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ElementId, FocusHandle, IntoElement, KeyBinding, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
+    ScrollHandle, SharedString, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
     Select,
-    actions::{Cancel, Confirm, SelectDown, SelectUp},
+    actions::{Cancel, Confirm, SelectDown, SelectPageDown, SelectPageUp, SelectUp},
     styled::StyledExt as _,
 };
 
@@ -17,6 +17,8 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("pageup", SelectPageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", SelectPageDown, Some(CONTEXT)),
         KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
         KeyBinding::new(
             "secondary-enter",
@@ -29,11 +31,18 @@ pub(crate) fn init(cx: &mut App) {
 
 type OpenChangeHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 type ActionHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+type HighlightHandler = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 
 /// An unstyled controlled combobox root.
 ///
 /// Applications own the trigger, popup, searchable collection, selection, and
 /// appearance. This root owns combobox semantics and keyboard focus transfer.
+///
+/// A combobox that supplies its matching [`options`](Self::options) lets this
+/// root move the highlighted option with Up, Down, Page Up and Page Down while
+/// its query field keeps the focus, as a combobox's list highlights through
+/// its active descendant. Home, End and typed letters stay with the query
+/// field. Tab and Shift-Tab close an open combobox and move the focus on.
 #[derive(IntoElement)]
 pub struct Combobox {
     id: ElementId,
@@ -46,6 +55,11 @@ pub struct Combobox {
     on_open_change: Option<OpenChangeHandler>,
     on_confirm: Option<ActionHandler>,
     on_dismiss: Option<ActionHandler>,
+    options: Option<Vec<SharedString>>,
+    selected_ix: Option<usize>,
+    highlighted_ix: Option<usize>,
+    on_highlight: Option<HighlightHandler>,
+    scroll_handle: Option<ScrollHandle>,
 }
 
 impl Combobox {
@@ -61,6 +75,11 @@ impl Combobox {
             on_open_change: None,
             on_confirm: None,
             on_dismiss: None,
+            options: None,
+            selected_ix: None,
+            highlighted_ix: None,
+            on_highlight: None,
+            scroll_handle: None,
         }
     }
 
@@ -107,6 +126,46 @@ impl Combobox {
         self.on_dismiss = Some(Rc::new(handler));
         self
     }
+
+    /// Supplies the labels of the options the open list shows, in order: the
+    /// ones matching the current query.
+    ///
+    /// With options, Up, Down, Page Up and Page Down move the highlighted
+    /// option, opening a closed combobox first, even while the query field
+    /// has the focus.
+    pub fn options(mut self, labels: impl IntoIterator<Item = impl Into<SharedString>>) -> Self {
+        self.options = Some(labels.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Sets the index of the option holding the committed value.
+    pub fn selected_index(mut self, ix: Option<usize>) -> Self {
+        self.selected_ix = ix;
+        self
+    }
+
+    /// Sets the application-controlled index of the highlighted option.
+    pub fn highlighted_index(mut self, ix: Option<usize>) -> Self {
+        self.highlighted_ix = ix;
+        self
+    }
+
+    /// Handles requests to highlight the option at an index.
+    pub fn on_highlight(
+        mut self,
+        handler: impl Fn(usize, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_highlight = Some(Rc::new(handler));
+        self
+    }
+
+    /// Scrolls the highlighted option into view in the element tracking this
+    /// handle, whose children must be the options in order. The pointer
+    /// moving over an option highlights it too.
+    pub fn scroll_handle(mut self, scroll_handle: &ScrollHandle) -> Self {
+        self.scroll_handle = Some(scroll_handle.clone());
+        self
+    }
 }
 
 impl Styled for Combobox {
@@ -140,6 +199,17 @@ impl RenderOnce for Combobox {
             .when_some(self.on_dismiss, |this, handler| {
                 this.on_dismiss(move |window, cx| handler(window, cx))
             })
+            .when_some(self.options, |this, labels| this.options(labels))
+            .selected_index(self.selected_ix)
+            .highlighted_index(self.highlighted_ix)
+            .when_some(self.on_highlight, |this, handler| {
+                this.on_highlight(move |ix, window, cx| handler(ix, window, cx))
+            })
+            .when_some(self.scroll_handle, |this, handle| {
+                this.scroll_handle(&handle)
+            })
+            // Typed letters belong to the query field.
+            .typeahead(false)
             .children(self.children)
             .refine_style(&self.style)
     }
@@ -148,9 +218,10 @@ impl RenderOnce for Combobox {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::InputState;
     use gpui::{
-        Context, Focusable, InteractiveElement as _, Render, TestAppContext, VisualTestContext,
-        div, px,
+        AppContext as _, Context, Entity, Focusable, InteractiveElement as _, Render,
+        TestAppContext, VisualTestContext, div, px,
     };
     use std::sync::{Arc, Mutex};
 
@@ -242,5 +313,58 @@ mod tests {
                 &["confirm"]
             );
         });
+    }
+    /// An open combobox whose query field keeps the focus.
+    struct QueryHarness {
+        query: Entity<InputState>,
+        highlighted: Option<usize>,
+    }
+
+    impl Render for QueryHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let state = cx.entity();
+            Combobox::new("combobox")
+                .open(true)
+                .content_focus_handle(&self.query.focus_handle(cx))
+                .options(["Apple", "Banana", "Cherry"])
+                .highlighted_index(self.highlighted)
+                .on_highlight(move |ix, _, cx| {
+                    state.update(cx, |state, cx| {
+                        state.highlighted = Some(ix);
+                        cx.notify();
+                    });
+                })
+                .child(crate::Input::new(&self.query))
+        }
+    }
+
+    /// Up, Down and the page keys move the highlight past the focused query
+    /// field, which still takes the typing.
+    #[gpui::test]
+    fn arrows_move_the_highlight_from_the_query_field(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (state, cx) = cx.add_window_view(|window, cx| QueryHarness {
+            query: cx.new(|cx| InputState::new(window, cx)),
+            highlighted: None,
+        });
+        let query = cx.update(|window, cx| {
+            let query = state.read(cx).query.clone();
+            query.focus_handle(cx).focus(window, cx);
+            window.draw(cx).clear(cx);
+            query
+        });
+
+        cx.simulate_keystrokes("down down");
+        assert_eq!(state.read_with(cx, |state, _| state.highlighted), Some(1));
+        cx.simulate_keystrokes("up");
+        assert_eq!(state.read_with(cx, |state, _| state.highlighted), Some(0));
+        // Without a scroll handle to measure a page, a page is every option.
+        cx.simulate_keystrokes("pagedown");
+        assert_eq!(state.read_with(cx, |state, _| state.highlighted), Some(2));
+        cx.simulate_keystrokes("pageup");
+        assert_eq!(state.read_with(cx, |state, _| state.highlighted), Some(0));
+        cx.simulate_keystrokes("a n");
+        assert_eq!(query.read_with(cx, |query, _| query.value()), "an");
+        cx.update(|window, cx| assert!(query.focus_handle(cx).is_focused(window)));
     }
 }

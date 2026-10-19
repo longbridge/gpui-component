@@ -13,6 +13,9 @@ pub trait ElementExt: ParentElement + Sized {
     }
 
     /// Invokes `callback` during prepaint with this element's resolved bounds.
+    ///
+    /// The bounds are those of the element's padding box, whatever its
+    /// display or the children before the observer.
     fn on_prepaint<F>(self, callback: F) -> Self
     where
         F: FnOnce(Bounds<Pixels>, &mut Window, &mut App) + 'static,
@@ -22,7 +25,11 @@ pub trait ElementExt: ParentElement + Sized {
                 move |bounds, window, cx| callback(bounds, window, cx),
                 |_, _, _, _| {},
             )
+            // Without insets, an absolute child sits at its static position,
+            // after the children before it in a block parent.
             .absolute()
+            .top_0()
+            .left_0()
             .size_full(),
         )
     }

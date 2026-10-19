@@ -1,24 +1,28 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, Interactivity, IntoElement,
-    MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
-    relative,
+    AnyElement, App, Axis, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement,
+    Interactivity, IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, accesskit, div,
+    prelude::FluentBuilder as _, relative,
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
+use crate::{
+    StateStyle, StyledExt as _, TestSupportExt as _,
+    a11y_disabled::A11yDisabledExt as _,
+    roving_focus::{Keys, Member, RovingFocus, RovingItem},
+};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
-/// An unstyled tab that owns pointer activation and accessibility behavior.
+/// An unstyled tab that owns activation, focus and accessibility behavior.
 ///
-/// Tabs do not participate in keyboard focus by themselves. A compound tab
-/// list may add keyboard navigation when that behavior is introduced.
-// TODO: Add compound keyboard navigation with roving focus, arrow keys,
-// Home/End, and Enter/Space activation before treating Tabs as a complete
-// desktop tab-list primitive.
+/// A tab takes keyboard focus but not pointer focus: clicking a tab selects
+/// it and leaves focus where it was, so a document tab bar never takes focus
+/// from the document. Enter and Space activate the focused tab. Inside
+/// [`Tabs`], the tab list is one Tab stop and the arrow keys move between
+/// its tabs.
 #[derive(IntoElement)]
 pub struct Tab {
     id: ElementId,
@@ -32,6 +36,9 @@ pub struct Tab {
     accessibility_label: Option<SharedString>,
     position_in_set: Option<usize>,
     size_of_set: Option<usize>,
+    tab_index: isize,
+    tab_stop: bool,
+    provided_focus_handle: Option<FocusHandle>,
 }
 
 impl Tab {
@@ -48,6 +55,9 @@ impl Tab {
             accessibility_label: None,
             position_in_set: None,
             size_of_set: None,
+            tab_index: 0,
+            tab_stop: true,
+            provided_focus_handle: None,
         }
     }
 
@@ -91,6 +101,36 @@ impl Tab {
     pub fn styles(mut self, build: impl FnOnce(TabStyles) -> TabStyles) -> Self {
         self.semantic_styles = build(self.semantic_styles);
         self
+    }
+
+    /// Uses a caller-owned focus handle instead of creating keyed state.
+    ///
+    /// A styled tab needs this to draw its own focus ring from the same
+    /// handle the primitive tracks.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.provided_focus_handle = Some(focus_handle.clone());
+        self
+    }
+
+    pub fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
+        self
+    }
+
+    /// Sets whether the tab is a Tab stop. Inside [`Tabs`], the list keeps a
+    /// single Tab stop on one of the tabs that allow it.
+    pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
+        self.provided_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        })
     }
 
     fn resolved_style(&self) -> StyleRefinement {
@@ -147,11 +187,20 @@ impl InteractiveElement for Tab {
 impl StatefulInteractiveElement for Tab {}
 
 impl RenderOnce for Tab {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
+        let selected = self.selected;
         let style = self.resolved_style();
+        // Keep the keyed handle alive while disabled, so focus state survives.
+        let focus_handle = self
+            .focus_handle(window, cx)
+            .tab_index(self.tab_index)
+            .tab_stop(self.tab_stop);
+        let focus_handle = (!disabled).then_some(focus_handle);
+        let on_click = (!disabled).then_some(self.on_click).flatten();
 
-        self.base
+        let tab = self
+            .base
             .id(self.id)
             .test_support()
             .role(Role::Tab)
@@ -170,38 +219,85 @@ impl RenderOnce for Tab {
                 this.aria_position_in_set(position)
             })
             .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
+            .when_some(focus_handle.as_ref(), |this, focus_handle| {
+                this.track_focus(focus_handle)
+            })
+            // Stopping the press here also keeps the window from moving focus
+            // to the tab.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .when_some(
-                (!disabled).then_some(self.on_click).flatten(),
-                |this, on_click| {
-                    this.on_click(move |event, window, cx| on_click(event, window, cx))
-                },
-            )
+            .when_some(on_click.clone(), |this, on_click| {
+                this.on_click(move |event, window, cx| on_click(event, window, cx))
+            })
             .children(self.children)
             .refine_style(&style)
-            .a11y_disabled(disabled)
+            .a11y_disabled(disabled);
+
+        RovingItem::new(
+            Member::Tab,
+            tab,
+            focus_handle,
+            selected,
+            on_click.map(|on_click| on_click as _),
+        )
     }
 }
 
 /// An unstyled collection root for [`Tab`] elements.
 ///
-/// Controlled selection and activation are expressed directly by its child
-/// tabs. The root supplies collection accessibility without introducing a
-/// context hierarchy or new keyboard behavior.
+/// Controlled selection and activation are expressed directly by its tabs,
+/// which may sit anywhere below the list. The list owns the keyboard: it is
+/// one Tab stop, held by the focused tab, otherwise the selected tab,
+/// otherwise the first. The arrow keys of its axis move focus to the previous
+/// or next enabled tab, wrapping at either end, and Home and End move to the
+/// first and last. Moving focus selects the tab, as platform tab views do,
+/// unless [`Tabs::activate_on_focus`] is turned off; then Enter or Space
+/// selects the focused tab.
 #[derive(IntoElement)]
 pub struct Tabs {
+    id: ElementId,
     base: gpui::Stateful<Div>,
     style: StyleRefinement,
+    axis: Axis,
+    activate_on_focus: bool,
+    focus_handle: Option<FocusHandle>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
 impl Tabs {
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
-            base: div().id(id),
+            base: div().id(id.clone()),
+            id,
             style: StyleRefinement::default(),
+            axis: Axis::Horizontal,
+            activate_on_focus: true,
+            focus_handle: None,
             children: SmallVec::new(),
         }
+    }
+
+    /// Sets the axis the tabs run along, which picks the arrow keys that move
+    /// between them. Defaults to horizontal.
+    pub fn axis(mut self, axis: Axis) -> Self {
+        self.axis = axis;
+        self
+    }
+
+    /// Sets whether moving focus with the keyboard also selects the tab.
+    /// Defaults to `true`; turn it off when showing a tab's content is slow.
+    pub fn activate_on_focus(mut self, activate_on_focus: bool) -> Self {
+        self.activate_on_focus = activate_on_focus;
+        self
+    }
+
+    /// Gives the group a focus handle of its own. Focusing it moves focus on
+    /// to the item holding the group's Tab stop, and it contains the focus
+    /// while any item has it, so an owner that keeps one focus handle per
+    /// control can treat the group as one.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.focus_handle = Some(focus_handle.clone());
+        self
     }
 }
 
@@ -226,11 +322,19 @@ impl InteractiveElement for Tabs {
 impl StatefulInteractiveElement for Tabs {}
 
 impl RenderOnce for Tabs {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base
-            .role(Role::TabList)
-            .children(self.children)
-            .refine_style(&self.style)
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let keys = Keys::tabs(self.axis, self.activate_on_focus);
+        RovingFocus::new(&self.id, keys, window, cx).group(
+            self.base
+                .role(Role::TabList)
+                .aria_orientation(match self.axis {
+                    Axis::Horizontal => accesskit::Orientation::Horizontal,
+                    Axis::Vertical => accesskit::Orientation::Vertical,
+                })
+                .children(self.children)
+                .refine_style(&self.style),
+            self.focus_handle,
+        )
     }
 }
 
@@ -425,5 +529,138 @@ mod tests {
         let (_, cx) = cx.add_window_view(move |_, _| Probe(captured));
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert_eq!(result.lock().unwrap().take().unwrap().role(), Role::TabList);
+    }
+
+    /// Four tabs, the third disabled, along `axis`, then a focusable element.
+    struct ListHarness {
+        axis: gpui::Axis,
+        activate_on_focus: bool,
+        selected: usize,
+        tabs: Vec<gpui::FocusHandle>,
+        after: gpui::FocusHandle,
+    }
+
+    impl Render for ListHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let view = cx.entity().downgrade();
+            div()
+                .child(
+                    Tabs::new("tabs")
+                        .axis(self.axis)
+                        .activate_on_focus(self.activate_on_focus)
+                        .children(self.tabs.iter().enumerate().map(|(index, focus)| {
+                            let view = view.clone();
+                            Tab::new(index)
+                                .track_focus(focus)
+                                .selected(self.selected == index)
+                                .disabled(index == 2)
+                                .size(px(20.))
+                                .on_click(move |_, _, cx| {
+                                    view.update(cx, |this, cx| {
+                                        this.selected = index;
+                                        cx.notify();
+                                    })
+                                    .ok();
+                                })
+                        })),
+                )
+                .child(div().id("after").size(px(20.)).track_focus(&self.after))
+        }
+    }
+
+    fn list(
+        cx: &mut gpui::TestAppContext,
+        axis: gpui::Axis,
+        activate_on_focus: bool,
+    ) -> (gpui::Entity<ListHarness>, &mut VisualTestContext) {
+        let (view, cx) = cx.add_window_view(|_, cx| ListHarness {
+            axis,
+            activate_on_focus,
+            selected: 1,
+            tabs: (0..4).map(|_| cx.focus_handle()).collect(),
+            after: cx.focus_handle().tab_stop(true),
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (view, cx)
+    }
+
+    /// Moves focus as Tab (or Shift-Tab) would, which `Root` binds in an app.
+    fn tab(cx: &mut VisualTestContext, forward: bool) {
+        cx.update(|window, cx| {
+            if forward {
+                window.focus_next(cx);
+            } else {
+                window.focus_prev(cx);
+            }
+        });
+        cx.run_until_parked();
+    }
+
+    /// The focused tab and the selected one.
+    fn state(
+        view: &gpui::Entity<ListHarness>,
+        cx: &mut VisualTestContext,
+    ) -> (Option<usize>, usize) {
+        cx.update(|window, cx| {
+            let harness = view.read(cx);
+            (
+                harness
+                    .tabs
+                    .iter()
+                    .position(|focus| focus.is_focused(window)),
+                harness.selected,
+            )
+        })
+    }
+
+    #[gpui::test]
+    fn the_list_is_one_tab_stop_and_arrows_select(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = list(cx, gpui::Axis::Horizontal, true);
+        tab(cx, true);
+        assert_eq!(state(&view, cx), (Some(1), 1));
+
+        // The disabled third tab is skipped, and the ends wrap.
+        cx.simulate_keystrokes("right");
+        assert_eq!(state(&view, cx), (Some(3), 3));
+        cx.simulate_keystrokes("right");
+        assert_eq!(state(&view, cx), (Some(0), 0));
+        cx.simulate_keystrokes("end");
+        assert_eq!(state(&view, cx), (Some(3), 3));
+        cx.simulate_keystrokes("home");
+        assert_eq!(state(&view, cx), (Some(0), 0));
+        // A horizontal list leaves Up and Down alone.
+        cx.simulate_keystrokes("down up");
+        assert_eq!(state(&view, cx), (Some(0), 0));
+
+        tab(cx, true);
+        assert!(cx.update(|window, cx| view.read(cx).after.is_focused(window)));
+        tab(cx, false);
+        assert_eq!(state(&view, cx), (Some(0), 0));
+    }
+
+    #[gpui::test]
+    fn a_vertical_list_without_activation_on_focus_selects_on_enter(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = list(cx, gpui::Axis::Vertical, false);
+        tab(cx, true);
+        cx.simulate_keystrokes("down");
+        assert_eq!(state(&view, cx), (Some(3), 1));
+        cx.simulate_keystrokes("right");
+        assert_eq!(state(&view, cx), (Some(3), 1));
+
+        let keystroke = gpui::Keystroke::parse("enter").unwrap();
+        cx.simulate_event(gpui::KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(gpui::KeyUpEvent { keystroke });
+        assert_eq!(state(&view, cx), (Some(3), 3));
+    }
+
+    #[gpui::test]
+    fn clicking_a_tab_selects_it_without_taking_focus(cx: &mut gpui::TestAppContext) {
+        let (view, cx) = list(cx, gpui::Axis::Horizontal, true);
+        cx.simulate_click(point(px(5.), px(5.)), Modifiers::default());
+        assert_eq!(state(&view, cx), (None, 0));
     }
 }

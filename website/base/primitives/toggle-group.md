@@ -36,6 +36,10 @@ The group coordinates single or multiple selection while children reflect group 
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 
+## Keyboard
+
+`ToggleGroup` owns the keyboard for the `Toggle`s below it, wherever a skin places them. The group is one Tab stop: Tab lands on the focused toggle, otherwise the toggle focused last, otherwise the first pressed one, otherwise the first enabled toggle. The arrow keys of its `axis` move focus to the previous or next enabled toggle, wrapping at either end, and Home and End move to the first and last. Moving focus presses nothing; Space and Enter press the focused toggle. `ToggleGroup::track_focus(&handle)` gives the group one handle of its own: focusing it moves focus on to the toggle holding the Tab stop.
+
 ## Complete Rust example
 
 The complete implementation used by the runnable showcase is embedded directly from Rust source:

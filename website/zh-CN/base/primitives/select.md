@@ -38,6 +38,23 @@ use gpui_kit::base::{Select};
 
 <<< ../../../../crates/base/examples/showcase/components/select.rs{rust}
 
+## 键盘
+
+Enter、Space 与方向键会打开收起的 select，并把焦点移到 `content_focus_handle`；
+Escape 关闭它并把焦点还给 trigger。Tab 与 Shift-Tab 会像 Escape 一样关闭展开的 select、
+不做选择，然后照常从 trigger 继续移动焦点。
+
+提供 `.options(labels)` 后，根节点还会负责展开列表内的导航。Up 与 Down 移动高亮项，
+到两端即停止；Page Up 与 Page Down 按一页移动，即列表可见的行数（没有可供测量的
+`.scroll_handle(...)` 时为全部选项）；Home 与 End 跳到第一项和最后一项。select 收起时，这些键会先打开它，
+方向键从 `.selected_index(...)` 开始。输入标签的开头会高亮下一个匹配项，并在收起时打开
+select；重复同一个字母会在以它开头的选项间依次切换。在上一个字母后一秒内输入的 Space 会继续这次搜索，
+因此可以输入含空格的标签；否则 Space 执行激活。应用通过 `.on_highlight(...)`
+同步 `.highlighted_index(...)`，用 `aria_active_descendant()` 标记该选项，并在
+`.on_confirm(...)` 中提交它；该回调运行时焦点在内容上，因此可以关闭列表并聚焦 trigger。
+`.scroll_handle(...)` 会把高亮项滚动到可见区域；提供它后，指针移到某个选项上也会高亮该选项。不提供 options 时，这些键会继续交给
+获得焦点的内容，由它自行导航。
+
 ## 可访问性
 
 在受控根节点上设置 `.accessibility_label(...)`，并把 `.accessibility_value(...)`

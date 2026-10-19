@@ -47,6 +47,14 @@ Slider::new(&slider_state)
     .accessibility_label("Corner radius")
 ```
 
+## 键盘
+
+Slider 是一个 Tab 停靠点。获得焦点后，Right 和 Up 将值增加一个步长，Left 和 Down 减少一个步长，Page Up 和 Page Down 一次移动十个步长，Home 和 End 分别移到最小值和最大值。每次按键都会先发出 `SliderEvent::Change`，再发出 `SliderEvent::Release`，与单击一致；值已在边界时不发出事件。无障碍 Increment、Decrement 操作也会发出同样的事件。
+
+范围模式下，按键移动指针最后移动过的那个滑块，在此之前移动结束端滑块；两个滑块不会越过彼此。`SliderState::is_keyboard_on_start()` 返回当前由按键移动的是哪个滑块，便于在 Slider 获得焦点时加以标示。禁用的 Slider 不是 Tab 停靠点。
+
+用 `.track_focus(&focus_handle)` 使用自己持有的焦点句柄，用 `.tab_index(...)` 或 `.tab_stop(false)` 调整焦点遍历。
+
 ## 注意事项
 
 在支持的位置使用稳定元素 ID，并在消费端设计系统中验证焦点、悬停、按下、选中、禁用、减少动态效果和高对比度状态。

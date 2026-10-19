@@ -8,7 +8,11 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
+use crate::{
+    StateStyle, StyledExt as _, TestSupportExt as _,
+    a11y_disabled::A11yDisabledExt as _,
+    roving_focus::{Activate, Member, RovingItem},
+};
 
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
@@ -192,13 +196,22 @@ impl StatefulInteractiveElement for Radio {}
 
 impl RenderOnce for Radio {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let focus_handle = self.focus_handle(window, cx);
         let disabled = self.disabled;
         let checked = self.checked;
+        // Keep the keyed handle alive while disabled, so focus state survives.
+        let focus_handle = self
+            .focus_handle(window, cx)
+            .tab_index(self.tab_index)
+            .tab_stop(self.tab_stop);
+        let focus_handle = (!disabled).then_some(focus_handle);
         let style = self.resolved_style();
-        let on_change = self.on_change;
+        let on_change = (!disabled && !checked).then_some(self.on_change).flatten();
+        let activate = on_change.clone().map(|on_change| -> Activate {
+            Rc::new(move |event, window, cx| on_change(true, event, window, cx))
+        });
 
-        self.base
+        let radio = self
+            .base
             .test_support()
             .role(Role::RadioButton)
             .aria_toggled(if checked {
@@ -217,24 +230,19 @@ impl RenderOnce for Radio {
                 this.aria_position_in_set(position)
             })
             .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
-            .when(!disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_index(self.tab_index)
-                        .tab_stop(self.tab_stop),
-                )
+            .when_some(focus_handle.as_ref(), |this, focus_handle| {
+                this.track_focus(focus_handle)
             })
-            .when_some(
-                (!disabled && !checked).then_some(on_change).flatten(),
-                |this, on_change| {
-                    this.on_click(move |event, window, cx| {
-                        on_change(!checked, event, window, cx);
-                    })
-                },
-            )
+            .when_some(on_change, |this, on_change| {
+                this.on_click(move |event, window, cx| {
+                    on_change(!checked, event, window, cx);
+                })
+            })
             .children(self.children)
             .refine_style(&style)
-            .a11y_disabled(disabled)
+            .a11y_disabled(disabled);
+
+        RovingItem::new(Member::Radio, radio, focus_handle, checked, activate)
     }
 }
 

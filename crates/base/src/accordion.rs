@@ -11,12 +11,22 @@ use smallvec::SmallVec;
 use crate::StyledExt as _;
 
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
+type ValueHandler = Rc<dyn Fn(&[usize], &mut Window, &mut App)>;
 
 /// An unstyled accordion root for application-owned items.
+///
+/// Items added with [`Accordion::item`] are indexed by position: when one's
+/// trigger asks to open or close, the accordion reports the requested set of
+/// open items to [`Accordion::on_change`], one item at most unless
+/// [`Accordion::multiple`]. Children added through `ParentElement` are
+/// rendered after them and left to the application.
 #[derive(IntoElement)]
 pub struct Accordion {
     base: crate::ObservedElement<gpui::Stateful<Div>>,
     style: StyleRefinement,
+    items: Vec<AccordionItem>,
+    multiple: bool,
+    on_change: Option<ValueHandler>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
@@ -25,9 +35,61 @@ impl Accordion {
         Self {
             base: div().id(id).test_support(),
             style: StyleRefinement::default(),
+            items: Vec::new(),
+            multiple: false,
+            on_change: None,
             children: SmallVec::new(),
         }
     }
+
+    /// Adds an item indexed by its position among the accordion's items.
+    pub fn item(mut self, item: AccordionItem) -> Self {
+        self.items.push(item);
+        self
+    }
+
+    /// Adds items indexed by their position among the accordion's items.
+    pub fn items(mut self, items: impl IntoIterator<Item = AccordionItem>) -> Self {
+        self.items.extend(items);
+        self
+    }
+
+    /// Sets whether several items may be open at once. The default is `false`:
+    /// opening an item requests the others to close.
+    pub fn multiple(mut self, multiple: bool) -> Self {
+        self.multiple = multiple;
+        self
+    }
+
+    /// Handles a requested change to the open items, by index in item order.
+    pub fn on_change(
+        mut self,
+        handler: impl Fn(&[usize], &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_change = Some(Rc::new(handler));
+        self
+    }
+}
+
+/// The open items after item `index` requests `open`, in item order.
+fn requested_open_items(
+    open_items: &[usize],
+    index: usize,
+    open: bool,
+    multiple: bool,
+) -> Vec<usize> {
+    let mut next = match (open, multiple) {
+        (true, false) => vec![index],
+        (true, true) => open_items.iter().copied().chain([index]).collect(),
+        (false, _) => open_items
+            .iter()
+            .copied()
+            .filter(|ix| *ix != index)
+            .collect(),
+    };
+    next.sort_unstable();
+    next.dedup();
+    next
 }
 
 impl Styled for Accordion {
@@ -57,8 +119,27 @@ impl StatefulInteractiveElement for Accordion {}
 
 impl RenderOnce for Accordion {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let open_items: Rc<[usize]> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| item.open.then_some(index))
+            .collect();
+        let multiple = self.multiple;
+        let on_change = self.on_change;
+        let items = self.items.into_iter().enumerate().map(|(index, item)| {
+            let Some(on_change) = on_change.clone() else {
+                return item;
+            };
+            let open_items = open_items.clone();
+            item.on_trigger_change(move |open, window, cx| {
+                let next = requested_open_items(&open_items, index, open, multiple);
+                on_change(&next, window, cx)
+            })
+        });
         self.base
             .role(Role::Group)
+            .children(items)
             .children(self.children)
             .refine_style(&self.style)
     }
@@ -105,6 +186,24 @@ impl AccordionItem {
 
     pub fn panel(mut self, panel: AccordionPanel) -> Self {
         self.panel = Some(panel);
+        self
+    }
+
+    /// Runs `handler` after the trigger's own change handler.
+    fn on_trigger_change(
+        mut self,
+        handler: impl Fn(bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.header = self.header.map(|mut header| {
+            let own = header.trigger.on_change.take();
+            header.trigger.on_change = Some(Rc::new(move |open, event, window, cx| {
+                if let Some(own) = &own {
+                    own(open, event, window, cx);
+                }
+                handler(open, window, cx);
+            }));
+            header
+        });
         self
     }
 }
@@ -503,5 +602,97 @@ mod tests {
         let nodes = captured.borrow();
         assert_eq!(nodes[0].role(), Role::Heading);
         assert_eq!(nodes[1].role(), Role::Region);
+    }
+
+    #[test]
+    fn requested_open_items_respect_multiple() {
+        assert_eq!(requested_open_items(&[0], 2, true, false), vec![2]);
+        assert_eq!(requested_open_items(&[2], 0, true, true), vec![0, 2]);
+        assert_eq!(requested_open_items(&[0, 2], 2, false, true), vec![0]);
+        assert!(requested_open_items(&[1], 1, false, false).is_empty());
+    }
+
+    struct ItemsHarness {
+        open: [bool; 3],
+        multiple: bool,
+        requested: Rc<RefCell<Vec<Vec<usize>>>>,
+        trigger_requests: Rc<RefCell<Vec<bool>>>,
+    }
+
+    impl Render for ItemsHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let requested = self.requested.clone();
+            Accordion::new("accordion")
+                .multiple(self.multiple)
+                .items(self.open.iter().enumerate().map(|(index, open)| {
+                    let trigger_requests = self.trigger_requests.clone();
+                    AccordionItem::new()
+                        .open(*open)
+                        .disabled(index == 2)
+                        .header(AccordionHeader::new(
+                            AccordionTrigger::new(index)
+                                .w(px(100.))
+                                .h(px(20.))
+                                .on_change(move |open, _, _, _| {
+                                    trigger_requests.borrow_mut().push(open)
+                                }),
+                        ))
+                }))
+                .on_change(move |open_items, _, _| requested.borrow_mut().push(open_items.to_vec()))
+        }
+    }
+
+    fn items_harness(
+        cx: &mut gpui::TestAppContext,
+        open: [bool; 3],
+        multiple: bool,
+    ) -> (
+        &mut VisualTestContext,
+        Rc<RefCell<Vec<Vec<usize>>>>,
+        Rc<RefCell<Vec<bool>>>,
+    ) {
+        let requested = Rc::new(RefCell::new(Vec::new()));
+        let trigger_requests = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let requested = requested.clone();
+            let trigger_requests = trigger_requests.clone();
+            move |_, _| ItemsHarness {
+                open,
+                multiple,
+                requested,
+                trigger_requests,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, requested, trigger_requests)
+    }
+
+    /// Clicks the trigger of item `index`; each is 20px tall, panels closed.
+    fn click_item(cx: &mut VisualTestContext, index: usize) {
+        cx.simulate_click(
+            point(px(10.), px(10. + 20. * index as f32)),
+            Modifiers::default(),
+        );
+    }
+
+    #[gpui::test]
+    fn items_request_one_open_item_unless_multiple(cx: &mut gpui::TestAppContext) {
+        let (cx, requested, trigger_requests) = items_harness(cx, [true, false, false], false);
+        click_item(cx, 1);
+        click_item(cx, 0);
+        assert_eq!(&*requested.borrow(), &[vec![1], vec![]]);
+        // The trigger's own handler still runs.
+        assert_eq!(&*trigger_requests.borrow(), &[true, false]);
+
+        let (cx, requested, _) = items_harness(cx, [true, false, false], true);
+        click_item(cx, 1);
+        assert_eq!(&*requested.borrow(), &[vec![0, 1]]);
+    }
+
+    #[gpui::test]
+    fn disabled_item_requests_no_change(cx: &mut gpui::TestAppContext) {
+        let (cx, requested, _) = items_harness(cx, [false; 3], false);
+        click_item(cx, 2);
+        assert!(requested.borrow().is_empty());
     }
 }
