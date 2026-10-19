@@ -4,6 +4,13 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: transition completion at the configured deadline
+
+Transitions and presence exits preserve duration precision when applying the
+reversing factor, including on Rust 1.96. A 100 ms transition
+no longer rounds up to 100 ms + 1 ns and requests another frame at its deadline;
+presence can unmount the exiting content on that frame.
+
 #### Root owns window overlays
 
 `gpui_component::Root` now always mounts the dialog, sheet and notification
