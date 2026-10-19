@@ -2818,6 +2818,17 @@ impl<M: InputModeKind> Element for TextElement<M> {
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
         if state.is_single_line() || !state.soft_wrap {
+            // The longest line by byte length is only a candidate: a shorter
+            // line can render wider (wide glyphs, proportional fonts). The
+            // visible lines have already been shaped, so keep their widest
+            // measured width as a lower bound. Caching it with the candidate
+            // keeps the scroll extent stable while scrolling the line away.
+            let widest_laid_out_line = lines
+                .iter()
+                .map(|line| line.longest_width)
+                .max()
+                .unwrap_or(px(0.));
+
             let longest_row = state.display_map.longest_row();
             let longest_line = state.text.slice_line(longest_row);
             let key = LongestLineKey {
@@ -2833,7 +2844,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 .take()
                 .filter(|(cached_key, _)| *cached_key == key);
             longest_line_width = match cached {
-                Some((_, width)) => width,
+                Some((_, width)) => width.max(widest_laid_out_line),
                 None => {
                     let longest_line: SharedString = longest_line.to_string().into();
                     window
@@ -2852,6 +2863,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                             wrap_width,
                         )
                         .width
+                        .max(widest_laid_out_line)
                 }
             };
             state
@@ -4021,6 +4033,73 @@ mod tests {
                     assert_eq!(state.scroll_handle.offset().x, offset.x);
                 });
             }
+        });
+    }
+
+    /// Scroll to the far right and assert the caret at `end` lands inside the
+    /// viewport, so the line ending there can be revealed completely.
+    fn assert_horizontal_scroll_reaches_line_end(
+        editor: &Entity<EditorState>,
+        end: usize,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let (layout, input_bounds, scroll_size) = {
+            let state = editor.read(cx);
+            (
+                state.last_layout.clone().expect("layout"),
+                state.input_bounds,
+                state.scroll_size,
+            )
+        };
+
+        editor.update(cx, |state, cx| {
+            state.set_selected_range(end..end, cx);
+            state.deferred_scroll_offset = Some(point(px(-1_000_000.), px(0.)));
+        });
+
+        let element = TextElement::new(editor.clone());
+        let mut bounds = input_bounds;
+        let (carets, offset, _, _) =
+            element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
+        let caret = carets.first().expect("a caret").bounds;
+        assert!(
+            caret.left() <= input_bounds.right() + px(1.),
+            "scrolling to the end ({offset:?}) leaves the caret at {caret:?} past {:?}",
+            input_bounds.right()
+        );
+    }
+
+    #[gpui::test]
+    fn horizontal_scroll_extent_covers_the_widest_laid_out_line(cx: &mut TestAppContext) {
+        // The first line is longest by bytes, but the second renders wider.
+        let narrow = format!("e{}", "\u{301}".repeat(200));
+        let wide = "W".repeat(300);
+        let text = format!("{narrow}\n{wide}");
+        let (editor, window) = decoration_editor(cx, &text, false);
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            assert_horizontal_scroll_reaches_line_end(&editor, text.len(), window, cx);
+
+            // Editing the wider line invalidates the cached measurement.
+            let wider = "W".repeat(400);
+            let edited = format!("{narrow}\n{wider}");
+            editor.update(cx, |state, cx| state.set_value(edited.as_str(), window, cx));
+            window.draw(cx).clear(cx);
+            assert_horizontal_scroll_reaches_line_end(&editor, edited.len(), window, cx);
+
+            // A larger font must widen the extent instead of reusing the old
+            // measurement.
+            let before = editor.read(cx).scroll_size.width;
+            window.set_rem_size(px(24.));
+            window.draw(cx).clear(cx);
+            let after = editor.read(cx).scroll_size.width;
+            assert!(
+                after > before,
+                "growing the font should widen the scroll extent: {after} > {before}"
+            );
+            assert_horizontal_scroll_reaches_line_end(&editor, edited.len(), window, cx);
         });
     }
 
