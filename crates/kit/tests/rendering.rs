@@ -237,12 +237,7 @@ mod rendering {
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .p_2()
-                .child(
-                    Input::new(&self.input)
-                        .id("name")
-                        .aria_label("Name")
-                        .w(px(200.)),
-                )
+                .child(Input::new(&self.input).id("name").w(px(200.)))
         }
     }
 
@@ -277,7 +272,7 @@ mod rendering {
             window.input("Ada", cx);
             window.blur(cx);
             window.render_frame(cx);
-            assert_eq!(window.find_by_label("Name").value(), Some("Ada"));
+            assert_eq!(window.find("name").value(), Some("Ada"));
         })
         .unwrap();
         let populated = cx.capture_screenshot(handle).unwrap();
@@ -287,7 +282,7 @@ mod rendering {
             let transparent = cx.theme().transparent;
             Theme::update(cx, |theme| theme.foreground = transparent);
             window.render_frame(cx);
-            assert_eq!(window.find_by_label("Name").value(), Some("Ada"));
+            assert_eq!(window.find("name").value(), Some("Ada"));
         })
         .unwrap();
         let hidden = cx.capture_screenshot(handle).unwrap();

@@ -7,7 +7,7 @@ use gpui_kit::{
     div, point,
     prelude::*,
     px, size,
-    test::{TestQueryExt, TestSupportExt, TestWindowExt},
+    test::{TestSupportExt, TestWindowExt},
 };
 
 use crate::common;
@@ -45,7 +45,6 @@ impl Render for Composer {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().p_4().child(
             Textarea::new(&self.text)
-                .aria_label("Document body")
                 .w_full()
                 .when_some(self.height, |input, height| input.h(height)),
         )
@@ -170,10 +169,7 @@ fn enter_and_shift_enter_insert_plain_newlines(cx: &mut TestAppContext) {
             window.press(key, cx);
             assert_eq!(text.read(cx).value(), expected);
             assert_eq!(text.read(cx).cursor(), expected.len());
-            assert_eq!(
-                window.find_by_label("Document body").value(),
-                Some(expected)
-            );
+            assert_eq!(window.find(target(&text)).value(), Some(expected));
         })
         .unwrap();
         cx.run_until_parked();
@@ -330,10 +326,7 @@ fn selection_across_soft_wraps_copies_and_replaces_buffer_text(cx: &mut TestAppC
         let expected = format!("X{}", &value[selected.end..]);
         assert_eq!(text.read(cx).value(), expected);
         assert_eq!(text.read(cx).selected_range(), 1..1);
-        assert_eq!(
-            window.find_by_label("Document body").value(),
-            Some(expected.as_str())
-        );
+        assert_eq!(window.find(target(&text)).value(), Some(expected.as_str()));
         window.press("secondary-z", cx);
         assert_eq!(text.read(cx).value(), value);
         assert_eq!(text.read(cx).selected_range(), selected);
@@ -386,10 +379,7 @@ fn wrapped_selection_repeats_and_reverses_across_its_anchor(cx: &mut TestAppCont
             assert_eq!(state.cursor_layout().unwrap().0.top(), rows[row].1.top());
             assert_eq!(state.cursor_position().line, 0);
             assert_caret_visible(state);
-            assert_eq!(
-                window.find_by_label("Document body").value(),
-                Some(value.as_str())
-            );
+            assert_eq!(window.find(target(&text)).value(), Some(value.as_str()));
         }
     })
     .unwrap();
@@ -426,7 +416,7 @@ fn vertical_selection_preserves_column_across_short_and_empty_lines(cx: &mut Tes
                 assert_eq!(state.cursor_layout().unwrap().0.left(), original_x);
             }
             assert_caret_visible(state);
-            assert_eq!(window.find_by_label("Document body").value(), Some(value));
+            assert_eq!(window.find(target(&text)).value(), Some(value));
         }
     })
     .unwrap();
@@ -1517,12 +1507,7 @@ impl Render for PreferredRows {
                 .h(px(rows as f32 * 24. + 32.))
                 .min_h(px(0.))
                 .flex_shrink(1.)
-                .child(
-                    Textarea::new(&self.text)
-                        .aria_label("Document body")
-                        .w_full()
-                        .h(gpui_kit::relative(1.)),
-                )
+                .child(Textarea::new(&self.text).w_full().h(gpui_kit::relative(1.)))
                 .test_support(),
         )
     }
@@ -1623,11 +1608,7 @@ impl Render for ScrollingPage {
             .overflow_y_scroll()
             .track_scroll(&self.page)
             .child(div().h(px(120.)))
-            .child(
-                Textarea::new(&self.text)
-                    .aria_label("Document body")
-                    .h(px(160.)),
-            )
+            .child(Textarea::new(&self.text).h(px(160.)))
             .child(div().h(px(1200.)))
     }
 }

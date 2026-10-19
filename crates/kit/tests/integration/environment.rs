@@ -10,7 +10,7 @@ use gpui_kit::{
     div,
     prelude::*,
     px, size,
-    test::{TestQueryExt, TestSupportExt, TestWindowExt},
+    test::{TestSupportExt, TestWindowExt},
 };
 
 struct Editor {
@@ -26,12 +26,7 @@ impl Render for Editor {
             .flex_col()
             .p_4()
             .gap_4()
-            .child(
-                Input::new(&self.input)
-                    .id("editor")
-                    .aria_label("Document draft")
-                    .w_full(),
-            )
+            .child(Input::new(&self.input).id("editor").w_full())
             .child(
                 Button::new("save")
                     .label("Save")
@@ -68,10 +63,7 @@ fn resize_and_display_scale_keep_input_state_and_pointer_targets(cx: &mut TestAp
             assert_eq!(window.viewport_size(), size(px(width), px(360.)));
             assert_eq!(window.scale_factor(), scale);
             let input = window.find("editor");
-            assert_eq!(
-                window.find_by_label("Document draft").value(),
-                Some("草稿 🦀")
-            );
+            assert_eq!(input.value(), Some("草稿 🦀"));
             assert_eq!(input.focused(), Some(true));
             assert_eq!(input.bounds().size.width, original_width + px(width - 640.));
             assert!(input.visible());
@@ -114,13 +106,10 @@ fn clipboard_transfers_between_windows_without_sharing_editor_state(cx: &mut Tes
     cx.update_window(destination.into(), |_, window, cx| {
         window.click("editor", cx);
         window.press("secondary-v", cx);
-        assert_eq!(
-            window.find_by_label("Document draft").value(),
-            Some("共享文字 🦀")
-        );
+        assert_eq!(window.find("editor").value(), Some("共享文字 🦀"));
         window.press("secondary-a", cx);
         window.press("secondary-x", cx);
-        assert_eq!(window.find_by_label("Document draft").value(), Some(""));
+        assert_eq!(window.find("editor").value(), Some(""));
     })
     .unwrap();
     cx.update(|cx| {
@@ -133,10 +122,7 @@ fn clipboard_transfers_between_windows_without_sharing_editor_state(cx: &mut Tes
     });
     cx.update_window(source.into(), |_, window, cx| {
         window.press("secondary-v", cx);
-        assert_eq!(
-            window.find_by_label("Document draft").value(),
-            Some("共享文字 🦀")
-        );
+        assert_eq!(window.find("editor").value(), Some("共享文字 🦀"));
     })
     .unwrap();
 }

@@ -16,7 +16,7 @@ mod lifecycle;
 #[path = "input/textarea.rs"]
 mod textarea;
 use gpui_component::input::{Input, InputState};
-use gpui_kit::test::{TestQueryExt, TestWindowExt};
+use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AppContext, Context, Entity, TestAppContext, Window, WindowHandle, div, prelude::*, px,
 };
@@ -36,21 +36,10 @@ impl Render for Inputs {
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                Input::new(&self.first)
-                    .aria_label("Given name")
-                    .id("first")
-                    .w(px(240.)),
-            )
-            .child(
-                Input::new(&self.second)
-                    .aria_label("Family name")
-                    .id("second")
-                    .w(px(240.)),
-            )
+            .child(Input::new(&self.first).id("first").w(px(240.)))
+            .child(Input::new(&self.second).id("second").w(px(240.)))
             .child(
                 Input::new(&self.guarded)
-                    .aria_label("Protected value")
                     .id("guarded")
                     .w(px(240.))
                     .disabled(self.disabled)
@@ -58,7 +47,6 @@ impl Render for Inputs {
             )
             .child(
                 Input::new(&self.secret)
-                    .aria_label("Account password")
                     .id("secret")
                     .mask_toggle()
                     .w(px(240.)),
@@ -85,13 +73,13 @@ fn text_goes_only_to_the_focused_input(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.click("first", cx);
         window.input("A🦀", cx);
-        let previous = window.find_by_label("Given name");
+        let previous = window.find("first");
         window.click("second", cx);
         window.input("中文", cx);
         assert_eq!(window.find("first").focused(), Some(false));
         assert_eq!(window.find("second").focused(), Some(true));
-        assert_eq!(window.find_by_label("Given name").value(), Some("A🦀"));
-        assert_eq!(window.find_by_label("Family name").value(), Some("中文"));
+        assert_eq!(window.find("first").value(), Some("A🦀"));
+        assert_eq!(window.find("second").value(), Some("中文"));
         assert_eq!(previous.focused(), Some(true));
     })
     .unwrap();
@@ -115,7 +103,7 @@ fn readonly_and_disabled_inputs_reject_native_typing(cx: &mut TestAppContext) {
         cx.update_window(handle.into(), |_, window, cx| {
             window.click("guarded", cx);
             window.input("ignored", cx);
-            let input = window.find_by_label("Protected value");
+            let input = window.find("guarded");
             assert_eq!(input.disabled(), None);
             assert_eq!(input.value(), Some("fixed"));
         })
@@ -133,7 +121,7 @@ fn masked_input_handles_typing_without_reporting_secret_value(cx: &mut TestAppCo
     cx.update_window(handle.into(), |_, window, cx| {
         window.click("secret", cx);
         window.input("secret", cx);
-        let secret = window.find_by_label("Account password");
+        let secret = window.find("secret");
         assert_eq!(secret.focused(), Some(true));
         assert_eq!(secret.value(), None);
     })
@@ -151,7 +139,6 @@ impl Render for Cleanable {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().child(
             Input::new(&self.query)
-                .aria_label("Search query")
                 .id("query")
                 .cleanable(true)
                 .w(px(240.)),
@@ -180,13 +167,10 @@ fn masked_input_is_a_password_field(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.draw(cx).clear(cx);
         assert_eq!(
-            window.find_by_label("Account password").role(),
+            window.find("secret").role(),
             Some(gpui_kit::Role::PasswordInput)
         );
-        assert_eq!(
-            window.find_by_label("Given name").role(),
-            Some(gpui_kit::Role::TextInput)
-        );
+        assert_eq!(window.find("first").role(), Some(gpui_kit::Role::TextInput));
     })
     .unwrap();
 }
@@ -221,7 +205,7 @@ fn existing_gpui_keyboard_editing_updates_observed_value(cx: &mut TestAppContext
     cx.update_window(handle.into(), |_, window, cx| {
         window.refresh();
         window.draw(cx).clear(cx);
-        assert_eq!(window.find_by_label("Given name").value(), Some("a"));
+        assert_eq!(window.find("first").value(), Some("a"));
     })
     .unwrap();
     common::update_content(handle, &handle_content, cx, |view, _, cx| {
@@ -244,16 +228,16 @@ impl Render for ScopedInputs {
             .child(
                 div().id("left").child(
                     Input::new(&self.left)
-                        .aria_label("Contact name")
                         .id("name")
+                        .aria_label("Contact name")
                         .w(px(240.)),
                 ),
             )
             .child(
                 div().id("right").child(
                     Input::new(&self.right)
-                        .aria_label("Contact name")
                         .id("name")
+                        .aria_label("Contact name")
                         .w(px(240.)),
                 ),
             )
@@ -276,24 +260,25 @@ fn scoped_keyboard_uses_the_focused_input_in_the_selected_scope(cx: &mut TestApp
     let (handle, _) = scoped_inputs(cx);
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
+        for scope in ["left", "right"] {
+            let name = window.within(scope).find("name");
+            assert_eq!(name.role(), Some(gpui_kit::Role::TextInput));
+            assert_eq!(name.label(), Some("Contact name"));
+            assert_eq!(name.value(), Some(""));
+            assert_eq!(name.bounds().size.width, px(240.));
+        }
         let mut dialog = window.within("right");
         dialog.click("name", cx);
         dialog.input("Ada中", cx);
         dialog.press("backspace", cx);
-        assert_eq!(dialog.find_by_label("Contact name").value(), Some("Ada"));
+        assert_eq!(dialog.find("name").value(), Some("Ada"));
         // Printable keys retain GPUI's text fallback, while named control
         // keys use the same scoped command routing without synthetic text.
         dialog.press("shift-a", cx);
-        assert_eq!(dialog.find_by_label("Contact name").value(), Some("AdaA"));
+        assert_eq!(dialog.find("name").value(), Some("AdaA"));
         window.press("space", cx);
-        assert_eq!(
-            window.within("right").find_by_label("Contact name").value(),
-            Some("AdaA ")
-        );
-        assert_eq!(
-            window.within("left").find_by_label("Contact name").value(),
-            Some("")
-        );
+        assert_eq!(window.within("right").find("name").value(), Some("AdaA "));
+        assert_eq!(window.within("left").find("name").value(), Some(""));
     })
     .unwrap();
 }
@@ -317,14 +302,8 @@ fn scoped_keyboard_rejects_focus_outside_the_selected_scope(cx: &mut TestAppCont
             let message = error.downcast_ref::<String>().unwrap();
             assert!(message.contains("no observed keyboard focus inside scope"));
         }
-        assert_eq!(
-            window.within("left").find_by_label("Contact name").value(),
-            Some("")
-        );
-        assert_eq!(
-            window.within("right").find_by_label("Contact name").value(),
-            Some("")
-        );
+        assert_eq!(window.within("left").find("name").value(), Some(""));
+        assert_eq!(window.within("right").find("name").value(), Some(""));
     })
     .unwrap();
 }

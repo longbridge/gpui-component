@@ -207,17 +207,6 @@ mod interaction {
         cx.update(|window, _| find(window, &[], &id).unwrap_or_else(|| panic!("missing {id:?}")))
     }
 
-    fn semantic_input(cx: &mut VisualTestContext, label: &str) -> ElementSnapshot {
-        cx.update(|window, _| {
-            let mut nodes = gpui_base::test_support::snapshots(window)
-                .into_iter()
-                .filter(|node| node.label() == Some(label));
-            let input = nodes.next().expect("named semantic input");
-            assert!(nodes.next().is_none(), "duplicate semantic input name");
-            input
-        })
-    }
-
     fn click(cx: &mut VisualTestContext, id: &'static str) {
         let bounds = snapshot(cx, id).bounds();
         cx.simulate_click(bounds.center(), Modifiers::default());
@@ -440,7 +429,7 @@ mod interaction {
         cx.simulate_input("Ada 中文");
         draw(&mut cx);
         assert_eq!(state.read_with(&cx, |state, _| state.value()), "Ada 中文");
-        let control = semantic_input(&mut cx, "Address");
+        let control = snapshot(&mut cx, ("input", state.entity_id()));
         assert_eq!(control.role(), Some(Role::TextInput));
         assert_eq!(control.label(), Some("Address"));
         assert_eq!(control.value(), Some("Ada 中文"));
@@ -533,7 +522,7 @@ mod interaction {
         click(&mut cx, "header");
         cx.simulate_input("One\nTwo\nThree\nFour\nFive");
         draw(&mut cx);
-        let control = semantic_input(&mut cx, "Message");
+        let control = snapshot(&mut cx, ("input", state.entity_id()));
         let header = snapshot(&mut cx, "header").bounds();
         let footer = snapshot(&mut cx, "footer").bounds();
         assert_eq!(control.role(), Some(Role::MultilineTextInput));

@@ -7,16 +7,14 @@ use gpui_kit::{
     div,
     prelude::*,
     px,
-    test::{TestInput, TestQueryExt, TestWindowExt},
+    test::{TestInput, TestWindowExt},
 };
 
 struct Field(Entity<InputState>);
 
 impl Render for Field {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        Input::new(&self.0)
-            .id("field")
-            .aria_label("Composition text")
+        Input::new(&self.0).id("field")
     }
 }
 
@@ -55,12 +53,10 @@ impl Render for MultilineField {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().child(match &self.state {
             MultilineState::Textarea(state) => Textarea::new(state)
-                .aria_label("Composition text")
                 .readonly(self.readonly)
                 .h(px(160.))
                 .into_any_element(),
             MultilineState::Editor(state) => Editor::new(state)
-                .aria_label("Composition text")
                 .readonly(self.readonly)
                 .h(px(160.))
                 .into_any_element(),
@@ -118,25 +114,16 @@ fn multiline_composition_undo_restores_backward_unicode_selection(cx: &mut TestA
             input.commit_text("日本語", cx);
             assert_eq!(input.marked_text_range(cx), None);
             drop(input);
-            assert_eq!(
-                window.find_by_label("Composition text").value(),
-                Some("first\nA日本語")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("first\nA日本語"));
             undo(window, cx);
-            assert_eq!(
-                window.find_by_label("Composition text").value(),
-                Some("first\nA🦀")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("first\nA🦀"));
             let mut input = field.read(cx).state.input(window);
             let restored = input.selected_text_range(cx).unwrap();
             assert_eq!(restored.range, before.range);
             assert_eq!(restored.reversed, before.reversed);
             input.commit_text("語", cx);
             drop(input);
-            assert_eq!(
-                window.find_by_label("Composition text").value(),
-                Some("first\nA語")
-            );
+            assert_eq!(window.find(id).value(), Some("first\nA語"));
         })
         .unwrap();
     }
@@ -181,17 +168,14 @@ fn readonly_multiline_rejects_composition_without_consuming_committed_history(
             assert_eq!(after.reversed, before.reversed);
             drop(input);
             undo(window, cx);
-            assert_eq!(
-                window.find_by_label("Composition text").value(),
-                Some("first\n🦀")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("first\n🦀"));
             field.update(cx, |field, cx| {
                 field.readonly = false;
                 cx.notify();
             });
             window.render_frame(cx);
             undo(window, cx);
-            assert_eq!(window.find_by_label("Composition text").value(), Some(""));
+            assert_eq!(window.find(id).value(), Some(""));
         })
         .unwrap();
     }
@@ -218,10 +202,7 @@ fn preedit_uses_utf16_and_whole_text_commit_replaces_it(cx: &mut TestAppContext)
         assert_eq!(input.marked_text_range(cx), None);
         assert_eq!(input.selected_text_range(cx).unwrap().range, 4..4);
         drop(input);
-        assert_eq!(
-            window.find_by_label("Composition text").value(),
-            Some("A日本語Z")
-        );
+        assert_eq!(window.find("field").value(), Some("A日本語Z"));
     })
     .unwrap();
 }
@@ -245,10 +226,7 @@ fn unmark_retains_text_and_empty_preedit_cancels(cx: &mut TestAppContext) {
         assert_eq!(input.marked_text_range(cx), None);
         input.commit_text("語", cx);
         drop(input);
-        assert_eq!(
-            window.find_by_label("Composition text").value(),
-            Some("日本語")
-        );
+        assert_eq!(window.find("field").value(), Some("日本語"));
     })
     .unwrap();
 }

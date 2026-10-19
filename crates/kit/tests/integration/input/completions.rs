@@ -19,7 +19,7 @@ use gpui_kit::{
     div, point,
     prelude::*,
     px, size,
-    test::{TestEventExt, TestQueryExt, TestWindowExt},
+    test::{TestEventExt, TestWindowExt},
 };
 use lsp_types::{
     CodeAction, CompletionContext, CompletionItem, CompletionResponse, CompletionTextEdit,
@@ -155,10 +155,9 @@ impl Render for CompletionEditor {
             .p_4()
             .flex()
             .flex_col()
-            .child(Input::new(&self.other).aria_label("Other text").id("other"))
+            .child(Input::new(&self.other).id("other"))
             .child(
                 Editor::new(&self.state)
-                    .aria_label("Completion source")
                     .readonly(self.readonly)
                     .disabled(self.disabled)
                     .flex_1(),
@@ -315,7 +314,7 @@ impl Fixture {
     fn assert_editor(&self, value: &str, cx: &mut TestAppContext) {
         cx.update_window(self.handle.into(), |_, window, cx| {
             window.render_frame(cx);
-            let input = window.find_by_label("Completion source");
+            let input = window.find(("input", self.state.entity_id()));
             assert_eq!(input.value(), Some(value));
             assert_eq!(input.focused(), Some(true));
             assert_eq!(self.state.read(cx).value(), value);
@@ -956,10 +955,7 @@ fn completion_response_after_focus_loss_cannot_reopen_on_refocus(cx: &mut TestAp
     fixture.provider.respond(0, Some("print"));
     fixture.settle(cx);
     cx.update_window(fixture.handle.into(), |_, window, cx| {
-        assert_eq!(
-            window.find_by_label("Other text").value(),
-            Some("other field")
-        );
+        assert_eq!(window.find("other").value(), Some("other field"));
         assert_eq!(window.find("other").focused(), Some(true));
         window.press("tab", cx);
     })
@@ -1108,7 +1104,10 @@ fn protection_invalidates_completion(cx: &mut TestAppContext, disabled: bool) {
     fixture.press("enter", cx);
     fixture.input("ignored", cx);
     cx.update_window(fixture.handle.into(), |_, window, cx| {
-        assert_eq!(window.find_by_label("Completion source").value(), Some("p"));
+        assert_eq!(
+            window.find(("input", fixture.state.entity_id())).value(),
+            Some("p")
+        );
         assert_eq!(fixture.state.read(cx).value(), "p");
     })
     .unwrap();

@@ -169,11 +169,7 @@ fn reverse_tab_cycles_three_inputs_with_passive_addons(cx: &mut TestAppContext) 
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         for (ix, id) in INPUT_IDS.into_iter().enumerate() {
-            assert_eq!(
-                window.find_by_label(INPUT_LABELS[ix]).value(),
-                Some("xxxx"),
-                "{id}"
-            );
+            assert_eq!(window.find(id).value(), Some("xxxx"), "{id}");
             assert_eq!(view.read(cx).inputs[ix].read(cx).value(), "xxxx", "{id}");
         }
     })
@@ -186,6 +182,20 @@ fn tab_cycles_keep_prefix_and_suffix_buttons_focused(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| window.click("third", cx))
         .unwrap();
     cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        let frame = window.find("second").bounds();
+        let mut scoped = window.within("second");
+        for id in ["prefix-button", "suffix-button"] {
+            let addon = scoped.find(id).bounds();
+            assert!(frame.contains(&addon.origin));
+            assert!(frame.contains(&addon.bottom_right()));
+            scoped.click(id, cx);
+        }
+        assert_eq!(view.read(cx).prefix_clicks, 1);
+        assert_eq!(view.read(cx).suffix_clicks, 1);
+        window.click("third", cx);
+    })
+    .unwrap();
 
     for (key, destinations) in [
         (
@@ -214,14 +224,10 @@ fn tab_cycles_keep_prefix_and_suffix_buttons_focused(cx: &mut TestAppContext) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         let view = view.read(cx);
-        assert_eq!(view.prefix_clicks, 2);
-        assert_eq!(view.suffix_clicks, 2);
+        assert_eq!(view.prefix_clicks, 3);
+        assert_eq!(view.suffix_clicks, 3);
         for (ix, id) in INPUT_IDS.into_iter().enumerate() {
-            assert_eq!(
-                window.find_by_label(INPUT_LABELS[ix]).value(),
-                Some("xx"),
-                "{id}"
-            );
+            assert_eq!(window.find(id).value(), Some("xx"), "{id}");
             assert_eq!(view.inputs[ix].read(cx).value(), "xx", "{id}");
         }
     })
@@ -255,12 +261,7 @@ impl Render for MultilineFocus {
             .flex_col()
             .p_4()
             .gap_4()
-            .child(
-                Input::new(&self.previous)
-                    .id("previous")
-                    .aria_label("Previous entry")
-                    .w_96(),
-            )
+            .child(Input::new(&self.previous).id("previous").w_96())
             .child(match &self.field {
                 MultilineField::Textarea(state) => Textarea::new(state)
                     .aria_label("Multiline field")

@@ -6,7 +6,7 @@ use gpui_kit::component::{
     input::{Input, InputState},
     notification::Notification,
 };
-use gpui_kit::test::{TestAppContextExt, TestQueryExt, TestWindowExt};
+use gpui_kit::test::{TestAppContextExt, TestWindowExt};
 use gpui_kit::{
     AppContext, Context, Entity, Focusable, TestAppContext, Window, div, prelude::*, px, size,
 };
@@ -26,11 +26,7 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                Input::new(&self.saved)
-                    .id("name")
-                    .aria_label("Saved profile name"),
-            )
+            .child(Input::new(&self.saved).id("name"))
             .child(
                 Button::new("edit")
                     .label("Edit…")
@@ -42,11 +38,7 @@ impl Render for Workspace {
                             let saved = saved.clone();
                             dialog
                                 .title("Edit profile")
-                                .child(
-                                    Input::new(&draft)
-                                        .id("name")
-                                        .aria_label("Draft profile name"),
-                                )
+                                .child(Input::new(&draft).id("name"))
                                 .footer(DialogFooter::new().child(
                                     DialogAction::new().child(Button::new("ok").label("Save")),
                                 ))
@@ -128,10 +120,7 @@ async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut
         window.within("dialog").click("name", cx);
         window.within("dialog").input("Ada 中文", cx);
         assert_eq!(
-            window
-                .within("dialog")
-                .find_by_label("Draft profile name")
-                .value(),
+            window.within("dialog").find("name").value(),
             Some("Ada 中文")
         );
         window.within("dialog").click("ok", cx);
@@ -144,10 +133,7 @@ async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut
     // Toast entrance also uses GPUI's wall-clock Animation (400 ms).
     std::thread::sleep(Duration::from_millis(410));
     cx.update_window(handle.into(), |_, window, cx| {
-        assert_eq!(
-            window.find_by_label("Saved profile name").value(),
-            Some("Ada 中文")
-        );
+        assert_eq!(window.find("name").value(), Some("Ada 中文"));
         assert!(window.find("notification").visible());
         window.hover("notification", cx);
         window.within("notification").click("close", cx);
@@ -292,11 +278,7 @@ impl Render for Stealer {
         div()
             .size_full()
             .p_4()
-            .child(
-                Input::new(&self.outside)
-                    .id("outside")
-                    .aria_label("Background entry"),
-            )
+            .child(Input::new(&self.outside).id("outside"))
             .child(
                 Button::new("open")
                     .label("Open…")

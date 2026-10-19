@@ -17,6 +17,7 @@ pub(super) struct Fields {
     textarea: Entity<TextareaState>,
     editor: Entity<EditorState>,
     mounted: bool,
+    custom_ids: bool,
     readonly: bool,
     disabled: bool,
     revision: usize,
@@ -46,6 +47,9 @@ impl Fields {
     }
 
     fn ids(&self) -> [ElementId; 3] {
+        if self.custom_ids {
+            return ["name".into(), "body".into(), "source".into()];
+        }
         [
             ("input", self.input.entity_id()).into(),
             ("input", self.textarea.entity_id()).into(),
@@ -73,20 +77,20 @@ impl Render for Fields {
             .when(self.mounted, |this| {
                 this.child(
                     Input::new(&self.input)
-                        .aria_label("Document content")
+                        .when(self.custom_ids, |input| input.id("name"))
                         .readonly(self.readonly)
                         .disabled(self.disabled),
                 )
                 .child(
                     Textarea::new(&self.textarea)
-                        .aria_label("Document content")
+                        .when(self.custom_ids, |input| input.id("body"))
                         .h_24()
                         .readonly(self.readonly)
                         .disabled(self.disabled),
                 )
                 .child(
                     Editor::new(&self.editor)
-                        .aria_label("Document content")
+                        .when(self.custom_ids, |input| input.id("source"))
                         .h_24()
                         .readonly(self.readonly)
                         .disabled(self.disabled),
@@ -107,6 +111,7 @@ pub(super) fn mount(
                 textarea: cx.new(|cx| TextareaState::new(window, cx)),
                 editor: cx.new(|cx| EditorState::new(window, cx)),
                 mounted: true,
+                custom_ids: false,
                 readonly: false,
                 disabled: false,
                 revision: 0,
@@ -143,6 +148,58 @@ fn select_all(window: &mut Window, cx: &mut App) {
 }
 
 #[gpui_kit::test]
+fn component_ids_expose_live_text_semantics_without_labels(cx: &mut TestAppContext) {
+    for custom_ids in [false, true] {
+        let (handle, fields, _) = mount(cx);
+        fields.update(cx, |fields, cx| {
+            fields.custom_ids = custom_ids;
+            cx.notify();
+        });
+        let ids = fields.read_with(cx, |fields, _| fields.ids());
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            for (ix, id) in ids.into_iter().enumerate() {
+                let role = if ix == 0 {
+                    gpui_kit::Role::TextInput
+                } else {
+                    gpui_kit::Role::MultilineTextInput
+                };
+                let empty = window.find(id.clone());
+                assert_eq!(empty.value(), Some(""), "{id:?}");
+                assert_eq!(empty.role(), Some(role), "{id:?}");
+                assert_eq!(empty.label(), None, "{id:?}");
+                window.click(id.clone(), cx);
+                window.input("A🦀", cx);
+                let edited = window.find(id.clone());
+                assert_eq!(edited.value(), Some("A🦀"), "{id:?}");
+                assert_eq!(edited.role(), Some(role), "{id:?}");
+                assert_eq!(edited.focused(), Some(true), "{id:?}");
+                // A retained query remains a snapshot, not a copied text source.
+                assert_eq!(empty.value(), Some(""));
+                fields.update(cx, |fields, cx| {
+                    match ix {
+                        0 => fields.input.update(cx, |state, cx| {
+                            state.set_value("owner replacement", window, cx)
+                        }),
+                        1 => fields.textarea.update(cx, |state, cx| {
+                            state.set_value("owner replacement", window, cx)
+                        }),
+                        _ => fields.editor.update(cx, |state, cx| {
+                            state.set_value("owner replacement", window, cx)
+                        }),
+                    }
+                    fields.revision += 1;
+                    cx.notify();
+                });
+                window.render_frame(cx);
+                assert_eq!(window.find(id).value(), Some("owner replacement"));
+            }
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
 fn switching_between_input_textarea_and_editor_routes_text_to_current_focus(
     cx: &mut TestAppContext,
 ) {
@@ -157,13 +214,7 @@ fn switching_between_input_textarea_and_editor_routes_text_to_current_focus(
         }
         assert_eq!(fields.read(cx).values(cx), ["name", "正文", "code"]);
         for (id, expected) in ids.iter().zip(["name", "正文", "code"]) {
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some(expected)
-            );
+            assert_eq!(window.find(id.clone()).value(), Some(expected));
         }
     })
     .unwrap();
@@ -184,10 +235,7 @@ fn parent_rerender_preserves_each_controls_focus_and_unicode_selection(cx: &mut 
             window.render_frame(cx);
             assert_eq!(window.find(id.clone()).focused(), Some(true));
             window.input("z", cx);
-            assert_eq!(
-                window.within(id).find_by_label("Document content").value(),
-                Some("Az")
-            );
+            assert_eq!(window.find(id).value(), Some("Az"));
         })
         .unwrap();
     }
@@ -226,13 +274,7 @@ fn readonly_transition_keeps_selection_copyable_and_reenable_restores_editing(
                 cx.read_from_clipboard().and_then(|item| item.text()),
                 Some("retained".into())
             );
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some("retained")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("retained"));
             assert_eq!(window.find(id.clone()).focused(), Some(true));
             fields.update(cx, |fields, cx| {
                 fields.readonly = false;
@@ -240,10 +282,7 @@ fn readonly_transition_keeps_selection_copyable_and_reenable_restores_editing(
             });
             window.render_frame(cx);
             window.input("editable", cx);
-            assert_eq!(
-                window.within(id).find_by_label("Document content").value(),
-                Some("editable")
-            );
+            assert_eq!(window.find(id).value(), Some("editable"));
         })
         .unwrap();
     }
@@ -332,13 +371,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
                 },
                 cx,
             );
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some("saved🦀")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("saved🦀"));
 
             window.blur(cx);
         })
@@ -348,13 +381,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
             window.click(id.clone(), cx);
             assert_eq!(window.find(id.clone()).focused(), Some(false));
             window.input("still blocked", cx);
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some("saved🦀")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("saved🦀"));
             fields.update(cx, |fields, cx| {
                 fields.disabled = false;
                 cx.notify();
@@ -364,10 +391,7 @@ fn disabling_focused_controls_blocks_edits_and_click_focus_until_reenabled(
             select_all(window, cx);
             window.input("enabled", cx);
             assert_eq!(window.find(id.clone()).focused(), Some(true));
-            assert_eq!(
-                window.within(id).find_by_label("Document content").value(),
-                Some("enabled")
-            );
+            assert_eq!(window.find(id).value(), Some("enabled"));
         })
         .unwrap();
     }
@@ -403,23 +427,11 @@ fn unmounting_focused_controls_removes_targets_and_remount_keeps_retained_values
                 cx.notify();
             });
             window.render_frame(cx);
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some("saved")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("saved"));
             window.click(id.clone(), cx);
             select_all(window, cx);
             window.input("restored", cx);
-            assert_eq!(
-                window
-                    .within(id.clone())
-                    .find_by_label("Document content")
-                    .value(),
-                Some("restored")
-            );
+            assert_eq!(window.find(id.clone()).value(), Some("restored"));
         })
         .unwrap();
     }

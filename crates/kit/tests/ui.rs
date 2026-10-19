@@ -1,5 +1,5 @@
 mod common;
-use gpui_kit::test::{TestQueryExt, TestSupportExt, TestWindowExt};
+use gpui_kit::test::{TestSupportExt, TestWindowExt};
 use gpui_kit::{
     AppContext, Context, Entity, Role, SharedString, TestAppContext, Window,
     component::{
@@ -74,17 +74,14 @@ fn saves_a_profile_through_the_ui(cx: &mut TestAppContext) {
 
         window.click("name", cx);
         window.input("Ada José", cx);
-        let name = window.find_by_label("Profile name");
+        let name = window.find("name");
         assert_eq!(name.label(), Some("Profile name"));
         assert_eq!(name.focused(), Some(true));
         assert_eq!(name.value(), Some("Ada José"));
         assert!(name.bounds().size.width > px(0.));
         // Named keys share the same Window API and refresh the resulting frame.
         window.press("backspace", cx);
-        assert_eq!(
-            window.find_by_label("Profile name").value(),
-            Some("Ada Jos")
-        );
+        assert_eq!(window.find("name").value(), Some("Ada Jos"));
 
         window.click("save", cx);
         let status = window.find("status");

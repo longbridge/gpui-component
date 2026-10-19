@@ -3,7 +3,7 @@ use gpui_kit::{
     component::input::{Input, InputEvent, InputState},
     div,
     prelude::*,
-    test::{TestQueryExt, TestWindowExt},
+    test::TestWindowExt,
 };
 
 use crate::common;
@@ -34,18 +34,8 @@ impl Render for HistoryInputs {
             .flex_col()
             .p_4()
             .gap_4()
-            .child(
-                Input::new(&self.text)
-                    .aria_label("Draft text")
-                    .id("text")
-                    .w_64(),
-            )
-            .child(
-                Input::new(&self.other)
-                    .aria_label("Other draft")
-                    .id("other")
-                    .w_64(),
-            )
+            .child(Input::new(&self.text).id("text").w_64())
+            .child(Input::new(&self.other).id("other").w_64())
     }
 }
 
@@ -66,17 +56,17 @@ fn consecutive_typing_undoes_and_redoes_as_one_group(cx: &mut TestAppContext) {
         window.click("text", cx);
         window.input("ab", cx);
         window.input("cd", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         assert_eq!(content.read(cx).text.read(cx).cursor(), 0);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
         assert_eq!(content.read(cx).text.read(cx).selected_range(), 4..4);
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
     })
     .unwrap();
 }
@@ -91,16 +81,16 @@ fn moving_away_and_back_splits_typing_groups(cx: &mut TestAppContext) {
         assert_eq!(content.read(cx).text.read(cx).cursor(), 1);
         window.press("right", cx);
         window.input("cd", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         assert_eq!(content.read(cx).text.read(cx).cursor(), 2);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
     })
     .unwrap();
 }
@@ -113,22 +103,16 @@ fn paste_is_atomic_and_separate_from_surrounding_typing(cx: &mut TestAppContext)
         window.input("before", cx);
         cx.write_to_clipboard(ClipboardItem::new_string("🦀中文".to_owned()));
         window.press(PASTE, cx);
-        assert_eq!(
-            window.find_by_label("Draft text").value(),
-            Some("before🦀中文")
-        );
+        assert_eq!(window.find("text").value(), Some("before🦀中文"));
         window.input("after", cx);
-        assert_eq!(
-            window.find_by_label("Draft text").value(),
-            Some("before🦀中文after")
-        );
+        assert_eq!(window.find("text").value(), Some("before🦀中文after"));
         for value in ["before🦀中文", "before", ""] {
             window.press(UNDO, cx);
-            assert_eq!(window.find_by_label("Draft text").value(), Some(value));
+            assert_eq!(window.find("text").value(), Some(value));
         }
         for value in ["before", "before🦀中文", "before🦀中文after"] {
             window.press(REDO, cx);
-            assert_eq!(window.find_by_label("Draft text").value(), Some(value));
+            assert_eq!(window.find("text").value(), Some(value));
         }
     })
     .unwrap();
@@ -146,16 +130,16 @@ fn undo_selection_replacement_restores_range_and_active_end(cx: &mut TestAppCont
         assert_eq!(state.selected_range(), 2..4);
         assert_eq!(state.cursor(), 2);
         window.input("X", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abX"));
+        assert_eq!(window.find("text").value(), Some("abX"));
         assert_eq!(content.read(cx).text.read(cx).selected_range(), 3..3);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
         let state = content.read(cx).text.read(cx);
         assert_eq!(state.selected_range(), 2..4);
         assert_eq!(state.cursor(), 2);
         assert_eq!(state.selected_value(), "cd");
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abX"));
+        assert_eq!(window.find("text").value(), Some("abX"));
         assert_eq!(content.read(cx).text.read(cx).selected_range(), 3..3);
     })
     .unwrap();
@@ -195,16 +179,16 @@ fn blur_splits_typing_without_moving_the_caret(cx: &mut TestAppContext) {
         assert_eq!(window.find("text").focused(), Some(true));
         assert_eq!(content.read(cx).text.read(cx).cursor(), 2);
         window.input("cd", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
+        assert_eq!(window.find("text").value(), Some("abcd"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcd"));
-        assert_eq!(window.find_by_label("Other draft").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some("abcd"));
+        assert_eq!(window.find("other").value(), Some(""));
     })
     .unwrap();
 }
@@ -216,15 +200,15 @@ fn backspace_at_start_preserves_redo(cx: &mut TestAppContext) {
         window.click("text", cx);
         window.input("abc", cx);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         window.press("backspace", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         assert_eq!(content.read(cx).text.read(cx).cursor(), 0);
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abc"));
+        assert_eq!(window.find("text").value(), Some("abc"));
         assert_eq!(content.read(cx).text.read(cx).cursor(), 3);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
     })
     .unwrap();
 }
@@ -238,17 +222,17 @@ fn empty_paste_at_caret_preserves_redo(cx: &mut TestAppContext) {
         cx.write_to_clipboard(ClipboardItem::new_string("🦀".into()));
         window.press(PASTE, cx);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("keep"));
+        assert_eq!(window.find("text").value(), Some("keep"));
         cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
         window.press(PASTE, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("keep"));
+        assert_eq!(window.find("text").value(), Some("keep"));
         assert_eq!(content.read(cx).text.read(cx).selected_range(), 4..4);
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("keep🦀"));
+        assert_eq!(window.find("text").value(), Some("keep🦀"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("keep"));
+        assert_eq!(window.find("text").value(), Some("keep"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
     })
     .unwrap();
 }
@@ -262,19 +246,19 @@ fn new_edit_after_undo_discards_the_redo_branch(cx: &mut TestAppContext) {
         window.press("left", cx);
         window.press("right", cx);
         window.input("old", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abold"));
+        assert_eq!(window.find("text").value(), Some("abold"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.input("new", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abnew"));
+        assert_eq!(window.find("text").value(), Some("abnew"));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abnew"));
+        assert_eq!(window.find("text").value(), Some("abnew"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abnew"));
+        assert_eq!(window.find("text").value(), Some("abnew"));
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abnew"));
+        assert_eq!(window.find("text").value(), Some("abnew"));
     })
     .unwrap();
 }
@@ -290,22 +274,22 @@ fn emoji_navigation_and_both_delete_directions_round_trip(cx: &mut TestAppContex
         window.press("left", cx);
         assert_eq!(content.read(cx).text.read(cx).cursor(), "a".len());
         window.press("delete", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("a🦀b"));
+        assert_eq!(window.find("text").value(), Some("a🦀b"));
         assert_eq!(content.read(cx).text.read(cx).cursor(), "a".len());
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(UNDO, cx);
         window.press("right", cx);
         assert_eq!(content.read(cx).text.read(cx).cursor(), "a🦀".len());
         window.press("backspace", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("a🦀b"));
+        assert_eq!(window.find("text").value(), Some("a🦀b"));
         assert_eq!(content.read(cx).text.read(cx).cursor(), "a🦀".len());
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("ab"));
+        assert_eq!(window.find("text").value(), Some("ab"));
     })
     .unwrap();
 }
@@ -320,15 +304,15 @@ fn unicode_selection_deletion_restores_text_and_active_end_on_undo(cx: &mut Test
         window.press("shift-home", cx);
         assert_eq!(content.read(cx).text.read(cx).selected_value(), text);
         window.press("backspace", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(text));
+        assert_eq!(window.find("text").value(), Some(text));
         let state = content.read(cx).text.read(cx);
         assert_eq!(state.selected_range(), 0..text.len());
         assert_eq!(state.selected_value(), text);
         assert_eq!(state.cursor(), 0);
         window.press(REDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some(""));
+        assert_eq!(window.find("text").value(), Some(""));
         assert_eq!(content.read(cx).text.read(cx).selected_range(), 0..0);
     })
     .unwrap();
@@ -344,25 +328,25 @@ fn cut_then_paste_replacement_restore_each_selection_and_clipboard(cx: &mut Test
             window.press("shift-left", cx);
         }
         window.press("secondary-x", cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abc"));
+        assert_eq!(window.find("text").value(), Some("abc"));
         window.press("home", cx);
         window.press("shift-right", cx);
         window.press("shift-right", cx);
         window.press(PASTE, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("DEFc"));
+        assert_eq!(window.find("text").value(), Some("DEFc"));
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abc"));
+        assert_eq!(window.find("text").value(), Some("abc"));
         let state = content.read(cx).text.read(cx);
         assert_eq!(state.selected_range(), 0..2);
         assert_eq!(state.cursor(), 2);
         window.press(UNDO, cx);
-        assert_eq!(window.find_by_label("Draft text").value(), Some("abcDEF"));
+        assert_eq!(window.find("text").value(), Some("abcDEF"));
         let state = content.read(cx).text.read(cx);
         assert_eq!(state.selected_range(), 3..6);
         assert_eq!(state.cursor(), 3);
         for (value, cursor) in [("abc", 3), ("DEFc", 3)] {
             window.press(REDO, cx);
-            assert_eq!(window.find_by_label("Draft text").value(), Some(value));
+            assert_eq!(window.find("text").value(), Some(value));
             assert_eq!(
                 content.read(cx).text.read(cx).selected_range(),
                 cursor..cursor
@@ -402,17 +386,14 @@ fn normalized_paste_undo_restores_unicode_selection_in_both_directions(cx: &mut 
             );
             cx.write_to_clipboard(ClipboardItem::new_string("中\r\n\t文".into()));
             window.press(PASTE, cx);
-            assert_eq!(window.find_by_label("Draft text").value(), Some("[中\t文]"));
+            assert_eq!(window.find("text").value(), Some("[中\t文]"));
             window.press(UNDO, cx);
-            assert_eq!(
-                window.find_by_label("Draft text").value(),
-                Some("[e\u{301}🦀]")
-            );
+            assert_eq!(window.find("text").value(), Some("[e\u{301}🦀]"));
             let state = content.read(cx).text.read(cx);
             assert_eq!(state.selected_range(), 1..8);
             assert_eq!(state.cursor(), if reversed { 1 } else { 8 });
             window.press(REDO, cx);
-            assert_eq!(window.find_by_label("Draft text").value(), Some("[中\t文]"));
+            assert_eq!(window.find("text").value(), Some("[中\t文]"));
             assert_eq!(content.read(cx).text.read(cx).selected_range(), 8..8);
         })
         .unwrap();
