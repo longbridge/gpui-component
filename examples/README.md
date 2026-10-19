@@ -12,6 +12,7 @@ not enable the gallery's test-support development dependency.
 | Editor and Markdown highlighted by syntect | `cargo run -p example-syntect` |
 | Brush | `cargo run -p example-brush` |
 | Dock | `cargo run -p example-dock` |
+| Completion (application-owned popup) | `cargo run -p completion` |
 | HTML | `cargo run -p example-html` |
 | Large text | `cargo run -p example-large-text` |
 | Markdown | `cargo run -p example-markdown` |
