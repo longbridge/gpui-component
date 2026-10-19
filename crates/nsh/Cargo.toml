@@ -1,0 +1,30 @@
+[package]
+name = "gpui-nsh"
+description = "Native Shell in GPUI Kit apps: NSH apps embedded as views, and GPUI Kit's controls as NSH native components."
+version = "0.7.3"
+keywords = ["desktop", "gpui", "nsh", "tsx"]
+license = "Apache-2.0"
+publish = false
+edition.workspace = true
+repository = "https://github.com/longbridge/gpui-kit"
+homepage = "https://gpui-kit.com"
+
+[lints]
+workspace = true
+
+[lib]
+doctest = false
+
+[features]
+# Connects an embedded app to an `nsh dev` server (`NshView::connect_dev_server`).
+dev = ["nsh-platform-gpui/dev"]
+
+[dependencies]
+# NSH draws with GPUI Fast: the Kit must use that same GPUI.
+gpui-kit = { path = "../kit", version = "0.7.3", features = ["gpui-fast", "inspector"] }
+log.workspace = true
+nsh-platform-gpui = { version = "0.1.1", default-features = false, features = ["js"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+gpui-kit = { path = "../kit", version = "0.7.3", features = ["gpui-fast", "inspector", "test-support"] }

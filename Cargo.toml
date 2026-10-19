@@ -39,8 +39,10 @@ members = [
     "examples/markdown_table",
     "examples/ai_recipes",
     "examples/speech",
+    "examples/nsh",
     "crates/shell",
     "crates/shell/rquickjs-compat",
+    "crates/nsh",
 ]
 resolver = "2"
 

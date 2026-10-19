@@ -1,0 +1,13 @@
+[package]
+name = "example-nsh"
+description = "A GPUI Kit window embedding an NSH app that uses GPUI Base's controls."
+version = "0.7.3"
+publish = false
+edition.workspace = true
+
+[dependencies]
+gpui-kit = { path = "../../crates/kit", features = ["gpui-fast"] }
+gpui-nsh = { path = "../../crates/nsh" }
+
+[lints]
+workspace = true

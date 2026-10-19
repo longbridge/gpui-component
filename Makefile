@@ -12,3 +12,8 @@ dev\:website:
 
 build\:website:
 	bun run --cwd website build
+
+# Builds the example's TSX app with the `nsh` CLI, then runs the example.
+example-nsh:
+	nsh build examples/nsh/app -o examples/nsh/build
+	cargo run -p example-nsh

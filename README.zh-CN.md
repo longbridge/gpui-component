@@ -227,7 +227,7 @@ cargo run -p window_title
 
 ## 相关项目:Native Shell
 
-[Native Shell](https://nsh.dev/zh-CN)([源码](https://github.com/longbridge/native-shell))是我们的兄弟项目,由 AI 生成 UI 并在 iOS、Android、Linux(GTK)和 macOS(AppKit)上原生渲染。它的 GPUI 桌面后端正在开发中,将基于 GPUI Kit 构建。
+[Native Shell](https://nsh.dev/zh-CN)([源码](https://github.com/longbridge/native-shell))是我们的兄弟项目,由 AI 生成 UI 并在 iOS、Android、Linux(GTK)和 macOS(AppKit)上原生渲染。它的 GPUI 后端可以在 GPUI Kit 应用中绘制:`gpui-nsh`(`crates/nsh`)把 NSH 应用嵌入 GPUI Kit 窗口,并让应用直接使用 GPUI Base 的控件(`examples/nsh`)。
 
 ## 许可证
 

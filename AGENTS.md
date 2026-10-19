@@ -37,6 +37,7 @@ This is a Rust workspace project with the following main crates:
 - `crates/component-macros` - Procedural macros (`IntoPlot` derive)
 - `crates/assets` - Static assets
 - `crates/webview` - WebView component support
+- `crates/nsh` - Native Shell (NSH) apps embedded in GPUI Kit windows, with GPUI Base's controls as NSH native components (`gpui-nsh`, not published)
 - `examples/` - Various example applications
 
 ## Common Commands
