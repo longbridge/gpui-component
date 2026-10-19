@@ -4928,6 +4928,7 @@ dependencies = [
  "gpui-fast",
  "gpui-fast-platform",
  "gpui-fps",
+ "gpui-kit",
  "gpui-pre",
  "gpui-pre-platform",
  "gpui-pre-reqwest",
