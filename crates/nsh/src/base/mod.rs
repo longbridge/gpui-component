@@ -13,12 +13,16 @@
 use crate::{Catalog, Control};
 
 mod check;
+mod data;
+mod disclosure;
 mod display;
+mod floating;
 mod group;
 mod input;
 #[cfg(test)]
 mod inventory;
 mod number;
+mod overlay;
 mod pagination;
 mod picker;
 mod press;
@@ -26,6 +30,9 @@ mod select;
 mod slider;
 mod text;
 mod time;
+mod toast;
+mod toolbar;
+mod tree;
 
 /// The prefix the controls are registered under (`gpui-base.Button`).
 pub const PREFIX: &str = "gpui-base";
@@ -44,6 +51,13 @@ fn controls() -> impl Iterator<Item = Control> {
         select::controls(),
         pagination::controls(),
         text::controls(),
+        disclosure::controls(),
+        overlay::controls(),
+        floating::controls(),
+        toast::controls(),
+        data::controls(),
+        tree::controls(),
+        toolbar::controls(),
     ]
     .into_iter()
     .flatten()

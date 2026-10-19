@@ -43,6 +43,10 @@ pub enum PropType {
     Enum(&'static [&'static str]),
     /// `string[]`; a missing prop reads as empty.
     Strings,
+    /// Structured data, of the TypeScript type given
+    /// (`"{ title: string; content: string }[]"`); read with
+    /// [`Props::json`].
+    Json(&'static str),
 }
 
 /// A TypeScript object type of `fields`.
@@ -66,6 +70,7 @@ impl PropType {
                 .collect::<Vec<_>>()
                 .join(" | "),
             PropType::Strings => "string[]".into(),
+            PropType::Json(ty) => ty.into(),
         }
     }
 }
@@ -228,6 +233,15 @@ impl Props {
     pub fn string(&self, name: &str) -> Option<SharedString> {
         self.value(name)
             .and_then(|value| value.as_str().map(|s| SharedString::from(s.to_owned())))
+    }
+
+    /// A [`PropType::Json`] prop, decoded into `T`; `None` when unset or
+    /// of another shape (logged).
+    pub fn json<T: serde::de::DeserializeOwned>(&self, name: &str) -> Option<T> {
+        let value = self.value(name)?;
+        serde_json::from_value(value)
+            .inspect_err(|err| log::warn!("prop `{name}`: {err}"))
+            .ok()
     }
 
     /// A [`PropType::Strings`] prop.

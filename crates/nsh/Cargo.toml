@@ -24,6 +24,7 @@ dev = ["nsh-platform-gpui/dev"]
 gpui-kit = { path = "../kit", version = "0.7.3", features = ["gpui-fast", "inspector"] }
 log.workspace = true
 nsh-platform-gpui = { version = "0.1.1", default-features = false, features = ["js"] }
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
