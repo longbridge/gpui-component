@@ -4,6 +4,14 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: keyboard traversal after a Button disables itself
+
+A focused Button that becomes disabled keeps its position in the focus tree
+until focus moves away. Tab and Shift-Tab can continue to neighboring controls
+instead of losing their dispatch path. Disabled buttons remain inert and are
+skipped when traversing back; re-enabling restores their normal tab stop.
+This applies to both Base and styled Component buttons without a new API.
+
 #### Fixed: Copy uses the current TextView gesture before paint
 
 TextView Copy now projects the current selection onto immutable native geometry
