@@ -73,7 +73,11 @@ impl<M: InputModeKind> Field<M> {
         let state = self.state.clone();
         let disabled = props.boolean("disabled");
         props
-            .styled(InputBase::new(props.id()), cx)
+            .states(
+                FRAME_STATES,
+                props.styled(InputBase::new(props.id()), cx),
+                cx,
+            )
             .focused(self.state.focus_handle(cx).is_focused(window))
             .disabled(disabled)
             .styles(|styles| {
@@ -91,6 +95,10 @@ impl<M: InputModeKind> Field<M> {
             })
     }
 }
+
+/// The interaction-state class props of the frame: its focus shows through
+/// `focusedClass`, which follows the text field's focus.
+const FRAME_STATES: [&str; 3] = ["hoverClass", "", ""];
 
 fn input() -> Control {
     Control::stateful(
@@ -129,6 +137,7 @@ fn input() -> Control {
     .prop("masked", PropType::Boolean)
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
+    .states(FRAME_STATES)
     .prop("focusedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -182,6 +191,7 @@ fn textarea() -> Control {
     .prop("submitOnEnter", PropType::Boolean)
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
+    .states(FRAME_STATES)
     .prop("focusedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::String)])

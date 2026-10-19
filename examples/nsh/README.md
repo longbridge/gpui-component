@@ -1,9 +1,9 @@
 # NSH example
 
-A GPUI Kit window embedding an NSH app (`app/App.tsx`). The app lays out with NSH's views and text and uses GPUI Base's
-`Tabs`, `Input`, `Select`, `Switch`, `Checkbox`, `RadioGroup`, `Slider`, `Progress` and `Button`, whose events update
-its state. GPUI Base draws nothing of its own, so the app's class strings are the controls' whole look, in GPUI Base's
-color tokens. The toolbar's button switches GPUI Kit between light and dark, and the app follows.
+A GPUI Kit window embedding an NSH app (`app/App.tsx`): a gallery of every GPUI Base control `gpui-nsh` registers, in
+five pages (Buttons, Choices, Fields, Pickers, Content). Layout and text are NSH's; the controls are GPUI Base's, and the
+app's class strings are their whole look, in GPUI Base's color tokens. The line at the bottom shows the last event a
+control sent. The toolbar's button switches GPUI Kit between light and dark, and the app follows.
 
 ```sh
 make example-nsh         # builds app/ with the nsh CLI, then runs the example

@@ -20,6 +20,10 @@ pub(super) fn controls() -> Vec<Control> {
 }
 
 /// The style of class prop `name`, for a part Base builds in a slot.
+/// The interaction-state class props of each time field segment; the field
+/// holds the focus, shown by `selectedSegmentClass`.
+const SEGMENT_STATES: [&str; 3] = ["segmentHoverClass", "", ""];
+
 fn part_style(props: &Props, name: &str, cx: &App) -> StyleRefinement {
     props
         .string(name)
@@ -86,12 +90,15 @@ fn time_field() -> Control {
             let disabled = props.boolean("disabled");
             let segment = part_style(props, "segmentClass", cx);
             let selected = part_style(props, "selectedSegmentClass", cx);
+            let states = props.state_styles(SEGMENT_STATES, cx);
             props
                 .styled(TimeField::new(props.id(), &control.state), cx)
                 .when(disabled, |this| props.styled_by("disabledClass", this, cx))
                 .disabled(disabled)
                 .render_segment(move |item, state, _, _| {
-                    item.refine_style(&segment)
+                    states
+                        .clone()
+                        .apply(item.refine_style(&segment))
                         .when(state.is_selected(), |this| this.refine_style(&selected))
                         .into_any_element()
                 })
@@ -110,6 +117,7 @@ fn time_field() -> Control {
     .prop("disabled", PropType::Boolean)
     .prop("rootClass", PropType::String)
     .prop("segmentClass", PropType::String)
+    .states(SEGMENT_STATES)
     .prop("selectedSegmentClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -140,12 +148,12 @@ impl CalendarStyles {
             weekday: style("weekdayClass"),
             day: style("dayClass"),
             cell: style("cellClass"),
-            active: style("activeClass"),
+            active: style("selectedClass"),
             today: style("todayClass"),
             muted: style("mutedClass"),
             in_range: style("inRangeClass"),
             disabled: style("itemDisabledClass"),
-            hover: style("hoverClass"),
+            hover: style("itemHoverClass"),
         }
     }
 
@@ -250,12 +258,12 @@ pub(super) fn calendar_props(control: Control) -> Control {
         .prop("weekdayClass", PropType::String)
         .prop("dayClass", PropType::String)
         .prop("cellClass", PropType::String)
-        .prop("activeClass", PropType::String)
+        .prop("selectedClass", PropType::String)
         .prop("todayClass", PropType::String)
         .prop("mutedClass", PropType::String)
         .prop("inRangeClass", PropType::String)
         .prop("itemDisabledClass", PropType::String)
-        .prop("hoverClass", PropType::String)
+        .prop("itemHoverClass", PropType::String)
 }
 
 /// An ISO date (`2025-02-10`), or a range of two (`2025-02-10/2025-02-14`);
@@ -504,12 +512,12 @@ mod tests {
                 "weekdayClass": "size_8 text_muted_foreground",
                 "dayClass": "size_8 rounded_md",
                 "cellClass": "h_8 px_2",
-                "activeClass": "bg_primary text_primary_foreground",
+                "selectedClass": "bg_primary text_primary_foreground",
                 "inRangeClass": "bg_accent",
                 "mutedClass": "text_muted_foreground",
                 "todayClass": "border_1 border_border",
                 "itemDisabledClass": "opacity_50",
-                "hoverClass": "bg_accent",
+                "itemHoverClass": "bg_accent",
             }),
         );
         let size = calendar.measure(cx);
@@ -563,7 +571,7 @@ mod tests {
         let calendar = Fixture::new(
             cx,
             "Calendar",
-            json!({ "value": "2025-02-10", "dayClass": "w_8", "activeClass": "w_16" }),
+            json!({ "value": "2025-02-10", "dayClass": "w_8", "selectedClass": "w_16" }),
         );
         let width = |calendar: &Fixture, cx: &mut TestAppContext, day: &str| {
             calendar.update(cx, |window, _| window.find(id(day)).bounds().size.width)

@@ -73,11 +73,22 @@ impl Render for Example {
 }
 
 fn main() {
+    // Shows what the controls warn about, such as an unknown class name.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            // The gallery's Avatar loads a remote image.
+            if let Ok(client) = reqwest_client::ReqwestClient::user_agent("gpui-kit/example-nsh") {
+                cx.set_http_client(std::sync::Arc::new(client));
+            }
             let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                    None,
+                    size(px(960.), px(760.)),
+                    cx,
+                ))),
                 // NSH animates at full rate while the window is unfocused.
                 inactive_frame_interval: None,
                 ..WindowOptions::default()

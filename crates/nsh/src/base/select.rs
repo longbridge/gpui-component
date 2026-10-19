@@ -54,11 +54,35 @@ fn choose(events: &Events, item: &SharedString) {
 
 /// The trigger, which a click opens or closes. Opening focuses `focus_on_open`,
 /// as Base's Combobox showcase focuses its query field.
-fn trigger(props: &Props, events: &Events, focus_on_open: Option<FocusHandle>, cx: &App) -> Button {
+/// The interaction-state class props of the trigger and of each option.
+/// The trigger never takes focus itself: its `triggerFocusedClass` shows
+/// while the root, which holds the focus, has it.
+const TRIGGER_STATES: [&str; 3] = [
+    "triggerHoverClass",
+    "triggerActiveClass",
+    "triggerFocusedClass",
+];
+const ITEM_STATES: [&str; 3] = ["itemHoverClass", "itemActiveClass", "itemFocusClass"];
+
+fn trigger(
+    props: &Props,
+    events: &Events,
+    focus_on_open: Option<FocusHandle>,
+    focused: bool,
+    cx: &App,
+) -> Button {
     let open = props.boolean("open");
     let events = events.clone();
     props
-        .styled_by("triggerClass", Button::new(part(props, "trigger")), cx)
+        .states(
+            TRIGGER_STATES,
+            props.styled_by("triggerClass", Button::new(part(props, "trigger")), cx),
+            cx,
+        )
+        // The root holds the focus, so its keyboard focus shows here.
+        .when(focused, |this| {
+            props.styled_by("triggerFocusedClass", this, cx)
+        })
         // The root is the Tab stop; a press focuses it through the trigger.
         .focusable(false)
         .disabled(props.boolean("disabled"))
@@ -98,9 +122,13 @@ fn options(
             let selected = value.as_ref() == Some(&item);
             let events = events.clone();
             props
-                .styled_by(
-                    "itemClass",
-                    Button::new(part(props, format!("item-{ix}"))),
+                .states(
+                    ITEM_STATES,
+                    props.styled_by(
+                        "itemClass",
+                        Button::new(part(props, format!("item-{ix}"))),
+                        cx,
+                    ),
                     cx,
                 )
                 .role(Role::ListBoxOption)
@@ -141,7 +169,7 @@ fn select() -> Control {
     Control::stateful(
         "Select",
         |_, _, _, cx| Focus::new(cx),
-        |focus, props, events, _, cx| {
+        |focus, props, events, window, cx| {
             let items = props.strings("items");
             focus.sync(items.len(), cx);
             let value = props.string("value");
@@ -167,19 +195,20 @@ fn select() -> Control {
                 .on_open_change(on_open_change(events))
                 .on_confirm(on_confirm(events, focus, items.clone()))
                 .child(
-                    Popup::new(part(props, "popup"), trigger(props, events, None, cx)).when(
-                        open,
-                        |this| {
-                            this.content(options(
-                                props,
-                                "contentClass",
-                                events,
-                                focus,
-                                items.into_iter().enumerate(),
-                                cx,
-                            ))
-                        },
-                    ),
+                    Popup::new(
+                        part(props, "popup"),
+                        trigger(props, events, None, focus.trigger.is_focused(window), cx),
+                    )
+                    .when(open, |this| {
+                        this.content(options(
+                            props,
+                            "contentClass",
+                            events,
+                            focus,
+                            items.into_iter().enumerate(),
+                            cx,
+                        ))
+                    }),
                 )
                 .into_any_element()
         },
@@ -198,9 +227,11 @@ fn select() -> Control {
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
     .prop("triggerClass", PropType::String)
+    .states(TRIGGER_STATES)
     .prop("placeholderClass", PropType::String)
     .prop("contentClass", PropType::String)
     .prop("itemClass", PropType::String)
+    .states(ITEM_STATES)
     .prop("selectedItemClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -265,7 +296,13 @@ fn combobox() -> Control {
                 .child(
                     Popup::new(
                         part(props, "popup"),
-                        trigger(props, events, Some(content.clone()), cx),
+                        trigger(
+                            props,
+                            events,
+                            Some(content.clone()),
+                            focus.trigger.is_focused(window),
+                            cx,
+                        ),
                     )
                     .when(open, |this| {
                         let query = state.query.clone();
@@ -279,6 +316,12 @@ fn combobox() -> Control {
                                             InputBase::new(part(props, "query")),
                                             cx,
                                         )
+                                        .focused(content.is_focused(window))
+                                        .styles(|styles| {
+                                            styles.focused(|style| {
+                                                props.styled_by("inputFocusedClass", style, cx)
+                                            })
+                                        })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             query.update(cx, |query, cx| query.focus(window, cx));
                                         })
@@ -306,11 +349,14 @@ fn combobox() -> Control {
     .prop("disabled", PropType::Boolean)
     .prop("rootClass", PropType::String)
     .prop("triggerClass", PropType::String)
+    .states(TRIGGER_STATES)
     .prop("placeholderClass", PropType::String)
     .prop("contentClass", PropType::String)
     .prop("inputClass", PropType::String)
+    .prop("inputFocusedClass", PropType::String)
     .prop("listClass", PropType::String)
     .prop("itemClass", PropType::String)
+    .states(ITEM_STATES)
     .prop("selectedItemClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -338,8 +384,10 @@ mod tests {
 
     fn select(cx: &mut TestAppContext, props: Value) -> Fixture {
         let fixture = Fixture::new(cx, "Select", props);
-        let focus = fixture.focus_handle(cx).expect("Select is a Tab stop");
-        fixture.update(cx, |window, cx| focus.focus(window, cx));
+        // A disabled select is no Tab stop.
+        if let Some(focus) = fixture.focus_handle(cx) {
+            fixture.update(cx, |window, cx| focus.focus(window, cx));
+        }
         fixture
     }
 
@@ -464,6 +512,7 @@ mod tests {
     #[gpui_kit::test]
     fn test_select_disabled(cx: &mut TestAppContext) {
         let select = select(cx, json!({ "items": ["Apple"], "disabled": true }));
+        assert!(select.focus_handle(cx).is_none());
         select.update(cx, |window, cx| {
             assert!(window.find(select.id.clone()).disabled() == Some(true));
             window.click(part(&select, "trigger"), cx);
@@ -475,8 +524,10 @@ mod tests {
 
     fn combobox(cx: &mut TestAppContext, props: Value) -> Fixture {
         let fixture = Fixture::new(cx, "Combobox", props);
-        let focus = fixture.focus_handle(cx).expect("Combobox is a Tab stop");
-        fixture.update(cx, |window, cx| focus.focus(window, cx));
+        // A disabled combobox is no Tab stop.
+        if let Some(focus) = fixture.focus_handle(cx) {
+            fixture.update(cx, |window, cx| focus.focus(window, cx));
+        }
         fixture
     }
 

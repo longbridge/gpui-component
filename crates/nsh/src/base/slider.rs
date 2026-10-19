@@ -19,6 +19,9 @@ pub(super) fn controls() -> Vec<Control> {
 }
 
 /// Prop `name`, or Base's default where the app set none.
+/// The interaction-state class props of the thumb, which never takes focus.
+const THUMB_STATES: [&str; 3] = ["thumbHoverClass", "thumbActiveClass", ""];
+
 fn number_or(props: &Props, name: &str, default: f32) -> f32 {
     if props.has(name) {
         props.number(name) as f32
@@ -147,12 +150,16 @@ fn slider() -> Control {
                                                 .bottom(relative(percentage.end)),
                                         })
                                         .child(
-                                            props.styled_by(
-                                                "thumbClass",
-                                                SliderThumb::new(state)
-                                                    .axis(axis)
-                                                    .disabled(disabled)
-                                                    .flex_none(),
+                                            props.states(
+                                                THUMB_STATES,
+                                                props.styled_by(
+                                                    "thumbClass",
+                                                    SliderThumb::new(state)
+                                                        .axis(axis)
+                                                        .disabled(disabled)
+                                                        .flex_none(),
+                                                    cx,
+                                                ),
                                                 cx,
                                             ),
                                         ),
@@ -179,6 +186,7 @@ fn slider() -> Control {
     .prop("indicatorClass", PropType::String)
     .prop("rangeClass", PropType::String)
     .prop("thumbClass", PropType::String)
+    .states(THUMB_STATES)
     .event("change", &[("value", PropType::Number)])
     .event("release", &[("value", PropType::Number)])
 }

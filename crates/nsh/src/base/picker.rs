@@ -23,6 +23,16 @@ pub(super) fn controls() -> Vec<Control> {
 }
 
 /// The id of part `name` of the control `props` belong to.
+/// The interaction-state class props of a picker's trigger and of each
+/// swatch. The trigger never takes focus itself: its `triggerFocusedClass`
+/// shows while the picker, which holds the focus, has it.
+const TRIGGER_STATES: [&str; 3] = [
+    "triggerHoverClass",
+    "triggerActiveClass",
+    "triggerFocusedClass",
+];
+const SWATCH_STATES: [&str; 3] = ["swatchHoverClass", "swatchActiveClass", "swatchFocusClass"];
+
 fn part_id(props: &Props, name: &'static str) -> ElementId {
     ElementId::NamedChild(Arc::new(props.id()), name.into())
 }
@@ -51,7 +61,7 @@ fn date_picker() -> Control {
                     _selected: selected,
                 }
             },
-            |field, props, events, _, cx| {
+            |field, props, events, window, cx| {
                 sync_calendar(&field.calendar, props, false, cx);
                 let value = props.string("value").filter(|value| !value.is_empty());
                 let open = props.boolean("open");
@@ -64,7 +74,14 @@ fn date_picker() -> Control {
                 // The root is the picker's one Tab stop: the trigger leaves focus
                 // with it, so Enter and Escape reach Base's handlers.
                 let trigger = props
-                    .styled_by("triggerClass", Button::new(part_id(props, "trigger")), cx)
+                    .states(
+                        TRIGGER_STATES,
+                        props.styled_by("triggerClass", Button::new(part_id(props, "trigger")), cx),
+                        cx,
+                    )
+                    .when(field.focus.is_focused(window), |this| {
+                        props.styled_by("triggerFocusedClass", this, cx)
+                    })
                     .tab_stop(false)
                     .focusable(false)
                     .disabled(disabled)
@@ -120,6 +137,7 @@ fn date_picker() -> Control {
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
     .prop("triggerClass", PropType::String)
+    .states(TRIGGER_STATES)
     .prop("disabledClass", PropType::String)
     .prop("popupClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -211,7 +229,14 @@ fn color_picker() -> Control {
             let focus = picker.focus_handle(cx);
 
             let trigger = props
-                .styled_by("triggerClass", Button::new(part_id(props, "trigger")), cx)
+                .states(
+                    TRIGGER_STATES,
+                    props.styled_by("triggerClass", Button::new(part_id(props, "trigger")), cx),
+                    cx,
+                )
+                .when(focus.is_focused(window), |this| {
+                    props.styled_by("triggerFocusedClass", this, cx)
+                })
                 .tab_stop(false)
                 .focusable(false)
                 .disabled(disabled)
@@ -251,6 +276,7 @@ fn color_picker() -> Control {
                             cx,
                         )
                         .selected(selected)
+                        .when(!disabled, |this| props.states(SWATCH_STATES, this, cx))
                         // The swatch shows its own color, which no class names.
                         .bg(color)
                         .when(selected, |this| {
@@ -332,11 +358,13 @@ fn color_picker() -> Control {
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
     .prop("triggerClass", PropType::String)
+    .states(TRIGGER_STATES)
     .prop("disabledClass", PropType::String)
     .prop("previewClass", PropType::String)
     .prop("popupClass", PropType::String)
     .prop("swatchesClass", PropType::String)
     .prop("swatchClass", PropType::String)
+    .states(SWATCH_STATES)
     .prop("swatchSelectedClass", PropType::String)
     .prop("inputClass", PropType::String)
     .prop("inputFocusedClass", PropType::String)
@@ -389,12 +417,12 @@ mod tests {
                 "weekdayClass": "size_8 text_muted_foreground",
                 "dayClass": "size_8 flex items_center justify_center",
                 "cellClass": "h_7",
-                "activeClass": "bg_primary text_primary_foreground",
+                "selectedClass": "bg_primary text_primary_foreground",
                 "todayClass": "border_1",
                 "mutedClass": "text_muted_foreground",
                 "inRangeClass": "bg_accent",
                 "itemDisabledClass": "opacity_50",
-                "hoverClass": "bg_accent",
+                "itemHoverClass": "bg_accent",
             }),
         );
         let size = picker.measure(cx);

@@ -19,6 +19,6 @@ mod testing;
 mod theme;
 mod view;
 
-pub use catalog::{Catalog, Control, Events, PropType, Props};
+pub use catalog::{Catalog, Control, Events, PropType, Props, ROOT_STATES, StateStyles};
 pub use nsh_platform_gpui::{self as platform, App as NshApp, AppOptions, AssetBase, Bundle, Root};
 pub use view::NshView;

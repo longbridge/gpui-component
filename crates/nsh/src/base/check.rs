@@ -7,18 +7,19 @@ use gpui_kit::{
 };
 use serde_json::json;
 
-use crate::{Control, PropType};
+use crate::{Control, PropType, ROOT_STATES};
 
 pub(super) fn controls() -> Vec<Control> {
     vec![switch(), checkbox(), radio()]
 }
 
 fn switch() -> Control {
-    Control::new("Switch", |props, events, _, cx| {
+    Control::focusable("Switch", |focus, props, events, _, cx| {
         let checked = props.boolean("checked");
         let disabled = props.boolean("disabled");
         props
-            .styled(Switch::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Switch::new(props.id()), cx), cx)
+            .track_focus(focus)
             .checked(checked)
             .disabled(disabled)
             .styles(|styles| {
@@ -67,6 +68,7 @@ fn switch() -> Control {
     .prop("label", PropType::String)
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("checkedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .prop("trackClass", PropType::String)
@@ -79,7 +81,7 @@ fn switch() -> Control {
 }
 
 fn checkbox() -> Control {
-    Control::new("Checkbox", |props, events, _, cx| {
+    Control::focusable("Checkbox", |focus, props, events, _, cx| {
         let state = if props.boolean("indeterminate") {
             CheckboxState::Indeterminate
         } else if props.boolean("checked") {
@@ -89,7 +91,8 @@ fn checkbox() -> Control {
         };
         let disabled = props.boolean("disabled");
         props
-            .styled(Checkbox::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Checkbox::new(props.id()), cx), cx)
+            .track_focus(focus)
             .state(state)
             .disabled(disabled)
             .styles(|styles| {
@@ -140,6 +143,7 @@ fn checkbox() -> Control {
     .prop("label", PropType::String)
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("checkedClass", PropType::String)
     .prop("indeterminateClass", PropType::String)
     .prop("disabledClass", PropType::String)
@@ -157,9 +161,10 @@ fn checkbox() -> Control {
 }
 
 fn radio() -> Control {
-    Control::new("Radio", |props, events, _, cx| {
+    Control::focusable("Radio", |focus, props, events, _, cx| {
         props
-            .styled(Radio::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Radio::new(props.id()), cx), cx)
+            .track_focus(focus)
             .checked(props.boolean("checked"))
             .disabled(props.boolean("disabled"))
             .styles(|styles| {
@@ -186,6 +191,7 @@ fn radio() -> Control {
     .prop("label", PropType::String)
     .prop("accessibilityLabel", PropType::String)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("checkedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("checked", PropType::Boolean)])

@@ -74,6 +74,34 @@ mod tests {
         );
     }
 
+    /// The single controls are Tab stops among the app's fields: NSH moves
+    /// the focus to their handle, and Space then activates them.
+    #[gpui_kit::test]
+    fn test_single_controls_are_tab_stops(cx: &mut gpui_kit::TestAppContext) {
+        use crate::testing::{Fixture, TestWindowExt as _};
+
+        for (name, event) in [
+            ("Button", "click"),
+            ("Toggle", "change"),
+            ("Switch", "change"),
+            ("Checkbox", "change"),
+            ("Radio", "change"),
+        ] {
+            let control = Fixture::new(cx, name, serde_json::json!({ "label": name }));
+            let focus = control
+                .focus_handle(cx)
+                .unwrap_or_else(|| panic!("{name} is a Tab stop"));
+            control.update(cx, |window, cx| focus.focus(window, cx));
+            control.update(cx, |window, cx| window.press("space", cx));
+            let events = control.take_events();
+            assert_eq!(events.len(), 1, "{name}: {events:?}");
+            assert_eq!(events[0].0, event, "{name}");
+
+            control.set_prop(cx, "disabled", Some(serde_json::json!(true)));
+            assert!(control.focus_handle(cx).is_none(), "{name} is disabled");
+        }
+    }
+
     #[test]
     fn test_control_names_are_unique() {
         let mut names: Vec<_> = controls().map(|control| control.name()).collect();

@@ -14,6 +14,10 @@ pub(super) fn controls() -> Vec<Control> {
     vec![pagination()]
 }
 
+/// The interaction-state class props of every page, Previous and Next
+/// button.
+const BUTTON_STATES: [&str; 3] = ["buttonHoverClass", "buttonActiveClass", "buttonFocusClass"];
+
 fn pagination() -> Control {
     Control::new("Pagination", |props, events, _, cx| {
         let mut state = PaginationState::new(
@@ -31,6 +35,10 @@ fn pagination() -> Control {
             let state = state.clone();
             props
                 .styled_by(class, Button::new(id), cx)
+                // A button with nowhere to go is disabled: no states.
+                .when(target.is_some(), |this| {
+                    props.states(BUTTON_STATES, this, cx)
+                })
                 .disabled(target.is_none())
                 .styles(|styles| {
                     styles.disabled(|style| props.styled_by("disabledClass", style, cx))
@@ -91,6 +99,7 @@ fn pagination() -> Control {
     .prop("currentPageClass", PropType::String)
     .prop("previousClass", PropType::String)
     .prop("nextClass", PropType::String)
+    .states(BUTTON_STATES)
     .prop("ellipsisClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::Number)])

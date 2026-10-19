@@ -17,6 +17,11 @@ pub(super) fn controls() -> Vec<Control> {
 }
 
 /// The `items` prop, each with whether it is the `value` prop's index.
+/// The interaction-state class props of each item.
+const RADIO_STATES: [&str; 3] = ["radioHoverClass", "radioActiveClass", "radioFocusClass"];
+const TOGGLE_STATES: [&str; 3] = ["toggleHoverClass", "toggleActiveClass", "toggleFocusClass"];
+const TAB_STATES: [&str; 3] = ["tabHoverClass", "tabActiveClass", ""];
+
 fn items(props: &Props) -> impl Iterator<Item = (usize, SharedString, bool)> {
     let value = props.has("value").then(|| props.number("value"));
     props
@@ -43,7 +48,11 @@ fn radio_group() -> Control {
             .axis(axis(props, Axis::Vertical))
             .children(items(props).map(|(index, label, checked)| {
                 props
-                    .styled_by("radioClass", Radio::new(index), cx)
+                    .states(
+                        RADIO_STATES,
+                        props.styled_by("radioClass", Radio::new(index), cx),
+                        cx,
+                    )
                     .checked(checked)
                     .disabled(props.boolean("disabled"))
                     .set_position(index + 1, count)
@@ -71,6 +80,7 @@ fn radio_group() -> Control {
     .prop("disabled", PropType::Boolean)
     .prop("rootClass", PropType::String)
     .prop("radioClass", PropType::String)
+    .states(RADIO_STATES)
     .prop("checkedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::Number)])
@@ -83,7 +93,11 @@ fn toggle_group() -> Control {
             .axis(axis(props, Axis::Horizontal))
             .children(items(props).map(|(index, label, pressed)| {
                 props
-                    .styled_by("toggleClass", Toggle::new(index), cx)
+                    .states(
+                        TOGGLE_STATES,
+                        props.styled_by("toggleClass", Toggle::new(index), cx),
+                        cx,
+                    )
                     .pressed(pressed)
                     .disabled(props.boolean("disabled"))
                     .styles(|styles| {
@@ -113,6 +127,7 @@ fn toggle_group() -> Control {
     .prop("disabled", PropType::Boolean)
     .prop("rootClass", PropType::String)
     .prop("toggleClass", PropType::String)
+    .states(TOGGLE_STATES)
     .prop("pressedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::Number)])
@@ -125,7 +140,11 @@ fn tabs() -> Control {
             .styled(Tabs::new(props.id()), cx)
             .children(items(props).map(|(index, label, selected)| {
                 props
-                    .styled_by("tabClass", Tab::new(index), cx)
+                    .states(
+                        TAB_STATES,
+                        props.styled_by("tabClass", Tab::new(index), cx),
+                        cx,
+                    )
                     .selected(selected)
                     .disabled(props.boolean("disabled"))
                     .set_position(index + 1, count)
@@ -149,6 +168,7 @@ fn tabs() -> Control {
     .prop("disabled", PropType::Boolean)
     .prop("rootClass", PropType::String)
     .prop("tabClass", PropType::String)
+    .states(TAB_STATES)
     .prop("selectedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("value", PropType::Number)])

@@ -25,6 +25,10 @@ struct NumberInputControl {
     _subscriptions: [Subscription; 2],
 }
 
+/// The interaction-state class props of both step buttons, which never take
+/// focus.
+const STEP_STATES: [&str; 3] = ["stepHoverClass", "stepActiveClass", ""];
+
 fn number_input() -> Control {
     Control::stateful(
         "NumberInput",
@@ -71,10 +75,11 @@ fn number_input() -> Control {
             });
             let button = |class: &str, label: &str| {
                 let style = props.styled_by(class, StyleRefinement::default(), cx);
+                let states = props.state_styles(STEP_STATES, cx);
                 let label = props.string(label);
                 move |button: Button| {
-                    button
-                        .refine_style(&style)
+                    states
+                        .apply(button.refine_style(&style))
                         .when_some(label, |this, label| this.child(label))
                 }
             };
@@ -111,6 +116,7 @@ fn number_input() -> Control {
     .prop("inputClass", PropType::String)
     .prop("decrementClass", PropType::String)
     .prop("incrementClass", PropType::String)
+    .states(STEP_STATES)
     .event("change", &[("value", PropType::String)])
     .event(
         "step",
@@ -331,7 +337,8 @@ mod tests {
             json!({ "value": "1", "step": 1, "disabled": true, "incrementLabel": "+" }),
         );
         input.update(cx, |window, cx| window.click("increment", cx));
-        focus(&input, cx);
+        // A disabled control is no Tab stop.
+        assert!(input.focus_handle(cx).is_none());
         input.update(cx, |window, cx| window.press("up", cx));
         input.update(cx, |window, cx| window.input("5", cx));
         assert!(input.take_events().is_empty());
@@ -408,10 +415,12 @@ mod tests {
     #[gpui_kit::test]
     fn test_otp_input_disabled(cx: &mut TestAppContext) {
         let otp = Fixture::new(cx, "OtpInput", json!({ "length": 4, "disabled": true }));
-        focus(&otp, cx);
+        // A disabled control is no Tab stop.
+        assert!(otp.focus_handle(cx).is_none());
         otp.update(cx, |window, cx| window.press("1", cx));
         assert!(otp.take_events().is_empty());
         otp.set_prop(cx, "disabled", None);
+        focus(&otp, cx);
         otp.update(cx, |window, cx| window.press("1", cx));
         assert_eq!(
             otp.take_events(),

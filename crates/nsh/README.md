@@ -37,9 +37,19 @@ GPUI Base owns each control's behavior: pointer and keyboard interaction, focus,
 no presentation, so the NSH app supplies it with class strings for the control (`rootClass`), each of its parts
 (`trackClass`, `thumbClass`, ...) and their states (`checkedClass`, `disabledClass`, ...). NSH keeps `class` for the
 Tailwind classes of the box every element has, which still apply around the control. A class string
-holds GPUI's and GPUI Base's style methods that take no argument (`flex items_center gap_2 rounded_full px_3`, found by
-reflection as GPUI Shell finds them) and `bg_<token>`, `text_<token>` and `border_<token>` for each color of GPUI
-Base's semantic tokens.
+holds:
+
+- GPUI's and GPUI Base's style methods that take no argument (`flex items_center gap_2 rounded_full px_3`, found by
+  reflection as GPUI Shell finds them), plus the font weights (`font_semibold`) reflection does not reach;
+- `bg_<token>`, `text_<token>` and `border_<token>` for each color of GPUI Base's semantic tokens (`bg_primary`,
+  `text_muted_foreground`);
+- `opacity_<percent>` (`opacity_50`).
+
+GPUI Base styles semantic states (checked, selected, disabled: `checkedClass`, `disabledClass`, ...). Interaction states
+are the composer's, so every interactive element or part also takes a hover, a pressed and a keyboard-focus class:
+`hoverClass`, `activeClass` and `focusClass` on the root, `itemHoverClass`, `thumbHoverClass` and so on for parts. None
+applies while the control is disabled. Focusable controls are Tab stops among the NSH app's text fields; a disabled one
+is not.
 
 Each control is declared once, in Rust, as a `Control` of a `Catalog` (`src/base/`): its props, its events, and the
 builder calls that create the GPUI Base element. The same catalog:

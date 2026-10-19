@@ -7,7 +7,7 @@ use gpui_kit::{
 };
 use serde_json::json;
 
-use crate::{Control, PropType, Props};
+use crate::{Control, PropType, Props, ROOT_STATES};
 
 pub(super) fn controls() -> Vec<Control> {
     vec![button(), toggle(), link()]
@@ -50,9 +50,10 @@ fn flag(props: &Props, name: &str) -> Option<bool> {
 }
 
 fn button() -> Control {
-    Control::new("Button", |props, events, _, cx| {
+    Control::focusable("Button", |focus, props, events, _, cx| {
         props
-            .styled(Button::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Button::new(props.id()), cx), cx)
+            .track_focus(focus)
             .disabled(props.boolean("disabled"))
             .selected(props.boolean("selected"))
             .role(button_role(props))
@@ -85,16 +86,18 @@ fn button() -> Control {
     .prop("tabStop", PropType::Boolean)
     .prop("focusable", PropType::Boolean)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("selectedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("click", &[])
 }
 
 fn toggle() -> Control {
-    Control::new("Toggle", |props, events, _, cx| {
+    Control::focusable("Toggle", |focus, props, events, _, cx| {
         let change = events.clone();
         props
-            .styled(Toggle::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Toggle::new(props.id()), cx), cx)
+            .track_focus(focus)
             .pressed(props.boolean("pressed"))
             .disabled(props.boolean("disabled"))
             .styles(|styles| {
@@ -124,6 +127,7 @@ fn toggle() -> Control {
     .prop("tabIndex", PropType::Number)
     .prop("tabStop", PropType::Boolean)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("pressedClass", PropType::String)
     .prop("disabledClass", PropType::String)
     .event("change", &[("pressed", PropType::Boolean)])
@@ -138,7 +142,7 @@ fn link() -> Control {
         let href = props.string("href");
         let activate = events.clone();
         props
-            .styled(Link::new(props.id()), cx)
+            .states(ROOT_STATES, props.styled(Link::new(props.id()), cx), cx)
             .disabled(props.boolean("disabled"))
             .styles(|styles| styles.disabled(|style| props.styled_by("disabledClass", style, cx)))
             .when_some(href.clone(), |this, href| this.href(href))
@@ -169,6 +173,7 @@ fn link() -> Control {
     .prop("tabIndex", PropType::Number)
     .prop("tabStop", PropType::Boolean)
     .prop("rootClass", PropType::String)
+    .states(ROOT_STATES)
     .prop("disabledClass", PropType::String)
     .event("activate", &[("href", PropType::String)])
 }

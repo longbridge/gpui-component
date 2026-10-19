@@ -17,11 +17,17 @@ use std::{
 
 use gpui_kit::{
     AnyElement, App, AvailableSpace, Bounds, ElementId, FocusHandle, Hsla, IntoElement as _,
-    ParentElement as _, Pixels, Refineable as _, SharedString, Size, StyleRefinement, Styled,
-    Window, base::Theme, inspector_reflection::FunctionReflection,
+    ParentElement as _, Pixels, Refineable as _, SharedString, Size, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window,
+    base::{StyledExt as _, Theme},
+    inspector_reflection::FunctionReflection,
 };
 use nsh_platform_gpui::{ComponentContext, Components, NativeComponent};
 use serde_json::{Map, Value};
+
+/// The interaction-state class props of a control's root element
+/// ([`Control::states`], [`Props::states`]).
+pub const ROOT_STATES: [&str; 3] = ["hoverClass", "activeClass", "focusClass"];
 
 /// The type of a prop or an event field, as TypeScript declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +116,23 @@ impl Control {
         )
     }
 
+    /// A control whose element tracks a focus handle the control keeps, so
+    /// it is a Tab stop among the app's text fields (GPUI Base's controls
+    /// take one with `track_focus`).
+    pub fn focusable(
+        name: &'static str,
+        build: impl Fn(&FocusHandle, &Props, &Events, &mut Window, &mut App) -> AnyElement + 'static,
+    ) -> Self {
+        Self::stateful(
+            name,
+            |_, _, _, cx| cx.focus_handle(),
+            move |focus: &mut FocusHandle, props, events, window, cx| {
+                build(focus, props, events, window, cx)
+            },
+        )
+        .focus(|focus: &FocusHandle, _| focus.clone())
+    }
+
     fn with_build(name: &'static str, build: Rc<Build>) -> Self {
         Self {
             name,
@@ -145,6 +168,17 @@ impl Control {
     pub fn prop(mut self, name: &'static str, ty: PropType) -> Self {
         self.props.push((name, ty));
         self
+    }
+
+    /// Declares the class props of an interactive element's pointer and
+    /// keyboard states, `[hover, active, focus]` (see [`Props::states`]). An
+    /// empty name is a state the element does not have (a part that never
+    /// takes focus).
+    pub fn states(self, names: [&'static str; 3]) -> Self {
+        names
+            .into_iter()
+            .filter(|name| !name.is_empty())
+            .fold(self, |control, name| control.prop(name, PropType::String))
     }
 
     /// Declares event `name` (handled in JS as `on<Name>`) and its data.
@@ -225,6 +259,35 @@ impl Props {
         self.styled_by("rootClass", element, cx)
     }
 
+    /// `element` with the class props of its interaction states, named
+    /// `[hover, active, focus]`: GPUI Base styles semantic states (checked,
+    /// selected, disabled), and the composer adds these. `focus` shows while
+    /// the element has keyboard focus (`focus_visible`). None applies while
+    /// the control is `disabled`.
+    pub fn states<E: StatefulInteractiveElement>(
+        &self,
+        names: [&str; 3],
+        element: E,
+        cx: &App,
+    ) -> E {
+        self.state_styles(names, cx).apply(element)
+    }
+
+    /// The styles [`Props::states`] applies, for a part built later (a
+    /// `'static` decorator).
+    pub fn state_styles(&self, [hover, active, focus]: [&str; 3], cx: &App) -> StateStyles {
+        // A disabled control answers neither the pointer nor the keyboard.
+        if self.boolean("disabled") {
+            return StateStyles::default();
+        }
+        let style = |name: &str| self.string(name).map(|class| class_style(&class, cx));
+        StateStyles {
+            hover: style(hover),
+            active: style(active),
+            focus: style(focus),
+        }
+    }
+
     /// `element` with the styles of prop `name`, a class string: GPUI's and
     /// GPUI Base's style methods that take no argument (`rounded_full p_1
     /// items_center`, found by reflection as GPUI Shell finds them), and
@@ -273,6 +336,21 @@ fn token_colors(cx: &App) -> HashMap<&'static str, Hsla> {
     )
 }
 
+/// No-argument style methods reflection does not reach: GPUI Base makes
+/// its font weights with a macro (GPUI Shell adds the same list).
+type Nullary = fn(StyleRefinement) -> StyleRefinement;
+const FONT_WEIGHTS: &[(&str, Nullary)] = &[
+    ("font_thin", |style| style.font_thin()),
+    ("font_extralight", |style| style.font_extralight()),
+    ("font_light", |style| style.font_light()),
+    ("font_normal", |style| style.font_normal()),
+    ("font_medium", |style| style.font_medium()),
+    ("font_semibold", |style| style.font_semibold()),
+    ("font_bold", |style| style.font_bold()),
+    ("font_extrabold", |style| style.font_extrabold()),
+    ("font_black", |style| style.font_black()),
+];
+
 /// The style of a class string.
 pub(crate) fn class_style(class: &str, cx: &App) -> StyleRefinement {
     let colors = token_colors(cx);
@@ -292,6 +370,17 @@ pub(crate) fn class_style(class: &str, cx: &App) -> StyleRefinement {
             .fold(StyleRefinement::default(), |style, name| {
                 if let Some(method) = methods.get(name) {
                     return method.invoke(style);
+                }
+                if let Some((_, weight)) = FONT_WEIGHTS.iter().find(|(n, _)| *n == name) {
+                    return weight(style);
+                }
+                // `opacity_<percent>`: GPUI's `opacity` takes an argument.
+                if let Some(percent) = name
+                    .strip_prefix("opacity_")
+                    .and_then(|percent| percent.parse::<u8>().ok())
+                    .filter(|percent| *percent <= 100)
+                {
+                    return style.opacity(f32::from(percent) / 100.0);
                 }
                 let token = |prefix: &str| {
                     name.strip_prefix(prefix)
@@ -324,6 +413,31 @@ impl Sink for ComponentContext {
 
     fn redraw(&self) {
         ComponentContext::redraw(self);
+    }
+}
+
+/// The interaction-state styles of an element ([`Props::state_styles`]).
+#[derive(Clone, Default)]
+pub struct StateStyles {
+    hover: Option<StyleRefinement>,
+    active: Option<StyleRefinement>,
+    focus: Option<StyleRefinement>,
+}
+
+impl StateStyles {
+    /// `element` with these styles while hovered, pressed and focused from
+    /// the keyboard.
+    pub fn apply<E: StatefulInteractiveElement>(self, mut element: E) -> E {
+        if let Some(style) = self.hover {
+            element = element.hover(|_| style);
+        }
+        if let Some(style) = self.active {
+            element = element.active(|_| style);
+        }
+        if let Some(style) = self.focus {
+            element = element.focus_visible(|_| style);
+        }
+        element
     }
 }
 
@@ -513,10 +627,14 @@ impl Mounted {
     pub(crate) fn build(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
         let element = (self.control.build)(&mut self.state, &self.props, &self.events, window, cx);
         self.props.changed.clear();
-        // Asked on every frame: a control may replace the entity it focuses.
-        if let (Some(focus), Some(state)) = (&self.control.focus, &self.state) {
-            self.focus = Some(focus(state.as_ref(), cx));
-        }
+        // Asked on every frame: a control may replace the entity it focuses,
+        // and a disabled control is no Tab stop.
+        self.focus = match (&self.control.focus, &self.state) {
+            (Some(focus), Some(state)) if !self.props.boolean("disabled") => {
+                Some(focus(state.as_ref(), cx))
+            }
+            _ => None,
+        };
         let foreground = Theme::global(cx).tokens.colors.foreground;
         gpui_kit::div()
             .text_color(foreground)
@@ -649,6 +767,33 @@ mod tests {
     }
 
     #[gpui_kit::test]
+    fn test_state_styles(cx: &mut gpui_kit::TestAppContext) {
+        let control = Control::new("Item", |_, _, _, _| unreachable!()).states([
+            "itemHoverClass",
+            "itemActiveClass",
+            "",
+        ]);
+        let declared: Vec<_> = control.props.iter().map(|(name, _)| *name).collect();
+        assert_eq!(declared, ["itemHoverClass", "itemActiveClass"]);
+
+        let mut mounted = Mounted::new(Rc::new(control), Rc::new(Silent));
+        mounted.set_prop("itemHoverClass", Some(&serde_json::json!("bg_accent")));
+        mounted.set_prop("itemActiveClass", Some(&serde_json::json!("bg_primary")));
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            let names = ["itemHoverClass", "itemActiveClass", ""];
+            let styles = mounted.props.state_styles(names, cx);
+            assert!(styles.hover.is_some() && styles.active.is_some());
+            assert!(styles.focus.is_none());
+
+            // A disabled control shows no interaction states.
+            mounted.set_prop("disabled", Some(&serde_json::json!(true)));
+            let styles = mounted.props.state_styles(names, cx);
+            assert!(styles.hover.is_none() && styles.active.is_none());
+        });
+    }
+
+    #[gpui_kit::test]
     fn test_class_style(cx: &mut gpui_kit::TestAppContext) {
         cx.update(|cx| {
             gpui_kit::init(cx);
@@ -659,6 +804,9 @@ mod tests {
             assert!(style.size.width.is_some());
             assert!(style.corner_radii.top_left.is_some());
             assert_eq!(style.background, Some(primary.into()));
+            let style = class_style("font_semibold opacity_50 opacity_101", cx);
+            assert_eq!(style.text.font_weight, Some(gpui_kit::FontWeight::SEMIBOLD));
+            assert_eq!(style.opacity, Some(0.5));
             let style = class_style("text_muted_foreground border_border", cx);
             assert!(style.text.color.is_some());
             assert!(style.border_color.is_some());
