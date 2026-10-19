@@ -4,6 +4,28 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: custom Find starts near the visible text
+
+`InputBaseState::set_search_query` now anchors a changed query or case mode to
+the current viewport, so an immediate Replace targets the nearby occurrence
+instead of the first match elsewhere in the document. Reusing the same query
+and case mode retains the navigated occurrence, including after closing and
+resuming search. This does not open the built-in search panel.
+#### Input caret visibility in constrained viewports
+
+Text inputs keep the caret's complete visual row visible even in a one-row
+viewport. Typing and keyboard movement share the same bounded reveal geometry.
+A focused, visible caret's row stays vertically visible when its textarea
+shrinks or reflows; deliberately scrolling away does not snap the viewport back.
+Resize-follow preserves horizontal scrolling and soft-wrap end affinity.
+No public API or dependency changes are required.
+#### Fixed: transition completion at the configured deadline
+
+Transitions and presence exits preserve duration precision when applying the
+reversing factor, including on Rust 1.96. A 100 ms transition
+no longer rounds up to 100 ms + 1 ns and requests another frame at its deadline;
+presence can unmount the exiting content on that frame.
+
 #### Root owns window overlays
 
 `gpui_component::Root` now always mounts the dialog, sheet and notification
@@ -18,6 +40,12 @@ its painted selection. Retaining and later remounting the same TextView state
 does not make old text copyable again without a fresh selection. Cached views
 that remain rendered, and selections unrelated to a removed participant, keep
 their existing selection.
+#### Fixed: keyboard activation inside Popover
+
+Enter and Space now activate a focused control inside a Popover instead of
+toggling the surrounding trigger. Textarea newline and space input keep their
+own bindings, and Escape still dismisses the popover and restores trigger focus.
+This applies to both the Base and styled Component Popover.
 
 #### Questionnaire: choosing a single answer confirms the item
 
