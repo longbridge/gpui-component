@@ -353,6 +353,8 @@ pub struct PrepaintCaretGeometry {
     line_height: Pixels,
     input_bounds: Bounds<Pixels>,
     scroll_offset: Point<Pixels>,
+    /// A resize owns visibility while its requested repaint settles.
+    pub(super) resize_reveal_owned: bool,
 }
 
 impl PrepaintCaretGeometry {
@@ -367,6 +369,7 @@ impl PrepaintCaretGeometry {
             line_height,
             input_bounds,
             scroll_offset,
+            resize_reveal_owned: false,
         }
     }
 
@@ -1420,7 +1423,10 @@ impl<M: InputModeKind> InputBaseState<M> {
     ///
     /// - `None` (default): [`BOTTOM_MARGIN_ROWS`] lines, falling back to
     ///   one line on small viewports.
-    /// - `Some(n)`: exactly `n` lines, clamped to half the viewport.
+    /// - `Some(n)`: requests `n` lines, clamped to half the viewport.
+    ///
+    /// In a constrained viewport, edge clearance yields to the cursor's
+    /// complete visual row so surrounding space cannot clip the text being edited.
     pub fn cursor_surrounding_lines(mut self, lines: Option<usize>) -> Self {
         self.cursor_surrounding_lines = lines;
         self
@@ -2875,10 +2881,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         let row = point.row;
 
         // Resolve the wrapped row even when the target is outside the last layout.
-        let display_pos = self
+        let display_row = self
             .display_map
-            .buffer_pos_to_display_pos(crate::input::BufferPoint::new(row, point.column));
-        let row_offset_y = line_height * display_pos.row;
+            .offset_to_display_row(offset, self.line_end_affinity_at(offset));
+        let row_offset_y = line_height * display_row;
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursors, so shifting the text here would cause a first-click visual jump.
@@ -2919,15 +2925,15 @@ impl<M: InputModeKind> InputBaseState<M> {
                     line_height,
                 )
             } else {
-                line_height
+                px(0.)
             };
-        if row_offset_y - edge_height + line_height < -scroll_offset.y {
-            // Scroll up
-            scroll_offset.y = -row_offset_y + edge_height - line_height;
-        } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
-            // Scroll down
-            scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
-        }
+        scroll_offset.y = super::element::reveal_row(
+            scroll_offset.y,
+            row_offset_y,
+            line_height,
+            bounds.size.height,
+            edge_height,
+        );
 
         // Avoid necessary scroll, when it was already in the correct position.
         if direction == Some(MoveDirection::Up) {

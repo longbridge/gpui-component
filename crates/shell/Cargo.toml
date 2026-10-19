@@ -24,6 +24,8 @@ gpui-fast = [
     "gpui-base/gpui-fast",
     "gpui-fps/gpui-fast",
     "gpui-component?/gpui-fast",
+    "gpui-kit/gpui-fast",
+    "gpui-webview?/gpui-fast",
 ]
 default = ["quickjs", "components", "webview"]
 # The `gpui-component` catalog (`gpui_shell::components`), which scripts import
@@ -31,8 +33,9 @@ default = ["quickjs", "components", "webview"]
 # not depend on the styled component library at all.
 components = ["dep:gpui-component"]
 # `WebView` and `WebViewState` in the `"gpui-component"` catalog: a native web
-# page, through `gpui-webview`. That crate is built on GPUI Fast, so this selects
-# it for the whole runtime; on Linux a page needs an X11 or XWayland window.
+# page, through `gpui-webview`. GPUI overlays render above the page only with
+# GPUI Fast's window composition, so this selects GPUI Fast for the whole
+# runtime; on Linux a page needs an X11 or XWayland window.
 webview = ["components", "gpui-fast", "dep:gpui-webview", "dep:wry"]
 # The scripting engine. See `src/engine/mod.rs` for the surface an engine has
 # to provide; QuickJS is the only implementation today, and the feature exists
@@ -54,6 +57,10 @@ gpui-base = { workspace = true, features = ["inspector"] }
 gpui-fps.workspace = true
 gpui-component = { workspace = true, features = ["syntect"], optional = true }
 gpui-webview = { workspace = true, optional = true }
+# Not named in the source: `gpui-webview` takes its GPUI types from the Kit, whose backend
+# follows the runtime's `gpui-fast`. It stays non-optional because GPUI's macros route their
+# paths through `gpui_kit` whenever the manifest lists it, enabled or not.
+gpui-kit = { path = "../kit", version = "0.7.3", default-features = false }
 wry = { version = "0.53.3", package = "lb-wry", optional = true }
 
 # Keep the bindings, runtime, and LLRT compatibility facade on the same release.
@@ -113,6 +120,9 @@ windows = { workspace = true, features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
 ] }
+
+[package.metadata.cargo-machete]
+ignored = ["gpui-kit"]
 
 [lints]
 workspace = true

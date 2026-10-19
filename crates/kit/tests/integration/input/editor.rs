@@ -1331,3 +1331,41 @@ fn shift_end_then_down_preserves_editor_visual_row_end_affinity(cx: &mut TestApp
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn visual_end_does_not_scroll_a_fully_visible_wrapped_editor_row(cx: &mut TestAppContext) {
+    let value = "x".repeat(600);
+    let (handle, state) = editor(cx, "plaintext", "");
+    let height = cx
+        .update_window(handle.into(), |_, window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_soft_wrap(true, window, cx);
+                state.set_cursor_surrounding_lines(Some(0), window, cx);
+                state.set_value(value.clone(), window, cx);
+            });
+            window.render_frame(cx);
+            let (_, line_height) = state.read(cx).cursor_layout().unwrap();
+            px(480.) - state.read(cx).input_bounds().size.height + line_height * 2.
+        })
+        .unwrap();
+    cx.simulate_window_resize(handle.into(), size(px(800.), height));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.click(("input", state.entity_id()), cx);
+        window.press(platform_shortcut("cmd-up", "ctrl-home"), cx);
+        window.press("down", cx);
+        let before = state.read(cx).scroll_offset();
+        let row_start = state.read(cx).cursor();
+        let top = state.read(cx).cursor_layout().unwrap().0.top();
+        window.press(platform_shortcut("cmd-right", "end"), cx);
+        assert!(state.read(cx).cursor() > row_start && state.read(cx).cursor() < value.len());
+        assert_eq!(state.read(cx).scroll_offset(), before);
+        let caret = state.read(cx).cursor_layout().unwrap().0;
+        let viewport = state.read(cx).input_bounds();
+        assert_eq!(caret.top(), top);
+        assert!(caret.top() + before.y >= viewport.top());
+        assert!(caret.bottom() + before.y <= viewport.bottom());
+        assert_eq!(state.read(cx).value(), value);
+    })
+    .unwrap();
+}

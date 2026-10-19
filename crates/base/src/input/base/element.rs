@@ -409,6 +409,24 @@ pub(super) fn cursor_surrounding_padding(
     raw.min(viewport_half)
 }
 
+/// Reveal the whole visual row without changing the usual edge clearance.
+/// Reserve the row's height below its insertion position before allocating
+/// top padding. A viewport shorter than a row can only align its start.
+pub(super) fn reveal_row(
+    offset: Pixels,
+    row_top: Pixels,
+    line_height: Pixels,
+    viewport_height: Pixels,
+    edge_padding: Pixels,
+) -> Pixels {
+    let row_height = line_height.min(viewport_height);
+    let bottom = edge_padding.max(row_height).min(viewport_height);
+    let top = edge_padding.min(viewport_height - bottom);
+    offset
+        .clamp(top - row_top, viewport_height - bottom - row_top)
+        .min(px(0.))
+}
+
 /// Pixel height of the empty area below the last line in the editor's
 /// scrollable region. Backs [`InputBaseState::scroll_beyond_last_line`].
 ///
@@ -548,9 +566,9 @@ impl<M: InputModeKind> TextElement<M> {
         last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
         scroll_size: Size<Pixels>,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
-    ) -> (Vec<CursorRenderInfo>, Point<Pixels>, Option<usize>) {
+    ) -> (Vec<CursorRenderInfo>, Point<Pixels>, Option<usize>, bool) {
         let state = self.state.read(cx);
 
         let line_height = last_layout.line_height;
@@ -561,6 +579,7 @@ impl<M: InputModeKind> TextElement<M> {
         let active_id = state.active_selection().id;
         let mut scroll_offset = state.scroll_handle.offset();
         let mut current_row = None;
+        let mut resize_reveal_owned = false;
         let mut cursor_infos: Vec<CursorRenderInfo> = Vec::with_capacity(state.selections.len());
 
         // Padding kept between the cursor and the viewport's top/bottom
@@ -571,6 +590,35 @@ impl<M: InputModeKind> TextElement<M> {
             viewport_visible_lines(bounds.size.height, line_height),
             line_height,
         );
+
+        // Keep a visible, focused caret visible when its viewport reflows, but
+        // do not undo deliberate scrolling away from an unchanged selection.
+        let resized = state.last_bounds.is_some_and(|old| old.size != bounds.size)
+            || state
+                .last_layout
+                .as_ref()
+                .is_some_and(|old| old.line_height != line_height);
+        let reveal_on_resize = resized
+            && state.deferred_scroll_offset.is_none()
+            && state.focus_handle.is_focused(window)
+            && state.prepaint_caret_geometry.is_some_and(|old| {
+                // An unshaped caret has provisional x until the notified
+                // repaint. Consecutive resize frames retain ownership only
+                // while no intervening scroll changed the viewport.
+                if old.resize_reveal_owned {
+                    return old.scroll_offset() == scroll_offset;
+                }
+                let caret = old.cursor_bounds();
+                let viewport = old.input_bounds();
+                let top = caret.top() + scroll_offset.y;
+                // Cached x already contains its painted scroll; account only
+                // for a wheel offset change since that geometry was produced.
+                let left = caret.left() + scroll_offset.x - old.scroll_offset().x;
+                top >= viewport.top()
+                    && top + caret.size.height <= viewport.bottom()
+                    && left >= viewport.left()
+                    && left + caret.size.width <= viewport.right()
+            });
 
         // Resolve a cursor or selection endpoint to a content-space position.
         let visible_buffer_lines = &last_layout.visible_buffer_lines;
@@ -587,7 +635,13 @@ impl<M: InputModeKind> TextElement<M> {
                     return line_origin + pos;
                 }
             }
-            line_origin
+            if state.masked {
+                return line_origin;
+            }
+            point(
+                px(0.),
+                line_height * state.display_map.offset_to_display_row(offset, affinity),
+            )
         };
 
         let cursor_height = 0.85 * line_height;
@@ -634,50 +688,43 @@ impl<M: InputModeKind> TextElement<M> {
 
                 let selection_changed = state.last_selected_range != Some(selected_range);
                 let auto_scrolling = state.auto_scroll.is_active();
-                if selection_changed && !is_selected_all {
-                    // For Right alignment use 0 margin: cursor is clamped to bounds separately,
-                    // so we never scroll the text for cursor-at-edge, avoiding a first-click jump.
-                    let safety_margin = match last_layout.text_align {
-                        TextAlign::Left => RIGHT_MARGIN,
-                        TextAlign::Right => px(0.),
-                        TextAlign::Center => CURSOR_WIDTH,
-                    };
-
-                    scroll_offset.x = if scroll_offset.x + cursor_pos.x
-                        > (bounds.size.width - line_number_width - safety_margin)
-                    {
-                        // cursor is out of right
-                        bounds.size.width - line_number_width - safety_margin - cursor_pos.x
-                    } else if scroll_offset.x + cursor_pos.x < px(0.) {
-                        // cursor is out of left
-                        -cursor_pos.x
-                    } else {
-                        scroll_offset.x
-                    };
+                if (selection_changed || reveal_on_resize) && !is_selected_all {
+                    // Resize-follow owns only vertical visibility. An unshaped
+                    // target has no reliable x; retain the existing x offset.
+                    if selection_changed {
+                        // Right-aligned carets are clamped instead of scrolling.
+                        let safety_margin = match last_layout.text_align {
+                            TextAlign::Left => RIGHT_MARGIN,
+                            TextAlign::Right => px(0.),
+                            TextAlign::Center => CURSOR_WIDTH,
+                        };
+                        scroll_offset.x = if scroll_offset.x + cursor_pos.x
+                            > (bounds.size.width - line_number_width - safety_margin)
+                        {
+                            bounds.size.width - line_number_width - safety_margin - cursor_pos.x
+                        } else if scroll_offset.x + cursor_pos.x < px(0.) {
+                            -cursor_pos.x
+                        } else {
+                            scroll_offset.x
+                        };
+                    }
 
                     // Vertical cursor-follow is suppressed while auto-scroll manages the y axis,
                     // to prevent fighting the background scroll task.
                     if !auto_scrolling {
-                        // Scroll straight to the caret's line. This runs only on
-                        // the frame the selection changed, so a one-line step
-                        // would leave a far-off caret (e.g. after typing at the
-                        // end of a long paste) outside the viewport.
-                        scroll_offset.y = if scroll_offset.y + cursor_pos.y
-                            > bounds.size.height - top_bottom_margin
-                        {
-                            // cursor is out of bottom
-                            bounds.size.height - top_bottom_margin - cursor_pos.y
-                        } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
-                            // cursor is out of top
-                            (top_bottom_margin - cursor_pos.y).min(px(0.))
-                        } else {
-                            scroll_offset.y
-                        };
+                        scroll_offset.y = reveal_row(
+                            scroll_offset.y,
+                            cursor_pos.y,
+                            line_height,
+                            bounds.size.height,
+                            top_bottom_margin,
+                        );
+                        resize_reveal_owned = reveal_on_resize;
                     }
 
                     // For selection to move scroll
                     if selection.reversed {
-                        if scroll_offset.x + cursor_start.x < px(0.) {
+                        if selection_changed && scroll_offset.x + cursor_start.x < px(0.) {
                             // selection start is out of left
                             scroll_offset.x = -cursor_start.x;
                         }
@@ -688,7 +735,7 @@ impl<M: InputModeKind> TextElement<M> {
                     } else {
                         // TODO: Consider to remove this part,
                         // maybe is not necessary (But selection_reversed is needed).
-                        if scroll_offset.x + cursor_end.x <= px(0.) {
+                        if selection_changed && scroll_offset.x + cursor_end.x <= px(0.) {
                             // selection end is out of left
                             scroll_offset.x = -cursor_end.x;
                         }
@@ -736,7 +783,12 @@ impl<M: InputModeKind> TextElement<M> {
 
         bounds.origin = bounds.origin + scroll_offset;
 
-        (cursor_infos, scroll_offset, current_row)
+        (
+            cursor_infos,
+            scroll_offset,
+            current_row,
+            resize_reveal_owned,
+        )
     }
 
     /// Layout the match range to a Path.
@@ -2903,7 +2955,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         // text, its carets, selections, and gutter contents are displaced.
         bounds.origin.y += px(stretch);
 
-        let (cursor_infos, cursor_scroll_offset, current_row) =
+        let (cursor_infos, cursor_scroll_offset, current_row, resize_reveal_owned) =
             self.layout_cursors(&last_layout, &mut bounds, scroll_size, window, cx);
         // Completion/code-action menus position at the active caret.
         last_layout.cursor_bounds = cursor_infos
@@ -2933,7 +2985,10 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 input_bounds.size.width,
                 last_layout.text_align,
             );
-            PrepaintCaretGeometry::new(cursor_bounds, line_height, input_bounds, scroll_offset)
+            let mut geometry =
+                PrepaintCaretGeometry::new(cursor_bounds, line_height, input_bounds, scroll_offset);
+            geometry.resize_reveal_owned = resize_reveal_owned;
+            geometry
         });
         self.state.update(cx, |state, _| {
             state.prepaint_caret_geometry = caret_geometry;
@@ -3941,7 +3996,7 @@ mod tests {
             let scroll_size = input_bounds.size;
             let element = TextElement::new(editor.clone());
             let mut bounds = input_bounds;
-            let (baseline, _, _) =
+            let (baseline, _, _, _) =
                 element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
 
             // Both a stale offset after deletion and a deferred scroll target must
@@ -3952,7 +4007,7 @@ mod tests {
                     state.deferred_scroll_offset = deferred;
                 });
                 let mut bounds = input_bounds;
-                let (carets, offset, _) =
+                let (carets, offset, _, _) =
                     element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
                 assert_eq!(offset.x, px(0.));
                 assert_eq!(bounds.origin.x, input_bounds.origin.x);
@@ -3995,7 +4050,7 @@ mod tests {
                         state.deferred_scroll_offset = Some(point(minimum, px(0.)));
                     });
                     let mut bounds = input_bounds;
-                    let (expected, _, _) =
+                    let (expected, _, _, _) =
                         element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
 
                     for target in [minimum - px(100.), px(100.)] {
@@ -4003,7 +4058,7 @@ mod tests {
                             state.deferred_scroll_offset = Some(point(target, px(0.)));
                         });
                         let mut bounds = input_bounds;
-                        let (carets, offset, _) =
+                        let (carets, offset, _, _) =
                             element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
                         let expected_offset = if target < minimum { minimum } else { px(0.) };
                         assert_eq!(offset.x, expected_offset);
@@ -4054,13 +4109,13 @@ mod tests {
                     state.deferred_scroll_offset = None;
                 });
                 let mut bounds = input_bounds;
-                let (baseline, _, _) =
+                let (baseline, _, _, _) =
                     element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
                 editor.update(cx, |state, _| {
                     state.deferred_scroll_offset = Some(point(px(-60.), px(0.)));
                 });
                 let mut bounds = input_bounds;
-                let (carets, offset, _) =
+                let (carets, offset, _, _) =
                     element.layout_cursors(&layout, &mut bounds, scroll_size, window, cx);
                 assert_eq!(offset.x, px(-60.));
                 assert_eq!(carets.len(), 3);
@@ -4974,100 +5029,41 @@ mod tests {
     }
 
     #[test]
-    fn test_cursor_surrounding_padding_auto_grow() {
-        // Auto-grow inputs always pad by one line, regardless of any
-        // override or visible-lines count.
+    fn row_reveal_contains_the_whole_row_and_has_a_stable_offset() {
         let line_height = px(20.);
-        for override_lines in [None, Some(0), Some(3), Some(99)] {
-            for visible_lines in [0_usize, 1, 8, 64] {
-                assert_eq!(
-                    cursor_surrounding_padding(true, override_lines, visible_lines, line_height,),
-                    line_height,
-                );
+        let row_top = px(1000.);
+        for viewport_height in [px(20.), px(30.), px(600.)] {
+            for auto_grow in [false, true] {
+                for surrounding in [None, Some(0), Some(50)] {
+                    let padding = cursor_surrounding_padding(
+                        auto_grow,
+                        surrounding,
+                        viewport_visible_lines(viewport_height, line_height),
+                        line_height,
+                    );
+                    for previous in [px(-1500.), px(-1000.), px(0.)] {
+                        let offset =
+                            reveal_row(previous, row_top, line_height, viewport_height, padding);
+                        assert!(row_top + offset >= px(0.));
+                        assert!(row_top + offset + line_height <= viewport_height);
+                        assert_eq!(
+                            reveal_row(offset, row_top, line_height, viewport_height, padding),
+                            offset,
+                            "unchanged caret must not oscillate",
+                        );
+                    }
+                }
             }
         }
     }
 
     #[test]
-    fn test_cursor_surrounding_padding_default() {
-        // `None`: historical heuristic — `BOTTOM_MARGIN_ROWS` for normal
-        // viewports, falls back to one line on small viewports (less
-        // than `BOTTOM_MARGIN_ROWS × 8` rows tall).
-        let line_height = px(20.);
-
-        // Small viewport → 1-line fallback.
-        let small = BOTTOM_MARGIN_ROWS * 8 - 1;
+    fn undersized_row_reveal_aligns_the_start_without_oscillating() {
+        let offset = reveal_row(px(0.), px(80.), px(20.), px(10.), px(60.));
+        assert_eq!(px(80.) + offset, px(0.));
         assert_eq!(
-            cursor_surrounding_padding(false, None, small, line_height),
-            line_height,
-        );
-
-        // Boundary at `BOTTOM_MARGIN_ROWS × 8` flips to the full margin.
-        let boundary = BOTTOM_MARGIN_ROWS * 8;
-        assert_eq!(
-            cursor_surrounding_padding(false, None, boundary, line_height),
-            BOTTOM_MARGIN_ROWS * line_height,
-        );
-
-        // Comfortably-large viewport.
-        assert_eq!(
-            cursor_surrounding_padding(false, None, 100, line_height),
-            BOTTOM_MARGIN_ROWS * line_height,
-        );
-    }
-
-    #[test]
-    fn test_cursor_surrounding_padding_explicit() {
-        // `Some(n)`: exactly `n × line_height` when the viewport has
-        // room for it; saturated against half the viewport when it
-        // doesn't.
-        let line_height = px(20.);
-
-        for lines in [0_usize, 1, 2, 5, 50] {
-            let raw = lines as f32 * line_height;
-            for visible_lines in [0_usize, 1, 8, 100] {
-                let viewport_half = (visible_lines as f32 * line_height).half();
-                assert_eq!(
-                    cursor_surrounding_padding(false, Some(lines), visible_lines, line_height,),
-                    raw.min(viewport_half),
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_cursor_surrounding_padding_saturates_against_viewport() {
-        // An aggressive override on a small viewport must not produce a
-        // padding larger than half the visible region — otherwise the
-        // bottom-edge auto-scroll-into-view threshold sinks below the
-        // top-edge threshold and the per-frame scroll adjustment loses
-        // a stable fixed point.
-        let line_height = px(20.);
-
-        // Override much larger than viewport → clamped to half.
-        let visible_lines = 10;
-        let viewport_half = (visible_lines as f32 * line_height).half();
-        assert_eq!(
-            cursor_surrounding_padding(false, Some(50), visible_lines, line_height),
-            viewport_half,
-        );
-
-        // Override that fits → returned unchanged.
-        let visible_lines = 40;
-        assert_eq!(
-            cursor_surrounding_padding(false, Some(3), visible_lines, line_height),
-            3.0 * line_height,
-        );
-
-        // Default heuristic still saturates if BOTTOM_MARGIN_ROWS would
-        // exceed the half-viewport bound (only possible at extreme
-        // sizes — kept for defensive completeness).
-        let visible_lines = BOTTOM_MARGIN_ROWS * 8;
-        let half = (visible_lines as f32 * line_height).half();
-        let raw = BOTTOM_MARGIN_ROWS * line_height;
-        assert_eq!(
-            cursor_surrounding_padding(false, None, visible_lines, line_height),
-            raw.min(half),
+            reveal_row(offset, px(80.), px(20.), px(10.), px(60.)),
+            offset
         );
     }
 }

@@ -305,6 +305,37 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_data_table_builder(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| FocusRingHarness {
+            state: cx.new(|cx| TableState::new(RowsDelegate, window, cx)),
+            focus_ring: true,
+        });
+        let state = view.read_with(cx, |view, _| view.state.clone());
+        assert!(DataTable::new(&state).is_focus_ring_enabled());
+
+        let table = DataTable::new(&state)
+            .stripe(true)
+            .bordered(false)
+            .scroll_bounce(false)
+            .header_row_height(px(32.))
+            .fixed_cols_border(false)
+            .scrollbar_visible(false, true)
+            .with_size(Size::Small)
+            .focus_ring(false);
+        assert!(table.options.stripe);
+        assert!(!table.options.bordered);
+        assert_eq!(table.options.scroll_bounce, Some(false));
+        assert_eq!(table.options.header_row_height, Some(px(32.)));
+        assert!(!table.options.fixed_cols_border);
+        assert!(!table.options.scrollbar_visible.right);
+        assert!(table.options.scrollbar_visible.bottom);
+        assert_eq!(table.options.size, Size::Small);
+        assert!(!table.is_focus_ring_enabled());
+        assert!(table.focus_ring(true).is_focus_ring_enabled());
+    }
+
+    #[gpui::test]
     fn data_table_draws_the_focus_ring_by_default(cx: &mut TestAppContext) {
         let cx = keyboard_focused_table(cx, true);
         assert!(
