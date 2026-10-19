@@ -45,6 +45,8 @@ use crate::input::{
 use crate::overscroll::Overscroll;
 use crate::{AutoScroll, StepAction, TestSupportExt as _};
 
+pub(super) const EDITOR_ELEMENT_ID: &str = "input-state";
+
 /// Vertical clearance to retain when revealing a text position.
 pub(crate) enum ScrollPadding {
     Minimal,
@@ -4934,7 +4936,7 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
         }
 
         let element = div()
-            .id("input-state")
+            .id(EDITOR_ELEMENT_ID)
             .key_context(CONTEXT)
             .when_some(self.accessibility.as_ref(), |this, accessibility| {
                 this.when_some(accessibility.role, |this, role| this.role(role))

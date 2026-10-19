@@ -731,6 +731,7 @@ impl RenderOnce for Input {
             .id
             .unwrap_or_else(|| ("input", state.entity_id()).into());
         BaseInput::new(id)
+            .semantic_owner(state.entity_id())
             .focused(focused)
             .disabled(disabled)
             .track_focus(&frame_focus_handle)
