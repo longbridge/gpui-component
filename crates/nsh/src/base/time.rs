@@ -137,6 +137,7 @@ struct CalendarStyles {
     in_range: StyleRefinement,
     disabled: StyleRefinement,
     hover: StyleRefinement,
+    focused: StyleRefinement,
 }
 
 impl CalendarStyles {
@@ -154,6 +155,7 @@ impl CalendarStyles {
             in_range: style("inRangeClass"),
             disabled: style("itemDisabledClass"),
             hover: style("itemHoverClass"),
+            focused: style("focusedClass"),
         }
     }
 
@@ -170,7 +172,8 @@ impl CalendarStyles {
 
 /// Base's Calendar `id` over `state`, mapped from the calendar props that
 /// [`calendar_props`] declares: `calendarClass` on the root, the item class
-/// props on its items, and the names and labels on their text.
+/// props on its items (`focusedClass` on the day the keyboard acts on), and
+/// the names and labels on their text.
 pub(super) fn calendar_element(
     id: impl Into<ElementId>,
     state: &Entity<CalendarState>,
@@ -199,9 +202,16 @@ pub(super) fn calendar_element(
                     this.refine_style(&styles.in_range)
                 })
                 .when(state.is_active(), |this| this.refine_style(&styles.active))
+                .when(state.is_focused(), |this| {
+                    this.refine_style(&styles.focused)
+                })
                 .map(|this| {
                     if state.is_disabled() {
                         this.refine_style(&styles.disabled)
+                    } else if state.is_active() {
+                        // As in GPUI Kit, a selected item keeps its look
+                        // under the pointer, so hover never hides its text.
+                        this
                     } else {
                         let hover = styles.hover.clone();
                         this.hover(move |mut style| {
@@ -264,6 +274,7 @@ pub(super) fn calendar_props(control: Control) -> Control {
         .prop("inRangeClass", PropType::String)
         .prop("itemDisabledClass", PropType::String)
         .prop("itemHoverClass", PropType::String)
+        .prop("focusedClass", PropType::String)
 }
 
 /// An ISO date (`2025-02-10`), or a range of two (`2025-02-10/2025-02-14`);
@@ -349,11 +360,15 @@ fn calendar() -> Control {
                 .into_any_element()
         },
     )
+    .focus(|control: &CalendarControl, cx| control.state.read(cx).focus_handle.clone())
     .documentation(
         "GPUI Base's Calendar: a month grid with month and year pickers; clicking a day \
-         selects it. The value is an ISO date (`2025-02-10`), or with `mode: \"range\"` two \
-         joined by `/` (`2025-02-10/2025-02-14`), sent once both ends are picked. Days \
-         before `min` or after `max` are disabled.",
+         selects it. One Tab stop: arrows move the focused day by a day or a week, \
+         PageUp/PageDown by a month (with Shift a year), Home/End to the week's start and \
+         end, and Enter or Space select it; the months shown follow it, and \
+         `focusedClass` shows it. The value is an ISO date (`2025-02-10`), or with \
+         `mode: \"range\"` two joined by `/` (`2025-02-10/2025-02-14`), sent once both \
+         ends are picked. Days before `min` or after `max` are disabled and skipped.",
     )
     .prop("mode", PropType::Enum(&["single", "range"]))
     .prop("rootClass", PropType::String);
@@ -605,6 +620,76 @@ mod tests {
         assert_eq!(
             calendar.take_events(),
             vec![("change".into(), json!({ "value": "2025-02-03" }))]
+        );
+    }
+
+    #[gpui_kit::test]
+    fn test_calendar_keyboard(cx: &mut TestAppContext) {
+        let calendar = Fixture::new(
+            cx,
+            "Calendar",
+            json!({ "value": "2025-02-10", "dayClass": "w_8", "focusedClass": "w_16" }),
+        );
+        let width = |calendar: &Fixture, cx: &mut TestAppContext, day: &str| {
+            calendar.update(cx, |window, _| window.find(id(day)).bounds().size.width)
+        };
+        // The calendar is a Tab stop (what Root's Tab does with nothing
+        // focused yet), on the selected day.
+        let focus = calendar.focus_handle(cx).unwrap();
+        calendar.update(cx, |window, cx| window.focus_next(cx));
+        calendar.update(cx, |window, cx| {
+            assert!(focus.is_focused(window));
+            window.press("right", cx);
+            window.press("right", cx);
+        });
+        assert_eq!(width(&calendar, cx, FEB_12), px(64.));
+        assert_eq!(width(&calendar, cx, FEB_10), px(32.));
+        assert!(calendar.take_events().is_empty());
+        calendar.update(cx, |window, cx| window.press("enter", cx));
+        assert_eq!(
+            calendar.take_events(),
+            vec![("change".into(), json!({ "value": "2025-02-12" }))]
+        );
+        // The month shown follows the focused day.
+        calendar.update(cx, |window, cx| {
+            window.press("pagedown", cx);
+            window.press("down", cx);
+            window.press("home", cx);
+            window.press("space", cx);
+        });
+        assert_eq!(
+            calendar.take_events(),
+            vec![("change".into(), json!({ "value": "2025-03-16" }))]
+        );
+        assert_eq!(width(&calendar, cx, "calendar-2025-03-16-0-3"), px(64.));
+    }
+
+    #[gpui_kit::test]
+    fn test_calendar_keyboard_range_and_bounds(cx: &mut TestAppContext) {
+        let calendar = Fixture::new(
+            cx,
+            "Calendar",
+            json!({
+                "mode": "range",
+                "value": "2025-02-10/2025-02-12",
+                "max": "2025-02-14",
+            }),
+        );
+        calendar.update(cx, |window, cx| {
+            window.focus_next(cx);
+            window.press("enter", cx);
+        });
+        // Half a range is not a value yet.
+        assert!(calendar.take_events().is_empty());
+        // Days after `max` are skipped: the focus stops on it.
+        calendar.update(cx, |window, cx| {
+            window.press("down", cx);
+            window.press("pagedown", cx);
+            window.press("enter", cx);
+        });
+        assert_eq!(
+            calendar.take_events(),
+            vec![("change".into(), json!({ "value": "2025-02-10/2025-02-14" }))]
         );
     }
 }

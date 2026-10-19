@@ -3,6 +3,7 @@
 // and the line that shows the last event a control sent.
 
 import { signal, Text, View } from "nsh";
+import type { JSX } from "nsh/types";
 
 // ---------------------------------------------------------------------------
 // The look: class strings shared by the controls.
@@ -25,7 +26,7 @@ export const popup = "mt_1 p_1 rounded_md border_1 border_border bg_background s
 export const option = "w_full h_7 px_2 flex items_center justify_start rounded_sm text_sm";
 export const optionStates = {
   itemHoverClass: "bg_accent",
-  itemFocusClass: "bg_accent",
+  highlightedItemClass: "bg_accent text_accent_foreground",
   selectedItemClass: "text_primary font_semibold",
 };
 export const segmented = "flex gap_1 p_1 rounded_lg bg_muted";
@@ -66,7 +67,7 @@ export function log(name: string, data: unknown) {
   lastEvent.set(`${name} ${JSON.stringify(data)}`);
 }
 
-export function Section(props: { title: string; note?: string; children: unknown }) {
+export function Section(props: { title: string; note?: string; children: JSX.Element }) {
   return (
     <View style={{ gap: 8 }}>
       <Text class={`${text} text-sm font-semibold`}>{props.title}</Text>

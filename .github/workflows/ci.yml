@@ -59,11 +59,14 @@ jobs:
       # Lints every member and, as a side effect, type-checks the example
       # crates that the `test` job leaves out. The WebView example enables
       # `gpui-kit/gpui-fast`, which feature unification would spread to every
-      # member, so it is linted on its own.
+      # member, so it is linted on its own; so is `gpui-nsh`, which always
+      # uses GPUI Fast (NSH draws with it), with its example.
       - name: Lint
-        run: cargo clippy --workspace --exclude gpui-shell --exclude webview --locked -- --deny warnings
+        run: cargo clippy --workspace --exclude gpui-shell --exclude webview --exclude gpui-nsh --exclude example-nsh --locked -- --deny warnings
       - name: Lint WebView (GPUI Fast)
         run: cargo clippy -p gpui-webview -p webview --features gpui-kit/gpui-fast,gpui-webview/gpui-fast --locked -- --deny warnings
+      - name: Lint NSH (GPUI Fast)
+        run: cargo clippy -p gpui-nsh -p example-nsh --tests --locked -- --deny warnings
 
   no-default-features:
     name: No default features
@@ -125,7 +128,8 @@ jobs:
             ((.workspace_root | gsub("\\\\"; "/")) + "/examples/") as $examples
             | .packages[]
             | select((((.manifest_path | gsub("\\\\"; "/")) | startswith($examples))
-                and .name != "gpui-kit-recipes") or .name == "gpui-webview")
+                and .name != "gpui-kit-recipes") or .name == "gpui-webview"
+                or .name == "gpui-nsh")
             | "--exclude \(.name) "')
           echo "TEST_EXCLUDES=$excludes" >> "$GITHUB_ENV"
       # `gpui-component-story/test-support` turns on `gpui-kit/test-support`, so
@@ -183,6 +187,10 @@ jobs:
           --lib tooltip::tests:: --locked
       - name: Test WebView
         run: cargo test -p gpui-webview --features gpui-fast,gpui-kit/gpui-fast --locked
+      # NSH's QuickJS needs LLVM to build on Windows, which this runner lacks.
+      - name: Test NSH
+        if: ${{ matrix.run_on != 'windows-latest' }}
+        run: cargo test -p gpui-nsh --locked
 
   # `gpui-webview` defaults to gpui-pre, where the native view is attached to
   # the window directly; this keeps that build compiling on every platform.

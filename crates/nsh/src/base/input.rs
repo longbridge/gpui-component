@@ -298,15 +298,9 @@ mod tests {
             window.click(input.id.clone(), cx);
             window.input("a", cx);
         });
-        // Base's `InputState` tracks focus while disabled too, so the click
-        // may focus it; typing changes nothing.
-        let events = input.take_events();
-        assert!(
-            events.iter().all(|(name, _)| name != "change"),
-            "{events:?}"
-        );
-        input.update(cx, |window, cx| window.blur(cx));
-        input.take_events();
+        // A disabled field takes no focus from the click, so typing changes
+        // nothing.
+        assert!(input.take_events().is_empty());
 
         input.set_prop(cx, "disabled", None);
         input.update(cx, |window, _| window.activate_window());

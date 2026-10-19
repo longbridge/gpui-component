@@ -138,11 +138,12 @@ fn toggle() -> Control {
 /// injects none and sends `activate` with the target for JS to open, route
 /// or ignore.
 fn link() -> Control {
-    Control::new("Link", |props, events, _, cx| {
+    Control::focusable("Link", |focus, props, events, _, cx| {
         let href = props.string("href");
         let activate = events.clone();
         props
             .states(ROOT_STATES, props.styled(Link::new(props.id()), cx), cx)
+            .track_focus(focus)
             .disabled(props.boolean("disabled"))
             .styles(|styles| styles.disabled(|style| props.styled_by("disabledClass", style, cx)))
             .when_some(href.clone(), |this, href| this.href(href))
@@ -180,40 +181,10 @@ fn link() -> Control {
 
 #[cfg(test)]
 mod tests {
-    use gpui_kit::{
-        App, InputEvent as _, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Role,
-        TestAppContext, Window, point, px,
-    };
+    use gpui_kit::{Role, TestAppContext, px};
     use serde_json::json;
 
     use crate::testing::{Fixture, TestWindowExt as _};
-
-    /// Clicks the window's control at its top-left corner: Base's Link is not
-    /// observed under its id, so `TestWindowExt::click` cannot find it.
-    fn click_control(window: &mut Window, cx: &mut App) {
-        let position = point(px(20.), px(20.));
-        window.dispatch_event(
-            MouseDownEvent {
-                button: MouseButton::Left,
-                position,
-                modifiers: Modifiers::default(),
-                click_count: 1,
-                first_mouse: false,
-            }
-            .to_platform_input(),
-            cx,
-        );
-        window.dispatch_event(
-            MouseUpEvent {
-                button: MouseButton::Left,
-                position,
-                modifiers: Modifiers::default(),
-                click_count: 1,
-            }
-            .to_platform_input(),
-            cx,
-        );
-    }
 
     #[gpui_kit::test]
     fn test_button_click(cx: &mut TestAppContext) {
@@ -369,25 +340,32 @@ mod tests {
         );
         let size = link.measure(cx);
         assert!(size.width > px(0.) && size.height > px(0.));
-        link.update(cx, click_control);
+        link.update(cx, |window, cx| window.click(link.id.clone(), cx));
         let activated = ("activate".into(), json!({ "href": "https://gpui-kit.com" }));
         assert_eq!(link.take_events(), vec![activated.clone()]);
 
-        // The click focused the link.
-        link.update(cx, |window, cx| window.press("enter", cx));
-        assert_eq!(link.take_events(), vec![activated]);
+        // The click focused the link, which Enter and Space activate.
+        link.update(cx, |window, cx| {
+            let found = window.find(link.id.clone());
+            assert_eq!(found.focused(), Some(true));
+            assert_eq!(found.role(), Some(Role::Link));
+            assert_eq!(found.label(), Some("Open GPUI Kit"));
+            window.press("enter", cx);
+            window.press("space", cx);
+        });
+        assert_eq!(link.take_events(), vec![activated.clone(), activated]);
     }
 
     #[gpui_kit::test]
     fn test_link_controlled_href(cx: &mut TestAppContext) {
         let link = Fixture::new(cx, "Link", json!({ "label": "Docs" }));
-        link.update(cx, click_control);
+        link.update(cx, |window, cx| window.click(link.id.clone(), cx));
         assert_eq!(
             link.take_events(),
             vec![("activate".into(), json!({ "href": "" }))]
         );
         link.set_prop(cx, "href", Some(json!("/docs")));
-        link.update(cx, click_control);
+        link.update(cx, |window, cx| window.click(link.id.clone(), cx));
         assert_eq!(
             link.take_events(),
             vec![("activate".into(), json!({ "href": "/docs" }))]
@@ -401,10 +379,18 @@ mod tests {
             "Link",
             json!({ "label": "Docs", "href": "/docs", "disabled": true }),
         );
-        link.update(cx, click_control);
+        link.update(cx, |window, cx| window.click(link.id.clone(), cx));
+        assert!(link.take_events().is_empty());
+        // A disabled link takes no focus and no keyboard activation.
+        link.update(cx, |window, cx| {
+            let found = window.find(link.id.clone());
+            assert_eq!(found.focused(), None);
+            assert_eq!(found.disabled(), Some(true));
+            window.press("enter", cx);
+        });
         assert!(link.take_events().is_empty());
         link.set_prop(cx, "disabled", None);
-        link.update(cx, click_control);
+        link.update(cx, |window, cx| window.click(link.id.clone(), cx));
         assert_eq!(link.take_events().len(), 1);
     }
 }

@@ -3,15 +3,17 @@
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use gpui_kit::{
-    App, AppContext as _, ElementId, Entity, FocusHandle, Focusable as _, Hsla,
+    AnyElement, App, AppContext as _, ElementId, Entity, FocusHandle, Focusable as _, Hsla,
     InteractiveElement as _, IntoElement as _, MouseButton, ParentElement as _, Rgba,
     StatefulInteractiveElement as _, Styled as _, Subscription, Window,
     base::{
         Button, CalendarEvent, CalendarState, ColorPicker, ColorPickerEvent, ColorPickerState,
-        ColorSwatch, DatePicker, Popup, TestSupportExt as _, input::InputBase,
+        ColorSwatch, DatePicker, Popup, Slider, SliderIndicator, SliderThumb, SliderTrack,
+        TestSupportExt as _, input::InputBase, slider::SliderState,
     },
     div,
     prelude::FluentBuilder as _,
+    relative,
 };
 use serde_json::json;
 
@@ -32,6 +34,9 @@ const TRIGGER_STATES: [&str; 3] = [
     "triggerFocusedClass",
 ];
 const SWATCH_STATES: [&str; 3] = ["swatchHoverClass", "swatchActiveClass", "swatchFocusClass"];
+/// The interaction-state class props of a component slider's thumb, which
+/// leaves focus with its slider.
+const SLIDER_THUMB_STATES: [&str; 3] = ["sliderThumbHoverClass", "sliderThumbActiveClass", ""];
 
 fn part_id(props: &Props, name: &'static str) -> ElementId {
     ElementId::NamedChild(Arc::new(props.id()), name.into())
@@ -90,7 +95,12 @@ fn date_picker() -> Control {
                     })
                     .on_click(events.handler("openChange", move |_| json!({ "open": !open })))
                     .child(label);
-                let popup = Popup::new(part_id(props, "popup"), trigger).when(open, |this| {
+                let popup = Popup::new(part_id(props, "popup"), trigger)
+                    .on_dismiss({
+                        let events = events.clone();
+                        move |_, _| events.emit("openChange", json!({ "open": false }))
+                    })
+                    .when(open, |this| {
                     this.content(
                         props
                             .styled_by(
@@ -127,8 +137,9 @@ fn date_picker() -> Control {
     .documentation(
         "GPUI Base's DatePicker: a trigger opening a popup with Base's Calendar. \
          `value`, `min` and `max` are ISO dates (`2026-08-12`). Clicking the trigger \
-         sends `openChange`; choosing a day sends `change` and leaves the popup open \
-         until the app sets `open` to false.",
+         sends `openChange`, as do Enter, which opens and closes it, and Escape or a \
+         click outside, which close it. Choosing a day sends `change` and leaves the popup open until the \
+         app sets `open` to false.",
     )
     .prop("open", PropType::Boolean)
     .prop("disabled", PropType::Boolean)
@@ -175,6 +186,68 @@ impl ColorField {
             self.state.update(cx, |state, cx| state.set_open(open, cx));
         }
     }
+}
+
+/// One of Base's HSLA component sliders, laid out as the Slider control lays
+/// out its parts: the thumb centered on the value along the indicator.
+fn component_slider(
+    state: &Entity<SliderState>,
+    label: &'static str,
+    disabled: bool,
+    props: &Props,
+    cx: &App,
+) -> AnyElement {
+    let percentage = state.read(cx).percentage();
+    props
+        .styled_by("sliderClass", Slider::new(state), cx)
+        .disabled(disabled)
+        .accessibility_label(label)
+        .child(
+            props
+                .styled_by("sliderTrackClass", SliderTrack::new(state), cx)
+                .disabled(disabled)
+                .child(
+                    props
+                        .styled_by(
+                            "sliderIndicatorClass",
+                            SliderIndicator::new(state).relative(),
+                            cx,
+                        )
+                        .child(
+                            props.styled_by(
+                                "sliderRangeClass",
+                                div()
+                                    .absolute()
+                                    .top_0()
+                                    .bottom_0()
+                                    .left_0()
+                                    .right(relative(1. - percentage.end)),
+                                cx,
+                            ),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .bottom_0()
+                                .w_0()
+                                .left(relative(percentage.end))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(props.states(
+                                    SLIDER_THUMB_STATES,
+                                    props.styled_by(
+                                        "sliderThumbClass",
+                                        SliderThumb::new(state).disabled(disabled).flex_none(),
+                                        cx,
+                                    ),
+                                    cx,
+                                )),
+                        ),
+                ),
+        )
+        .into_any_element()
 }
 
 fn color_picker() -> Control {
@@ -312,7 +385,38 @@ fn color_picker() -> Control {
                 })
                 .child(hex_input);
 
-            let popup = Popup::new(part_id(props, "popup"), trigger).when(open, |this| {
+            let sliders = props.boolean("sliders").then(|| {
+                let sliders = picker.sliders();
+                let labels = props.strings("sliderLabels");
+                let rows = [
+                    (sliders.hue(), "Hue"),
+                    (sliders.saturation(), "Saturation"),
+                    (sliders.lightness(), "Lightness"),
+                    (sliders.alpha(), "Alpha"),
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(index, (slider, name))| {
+                    props
+                        .styled_by("sliderRowClass", div(), cx)
+                        .when_some(labels.get(index), |this, label| {
+                            this.child(
+                                props
+                                    .styled_by("sliderLabelClass", div(), cx)
+                                    .child(label.clone()),
+                            )
+                        })
+                        .child(component_slider(slider, name, disabled, props, cx))
+                });
+                props.styled_by("slidersClass", div(), cx).children(rows)
+            });
+
+            let popup = Popup::new(part_id(props, "popup"), trigger)
+                .on_dismiss({
+                    let state = state.clone();
+                    move |_, cx| state.update(cx, |state, cx| state.set_open(false, cx))
+                })
+                .when(open, |this| {
                 this.content(
                     props
                         .styled_by(
@@ -325,6 +429,7 @@ fn color_picker() -> Control {
                                 .styled_by("swatchesClass", div(), cx)
                                 .children(swatches),
                         )
+                        .children(sliders)
                         .child(input),
                 )
             });
@@ -347,11 +452,14 @@ fn color_picker() -> Control {
     .focus(|field: &ColorField, cx| field.state.focus_handle(cx))
     .documentation(
         "GPUI Base's ColorPicker: a trigger opening a popup of `swatches` and a hex \
-         field. `value` and `swatches` are hex colors; `change` sends Base's \
-         `#RRGGBB` or `#RRGGBBAA`. A swatch or Enter in the hex field commits and closes.",
+         field, with Base's hue, saturation, lightness and alpha sliders when `sliders` \
+         is set, each after its label in `sliderLabels`. `value` and `swatches` are \
+         hex colors; `change` sends Base's `#RRGGBB` or `#RRGGBBAA`. A swatch or Enter in the hex field commits and closes; a slider \
+         commits and leaves the popup open. Escape or a click outside closes it.",
     )
     .prop("value", PropType::String)
     .prop("swatches", PropType::Strings)
+    .prop("sliders", PropType::Boolean)
     .prop("open", PropType::Boolean)
     .prop("disabled", PropType::Boolean)
     .prop("placeholder", PropType::String)
@@ -366,6 +474,16 @@ fn color_picker() -> Control {
     .prop("swatchClass", PropType::String)
     .states(SWATCH_STATES)
     .prop("swatchSelectedClass", PropType::String)
+    .prop("sliderLabels", PropType::Strings)
+    .prop("slidersClass", PropType::String)
+    .prop("sliderRowClass", PropType::String)
+    .prop("sliderLabelClass", PropType::String)
+    .prop("sliderClass", PropType::String)
+    .prop("sliderTrackClass", PropType::String)
+    .prop("sliderIndicatorClass", PropType::String)
+    .prop("sliderRangeClass", PropType::String)
+    .prop("sliderThumbClass", PropType::String)
+    .states(SLIDER_THUMB_STATES)
     .prop("inputClass", PropType::String)
     .prop("inputFocusedClass", PropType::String)
     .event("change", &[("value", PropType::String)])
@@ -497,6 +615,62 @@ mod tests {
         picker.set_prop(cx, "disabled", None);
         picker.update(cx, |window, cx| window.click(part(&picker, "trigger"), cx));
         assert_eq!(picker.take_events().len(), 1);
+    }
+
+    #[gpui_kit::test]
+    fn test_date_picker_keyboard(cx: &mut TestAppContext) {
+        let picker = Fixture::new(cx, "DatePicker", json!({ "value": "2026-08-12" }));
+        let focus = picker.focus_handle(cx).expect("a Tab stop");
+        picker.update(cx, |window, cx| {
+            focus.focus(window, cx);
+            window.press("enter", cx);
+        });
+        assert_eq!(
+            picker.take_events(),
+            vec![("openChange".into(), json!({ "open": true }))]
+        );
+        picker.update(cx, |window, _| {
+            assert!(window.try_find(part(&picker, "content")).is_some());
+        });
+        picker.update(cx, |window, cx| window.press("escape", cx));
+        assert_eq!(
+            picker.take_events(),
+            vec![("openChange".into(), json!({ "open": false }))]
+        );
+        picker.update(cx, |window, _| {
+            assert!(window.try_find(part(&picker, "content")).is_none());
+        });
+        // A closed picker leaves Escape to its ancestors.
+        picker.update(cx, |window, cx| window.press("escape", cx));
+        assert!(picker.take_events().is_empty());
+    }
+
+    #[gpui_kit::test]
+    fn test_date_picker_click_outside(cx: &mut TestAppContext) {
+        let picker = Fixture::new(
+            cx,
+            "DatePicker",
+            json!({ "value": "2026-08-12", "open": true }),
+        );
+        // A day inside the popup keeps it open.
+        picker.update(cx, |window, cx| window.click(day("2026-08-20", 3), cx));
+        assert_eq!(
+            picker.take_events(),
+            vec![("change".into(), json!({ "value": "2026-08-20" }))]
+        );
+        picker.update(cx, |window, cx| {
+            // A press and release below and right of the popup.
+            let outside = window
+                .find(part(&picker, "content"))
+                .bounds()
+                .bottom_right()
+                + point(px(40.), px(40.));
+            window.drag(outside, outside, cx);
+        });
+        assert_eq!(
+            picker.take_events(),
+            vec![("openChange".into(), json!({ "open": false }))]
+        );
     }
 
     /// Swatches 24px wide in a row at the popup's top left.
@@ -648,6 +822,144 @@ mod tests {
             picker.take_events(),
             vec![("openChange".into(), json!({ "open": false }))]
         );
+    }
+
+    #[gpui_kit::test]
+    fn test_color_picker_exact_hex(cx: &mut TestAppContext) {
+        let picker = Fixture::new(
+            cx,
+            "ColorPicker",
+            json!({
+                "value": "#7c3aed",
+                "swatches": ["#7c3aed", "#0ea5e9"],
+                "open": true,
+                "swatchesClass": SWATCHES,
+                "swatchClass": SWATCH,
+                "inputClass": INPUT,
+            }),
+        );
+        // The value set reads back as set: Enter in the hex field commits it.
+        picker.update(cx, |window, cx| window.click(part(&picker, "input"), cx));
+        picker.update(cx, |window, cx| window.press("enter", cx));
+        assert_eq!(
+            picker.take_events(),
+            vec![
+                ("openChange".into(), json!({ "open": false })),
+                ("change".into(), json!({ "value": "#7C3AED" })),
+            ]
+        );
+        picker.set_prop(cx, "open", Some(json!(true)));
+        picker.update(cx, |window, cx| {
+            window.click_at(part(&picker, "content"), swatch(1), cx)
+        });
+        assert_eq!(
+            picker.take_events(),
+            vec![
+                ("openChange".into(), json!({ "open": false })),
+                ("change".into(), json!({ "value": "#0EA5E9" })),
+            ]
+        );
+    }
+
+    /// Component sliders 128px wide, one above the other.
+    fn slider_props() -> serde_json::Value {
+        json!({
+            "value": "#ff0000",
+            "open": true,
+            "sliders": true,
+            "sliderLabels": ["H", "S", "L", "A"],
+            "slidersClass": "flex flex_col gap_2",
+            "sliderRowClass": "flex items_center gap_2",
+            "sliderLabelClass": "w_4 text_xs",
+            "sliderTrackClass": "w_32 h_4 flex items_center",
+            "sliderIndicatorClass": "w_full h_1 bg_muted",
+            "sliderRangeClass": "bg_primary",
+            "sliderThumbClass": "size_3 bg_background border_1 border_primary",
+            "inputClass": INPUT,
+        })
+    }
+
+    /// The root of the component slider `index` (hue, saturation, lightness,
+    /// alpha), which Base identifies by its state's entity.
+    fn slider(window: &gpui_kit::Window, index: usize) -> ElementId {
+        window.find_all("slider-bar-container")[index]
+            .path()
+            .iter()
+            .find(|id| matches!(id, ElementId::NamedInteger(name, _) if name == "slider"))
+            .cloned()
+            .expect("the track is inside its slider")
+    }
+
+    #[gpui_kit::test]
+    fn test_color_picker_sliders(cx: &mut TestAppContext) {
+        let picker = Fixture::new(cx, "ColorPicker", slider_props());
+        let size = picker.measure(cx);
+        assert!(size.width > px(0.) && size.height > px(0.));
+        picker.update(cx, |window, _| {
+            let labels = (0..4)
+                .map(|index| window.find(slider(window, index)).label().map(String::from))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                labels,
+                ["Hue", "Saturation", "Lightness", "Alpha"].map(|label| Some(label.into()))
+            );
+        });
+        // Half way along the hue turns red to cyan, and leaves the popup open.
+        picker.update(cx, |window, cx| {
+            let hue = slider(window, 0);
+            let mut hue = window.within(hue);
+            let track = hue.find("slider-bar-container").bounds();
+            hue.click_at(
+                "slider-bar-container",
+                point(track.size.width / 2., track.size.height / 2.),
+                cx,
+            );
+        });
+        assert_eq!(
+            picker.take_events(),
+            vec![("change".into(), json!({ "value": "#00FFFF" }))]
+        );
+        picker.update(cx, |window, _| {
+            assert!(window.try_find(part(&picker, "content")).is_some());
+        });
+        // A value set from JS moves the sliders: none at the far end for black.
+        picker.set_prop(cx, "value", Some(json!("#000000")));
+        picker.update(cx, |window, _| {
+            let lightness = slider(window, 2);
+            let lightness = window.within(lightness);
+            let track = lightness.find("slider-bar-container").bounds();
+            let thumb = lightness.find(("slider-thumb", 0u32)).bounds();
+            assert_eq!(thumb.center().x, track.left());
+        });
+        assert!(picker.take_events().is_empty());
+    }
+
+    #[gpui_kit::test]
+    fn test_color_picker_click_outside(cx: &mut TestAppContext) {
+        let picker = Fixture::new(
+            cx,
+            "ColorPicker",
+            json!({ "open": true, "inputClass": INPUT }),
+        );
+        // The hex field is inside the popup.
+        picker.update(cx, |window, cx| window.click(part(&picker, "input"), cx));
+        assert!(picker.take_events().is_empty());
+        picker.update(cx, |window, cx| {
+            // A press and release below and right of the popup.
+            let outside = window
+                .find(part(&picker, "content"))
+                .bounds()
+                .bottom_right()
+                + point(px(40.), px(40.));
+            window.drag(outside, outside, cx);
+        });
+        assert_eq!(
+            picker.take_events(),
+            vec![("openChange".into(), json!({ "open": false }))]
+        );
+        picker.update(cx, |window, _| {
+            assert!(window.try_find(part(&picker, "content")).is_none());
+        });
     }
 
     #[gpui_kit::test]

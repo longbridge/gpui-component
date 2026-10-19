@@ -4541,6 +4541,7 @@ dependencies = [
  "gpui-kit",
  "log",
  "nsh-platform-gpui",
+ "serde",
  "serde_json",
 ]
 

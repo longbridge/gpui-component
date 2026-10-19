@@ -6,6 +6,7 @@
 // color tokens, which follow the host's theme.
 
 import { mount, Scroll, signal, Text, View } from "nsh";
+import type { JSX } from "nsh/types";
 import {
   text,
   muted,
@@ -128,6 +129,7 @@ function Buttons() {
           href="https://gpui-kit.com"
           rootClass="text_primary text_sm underline"
           hoverClass="text_foreground"
+          focusClass="text_foreground font_semibold"
           onActivate={(e) => log("Link.activate", e)}
         />
       </Section>
@@ -228,7 +230,7 @@ function Choices() {
         <View style={{ width: 320, gap: 12 }}>
           <Slider
             value={volume()}
-            onChange={(e) => volume.set(e.value)}
+            onChange={(e) => volume.set(e.value as number)}
             onRelease={(e) => log("Slider.release", e)}
             rootClass="w_full h_5"
             trackClass="flex items_center w_full h_5"
@@ -524,7 +526,7 @@ function Content() {
 // ---------------------------------------------------------------------------
 
 /** A page: its own controls, then the demos added to it. */
-function stack(...views: (() => unknown)[]) {
+function stack(...views: (() => JSX.Element)[]) {
   return () => <View style={{ gap: 20 }}>{views.map((view) => view())}</View>;
 }
 
@@ -542,20 +544,24 @@ const pages = [
 function App() {
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12 }}>
-        <Tabs
-          items={pages.map((p) => p.title)}
-          value={page()}
-          onChange={(e) => page.set(e.value)}
-          rootClass={segmented}
-          tabClass={segment}
-          tabHoverClass="text_foreground"
-          selectedClass="bg_background text_foreground"
-        />
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <View class="border-r border-zinc-200 dark:border-zinc-800" style={{ width: 168, padding: 12 }}>
+          <Tabs
+            items={pages.map((p) => p.title)}
+            value={page()}
+            onChange={(e) => page.set(e.value)}
+            axis="vertical"
+            rootClass="flex flex_col gap_0p5 w_full"
+            tabClass="w_full h_8 px_3 flex items_center justify_start rounded_md text_sm text_muted_foreground"
+            tabHoverClass="bg_accent text_accent_foreground"
+            tabFocusClass={ring}
+            selectedClass="bg_accent text_accent_foreground font_medium"
+          />
+        </View>
+        <Scroll style={{ flex: 1 }}>
+          <View style={{ padding: 24 }}>{pages[page()].view()}</View>
+        </Scroll>
       </View>
-      <Scroll style={{ flex: 1 }}>
-        <View style={{ paddingHorizontal: 24, paddingBottom: 24 }}>{pages[page()].view()}</View>
-      </Scroll>
       <View class="border-t border-zinc-200 dark:border-zinc-800" style={{ paddingHorizontal: 24, paddingVertical: 8 }}>
         <Text class={`${muted} text-xs`}>{lastEvent()}</Text>
       </View>

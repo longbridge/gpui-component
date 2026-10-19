@@ -85,6 +85,7 @@ fn number_input() -> Control {
             };
             props
                 .styled(NumberInput::new(&control.input), cx)
+                .id(props.id())
                 .disabled(props.boolean("disabled"))
                 .when(props.boolean("controlsRight"), |this| this.controls_right())
                 .when_some(props.string("accessibilityLabel"), |this, label| {
@@ -176,6 +177,7 @@ fn otp_input() -> Control {
         let mask = props.string("maskLabel").unwrap_or_else(|| "•".into());
         props
             .styled(OtpInput::new(&control.otp), cx)
+            .id(props.id())
             .disabled(disabled)
             .children((0..length).map(|ix| {
                 props
@@ -222,6 +224,13 @@ mod tests {
         fixture.update(cx, |window, cx| handle.focus(window, cx));
     }
 
+    /// Clicks a NumberInput's step button, found under the input's id.
+    fn step(input: &Fixture, button: &'static str, cx: &mut TestAppContext) {
+        input.update(cx, |window, cx| {
+            window.within(input.id.clone()).click(button, cx)
+        });
+    }
+
     #[gpui_kit::test]
     fn test_number_input_builder(cx: &mut TestAppContext) {
         let input = Fixture::new(
@@ -254,13 +263,13 @@ mod tests {
             "NumberInput",
             json!({ "value": "1", "min": 0, "max": 2, "step": 1, "decrementLabel": "-", "incrementLabel": "+" }),
         );
-        input.update(cx, |window, cx| window.click("increment", cx));
+        step(&input, "increment", cx);
         assert_eq!(
             input.take_events(),
             vec![("change".into(), json!({ "value": "2" }))]
         );
         // At `max` the value no longer moves.
-        input.update(cx, |window, cx| window.click("increment", cx));
+        step(&input, "increment", cx);
         assert!(input.take_events().is_empty());
 
         focus(&input, cx);
@@ -302,8 +311,8 @@ mod tests {
             "NumberInput",
             json!({ "value": "1", "decrementLabel": "-", "incrementLabel": "+" }),
         );
-        input.update(cx, |window, cx| window.click("increment", cx));
-        input.update(cx, |window, cx| window.click("decrement", cx));
+        step(&input, "increment", cx);
+        step(&input, "decrement", cx);
         assert_eq!(
             input.take_events(),
             vec![
@@ -322,7 +331,7 @@ mod tests {
         );
         input.set_prop(cx, "value", Some(json!("7")));
         assert!(input.take_events().is_empty());
-        input.update(cx, |window, cx| window.click("increment", cx));
+        step(&input, "increment", cx);
         assert_eq!(
             input.take_events(),
             vec![("change".into(), json!({ "value": "7.5" }))]
@@ -336,7 +345,7 @@ mod tests {
             "NumberInput",
             json!({ "value": "1", "step": 1, "disabled": true, "incrementLabel": "+" }),
         );
-        input.update(cx, |window, cx| window.click("increment", cx));
+        step(&input, "increment", cx);
         // A disabled control is no Tab stop.
         assert!(input.focus_handle(cx).is_none());
         input.update(cx, |window, cx| window.press("up", cx));
@@ -344,7 +353,7 @@ mod tests {
         assert!(input.take_events().is_empty());
 
         input.set_prop(cx, "disabled", None);
-        input.update(cx, |window, cx| window.click("increment", cx));
+        step(&input, "increment", cx);
         assert_eq!(
             input.take_events(),
             vec![("change".into(), json!({ "value": "2" }))]
@@ -372,8 +381,16 @@ mod tests {
 
     #[gpui_kit::test]
     fn test_otp_input_typing(cx: &mut TestAppContext) {
-        let otp = Fixture::new(cx, "OtpInput", json!({ "length": 3 }));
-        focus(&otp, cx);
+        let otp = Fixture::new(
+            cx,
+            "OtpInput",
+            json!({ "length": 3, "rootClass": "flex", "cellClass": "size_7" }),
+        );
+        // A click focuses the code, as a Tab would.
+        otp.update(cx, |window, cx| {
+            window.click(otp.id.clone(), cx);
+            assert_eq!(window.find(otp.id.clone()).focused(), Some(true));
+        });
         for key in ["1", "a", "2", "3", "4"] {
             otp.update(cx, |window, cx| window.press(key, cx));
         }
@@ -414,10 +431,18 @@ mod tests {
 
     #[gpui_kit::test]
     fn test_otp_input_disabled(cx: &mut TestAppContext) {
-        let otp = Fixture::new(cx, "OtpInput", json!({ "length": 4, "disabled": true }));
-        // A disabled control is no Tab stop.
+        let otp = Fixture::new(
+            cx,
+            "OtpInput",
+            json!({ "length": 4, "disabled": true, "rootClass": "flex", "cellClass": "size_7" }),
+        );
+        // A disabled control is no Tab stop, and a click does not focus it.
         assert!(otp.focus_handle(cx).is_none());
-        otp.update(cx, |window, cx| window.press("1", cx));
+        otp.update(cx, |window, cx| {
+            window.click(otp.id.clone(), cx);
+            assert_eq!(window.find(otp.id.clone()).focused(), None);
+            window.press("1", cx);
+        });
         assert!(otp.take_events().is_empty());
         otp.set_prop(cx, "disabled", None);
         focus(&otp, cx);
