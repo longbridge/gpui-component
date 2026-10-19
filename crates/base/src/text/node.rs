@@ -152,6 +152,37 @@ impl PartialEq for BlockState {
     }
 }
 
+pub(super) struct CustomBlockSelectionProjection {
+    state: BlockState,
+    bounds: Bounds<Pixels>,
+}
+
+impl CustomBlockSelectionProjection {
+    pub(super) fn project(&self, start: Point<Pixels>, end: Point<Pixels>) {
+        self.state
+            .set_selection(custom_block_selection(self.bounds, start, end));
+    }
+}
+
+fn custom_block_selection(
+    bounds: Bounds<Pixels>,
+    start: Point<Pixels>,
+    end: Point<Pixels>,
+) -> Option<BlockSelection> {
+    if bounds.size.width <= Pixels::ZERO
+        || bounds.size.height <= Pixels::ZERO
+        || bounds.bottom() <= start.y.min(end.y)
+        || bounds.top() > start.y.max(end.y)
+    {
+        return None;
+    }
+    Some(if custom_block_is_selected(bounds, start, end) {
+        BlockSelection::Full
+    } else {
+        BlockSelection::Empty
+    })
+}
+
 /// Observe the plugin's own bounds without changing its layout or listeners.
 struct CustomBlockElement {
     content: AnyElement,
@@ -223,23 +254,20 @@ impl Element for CustomBlockElement {
                 return self.state.selection();
             }
             let (start, end) = state.selection_points(cx)?;
-            // Selection uses the full content bounds, not the visible clip or
-            // the paragraph gap outside this element.
-            if bounds.size.width <= Pixels::ZERO
-                || bounds.size.height <= Pixels::ZERO
-                || bounds.bottom() <= start.y.min(end.y)
-                || bounds.top() > start.y.max(end.y)
-            {
-                return None;
-            }
-            Some(if custom_block_is_selected(bounds, start, end) {
-                BlockSelection::Full
-            } else {
-                BlockSelection::Empty
-            })
+            custom_block_selection(bounds, start, end)
         });
         self.state.set_selection(selection);
         if let Some(view) = &view {
+            if view.read(cx).is_selectable() {
+                view.read(cx).selection_adapter.register_copy_projection(
+                    super::selection_adapter::CopyProjection::CustomBlock(
+                        CustomBlockSelectionProjection {
+                            state: self.state.clone(),
+                            bounds,
+                        },
+                    ),
+                );
+            }
             let visible = bounds.intersect(&window.content_mask().bounds);
             if view.read(cx).is_selectable()
                 && visible.size.width > Pixels::ZERO

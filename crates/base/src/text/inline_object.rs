@@ -148,6 +148,35 @@ impl MeasuredInlineObject {
     }
 }
 
+pub(super) struct InlineObjectSelectionProjection {
+    selected: std::sync::Weak<Mutex<bool>>,
+    bounds: Bounds<Pixels>,
+}
+
+impl InlineObjectSelectionProjection {
+    pub(super) fn project(&self, start: gpui::Point<Pixels>, end: gpui::Point<Pixels>) {
+        if let Some(selected) = self.selected.upgrade()
+            && let Ok(mut selected) = selected.lock()
+        {
+            *selected = object_in_selection(self.bounds, start, end);
+        }
+    }
+}
+
+fn object_in_selection(
+    bounds: Bounds<Pixels>,
+    start: gpui::Point<Pixels>,
+    end: gpui::Point<Pixels>,
+) -> bool {
+    point_in_text_selection(
+        bounds.origin,
+        bounds.size.width,
+        start,
+        end,
+        bounds.size.height,
+    )
+}
+
 /// Atomic selection wrapper that leaves child styling and interaction to GPUI.
 pub(super) struct InlineObject {
     id: ElementId,
@@ -314,13 +343,7 @@ impl Element for InlineObject {
                         )
                     })
                     || state.selection_points(cx).is_some_and(|(start, end)| {
-                        point_in_text_selection(
-                            self.selection_bounds.origin,
-                            self.selection_bounds.size.width,
-                            start,
-                            end,
-                            self.selection_bounds.size.height,
-                        )
+                        object_in_selection(self.selection_bounds, start, end)
                     }))
         });
         if let Ok(mut value) = self.selected.lock() {
@@ -360,6 +383,16 @@ impl Element for InlineObject {
             });
         }
         if selectable {
+            view.as_ref()
+                .unwrap()
+                .read(cx)
+                .selection_adapter
+                .register_copy_projection(super::selection_adapter::CopyProjection::InlineObject(
+                    InlineObjectSelectionProjection {
+                        selected: Arc::downgrade(&self.selected),
+                        bounds: self.selection_bounds,
+                    },
+                ));
             if self.link.is_none() {
                 window.set_cursor_style(CursorStyle::IBeam, hitbox);
             }

@@ -4,6 +4,14 @@
 
 ### 0.7.0 (unreleased)
 
+#### Fixed: Copy uses the current TextView gesture before paint
+
+TextView Copy now projects the current selection onto immutable native geometry
+from its completed paint. Starting, extending or retracting a drag and immediately
+copying no longer returns the previous frame's range. Rendered Unicode,
+inline-code spacing, Markdown source, custom inline/block nodes, and virtualized
+partial endpoints keep their existing semantics. Copy does not force a render,
+change focus, or discard offscreen logical selections.
 #### Fixed: custom Find starts near the visible text
 
 `InputBaseState::set_search_query` now anchors a changed query or case mode to

@@ -3479,6 +3479,456 @@ mod tests {
         assert_eq!(selected_text.trim(), "quick select value");
     }
 
+    mod copy_before_paint {
+        use super::*;
+        use crate::{TextSelection, text::SelectionFormat};
+
+        const MARKDOWN: &str = "中文 **café**\n\nβeta `\u{2009}code\u{2009}` 👩‍💻\n\n終わり";
+        const PLAIN: &str = "中文 café\nβeta \u{2009}code\u{2009} 👩‍💻\n終わり\n";
+
+        struct Root {
+            state: Entity<TextViewState>,
+            format: SelectionFormat,
+            width: Pixels,
+            scrollable: bool,
+        }
+
+        impl Render for Root {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .w(self.width)
+                    .when(self.scrollable, |el| el.h(px(160.)))
+                    .child(crate::TextSelectionLayer)
+                    .child(
+                        TextView::new(&self.state)
+                            .scrollable(self.scrollable)
+                            .selection_format(self.format),
+                    )
+            }
+        }
+
+        fn setup(
+            format: SelectionFormat,
+            cx: &mut TestAppContext,
+        ) -> (Entity<TextViewState>, &mut VisualTestContext) {
+            cx.update(crate::init);
+            let (root, cx) = cx.add_window_view(|_, cx| Root {
+                state: cx.new(|cx| TextViewState::markdown(MARKDOWN, cx)),
+                format,
+                width: px(520.),
+                scrollable: false,
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            (root.read_with(cx, |root, _| root.state.clone()), cx)
+        }
+
+        fn document<'a>(
+            markdown: &str,
+            format: SelectionFormat,
+            scrollable: bool,
+            cx: &'a mut TestAppContext,
+        ) -> (Entity<Root>, &'a mut VisualTestContext) {
+            cx.update(crate::init);
+            let (root, cx) = cx.add_window_view(|_, cx| Root {
+                state: cx.new(|cx| TextViewState::markdown(markdown, cx)),
+                format,
+                width: px(520.),
+                scrollable,
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            (root, cx)
+        }
+
+        fn scroll_to(state: &Entity<TextViewState>, ix: usize, cx: &mut VisualTestContext) {
+            state.read_with(cx, |state, _| {
+                state.list_state.scroll_to(gpui::ListOffset {
+                    item_ix: ix,
+                    offset_in_item: px(0.),
+                })
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+
+        fn endpoints(
+            state: &Entity<TextViewState>,
+            cx: &mut VisualTestContext,
+        ) -> (
+            gpui::Point<Pixels>,
+            gpui::Point<Pixels>,
+            gpui::Point<Pixels>,
+        ) {
+            let rows = state.read_with(cx, |state, _| state.selection_adapter.text_bounds());
+            let first = rows.first().unwrap();
+            let last = rows.last().unwrap();
+            (
+                point(first.left() + px(0.1), first.center().y),
+                point(first.right() - px(0.1), first.center().y),
+                point(last.right() - px(0.1), last.center().y),
+            )
+        }
+
+        // Raw dispatch is intentional: simulate_event may draw after each
+        // packet, concealing the exact native before-paint race.
+        fn press(position: gpui::Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+            window.dispatch_event(
+                gpui::PlatformInput::MouseDown(MouseDownEvent {
+                    position,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        }
+
+        fn extend(position: gpui::Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+            window.dispatch_event(
+                gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                    position,
+                    pressed_button: Some(MouseButton::Left),
+                    ..Default::default()
+                }),
+                cx,
+            );
+        }
+
+        fn release(position: gpui::Point<Pixels>, window: &mut Window, cx: &mut gpui::App) {
+            window.dispatch_event(
+                gpui::PlatformInput::MouseUp(MouseUpEvent {
+                    position,
+                    button: MouseButton::Left,
+                    modifiers: Modifiers::default(),
+                    click_count: 1,
+                }),
+                cx,
+            );
+        }
+
+        fn assert_copy(expected: &str, window: &mut Window, cx: &mut gpui::App) {
+            // Dispatch synchronously on the native current focus, without
+            // focusing a different entity or using deferred window dispatch.
+            let focus = window.focused(cx).expect("gesture focuses TextView");
+            focus.dispatch_action(&crate::input::Copy, window, cx);
+            assert_eq!(
+                cx.read_from_clipboard().and_then(|item| item.text()),
+                Some(expected.trim().to_string())
+            );
+            assert!(focus.is_focused(window));
+            assert_eq!(TextSelection::selected_text(window, cx), expected);
+        }
+
+        #[gpui::test]
+        fn custom_inline_and_block_copy_project_with_the_text(cx: &mut TestAppContext) {
+            struct CustomRoot {
+                state: Entity<TextViewState>,
+                format: SelectionFormat,
+                extensions: crate::text::MarkdownExtensions,
+            }
+            impl Render for CustomRoot {
+                fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                    div().w(px(520.)).child(crate::TextSelectionLayer).child(
+                        TextView::new(&self.state)
+                            .selection_format(self.format)
+                            .markdown_extensions(self.extensions.clone()),
+                    )
+                }
+            }
+            for format in [SelectionFormat::Plain, SelectionFormat::Source] {
+                cx.update(crate::init);
+                let extensions = crate::text::MarkdownExtensions::default()
+                    .plugin(
+                        crate::text::markdown_ext::TestInlinePlugin::new("math").parse_with(
+                            |node, _| {
+                                let markdown::mdast::Node::InlineMath(math) = node else {
+                                    return None;
+                                };
+                                Some(
+                                    crate::text::MarkdownNode::new("math", ())
+                                        .text(format!("{}²", math.value)),
+                                )
+                            },
+                        ),
+                    )
+                    .block_parser(|node, _| {
+                        matches!(node, markdown::mdast::Node::ThematicBreak(_)).then(|| {
+                            crate::text::MarkdownNode::new("block", ())
+                                .text("BLOCK")
+                                .markdown("---")
+                        })
+                    })
+                    .block_renderer("block", |_, _, _| {
+                        div()
+                            .debug_selector(|| "copy-custom-block".into())
+                            .w(px(520.))
+                            .h(px(40.))
+                    });
+                let (root, cx) = cx.add_window_view(|_, cx| CustomRoot {
+                    state: cx
+                        .new(|cx| TextViewState::markdown("before $x$ after\n\n---\n\nlast", cx)),
+                    format,
+                    extensions,
+                });
+                cx.run_until_parked();
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+                let state = root.read_with(cx, |root, _| root.state.clone());
+                let (start, _, end) = endpoints(&state, cx);
+                let expected = if format == SelectionFormat::Plain {
+                    "before x² after\nBLOCK\nlast\n"
+                } else {
+                    "before $x$ after\n\n---\n\nlast"
+                };
+                cx.update(|window, cx| {
+                    press(start, window, cx);
+                    extend(end, window, cx);
+                    assert_copy(expected, window, cx);
+                    release(end, window, cx);
+                });
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+                cx.update(|window, cx| assert_copy(expected, window, cx));
+                let block = cx.debug_bounds("copy-custom-block").unwrap();
+                cx.update(|window, cx| {
+                    press(block.center(), window, cx);
+                    extend(point(block.center().x, block.bottom() + px(1.)), window, cx);
+                    assert_copy(
+                        if format == SelectionFormat::Plain {
+                            "BLOCK\n"
+                        } else {
+                            "---"
+                        },
+                        window,
+                        cx,
+                    );
+                });
+            }
+        }
+
+        #[gpui::test]
+        fn unicode_180_paragraph_copy_extends_and_retracts_before_paint(cx: &mut TestAppContext) {
+            let markdown = (0..180)
+                .map(|ix| format!("p{ix:03} **café** 中文 👩‍💻 `\u{2009}code\u{2009}`"))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            // Expected bytes are constructed independently of rendered_text(),
+            // selected_text(), and the document's selection serializer.
+            let expected = (0..180)
+                .map(|ix| format!("p{ix:03} café 中文 👩‍💻 \u{2009}code\u{2009}\n"))
+                .collect::<String>();
+            let (root, cx) = document(&markdown, SelectionFormat::Plain, false, cx);
+            cx.simulate_resize(gpui::size(px(800.), px(12000.)));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let state = root.read_with(cx, |root, _| root.state.clone());
+            let rows = state.read_with(cx, |state, _| state.selection_adapter.text_bounds());
+            let first = rows.first().unwrap();
+            let first_end = rows
+                .iter()
+                .take_while(|row| row.top() < first.bottom())
+                .last()
+                .unwrap();
+            let last = rows.last().unwrap();
+            assert!(last.top() > first.top() + px(3000.));
+            let start = point(first.left() + px(0.1), first.center().y);
+            let short_end = point(first_end.right() - px(0.1), first_end.center().y);
+            let end = point(last.right() - px(0.1), last.center().y);
+            let short = "p000 café 中文 👩‍💻 \u{2009}code\u{2009}\n";
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(short_end, window, cx);
+                assert_copy(short, window, cx);
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.update(|window, cx| {
+                extend(end, window, cx);
+                assert_copy(&expected, window, cx);
+                extend(short_end, window, cx);
+                assert_copy(short, window, cx);
+            });
+        }
+
+        #[gpui::test]
+        fn scrolling_before_paint_keeps_the_completed_frame_coordinates(cx: &mut TestAppContext) {
+            let markdown = format!(
+                "{}\n\nlast",
+                "alpha beta gamma delta epsilon zeta ".repeat(30)
+            );
+            let (root, cx) = document(&markdown, SelectionFormat::Plain, true, cx);
+            root.update(cx, |root, cx| {
+                root.width = px(180.);
+                cx.notify();
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let state = root.read_with(cx, |root, _| root.state.clone());
+            let rows = state.read_with(cx, |state, _| state.selection_adapter.text_bounds());
+            let first = rows[0];
+            let (start, end) = state.read_with(cx, |state, _| {
+                (
+                    state.selection_adapter.first_text_position(0),
+                    state.selection_adapter.first_text_position("alpha".len()),
+                )
+            });
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(end, window, cx);
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.update(|window, cx| {
+                state.read(cx).list_state.scroll_by(first.size.height);
+                // The logical offset changed, registration and native pixels
+                // have not. This must not select the next wrapped row.
+                assert_copy("alpha\n", window, cx);
+            });
+        }
+
+        #[gpui::test]
+        fn offscreen_remeasurement_is_not_a_copy_projection(cx: &mut TestAppContext) {
+            let markdown = (0..180)
+                .map(|ix| format!("row {ix:03} café 中文"))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let (root, cx) = document(&markdown, SelectionFormat::Plain, true, cx);
+            let state = root.read_with(cx, |root, _| root.state.clone());
+            scroll_to(&state, 90, cx);
+            root.update(cx, |root, cx| {
+                root.width = px(260.);
+                cx.notify();
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            scroll_to(&state, 90, cx);
+            // measure_all has remeasured earlier, unpainted paragraphs at the
+            // new width. Only this completed paint supplies Copy geometry.
+            let (start, end, _) = endpoints(&state, cx);
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(end, window, cx);
+                assert_copy("row 090 café 中文\n", window, cx);
+            });
+        }
+
+        #[gpui::test]
+        fn virtualized_flow_retains_its_source_owned_partial_anchor(cx: &mut TestAppContext) {
+            for format in [SelectionFormat::Plain, SelectionFormat::Source] {
+                let tail = (1..180)
+                    .map(|ix| format!("row {ix:03} café 中文"))
+                    .collect::<Vec<_>>();
+                let markdown = format!("PREFIX `code` suffix\n\n{}", tail.join("\n\n"));
+                let expected = if format == SelectionFormat::Plain {
+                    format!("code suffix\n{}\n", tail.join("\n"))
+                } else {
+                    format!("`code` suffix\n\n{}", tail.join("\n\n"))
+                };
+                let (root, cx) = document(&markdown, format, true, cx);
+                let state = root.read_with(cx, |root, _| root.state.clone());
+                let rows = state.read_with(cx, |state, _| state.selection_adapter.text_bounds());
+                let code = rows[1];
+                let suffix = rows[2];
+                assert!(code.left() < suffix.left());
+                cx.update(|window, cx| {
+                    press(point(code.left() + px(0.1), code.center().y), window, cx);
+                    extend(
+                        point(suffix.right() - px(0.1), suffix.center().y),
+                        window,
+                        cx,
+                    );
+                });
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+                scroll_to(&state, 179, cx);
+                // Two completed frames let GPUI retire temporary flow fragments.
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+                let (_, _, end) = endpoints(&state, cx);
+                cx.update(|window, cx| {
+                    extend(end, window, cx);
+                    assert_copy(&expected, window, cx);
+                });
+            }
+        }
+
+        #[gpui::test]
+        fn a_new_range_copies_before_its_first_selection_paint(cx: &mut TestAppContext) {
+            let (state, cx) = setup(SelectionFormat::Plain, cx);
+            let (start, _, end) = endpoints(&state, cx);
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(end, window, cx);
+                assert_copy(PLAIN, window, cx);
+            });
+        }
+
+        #[gpui::test]
+        fn an_established_range_extends_and_retracts_without_paint(cx: &mut TestAppContext) {
+            let (state, cx) = setup(SelectionFormat::Plain, cx);
+            let (start, first_end, end) = endpoints(&state, cx);
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(first_end, window, cx);
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.update(|window, cx| {
+                assert_copy("中文 café\n", window, cx);
+                extend(end, window, cx);
+                assert_copy(PLAIN, window, cx);
+                extend(first_end, window, cx);
+                assert_copy("中文 café\n", window, cx);
+            });
+        }
+
+        #[gpui::test]
+        fn source_copy_projects_the_current_range_without_paint(cx: &mut TestAppContext) {
+            let (state, cx) = setup(SelectionFormat::Source, cx);
+            let (start, first_end, end) = endpoints(&state, cx);
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(first_end, window, cx);
+                assert_copy("中文 **café**", window, cx);
+                extend(end, window, cx);
+                assert_copy(MARKDOWN, window, cx);
+                extend(first_end, window, cx);
+                assert_eq!(TextSelection::selected_text(window, cx), "中文 **café**");
+            });
+        }
+
+        #[gpui::test]
+        fn a_blank_gesture_does_not_reuse_the_previous_range(cx: &mut TestAppContext) {
+            let (state, cx) = setup(SelectionFormat::Plain, cx);
+            let (start, first_end, end) = endpoints(&state, cx);
+            cx.update(|window, cx| {
+                press(start, window, cx);
+                extend(end, window, cx);
+                assert_eq!(TextSelection::selected_text(window, cx), PLAIN);
+                release(end, window, cx);
+                press(first_end + point(px(20.), px(0.)), window, cx);
+                extend(first_end + point(px(60.), px(0.)), window, cx);
+                assert_eq!(TextSelection::selected_text(window, cx), "");
+            });
+        }
+
+        #[gpui::test]
+        fn replacing_source_cannot_reproject_old_content(cx: &mut TestAppContext) {
+            for format in [SelectionFormat::Plain, SelectionFormat::Source] {
+                for replacement in ["replacement".to_string(), "replacement ".repeat(500)] {
+                    let (state, cx) = setup(format, cx);
+                    let (start, _, end) = endpoints(&state, cx);
+                    cx.update(|window, cx| {
+                        press(start, window, cx);
+                        extend(end, window, cx);
+                        assert_eq!(
+                            TextSelection::selected_text(window, cx),
+                            if format == SelectionFormat::Plain {
+                                PLAIN
+                            } else {
+                                MARKDOWN
+                            }
+                        );
+                        // Large replacements leave the previous parsed document
+                        // in place while parsing; neither size may reuse it.
+                        state.update(cx, |state, cx| state.set_text(&replacement, cx));
+                        assert_eq!(TextSelection::selected_text(window, cx), "");
+                    });
+                }
+            }
+        }
+    }
+
     // Regression: markdown `TextView` items inside an outer `gpui::list` with
     // `measure_all` must keep a stable total content height while scrolling.
     // Before synchronous full-replace parsing, off-screen markdown views were
