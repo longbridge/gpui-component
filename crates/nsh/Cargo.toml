@@ -15,10 +15,6 @@ workspace = true
 [lib]
 doctest = false
 
-[features]
-# Connects an embedded app to an `nsh dev` server (`NshView::connect_dev_server`).
-dev = ["nsh-platform-gpui/dev"]
-
 [dependencies]
 # NSH draws with GPUI Fast: the Kit must use that same GPUI.
 gpui-kit = { path = "../kit", version = "0.7.3", features = ["gpui-fast", "inspector"] }
