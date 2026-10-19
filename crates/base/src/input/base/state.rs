@@ -4328,9 +4328,18 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
             .map(|range| self.range_to_utf16(&range.into()))
     }
 
-    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.ime_marked_range = None;
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let committed = self.ime_marked_range.take().is_some();
         self.undo_manager.commit_transaction();
+        // Some input methods confirm their final preedit with unmarkText
+        // instead of insertText. Preedit edits do not emit Change, so publish
+        // that confirmation here. insertText already clears the marked range.
+        if committed {
+            if self.emit_events {
+                cx.emit(InputEvent::Change);
+            }
+            cx.notify();
+        }
     }
 
     /// Replace text in range.
@@ -7878,6 +7887,84 @@ mod tests {
                 assert_eq!(state.value(), "line one\nline two\n第三行");
             });
         });
+    }
+
+    #[gpui::test]
+    fn unmarking_commits_chinese_composition_to_change_subscribers(cx: &mut TestAppContext) {
+        use std::{cell::RefCell, rc::Rc};
+
+        let view = InputView::build(cx, |state| state);
+        let input = view.input;
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        let recorded = changes.clone();
+        let _subscription = view
+            .window_handle
+            .update(cx, |_, window, cx| {
+                window.subscribe(&input, cx, move |input, event, _, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        recorded
+                            .borrow_mut()
+                            .push(input.read(cx).value().to_string());
+                    }
+                })
+            })
+            .unwrap();
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "n", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "你", None, window, cx);
+            })
+        });
+        assert!(
+            changes.borrow().is_empty(),
+            "preedit must not publish controlled values"
+        );
+        cx.update(|window, cx| input.update(cx, |state, cx| state.unmark_text(window, cx)));
+        assert_eq!(*changes.borrow(), ["你"]);
+        cx.update(|window, cx| input.update(cx, |state, cx| state.unmark_text(window, cx)));
+        assert_eq!(
+            *changes.borrow(),
+            ["你"],
+            "unmark must not duplicate a commit"
+        );
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "hao", None, window, cx);
+                state.replace_text_in_range(None, "好", window, cx);
+            })
+        });
+        assert_eq!(*changes.borrow(), ["你", "你好"]);
+        cx.update(|window, cx| input.update(cx, |state, cx| state.unmark_text(window, cx)));
+        assert_eq!(*changes.borrow(), ["你", "你好"]);
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "x", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "", None, window, cx);
+                state.unmark_text(window, cx);
+            })
+        });
+        assert_eq!(
+            *changes.borrow(),
+            ["你", "你好"],
+            "canceling must not publish a change"
+        );
+        assert_eq!(input.read_with(&cx, |state, _| state.value()), "你好");
+        for readonly in [false, true] {
+            cx.update(|window, cx| {
+                input.update(cx, |state, cx| {
+                    state.set_disabled(!readonly, cx);
+                    state.set_readonly(readonly, cx);
+                    state.replace_and_mark_text_in_range(None, "拒绝", None, window, cx);
+                    state.unmark_text(window, cx);
+                })
+            });
+            assert_eq!(*changes.borrow(), ["你", "你好"]);
+            assert_eq!(input.read_with(&cx, |state, _| state.value()), "你好");
+        }
     }
 
     #[gpui::test]

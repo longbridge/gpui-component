@@ -75,3 +75,17 @@ task_app、composition。
 Base 默认七 family 串联已通过。Component 的 152 值/326 schema 类型契约不能挪作
 Base 的验收；上述结果仍限定当前三个代表绑定与实际断言。release 优化、
 Windows/Linux GUI、系统 IME 与其他平台行为未由这些 macOS 运行证明。
+
+## 中文输入法确认回归
+
+Base Input 的 `unmark_text` 现在在确认已有 marked composition 时发布一次
+`InputEvent::Change`。此前 `n → ni → 你 → unmark_text` 只改变原生文本，NSH
+订阅者收不到最终值。新增回归在修复前得到 `[]`，修复后得到 `["你"]`；同时检查
+重复 unmark、insertText 后 unmark、取消预编辑、只读和禁用输入。
+
+```sh
+cargo test -p gpui-base --features test-support composition --lib --locked
+```
+
+本轮 10 项 composition 测试和 Base 七 family UI 套件均通过。这里覆盖输入法协议
+与事件订阅，不宣称已经自动操作 macOS 系统输入法候选框。
