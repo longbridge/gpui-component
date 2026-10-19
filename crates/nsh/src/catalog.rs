@@ -460,6 +460,7 @@ impl Events {
                 }
             }
         }
+        log::debug!("{name} {data}");
         self.sink.emit(name, data);
         self.sink.redraw();
     }
