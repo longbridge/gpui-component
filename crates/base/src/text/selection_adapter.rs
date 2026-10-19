@@ -6,7 +6,10 @@ use crate::{
 };
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 
-use super::TextViewState;
+use super::{
+    TextViewState, inline::InlineSelectionProjection,
+    inline_object::InlineObjectSelectionProjection, node::CustomBlockSelectionProjection,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct CachedBlockEndpoint {
@@ -94,9 +97,32 @@ pub(super) struct TextViewSelectionAdapter {
 struct PaintedText {
     text_bounds: Vec<Bounds<Pixels>>,
     text_runs: Vec<TextSelectionRun>,
+    copy_projections: Vec<CopyProjection>,
     /// The caret boxes at the first and last selected character painted this
     /// frame, where the touch handles go.
     selection_edges: Option<(Bounds<Pixels>, Bounds<Pixels>)>,
+}
+
+pub(super) enum CopyProjection {
+    Text(InlineSelectionProjection),
+    InlineObject(InlineObjectSelectionProjection),
+    CustomBlock(CustomBlockSelectionProjection),
+}
+
+impl CopyProjection {
+    fn reset(&self) {
+        if let Self::Text(projection) = self {
+            projection.reset();
+        }
+    }
+
+    fn project(&self, start: Point<Pixels>, end: Point<Pixels>) {
+        match self {
+            Self::Text(projection) => projection.project(start, end),
+            Self::InlineObject(projection) => projection.project(start, end),
+            Self::CustomBlock(projection) => projection.project(start, end),
+        }
+    }
 }
 
 impl TextViewSelectionAdapter {
@@ -104,6 +130,7 @@ impl TextViewSelectionAdapter {
         let selection = TextSelectionHandle::new("", cx);
         let selection_id = selection.entity_id();
         let virtual_blocks = Rc::new(RefCell::new(VirtualBlockSelection::default()));
+        let frame = Rc::new(RefCell::new(PaintedText::default()));
 
         let view_for_events = view.clone();
         let blocks_for_events = virtual_blocks.clone();
@@ -158,14 +185,45 @@ impl TextViewSelectionAdapter {
 
         let view_for_copy = view.clone();
         let blocks_for_copy = virtual_blocks.clone();
+        let frame_for_copy = frame.clone();
         selection.copy_with(
             move |cx| {
                 let Some(view) = view_for_copy.upgrade() else {
                     return String::new();
                 };
                 let state = view.read(cx);
+                if !state.has_current_copy_document() {
+                    return String::new();
+                }
+                // Read the handle itself: event subscribers may not have run
+                // yet when input and Copy arrive in the same App update.
+                let mut current = VirtualBlockSelection::default();
+                current.update(state.selection_adapter.selection.snapshot(cx), selection_id);
+                let previous = blocks_for_copy.borrow();
+                let range_changed = current.anchor != previous.anchor
+                    || current.cursor != previous.cursor
+                    || current.coverage != previous.coverage;
+                drop(previous);
+                // Gesture snapshots are current before paint. Refresh the rich
+                // document's byte ranges from its retained native layouts
+                // before its existing Plain/Source serializer reads them.
+                if !state.has_view_selection()
+                    && (!state.preserve_inline_selection || range_changed)
+                {
+                    if let Some((start, end)) = state.selection_points(cx) {
+                        // Only represented source states are refreshed.
+                        // Offscreen AST selections retain their logical ends.
+                        let frame = frame_for_copy.borrow();
+                        for projection in &frame.copy_projections {
+                            projection.reset();
+                        }
+                        for projection in &frame.copy_projections {
+                            projection.project(start, end);
+                        }
+                    }
+                }
                 let last = state.parsed_content.document.blocks.len().saturating_sub(1);
-                let blocks = blocks_for_copy.borrow().block_range(selection_id, last);
+                let blocks = current.block_range(selection_id, last);
                 state.selected_text_in(blocks)
             },
             cx,
@@ -196,7 +254,7 @@ impl TextViewSelectionAdapter {
 
         Self {
             selection,
-            frame: Rc::default(),
+            frame,
             layout_revision: None,
         }
     }
@@ -211,8 +269,20 @@ impl TextViewSelectionAdapter {
         changed && !is_selecting
     }
 
+    pub(super) fn clear_copy_projections(&self) {
+        self.frame.borrow_mut().copy_projections.clear();
+    }
+
+    pub(super) fn register_copy_projection(&self, projection: CopyProjection) {
+        self.frame.borrow_mut().copy_projections.push(projection);
+    }
+
     pub(super) fn begin_frame(&self) {
-        *self.frame.borrow_mut() = PaintedText::default();
+        let mut frame = self.frame.borrow_mut();
+        frame.text_bounds.clear();
+        frame.text_runs.clear();
+        frame.copy_projections.clear();
+        frame.selection_edges = None;
     }
 
     /// Records one inline's painted selection ends. Inlines paint in document
@@ -304,5 +374,13 @@ impl TextViewSelectionAdapter {
     #[cfg(test)]
     pub(super) fn text_bounds(&self) -> Vec<Bounds<Pixels>> {
         self.frame.borrow().text_bounds.clone()
+    }
+
+    #[cfg(test)]
+    pub(super) fn first_text_position(&self, index: usize) -> Point<Pixels> {
+        let frame = self.frame.borrow();
+        let layout = frame.text_runs.first().unwrap().layout();
+        layout.position_for_index(index).unwrap()
+            + gpui::point(Pixels::ZERO, layout.line_height() / 2.)
     }
 }

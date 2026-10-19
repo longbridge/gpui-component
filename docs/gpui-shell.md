@@ -2301,8 +2301,8 @@ it a page or a script could open `file:` URLs and read the disk past every
 `fs` grant. Beyond the scheme, loading is not a capability: browsing a page is
 not treated as network access by the script, which never sees the bytes.
 
-**Platform limits come from `gpui-webview`.** It is built on GPUI Fast, so the
-feature selects GPUI Fast for the whole runtime. On Linux the page needs an X11
+**Platform limits come from `gpui-webview`.** GPUI overlays render above the
+page only with GPUI Fast, so the feature selects GPUI Fast for the whole runtime. On Linux the page needs an X11
 window; on a Wayland window `WebViewState` throws with that reason, and the
 host does not force X11 on applications that never create a page. On Windows
 the native page draws above GPUI content it overlaps.

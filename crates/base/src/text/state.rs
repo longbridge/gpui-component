@@ -81,6 +81,19 @@ pub enum SelectionFormat {
     /// reconstructed as Markdown from the parsed nodes (e.g. selecting inside
     /// a `**bold**` run yields `**bold**`).
     Source,
+    /// The rendered text while the selection stays within one style, the
+    /// source as soon as it takes in several.
+    ///
+    /// A style is everything the source would spell out around the selected
+    /// text: the marks of an inline run (emphasis, code, a link's URL) and the
+    /// block it sits in (a heading's `#`, a list marker, a code fence). So
+    /// selecting inside a `**bold**` run, a link or a code block yields the
+    /// text alone, also when the selection reaches exactly up to the run's
+    /// boundaries, while a selection across that boundary, into a second
+    /// block, or over an inline object copies like [`Self::Source`]. Two blocks
+    /// count as two styles even when their marks match, since the source of
+    /// either spells out where one ends. Select-all copies the source verbatim.
+    SourceAcrossStyles,
 }
 
 /// One text element's laid-out vertical extent, reported by `Inline` during
@@ -431,6 +444,12 @@ impl TextViewState {
         }
     }
 
+    /// A pending full replacement leaves the previous document on screen, but
+    /// that document must no longer supply clipboard content.
+    pub(super) fn has_current_copy_document(&self) -> bool {
+        self.committed_revision >= self.full_update_revision
+    }
+
     /// Return the selected text, with `blocks` bounding which top-level blocks
     /// the selection covers.
     ///
@@ -441,7 +460,7 @@ impl TextViewState {
         let format = self.effective_format();
 
         if self.select_all {
-            if format == SelectionFormat::Source {
+            if format != SelectionFormat::Plain {
                 return self.source().to_string();
             }
 
@@ -452,7 +471,7 @@ impl TextViewState {
         // past the block walk. Source mode cannot take it: the word it stored
         // has lost its markup. The click also set the inline selection it came
         // from, so the walk reconstructs the same range with the markup intact.
-        if format != SelectionFormat::Source
+        if format == SelectionFormat::Plain
             && let Some(text) = &self.selected_text_override
         {
             return text.clone();
@@ -504,6 +523,10 @@ impl TextViewState {
         if !append {
             self.full_update_revision = self.revision;
             self.selection_revision = self.selection_revision.wrapping_add(1);
+            // Old native layouts must not project a still-active gesture back
+            // into replaced content, including while a large parse is pending.
+            self.selection_adapter.clear_copy_projections();
+            self.parsed_content.document.clear_selection();
         }
         let parse_synchronously = !append && text.len() <= MAX_SYNC_FULL_REPLACE_BYTES;
         let update_options = UpdateOptions {
