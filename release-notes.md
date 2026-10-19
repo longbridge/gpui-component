@@ -18,6 +18,13 @@ layers above application content. Opening a dialog, sheet or notification no
 longer depends on the application's view rendering its layer. Notifications use
 the Root's full bounds, and cached content does not duplicate or suppress layers.
 
+#### Fixed: keyboard activation inside Popover
+
+Enter and Space now activate a focused control inside a Popover instead of
+toggling the surrounding trigger. Textarea newline and space input keep their
+own bindings, and Escape still dismisses the popover and restores trigger focus.
+This applies to both the Base and styled Component Popover.
+
 #### Questionnaire: choosing a single answer confirms the item
 
 ```rust
