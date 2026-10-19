@@ -62,7 +62,7 @@ pub struct Lsp {
     ///
     /// Defaults to [`highlight_prefix`]. Replace it to paint a contiguous
     /// match, a character-by-character match, or ranges the host computed.
-    pub completion_highlighter: Rc<CompletionHighlighter>,
+    completion_highlighter: Rc<CompletionHighlighter>,
 
     pub(crate) document_colors: Vec<(lsp_types::Range, Hsla)>,
     /// Cached semantic tokens as absolute position ranges + theme token-type
@@ -98,6 +98,24 @@ impl Default for Lsp {
 }
 
 impl Lsp {
+    /// Set the completion label highlighter when constructing the LSP configuration.
+    pub fn with_completion_highlighter(mut self, highlighter: Rc<CompletionHighlighter>) -> Self {
+        self.set_completion_highlighter(highlighter);
+        self
+    }
+
+    /// Return the completion label highlighter.
+    pub fn completion_highlighter(&self) -> &Rc<CompletionHighlighter> {
+        &self.completion_highlighter
+    }
+
+    /// Replace the completion label highlighter.
+    ///
+    /// Notify the editor after updating its LSP configuration to repaint an open menu.
+    pub fn set_completion_highlighter(&mut self, highlighter: Rc<CompletionHighlighter>) {
+        self.completion_highlighter = highlighter;
+    }
+
     /// Update the LSP when the text changes.
     pub(crate) fn update(
         &mut self,
@@ -135,5 +153,21 @@ impl InputBaseState<EditorMode> {
             let range_utf16 = self.range_to_utf16(&(start..end));
             self.replace_text_in_range_silent(Some(range_utf16), &edit.new_text, window, cx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lsp_builder() {
+        let highlighter: Rc<CompletionHighlighter> = Rc::new(highlight_contains);
+        let mut lsp = Lsp::default().with_completion_highlighter(highlighter.clone());
+        assert!(Rc::ptr_eq(lsp.completion_highlighter(), &highlighter));
+
+        let replacement: Rc<CompletionHighlighter> = Rc::new(highlight_characters);
+        lsp.set_completion_highlighter(replacement.clone());
+        assert!(Rc::ptr_eq(lsp.completion_highlighter(), &replacement));
     }
 }

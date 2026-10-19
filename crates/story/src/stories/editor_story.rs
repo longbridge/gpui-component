@@ -332,7 +332,9 @@ impl EditorStory {
     fn set_completion_highlight(&mut self, mode: StoryCompletionHighlight, cx: &mut Context<Self>) {
         self.completion_highlight.set(mode);
         self.completions_state.update(cx, |state, cx| {
-            state.lsp_mut().completion_highlighter = mode.highlighter();
+            state
+                .lsp_mut()
+                .set_completion_highlighter(mode.highlighter());
             let (open, query, start) = {
                 let menu = state.completion_menu_state();
                 (

@@ -4,7 +4,7 @@ use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
     HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render,
     RenderOnce, SharedString, Styled, StyledText, Subscription, WeakEntity, Window, deferred, div,
-    prelude::FluentBuilder, px,
+    prelude::FluentBuilder, px, rems,
 };
 use gpui_base::TestSupportExt as _;
 use gpui_base::input::CompletionHighlighter;
@@ -148,9 +148,9 @@ impl RenderOnce for CompletionMenuItem {
             .text_sm()
             .py_0()
             .px_2()
-            .h(px(26.))
+            .h(rems(26. / 16.))
             .mb_0p5()
-            .rounded(cx.theme().radius.min(px(8.)))
+            .rounded(cx.theme().radius)
             .when(item.deprecated.unwrap_or(false), |this| this.line_through())
             .child(
                 h_flex()

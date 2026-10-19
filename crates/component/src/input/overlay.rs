@@ -214,7 +214,7 @@ impl OverlayMode for crate::input::EditorMode {
     ) {
         let cursor = snapshot.cursor;
 
-        let highlight = state.read(cx).lsp().completion_highlighter.clone();
+        let highlight = state.read(cx).lsp().completion_highlighter().clone();
         if lsp
             .completion_highlight
             .as_ref()
