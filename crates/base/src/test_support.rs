@@ -160,13 +160,24 @@ impl Registration {
             .get(owner_id)
             .and_then(Weak::upgrade)
             .unwrap_or_else(|| panic!("semantic owner {owner_id:?} was not observed"));
-        let mut snapshot = owner.facts.borrow().clone();
+        let semantics = owner.facts.borrow();
         // Identity and pointer targeting belong to the frame; semantic facts
         // belong only to the explicitly named native editor.
-        snapshot.path.clone_from(&facts.path);
-        snapshot.bounds = facts.bounds;
-        snapshot.visible = facts.visible;
-        snapshot
+        ElementSnapshot {
+            path: facts.path.clone(),
+            bounds: facts.bounds,
+            visible: facts.visible,
+            role: semantics.role,
+            checked: semantics.checked,
+            indeterminate: semantics.indeterminate,
+            selected: semantics.selected,
+            expanded: semantics.expanded,
+            value: semantics.value.clone(),
+            focused: semantics.focused,
+            focus_action: semantics.focus_action,
+            disabled: semantics.disabled,
+            label: semantics.label.clone(),
+        }
     }
 }
 

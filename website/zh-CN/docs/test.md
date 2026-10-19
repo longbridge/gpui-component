@@ -125,10 +125,11 @@ cargo test -p gpui-kit --features test-support --test ui --locked
 TabBar 内的 Tab 使用下标 ID。Select 已有的 `"input"` 子元素是触发区域：
 `window.within("language").click("input", cx)`。
 
-Input、Textarea 和 Editor 的构造函数 ID 标识外框，包含前后附加控件。
-文本语义和焦点由内部编辑器持有。使用 `find_by_label("Profile name")` 或
-作用域内的角色查询读取编辑器的角色、值和焦点，不要从外框读取这些属性。
-附加按钮获得焦点时，文本语义节点不应报告焦点。
+对于 Input、Textarea 和 Editor，`window.find(component_id)` 保留外框的路径、
+边界和可见性，以及前后附加控件的查询作用域。角色、无障碍名称、值和焦点
+来自明确关联的原生编辑器。现有 ID 查询无需改用标签，也无需知道内部编辑器 ID。
+独立附加按钮获得焦点时，控件的文本 owner 不会报告焦点。名称和角色查询
+仍然只枚举实际的原生编辑器；组件 ID 的关联不会增加原生文本节点或 Tab 停靠点。
 
 原生 div 只注册观察，不再填写另一份测试状态：
 
@@ -141,9 +142,10 @@ let target = div().id("details").test_support().child(content);
 `TestSupportExt` 始终可用。关闭 `test-support` 时，`.test_support()` 直接返回原生元素，
 保留其准确类型；启用后保留身份、布局、事件与无障碍接口，不增加布局容器。
 重复调用只保留一个注册项。先调用 `.test_support()`，再调用 `.track_focus(&handle)`，
-让包装器观察实际焦点绑定；Kit 控件在内部完成这件事。`focused()` 检查焦点作用域内
-是否存在键盘焦点，也包括 Input 外框中的编辑器。如果 GPUI 声明元素可聚焦，但没有
-观察到绑定，`focused()` 会报错并给出修复提示，不再静默返回 `None`。这能发现
+让包装器观察实际焦点绑定；Kit 控件在内部完成这件事。`focused()` 检查被观察的
+焦点作用域内是否存在键盘焦点。Input 的 ID 查询只观察编辑器的作用域，不计入
+独立附加控件的焦点。如果 GPUI 声明元素可聚焦，但没有观察到绑定，`focused()`
+会报错并给出修复提示，不再静默返回 `None`。这能发现
 `.track_focus(&handle).test_support()` 的顺序错误；隐式 `.focusable()` 句柄也无法读取，
 应改用显式句柄。没有观察到绑定、也没有声明焦点 action 时返回 `None`。
 这个诊断是尽力而为的，依赖原生 accessibility 的 `Action::Focus`。
@@ -301,7 +303,7 @@ cx.update_window(handle.into(), |_, window, cx| {
     window.click("name", cx);
     window.input("Ada", cx);
     window.press("backspace", cx);
-    assert_eq!(window.find_by_label("Profile name").value(), Some("Ad"));
+    assert_eq!(window.find("name").value(), Some("Ad"));
 }).unwrap();
 ```
 

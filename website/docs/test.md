@@ -154,11 +154,13 @@ their defaults include the state entity ID. Tabs inside a TabBar use their
 index as ID. Select's existing `"input"` child identifies its trigger:
 `window.within("language").click("input", cx)`.
 
-For Input, Textarea and Editor, the constructor ID identifies the outer frame,
-including its prefix/suffix controls. Text semantics and focus belong to the
-editor inside it. Use `find_by_label("Profile name")` or scoped role queries to
-read that editor's role, value and focus; do not read those properties from the
-frame. Focusing an addon does not focus the semantic text node.
+For Input, Textarea and Editor, `window.find(component_id)` keeps the outer
+frame's path, bounds and visibility, including its prefix/suffix scopes.
+Role, accessible name, value and focus come from the explicitly associated
+native editor. Existing ID queries need no label migration or internal editor
+ID. Focusing an independent addon does not focus the component's text owner.
+Named and role queries still enumerate the actual native editor once; the
+component-ID relationship adds neither a native text node nor a focus stop.
 
 Native divs opt in without supplying a second description of their state:
 
@@ -173,8 +175,9 @@ returns the original native element with its exact type. With the feature enable
 it preserves identity, layout, events and accessibility, without adding a layout
 container. Repeated observation keeps one registration. Call `.test_support()` before
 `.track_focus(&handle)` so the wrapper sees the actual binding. Kit controls do this
-internally. `focused()` checks whether that focus scope contains keyboard focus,
-including the nested editor inside an Input frame. If GPUI advertises focus support
+internally. `focused()` checks whether that observed scope contains keyboard focus.
+An Input component query uses the editor's scope; independent addon focus does not
+count. If GPUI advertises focus support
 but the binding was not observed, `focused()` panics with a diagnostic instead of
 silently returning `None`. This catches `.track_focus(&handle).test_support()`;
 implicit `.focusable()` handles are also unavailable, so use an explicit handle.
@@ -399,7 +402,7 @@ cx.update_window(handle.into(), |_, window, cx| {
     window.click("name", cx);
     window.input("Ada", cx);
     window.press("backspace", cx);
-    assert_eq!(window.find_by_label("Profile name").value(), Some("Ad"));
+    assert_eq!(window.find("name").value(), Some("Ad"));
 }).unwrap();
 ```
 

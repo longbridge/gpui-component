@@ -47,11 +47,12 @@ impl Fields {
     }
 
     fn ids(&self) -> [ElementId; 3] {
-        if self.custom_ids {
-            return ["name".into(), "body".into(), "source".into()];
-        }
         [
-            ("input", self.input.entity_id()).into(),
+            if self.custom_ids {
+                "name".into()
+            } else {
+                ("input", self.input.entity_id()).into()
+            },
             ("input", self.textarea.entity_id()).into(),
             ("input", self.editor.entity_id()).into(),
         ]
@@ -83,14 +84,12 @@ impl Render for Fields {
                 )
                 .child(
                     Textarea::new(&self.textarea)
-                        .when(self.custom_ids, |input| input.id("body"))
                         .h_24()
                         .readonly(self.readonly)
                         .disabled(self.disabled),
                 )
                 .child(
                     Editor::new(&self.editor)
-                        .when(self.custom_ids, |input| input.id("source"))
                         .h_24()
                         .readonly(self.readonly)
                         .disabled(self.disabled),
@@ -159,6 +158,10 @@ fn component_ids_expose_live_text_semantics_without_labels(cx: &mut TestAppConte
         cx.update_window(handle.into(), |_, window, cx| {
             window.render_frame(cx);
             for (ix, id) in ids.into_iter().enumerate() {
+                // Only Input has a public custom ElementId builder.
+                if custom_ids && ix != 0 {
+                    continue;
+                }
                 let role = if ix == 0 {
                     gpui_kit::Role::TextInput
                 } else {
@@ -193,6 +196,22 @@ fn component_ids_expose_live_text_semantics_without_labels(cx: &mut TestAppConte
                 });
                 window.render_frame(cx);
                 assert_eq!(window.find(id).value(), Some("owner replacement"));
+            }
+            if custom_ids {
+                let old_input = fields.update(cx, |fields, cx| {
+                    let old_input = fields.input.clone();
+                    fields.input =
+                        cx.new(|cx| InputState::new(window, cx).default_value("new editor"));
+                    cx.notify();
+                    old_input
+                });
+                window.render_frame(cx);
+                assert_eq!(window.find("name").value(), Some("new editor"));
+                window.click("name", cx);
+                select_all(window, cx);
+                window.input("replacement input", cx);
+                assert_eq!(window.find("name").value(), Some("replacement input"));
+                assert_eq!(old_input.read(cx).value(), "owner replacement");
             }
         })
         .unwrap();

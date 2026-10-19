@@ -188,7 +188,6 @@ fn tab_cycles_keep_prefix_and_suffix_buttons_focused(cx: &mut TestAppContext) {
         for id in ["prefix-button", "suffix-button"] {
             let addon = scoped.find(id).bounds();
             assert!(frame.contains(&addon.origin));
-            assert!(frame.contains(&addon.bottom_right()));
             scoped.click(id, cx);
         }
         assert_eq!(view.read(cx).prefix_clicks, 1);

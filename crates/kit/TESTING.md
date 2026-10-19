@@ -64,17 +64,19 @@ remain necessary.
   modal forms, notifications, nested menus and Dock drag/zoom workflows. See the guide's
   per-suite contract matrix; this is not exhaustive option coverage or packaged-app automation.
 
-Input, Textarea and Editor keep their `.id(...)` on the outer frame for hit
-testing, layout and addon scopes. Text role, accessible name, value and actions
-belong to the editor's existing keyboard-focus boundary instead. Query that
-semantic node with `find_by_label`, or `within(frame).find_all_by_role(...)`;
-the frame itself does not duplicate text semantics. An addon may have focus
-inside the frame while the semantic text node correctly reports no focus.
-Give fixture editors meaningful `.aria_label(...)` names and select the intended
-editor explicitly at each assertion. If names repeat, scope the query to the
-owning frame. Do not hide these selectors behind a helper that guesses an input
-from a fixed list of text roles: password, email, phone and URL inputs need not
-share the same role.
+Input, Textarea and Editor keep their component IDs on the outer frame for hit
+testing, layout and addon scopes. `window.find(component_id)` reads role, label,
+value and focus from the explicitly associated native editor while retaining
+the frame's path, bounds and visibility. Existing ID queries do not require an
+accessible label or knowledge of an internal editor ID. An independent addon
+can have focus inside the frame while the component's text owner reports no
+focus.
+
+The relationship does not add a native text node or register another focus
+handle. `find_by_label` and role queries still enumerate the actual native
+owners once, not the component-ID projections. Give controls meaningful
+accessible names where appropriate, and scope repeated names or IDs to their
+owning frame. Do not guess an editor from a fixed list of text roles.
 
 ## Inspect accessibility targets and individual events
 

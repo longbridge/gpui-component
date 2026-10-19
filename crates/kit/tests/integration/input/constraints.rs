@@ -269,7 +269,10 @@ fn component_id_preserves_supported_content_type_roles(cx: &mut TestAppContext) 
     let (handle, view) = fixture(cx, |input| input.default_value("contact"));
     for (kind, role) in [
         (InputContentType::EmailAddress, gpui_kit::Role::EmailInput),
-        (InputContentType::TelephoneNumber, gpui_kit::Role::PhoneNumberInput),
+        (
+            InputContentType::TelephoneNumber,
+            gpui_kit::Role::PhoneNumberInput,
+        ),
         (InputContentType::Url, gpui_kit::Role::UrlInput),
         (InputContentType::DateTime, gpui_kit::Role::DateTimeInput),
         (InputContentType::Birthdate, gpui_kit::Role::DateInput),
