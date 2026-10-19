@@ -44,10 +44,8 @@ const muted = "text-zinc-500 dark:text-zinc-400";
 const ring = "border_ring";
 const button = "h_8 px_3 flex items_center rounded_md border_1 border_border bg_background text_sm";
 const buttonStates = { hoverClass: "bg_accent", activeClass: "bg_muted", focusClass: ring };
-/** Hover draws on top of every other style, so a control whose selected look
- * is dark only changes its border on hover: a light hover background under its
- * light text would hide the text. */
-const selectableStates = { hoverClass: "border_ring", focusClass: ring };
+/** GPUI Kit's pressed and selected look: the accent, as on hover. */
+const accent = "bg_accent text_accent_foreground";
 const primary = "h_8 px_3 flex items_center rounded_md border_1 border_primary bg_primary text_primary_foreground text_sm";
 const field = "w_full h_8 px_2 flex items_center rounded_md border_1 border_input bg_background text_sm";
 const trigger =
@@ -123,6 +121,7 @@ function Buttons() {
         <Button
           label={`Clicked ${clicks()} times`}
           rootClass={primary}
+          hoverClass="opacity_90"
           activeClass="opacity_80"
           focusClass={ring}
           onClick={() => clicks.update((n) => n + 1)}
@@ -139,8 +138,9 @@ function Buttons() {
             log("Toggle.change", e);
           }}
           rootClass={button}
-          pressedClass="border_primary bg_primary text_primary_foreground"
-          {...selectableStates}
+          pressedClass={accent}
+          hoverClass={accent}
+          focusClass={ring}
         />
         <Text class={`${text} ${bold() ? "font-bold" : ""}`}>{bold() ? "Bold text" : "Regular text"}</Text>
       </Section>
@@ -256,9 +256,9 @@ function Choices() {
           axis="horizontal"
           rootClass="flex gap_2"
           radioClass="h_8 px_3 flex items_center rounded_md border_1 border_border text_sm"
-          radioHoverClass="border_ring"
+          radioHoverClass={accent}
           radioFocusClass={ring}
-          checkedClass="border_primary bg_primary text_primary_foreground"
+          checkedClass={accent}
         />
       </Section>
       <Section title="Slider and Progress" note="The progress bar follows the slider.">
@@ -544,12 +544,12 @@ function Content() {
           previousLabel="‹"
           nextLabel="›"
           rootClass="flex items_center gap_1"
-          pageClass="size_8 flex items_center justify_center rounded_md text_sm border_1 border_background"
-          previousClass="size_8 flex items_center justify_center rounded_md border_1 border_background"
-          nextClass="size_8 flex items_center justify_center rounded_md border_1 border_background"
-          buttonHoverClass="border_border"
+          pageClass="size_8 flex items_center justify_center rounded_md text_sm"
+          previousClass="size_8 flex items_center justify_center rounded_md"
+          nextClass="size_8 flex items_center justify_center rounded_md"
+          buttonHoverClass="bg_accent"
           buttonFocusClass={ring}
-          currentPageClass="bg_primary text_primary_foreground"
+          currentPageClass="border_1 border_border bg_background"
           ellipsisClass="px_1 text_muted_foreground"
           disabledClass="opacity_50"
         />
