@@ -43,8 +43,14 @@ const CHECK_SVG_LIGHT: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewB
 const CHECK_SVG_DARK: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"><path d="m3.25 8.25 3 3 6.5-7" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
 
 /// The block-level nodes.
+///
+/// This is the document tree TextView renders. Together with
+/// [`editor_host`](super::editor_host) it is also the hand-over type for
+/// external editors: they build the tree, render it with
+/// [`BlockNode::render`] and read geometry back per leaf.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum BlockNode {
+#[non_exhaustive]
+pub enum BlockNode {
     /// Something like a Div container in HTML.
     Root {
         children: Vec<BlockNode>,
@@ -100,8 +106,11 @@ pub(crate) enum BlockNode {
 }
 
 /// Retained block interaction state, shared with its rendered element.
+///
+/// Opaque: build one with `BlockState::default()` for a
+/// [`BlockNode::Custom`].
 #[derive(Debug, Clone, Default)]
-pub(crate) struct BlockState {
+pub struct BlockState {
     // None is unobserved, allowing virtualized copy to include enclosed blocks.
     selection: Arc<Mutex<Option<BlockSelection>>>,
 }
@@ -317,7 +326,7 @@ impl BlockNode {
     }
 
     /// Get the span of the node.
-    pub(crate) fn span(&self) -> Option<Span> {
+    pub fn span(&self) -> Option<Span> {
         match self {
             BlockNode::Root { span, .. } => *span,
             BlockNode::Paragraph(paragraph) => paragraph.span,
@@ -882,8 +891,10 @@ fn source_range_for_segments(
     (rendered_end >= selection.end).then_some(source_start..source_end)
 }
 
+/// One run of inline content in a [`Paragraph`]: marked text, an image or a
+/// custom inline node.
 #[derive(Default, Clone, Debug)]
-pub(crate) struct InlineNode {
+pub struct InlineNode {
     /// The text content.
     pub(crate) text: SharedString,
     pub(crate) image: Option<ImageNode>,
@@ -905,6 +916,20 @@ impl PartialEq for InlineNode {
             && self.marks == other.marks
             && self.source_segments == other.source_segments
     }
+}
+
+fn set_leaf_key(state: &mut Arc<Mutex<InlineState>>, key: u64) {
+    let text = state
+        .lock()
+        .map(|state| state.text.clone())
+        .unwrap_or_default();
+    // Rekeying creates a new rendered identity. Do not mutate the state of
+    // another AST clone (or carry its transient selection into this instance).
+    *state = Arc::new(Mutex::new(InlineState {
+        text,
+        editor_key: Some(key),
+        ..Default::default()
+    }));
 }
 
 /// Wrap `text` with the Markdown syntax implied by `mark`.
@@ -1218,7 +1243,7 @@ fn table_selected_source(table: &Table) -> String {
             let aligns: Vec<String> = (0..row.children.len())
                 .map(|ix| {
                     match table.column_align(ix) {
-                        ColumnumnAlign::Left => ":--",
+                        ColumnumnAlign::None | ColumnumnAlign::Left => ":--",
                         ColumnumnAlign::Center => ":-:",
                         ColumnumnAlign::Right => "--:",
                     }
@@ -1332,7 +1357,8 @@ fn list_selected_source(
 }
 
 impl InlineNode {
-    pub(crate) fn new(text: impl Into<SharedString>) -> Self {
+    /// A run of text with no marks.
+    pub fn new(text: impl Into<SharedString>) -> Self {
         Self {
             text: text.into(),
             image: None,
@@ -1344,21 +1370,44 @@ impl InlineNode {
         }
     }
 
-    pub(crate) fn custom(node: MarkdownNode) -> Self {
+    /// A custom inline node, an atomic object in the flow.
+    pub fn custom(node: MarkdownNode) -> Self {
         let mut this = Self::new(node.as_text().to_string());
         this.custom = Some(node);
         this
     }
 
-    pub(crate) fn image(image: ImageNode) -> Self {
+    /// An inline image, an atomic object in the flow.
+    pub fn image(image: ImageNode) -> Self {
         let mut this = Self::new("");
         this.image = Some(image);
         this
     }
 
-    pub(crate) fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
+    /// Sets the marks, each a byte range of the text and its style.
+    pub fn marks(mut self, marks: Vec<(Range<usize>, TextMark)>) -> Self {
         self.marks = marks;
         self
+    }
+
+    /// The text of the run (the fallback text of a custom node, empty for an image).
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// The image, when this run is an image.
+    pub fn as_image(&self) -> Option<&ImageNode> {
+        self.image.as_ref()
+    }
+
+    /// The custom node, when this run is one.
+    pub fn as_custom(&self) -> Option<&MarkdownNode> {
+        self.custom.as_ref()
+    }
+
+    /// The marks, each a byte range of the text and its style.
+    pub fn mark_runs(&self) -> &[(Range<usize>, TextMark)] {
+        &self.marks
     }
 
     pub(crate) fn source_segments(mut self, source_segments: Vec<SourceSegment>) -> Self {
@@ -1376,7 +1425,7 @@ impl InlineNode {
 /// Unlike other Element, this is cloneable, because it is used in the Node AST.
 /// We are keep the selection state inside this AST Nodes.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Paragraph {
+pub struct Paragraph {
     pub(super) span: Option<Span>,
     pub(super) children: Vec<InlineNode>,
     /// The link references in this paragraph, used for reference links.
@@ -1790,8 +1839,9 @@ impl Paragraph {
     }
 }
 
+/// A table: rows of cell paragraphs and per-column alignment.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Table {
+pub struct Table {
     pub(crate) children: Vec<TableRow>,
     pub(crate) column_aligns: Vec<ColumnumnAlign>,
     pub(crate) span: Option<Span>,
@@ -1930,6 +1980,38 @@ pub struct TableData {
 }
 
 impl Table {
+    /// A table of `rows` (one paragraph per cell) with the column alignments.
+    pub fn new(rows: Vec<Vec<Paragraph>>, column_aligns: Vec<ColumnumnAlign>) -> Self {
+        Self {
+            children: rows
+                .into_iter()
+                .map(|row| TableRow {
+                    children: row
+                        .into_iter()
+                        .map(|children| TableCell {
+                            children,
+                            width: None,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            column_aligns,
+            ..Default::default()
+        }
+    }
+
+    /// The rows, each an iterator over its cells' paragraphs.
+    pub fn rows(&self) -> impl Iterator<Item = impl Iterator<Item = &Paragraph>> {
+        self.children
+            .iter()
+            .map(|row| row.children.iter().map(|cell| &cell.children))
+    }
+
+    /// The alignment of each column.
+    pub fn column_aligns(&self) -> &[ColumnumnAlign] {
+        &self.column_aligns
+    }
+
     pub(crate) fn column_align(&self, index: usize) -> ColumnumnAlign {
         self.column_aligns.get(index).copied().unwrap_or_default()
     }
@@ -1963,7 +2045,7 @@ impl Table {
                 let aligns: Vec<String> = (0..row.children.len())
                     .map(|ix| {
                         match self.column_align(ix) {
-                            ColumnumnAlign::Left => ":--",
+                            ColumnumnAlign::None | ColumnumnAlign::Left => ":--",
                             ColumnumnAlign::Center => ":-:",
                             ColumnumnAlign::Right => "--:",
                         }
@@ -2014,9 +2096,12 @@ impl Table {
     }
 }
 
+/// The alignment of a table column.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub(crate) enum ColumnumnAlign {
+pub enum ColumnumnAlign {
+    /// No alignment in the delimiter row (`---`); renders like `Left`.
     #[default]
+    None,
     Left,
     Center,
     Right,
@@ -2025,7 +2110,7 @@ pub(crate) enum ColumnumnAlign {
 impl From<mdast::AlignKind> for ColumnumnAlign {
     fn from(value: mdast::AlignKind) -> Self {
         match value {
-            mdast::AlignKind::None => ColumnumnAlign::Left,
+            mdast::AlignKind::None => ColumnumnAlign::None,
             mdast::AlignKind::Left => ColumnumnAlign::Left,
             mdast::AlignKind::Center => ColumnumnAlign::Center,
             mdast::AlignKind::Right => ColumnumnAlign::Right,
@@ -2073,9 +2158,24 @@ impl Paragraph {
         self.invalidate_render_cache();
     }
 
-    pub(crate) fn push(&mut self, text: InlineNode) {
+    /// Appends an inline run.
+    pub fn push(&mut self, text: InlineNode) {
         self.children.push(text);
         self.invalidate_render_cache();
+    }
+
+    /// The inline runs.
+    pub fn children(&self) -> &[InlineNode] {
+        &self.children
+    }
+
+    /// Marks this paragraph as a leaf of an external editor: while a
+    /// [`collect_leaf_geometry`](super::editor_host::collect_leaf_geometry)
+    /// scope is active, it reports its geometry under `key` and paints the
+    /// decorations given for `key`. Rekeying detaches runtime state from clones.
+    pub fn with_leaf_key(mut self, key: u64) -> Self {
+        set_leaf_key(&mut self.state, key);
+        self
     }
 
     pub(crate) fn push_image(&mut self, image: ImageNode) {
@@ -2113,6 +2213,7 @@ impl Paragraph {
 #[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
+    meta: Option<SharedString>,
     state: Arc<Mutex<InlineState>>,
     highlight_cache: Arc<Mutex<Option<CachedCodeBlockHighlights>>>,
     /// Rendered UTF-8 byte spans of the code paired with their exact Markdown
@@ -2136,7 +2237,10 @@ impl std::fmt::Debug for CachedCodeBlockHighlights {
 
 impl PartialEq for CodeBlock {
     fn eq(&self, other: &Self) -> bool {
-        self.lang == other.lang && self.code() == other.code() && self.span == other.span
+        self.lang == other.lang
+            && self.meta == other.meta
+            && self.code() == other.code()
+            && self.span == other.span
     }
 }
 
@@ -2144,6 +2248,25 @@ impl CodeBlock {
     /// Get the language of the code block.
     pub fn lang(&self) -> Option<SharedString> {
         self.lang.clone()
+    }
+
+    /// The rest of the fence's info string after the language, when any.
+    pub fn meta(&self) -> Option<SharedString> {
+        self.meta.clone()
+    }
+
+    /// Sets the fence's info string after the language. It is kept for
+    /// round trips and is not rendered.
+    pub fn with_meta(mut self, meta: Option<SharedString>) -> Self {
+        self.meta = meta;
+        self
+    }
+
+    /// Marks this code block as a leaf of an external editor, like
+    /// [`Paragraph::with_leaf_key`]. Rekeying detaches runtime state from clones.
+    pub fn with_leaf_key(mut self, key: u64) -> Self {
+        set_leaf_key(&mut self.state, key);
+        self
     }
 
     /// Get the code content of the code block.
@@ -2163,7 +2286,8 @@ impl CodeBlock {
         Self::new(code.into(), lang.map(Into::into), None::<Span>)
     }
 
-    pub(crate) fn new(
+    /// A code block of `code` in `lang`.
+    pub fn new(
         code: SharedString,
         lang: Option<SharedString>,
         span: Option<impl Into<Span>>,
@@ -2175,6 +2299,7 @@ impl CodeBlock {
 
         Self {
             lang,
+            meta: None,
             state,
             highlight_cache: Arc::new(Mutex::new(None)),
             source_segments: vec![],
@@ -2567,6 +2692,7 @@ impl Paragraph {
                 self.inline_flow_items(fade_key, fades, backgrounds, node_cx, cx),
                 node_cx.link_click_handler.clone(),
             )
+            .editor_key(self.leaf_key())
             .into_any_element();
         }
 
@@ -2575,7 +2701,9 @@ impl Paragraph {
         // text, highlights and links are cached across frames.
         if !has_image {
             let (text, highlights, mut links) = self.plain_render(node_cx, cx);
-            if text.is_empty() {
+            // An editor leaf is laid out even when empty, so the editor gets
+            // a line box for the caret.
+            if text.is_empty() && self.leaf_key().is_none() {
                 return div().into_any_element();
             }
             for (_, link_mark) in &mut links {
@@ -2746,9 +2874,20 @@ impl Paragraph {
             .into_any_element()
     }
 
+    /// The key an external editor gave this leaf, if any.
+    fn leaf_key(&self) -> Option<u64> {
+        self.state.lock().ok().and_then(|state| state.editor_key)
+    }
+
     fn should_render_inline_flow(&self) -> bool {
         let has_image = self.children.iter().any(|child| child.image.is_some());
         let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        // An editor leaf with an image always uses the flow, which reports
+        // its pieces to the editor (an image-only paragraph would otherwise
+        // take the plain image path, which reports nothing).
+        if has_image && self.leaf_key().is_some() {
+            return true;
+        }
         self.children.iter().any(|child| child.custom.is_some())
             || (has_image && has_text)
             || self
@@ -3858,7 +3997,7 @@ impl BlockNode {
 
                 let grow = SLACK_GROW * column.max / total_w;
                 let (lead, trail) = match align {
-                    ColumnumnAlign::Left => (0., grow),
+                    ColumnumnAlign::None | ColumnumnAlign::Left => (0., grow),
                     ColumnumnAlign::Center => (grow / 2., grow / 2.),
                     ColumnumnAlign::Right => (grow, 0.),
                 };

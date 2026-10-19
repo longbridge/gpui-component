@@ -2092,10 +2092,10 @@ async function verifyKitAgainstStaging(
 
     // The same commands the repository's CI runs. Clippy stays scoped to the
     // crates this repository publishes; `--no-deps` keeps it off the staged
-    // crates, whose warnings are Zed's to fix. `gpui-webview` enables
+    // crates, whose warnings are Zed's to fix. The WebView example enables
     // `gpui-kit/gpui-fast`, which would switch every member off gpui-pre.
     const commands = [
-      ["cargo", "check", ...patches, "--workspace", "--exclude", "gpui-webview", "--exclude", "webview", "--all-targets"],
+      ["cargo", "check", ...patches, "--workspace", "--exclude", "webview", "--all-targets"],
       ["cargo", "clippy", ...patches, "--no-deps", "-p", "gpui-component", "-p", "gpui-component-story", "-p", "gpui-kit-assets", "-p", "gpui-kit", "--", "--deny", "warnings"],
       ["cargo", "test", ...patches, "--workspace", "--exclude", "gpui-shell", "--exclude", "gpui-webview", "--exclude", "webview", "--features", "gpui-component-story/test-support"],
     ];
