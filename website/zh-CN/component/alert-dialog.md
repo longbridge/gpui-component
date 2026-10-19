@@ -27,7 +27,7 @@ use gpui_kit::component::WindowExt;
 
 ### 入场动画
 
-使用 `.entrance(DialogEntrance::Fade)`、`.entrance(DialogEntrance::FadeSlide)` 或 `.entrance(DialogEntrance::None)` 可以替换默认的 `SlideDown` 入场方式。AlertDialog 与 [Dialog](./dialog.md#入场动画) 共用主题时长、窗口边界处理和 reduced motion 策略。关闭仍然立即生效。
+使用 `.entrance(DialogEntrance::Fade)`、`.entrance(DialogEntrance::FadeSlide)` 或 `.entrance(DialogEntrance::None)` 可以替换默认的 `SlideDown` 入场方式。AlertDialog 与 [Dialog](./dialog.md#入场动画) 共用主题时长、窗口边界处理和 reduced motion 策略，关闭时的退场动画也一致。
 
 ### 配置应用根视图
 

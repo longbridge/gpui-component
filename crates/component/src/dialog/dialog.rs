@@ -298,6 +298,16 @@ impl IntoElement for BaseDialogRoot {
     }
 }
 
+/// The exit transition of a dialog that has been closed.
+///
+/// Built by [`WindowState::dialog_layer`](crate::root) each frame while the
+/// dialog leaves; absent when the dialog is open.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DialogExit {
+    /// `1.0` when the close starts, `0.0` once the dialog is gone.
+    pub(crate) visibility: f32,
+}
+
 /// A modal to display content in a dialog box.
 #[derive(IntoElement)]
 pub struct Dialog {
@@ -317,6 +327,8 @@ pub struct Dialog {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) layer_ix: usize,
     pub(crate) selection_scope: TextSelectionScopeId,
+    /// Set while the dialog is closing, see [`DialogExit`].
+    pub(crate) exit: Option<DialogExit>,
 }
 
 pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
@@ -363,6 +375,7 @@ impl Dialog {
             layer_ix: 0,
             selection_scope: TextSelectionScopeId::default(),
             button_props: DialogButtonProps::default(),
+            exit: None,
         }
     }
 
@@ -521,11 +534,28 @@ impl Dialog {
 
     /// Sets how the dialog enters, defaulting to [`DialogEntrance::SlideDown`].
     ///
-    /// This controls the surface and backdrop together. Reduced motion skips
-    /// the entrance and immediately shows the final state. Closing remains immediate.
+    /// This controls the surface and backdrop together, and closing animates
+    /// both back out. Reduced motion skips both and shows the final state
+    /// immediately, as does [`DialogEntrance::None`].
     pub fn entrance(mut self, entrance: DialogEntrance) -> Self {
         self.props.entrance = entrance;
         self
+    }
+
+    /// How long the exit transition runs; `Duration::ZERO` closes in one frame.
+    ///
+    /// Mirrors the entrance: [`DialogEntrance::None`], reduced motion, and a
+    /// zero theme duration leave nothing to animate out.
+    pub(crate) fn exit_duration(&self, cx: &App) -> Duration {
+        if cx.reduce_motion() {
+            return Duration::ZERO;
+        }
+
+        match self.props.entrance {
+            DialogEntrance::None => Duration::ZERO,
+            DialogEntrance::SlideDown => *ANIMATION_DURATION,
+            _ => cx.theme().motion_tokens().duration_normal,
+        }
     }
 
     pub(crate) fn has_overlay(&self) -> bool {
@@ -618,7 +648,17 @@ impl RenderOnce for Dialog {
         let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + layer_offset;
         let entrance = self.props.entrance;
         let motion = cx.theme().motion_tokens();
-        let animated = entrance != DialogEntrance::None
+        let exit = self.exit;
+        let closing = exit.is_some();
+        // 1.0 while the dialog is at rest, shrinking to 0.0 as it leaves.
+        let exit_visibility = exit.map_or(1.0, |exit| exit.visibility.clamp(0., 1.));
+        // The exiting dialog paints its own fading dim: base's backdrop stops
+        // every press, and the app below is already usable again.
+        let fade_overlay = closing && self.props.overlay_visible;
+        // The entrance plays once, on the way in. A closing dialog renders the
+        // trajectory back out from `exit_visibility` instead.
+        let animated = !closing
+            && entrance != DialogEntrance::None
             && !cx.reduce_motion()
             && (entrance == DialogEntrance::SlideDown || !motion.duration_normal.is_zero());
         let travel = motion.distance_short.to_pixels(window.rem_size());
@@ -664,6 +704,14 @@ impl RenderOnce for Dialog {
                 .with_easing(move |delta| easing.sample(delta).clamp(0., 1.))
         };
 
+        // The newest dialog still open owns Escape, the backdrop, and the
+        // focus trap; a closing dialog keeps its layer only to finish leaving.
+        let topmost = WindowState::read(window, cx)
+            .active_dialogs
+            .iter()
+            .rposition(|dialog| !dialog.closing);
+        let is_topmost = !closing && topmost == Some(layer_ix);
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
@@ -671,23 +719,24 @@ impl RenderOnce for Dialog {
                 div()
                     .id("dialog")
                     .test_support()
-                    .occlude()
+                    // A closing dialog is leaving: it must not swallow input
+                    // aimed at what is already usable again beneath it.
+                    .when(!closing, |this| this.occlude())
                     .w(view_size.width)
                     .h(view_size.height)
+                    .when(fade_overlay, |this| {
+                        this.child(div().absolute().inset_0().bg(overlay_color(true, cx)))
+                    })
                     .child(
                         self.base
                             .take()
                             .expect("Dialog base host is always present")
-                            .layer(
-                                layer_ix,
-                                (self.layer_ix + 1)
-                                    == WindowState::read(window, cx).active_dialogs.len(),
-                            )
+                            .layer(layer_ix, is_topmost)
                             .focus_handle(self.focus_handle.clone())
-                            .close_on_escape(self.props.keyboard)
-                            .close_on_backdrop_press(self.props.overlay_closable)
+                            .close_on_escape(self.props.keyboard && !closing)
+                            .close_on_backdrop_press(self.props.overlay_closable && !closing)
                             .dismiss_below_y(TITLE_BAR_HEIGHT)
-                            .when(self.props.overlay, |this| {
+                            .when(self.props.overlay && !closing, |this| {
                                 this.backdrop(
                                     div()
                                         .absolute()
@@ -698,10 +747,17 @@ impl RenderOnce for Dialog {
                                         }),
                                 )
                             })
-                            .on_ok(move |event, window, cx| on_ok(event, window, cx))
-                            .on_cancel(move |event, window, cx| on_cancel(event, window, cx))
+                            .on_ok(move |event, window, cx| !closing && on_ok(event, window, cx))
+                            .on_cancel(move |event, window, cx| {
+                                !closing && on_cancel(event, window, cx)
+                            })
                             .on_close(move |event, window, cx| on_close(event, window, cx))
                             .request_close(move |deferred, window, cx| {
+                                // A dialog already leaving must not close
+                                // whatever sits below it.
+                                if closing {
+                                    return;
+                                }
                                 if deferred {
                                     Self::defer_close_dialog(window, cx);
                                 } else {
@@ -803,13 +859,36 @@ impl RenderOnce for Dialog {
                                                 })
                                         }))
                                         .map(|surface| {
-                                            if animated {
+                                            if closing {
+                                                // The popup paints inside the base host's
+                                                // deferred draw, so the layer opacity cannot
+                                                // reach it: fade the surface itself.
+                                                surface
+                                                    .opacity(exit_visibility)
+                                                    .shadow(dialog_shadow(exit_visibility))
+                                                    .text_selection_scope(selection_scope)
+                                                    .into_any_element()
+                                            } else if animated {
+                                                // The base host paints its popup in a
+                                                // deferred pass, so opacity on the layer
+                                                // cannot reach it: fade the surface itself.
+                                                let fades_in = matches!(
+                                                    entrance,
+                                                    DialogEntrance::Fade
+                                                        | DialogEntrance::FadeSlide
+                                                );
                                                 surface
                                                     .with_animation(
                                                         "slide-down-shadow",
                                                         animation.clone(),
-                                                        |surface, delta| {
-                                                            surface.shadow(dialog_shadow(delta))
+                                                        move |surface, delta| {
+                                                            let surface = surface
+                                                                .shadow(dialog_shadow(delta));
+                                                            if fades_in {
+                                                                surface.opacity(delta)
+                                                            } else {
+                                                                surface
+                                                            }
                                                         },
                                                     )
                                                     .text_selection_scope(selection_scope)
@@ -822,7 +901,21 @@ impl RenderOnce for Dialog {
                                             }
                                         })
                                         .map(|surface| {
-                                            if animated && entrance == DialogEntrance::FadeSlide {
+                                            if closing {
+                                                if entrance == DialogEntrance::FadeSlide {
+                                                    let mut surface = EntranceSurface::new(
+                                                        surface,
+                                                        travel,
+                                                        window_paddings.top + margin,
+                                                    );
+                                                    surface.progress = exit_visibility;
+                                                    surface.into_any_element()
+                                                } else {
+                                                    surface
+                                                }
+                                            } else if animated
+                                                && entrance == DialogEntrance::FadeSlide
+                                            {
                                                 EntranceSurface::new(
                                                     surface,
                                                     travel,
@@ -843,7 +936,18 @@ impl RenderOnce for Dialog {
                                         }),
                                 )
                                 .map(|positioner| {
-                                    if animated && entrance == DialogEntrance::SlideDown {
+                                    if closing {
+                                        if entrance == DialogEntrance::SlideDown {
+                                            positioner
+                                                .position(point(
+                                                    window_paddings.left + x,
+                                                    window_paddings.top + y * exit_visibility,
+                                                ))
+                                                .into_any_element()
+                                        } else {
+                                            positioner.into_any_element()
+                                        }
+                                    } else if animated && entrance == DialogEntrance::SlideDown {
                                         positioner
                                             .with_animation(
                                                 "slide-down",
@@ -863,7 +967,9 @@ impl RenderOnce for Dialog {
                             ),
                     )
                     .map(|layer| {
-                        if animated {
+                        if closing {
+                            layer.opacity(exit_visibility).into_any_element()
+                        } else if animated {
                             layer
                                 .with_animation("fade-in", animation, |layer, delta| {
                                     layer.opacity(delta)
@@ -881,13 +987,31 @@ impl RenderOnce for Dialog {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use gpui::{AppContext as _, Bounds, Context, Render, TestAppContext, VisualTestContext, size};
+    use gpui::{
+        AppContext as _, Bounds, Context, Render, StatefulInteractiveElement as _, TestAppContext,
+        VisualTestContext, size,
+    };
+    use std::{cell::Cell, rc::Rc};
 
-    struct DialogHost;
+    struct DialogHost {
+        clicks: Rc<Cell<usize>>,
+    }
 
     impl Render for DialogHost {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().size_full()
+            let clicks = self.clicks.clone();
+            div().size_full().child(
+                // A target beneath the dialog's backdrop, so tests can observe
+                // whether presses reach the application while it is covered.
+                div()
+                    .id("background-target")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .w_full()
+                    .h(px(200.))
+                    .on_click(move |_, _, _| clicks.set(clicks.get() + 1)),
+            )
         }
     }
 
@@ -897,17 +1021,29 @@ pub(crate) mod tests {
         cx: &mut TestAppContext,
         window_size: gpui::Size<Pixels>,
     ) -> &mut VisualTestContext {
+        let (cx, _) = window_with_click_count(cx, window_size);
+        cx
+    }
+
+    /// [`window`], also returning how often the click target beneath the
+    /// dialog was pressed.
+    fn window_with_click_count(
+        cx: &mut TestAppContext,
+        window_size: gpui::Size<Pixels>,
+    ) -> (&mut VisualTestContext, Rc<Cell<usize>>) {
         cx.update(|cx| {
             crate::init(cx);
             cx.set_reduce_motion(true);
         });
+        let clicks = Rc::new(Cell::new(0));
+        let counter = clicks.clone();
         let (_, cx) = cx.add_window_view(|window, cx| {
-            let view = cx.new(|_| DialogHost);
+            let view = cx.new(|_| DialogHost { clicks: counter });
             crate::Root::new(view, window, cx)
         });
         cx.simulate_resize(window_size);
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx
+        (cx, clicks)
     }
 
     fn open(
@@ -919,6 +1055,13 @@ pub(crate) mod tests {
         // One frame mounts the layer, the next paints it at rest.
         cx.update(|window, cx| window.draw(cx).clear(cx));
         cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    /// Draws one frame, so an exit transition samples the clock at its
+    /// current value.
+    fn frame(cx: &mut VisualTestContext) {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
     }
 
     fn surface(cx: &mut VisualTestContext, layer_ix: usize) -> Bounds<Pixels> {
@@ -1063,6 +1206,181 @@ pub(crate) mod tests {
         cx.update(|window, cx| assert!(WindowState::read(window, cx).active_dialogs.is_empty()));
     }
 
+    /// Closing keeps the dialog mounted until the entrance plays back out, and
+    /// the dialog stops counting as active before it leaves the screen.
+    #[gpui::test]
+    fn closing_plays_the_entrance_backwards_before_the_dialog_unmounts(cx: &mut TestAppContext) {
+        let cx = window(cx, size(px(1000.), px(800.)));
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        open(cx, |dialog, _, _| {
+            dialog.title("Closing").child("body").margin_top(px(300.))
+        });
+
+        cx.update(|window, cx| window.close_dialog(cx));
+        frame(cx);
+        // The exit starts from the resting position and the dialog is already
+        // logically inactive, though it still paints.
+        cx.update(|window, cx| {
+            assert_eq!(WindowState::read(window, cx).active_dialogs.len(), 1);
+            assert!(!window.has_active_dialog(cx));
+        });
+        assert_eq!(surface(cx, 0).top(), px(300.));
+
+        // Halfway through, the surface has slid up between rest and the top.
+        cx.background_executor
+            .advance_clock(*ANIMATION_DURATION / 2);
+        frame(cx);
+        cx.update(|window, cx| assert_eq!(WindowState::read(window, cx).active_dialogs.len(), 1));
+        let halfway = surface(cx, 0).top();
+        assert!(
+            halfway > px(0.) && halfway < px(300.),
+            "the closing dialog should slide back up: {halfway:?}"
+        );
+
+        // Once the transition finishes the dialog leaves the window state.
+        cx.background_executor
+            .advance_clock(*ANIMATION_DURATION / 2 + Duration::from_millis(1));
+        frame(cx);
+        cx.update(|window, cx| {
+            assert!(WindowState::read(window, cx).active_dialogs.is_empty());
+            assert!(!window.has_active_dialog(cx));
+        });
+        assert!(cx.debug_bounds("dialog-0").is_none());
+    }
+
+    #[gpui::test]
+    fn reduced_motion_closes_in_a_single_frame(cx: &mut TestAppContext) {
+        let cx = window(cx, size(px(1000.), px(800.)));
+        open(cx, |dialog, _, _| dialog.title("Reduced").child("body"));
+        cx.update(|window, cx| window.close_dialog(cx));
+        cx.update(|window, cx| {
+            assert!(WindowState::read(window, cx).active_dialogs.is_empty());
+            assert!(!window.has_active_dialog(cx));
+        });
+    }
+
+    #[gpui::test]
+    fn zero_theme_duration_closes_fade_entrances_immediately(cx: &mut TestAppContext) {
+        for entrance in [DialogEntrance::Fade, DialogEntrance::FadeSlide] {
+            let cx = window(cx, size(px(1000.), px(800.)));
+            cx.update(|_, cx| {
+                cx.set_reduce_motion(false);
+                crate::Theme::update(cx, |theme| theme.motion.duration_normal = Duration::ZERO);
+            });
+            open(cx, move |dialog, _, _| {
+                dialog.title("Immediate").child("body").entrance(entrance)
+            });
+            cx.update(|window, cx| window.close_dialog(cx));
+            cx.update(|window, cx| {
+                assert!(WindowState::read(window, cx).active_dialogs.is_empty());
+                assert!(!window.has_active_dialog(cx));
+            });
+        }
+    }
+
+    /// Opening a new dialog while the previous one is leaving keeps both
+    /// mounted for the exit: the new dialog owns focus and survives it.
+    #[gpui::test]
+    fn reopening_during_the_exit_keeps_the_new_dialog(cx: &mut TestAppContext) {
+        let cx = window(cx, size(px(1000.), px(800.)));
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        open(cx, |dialog, _, _| dialog.title("First").child("body"));
+        cx.update(|window, cx| window.close_dialog(cx));
+        frame(cx);
+
+        open(cx, |dialog, _, _| dialog.title("Second").child("body"));
+        cx.update(|window, cx| {
+            let state = WindowState::read(window, cx);
+            assert_eq!(state.active_dialogs.len(), 2);
+            assert!(state.active_dialogs[0].closing);
+            assert!(!state.active_dialogs[1].closing);
+            assert!(
+                state.active_dialogs[1].focus_handle().is_focused(window),
+                "the reopened dialog owns focus while the old one leaves"
+            );
+        });
+
+        cx.background_executor
+            .advance_clock(*ANIMATION_DURATION + Duration::from_millis(1));
+        frame(cx);
+        // The old dialog is gone and the new one moves up to its layer.
+        frame(cx);
+        cx.update(|window, cx| {
+            let state = WindowState::read(window, cx);
+            assert_eq!(state.active_dialogs.len(), 1);
+            assert!(!state.active_dialogs[0].closing);
+            assert!(state.active_dialogs[0].focus_handle().is_focused(window));
+            assert!(window.has_active_dialog(cx));
+        });
+        assert!(cx.debug_bounds("dialog-0").is_some());
+        assert!(cx.debug_bounds("dialog-1").is_none());
+    }
+
+    /// Closing the top of a stack only removes that dialog: the one below stays
+    /// mounted and becomes the active dialog for the duration of the exit.
+    #[gpui::test]
+    fn closing_the_top_dialog_leaves_the_one_below_mounted(cx: &mut TestAppContext) {
+        let cx = window(cx, size(px(1000.), px(800.)));
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        open(cx, |dialog, _, _| dialog.title("First").child("body"));
+        open(cx, |dialog, _, _| dialog.title("Second").child("body"));
+
+        cx.update(|window, cx| window.close_dialog(cx));
+        frame(cx);
+        cx.update(|window, cx| {
+            assert_eq!(WindowState::read(window, cx).active_dialogs.len(), 2);
+            assert!(window.has_active_dialog(cx));
+        });
+        assert!(
+            cx.debug_bounds("dialog-0").is_some(),
+            "the lower dialog stays"
+        );
+        assert!(
+            cx.debug_bounds("dialog-1").is_some(),
+            "the closing dialog still paints its exit"
+        );
+
+        cx.background_executor
+            .advance_clock(*ANIMATION_DURATION + Duration::from_millis(1));
+        frame(cx);
+        cx.update(|window, cx| {
+            assert_eq!(WindowState::read(window, cx).active_dialogs.len(), 1);
+            assert!(window.has_active_dialog(cx));
+        });
+        assert!(cx.debug_bounds("dialog-0").is_some());
+        assert!(cx.debug_bounds("dialog-1").is_none());
+    }
+
+    /// A leaving dialog releases input: a press that the open backdrop used to
+    /// swallow now reaches the application beneath it.
+    #[gpui::test]
+    fn closing_dialog_does_not_block_input_beneath_it(cx: &mut TestAppContext) {
+        let (cx, clicks) = window_with_click_count(cx, size(px(1000.), px(800.)));
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        open(cx, |dialog, _, _| {
+            dialog
+                .title("Closing")
+                .child("body")
+                .margin_top(px(300.))
+                .overlay_closable(false)
+        });
+
+        // The open dialog covers the window: the backdrop stops the press
+        // before it can reach the target underneath.
+        let backdrop_point = point(px(100.), px(60.));
+        cx.simulate_click(backdrop_point, gpui::Modifiers::default());
+        assert_eq!(clicks.get(), 0, "an open dialog blocked the application");
+
+        cx.update(|window, cx| window.close_dialog(cx));
+        frame(cx);
+        cx.simulate_click(backdrop_point, gpui::Modifiers::default());
+        assert_eq!(
+            clicks.get(),
+            1,
+            "the closing dialog swallowed a press meant for the application"
+        );
+    }
+
     #[gpui::test]
     fn zero_theme_duration_displays_fade_entrances_immediately(cx: &mut TestAppContext) {
         for entrance in [DialogEntrance::Fade, DialogEntrance::FadeSlide] {
@@ -1105,5 +1423,59 @@ pub(crate) mod tests {
             cx.update(|window, cx| window.draw(cx).clear(cx));
             assert_eq!(surface(cx, 0).top(), px(80.));
         }
+    }
+
+    /// Closing fades the surface itself, not only the layer: the base host
+    /// paints in a deferred pass, where ancestor opacity no longer applies.
+    #[gpui::test]
+    fn closing_fades_the_dialog_surface(cx: &mut TestAppContext) {
+        let cx = window(cx, size(px(1000.), px(800.)));
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        open(cx, |dialog, _, _| {
+            dialog
+                .title("Fading")
+                .child("body")
+                .margin_top(px(300.))
+                .entrance(DialogEntrance::Fade)
+        });
+        cx.update(|window, cx| window.close_dialog(cx));
+        frame(cx);
+        assert_eq!(
+            surface_alpha(cx),
+            1.0,
+            "the exit should start fully visible"
+        );
+
+        cx.background_executor
+            .advance_clock(Duration::from_millis(90));
+        frame(cx);
+        let alpha = surface_alpha(cx);
+        assert!(
+            alpha > 0.0 && alpha < 1.0,
+            "the closing surface should fade, but its background is {alpha}"
+        );
+    }
+
+    /// The most opaque background painted at the surface's current bounds.
+    fn surface_alpha(cx: &mut VisualTestContext) -> f32 {
+        let bounds = cx.debug_bounds("dialog-0").unwrap();
+        let scale = cx.update(|window, _| window.scale_factor());
+        let left = f32::from(bounds.origin.x) * scale;
+        let top = f32::from(bounds.origin.y) * scale;
+        let width = f32::from(bounds.size.width) * scale;
+        let height = f32::from(bounds.size.height) * scale;
+        cx.update(|window, _| {
+            window
+                .painted_quads()
+                .into_iter()
+                .filter(|quad| {
+                    (quad.bounds.origin.x.0 - left).abs() < 1.0
+                        && (quad.bounds.origin.y.0 - top).abs() < 1.0
+                        && (quad.bounds.size.width.0 - width).abs() < 1.0
+                        && (quad.bounds.size.height.0 - height).abs() < 1.0
+                })
+                .filter_map(|quad| quad.background.as_solid().map(|color| color.a))
+                .fold(0.0_f32, f32::max)
+        })
     }
 }

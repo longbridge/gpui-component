@@ -1,6 +1,6 @@
 use crate::{
     ActiveTheme, ElementExt, Placement,
-    dialog::{ANIMATION_DURATION, Dialog},
+    dialog::{ANIMATION_DURATION, Dialog, DialogExit},
     input::AnyInputState,
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
@@ -15,8 +15,11 @@ use gpui::{
     ParentElement as _, Pixels, Render, RenderOnce, Styled, WeakFocusHandle, Window, canvas, div,
     prelude::FluentBuilder as _,
 };
-use gpui_base::{TextSelection, TextSelectionScopeId};
-use std::{any::TypeId, rc::Rc};
+use gpui_base::{
+    TextSelection, TextSelectionScopeId,
+    motion::{Presence, Transition},
+};
+use std::{any::TypeId, cell::Cell, rc::Rc};
 
 pub(crate) fn init(cx: &mut App) {
     gpui_base::Root::register_plugin::<WindowState>(cx, WindowState::new);
@@ -38,6 +41,9 @@ pub(crate) struct WindowState {
     touch_selection_overlay: Entity<WindowTouchSelectionOverlay>,
     sheet_size: Option<DefiniteLength>,
     pending_focus_restore: Option<WeakFocusHandle>,
+    /// Source of `ActiveDialog::id`, so a closed dialog's exit transition
+    /// never reuses another dialog's animation state.
+    next_dialog_id: u64,
 }
 
 #[derive(Clone)]
@@ -52,27 +58,51 @@ pub(crate) struct ActiveSheet {
 
 #[derive(Clone)]
 pub(crate) struct ActiveDialog {
+    /// Stable for the dialog's lifetime; keys its exit transition.
+    id: u64,
     focus_handle: FocusHandle,
     /// The previous focused handle before opening the Dialog.
     previous_focused_handle: Option<WeakFocusHandle>,
     selection_scope: TextSelectionScopeId,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
+    /// Whether closing plays an exit transition, refreshed on every render.
+    ///
+    /// `DialogEntrance::None`, reduced motion, and a zero theme duration all
+    /// close in a single frame.
+    exit_enabled: Rc<Cell<bool>>,
+    /// Retained after closing until its exit transition finishes.
+    pub(crate) closing: bool,
 }
 
 impl ActiveDialog {
     pub(crate) fn new(
+        id: u64,
         focus_handle: FocusHandle,
         previous_focused_handle: Option<WeakFocusHandle>,
         selection_scope: TextSelectionScopeId,
         builder: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     ) -> Self {
         Self {
+            id,
             focus_handle,
             previous_focused_handle,
             selection_scope,
             builder: Rc::new(builder),
+            exit_enabled: Rc::new(Cell::new(false)),
+            closing: false,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn focus_handle(&self) -> &FocusHandle {
+        &self.focus_handle
+    }
+}
+
+/// Keys one dialog's exit transition. Ids are never reused, so a closing
+/// dialog can never inherit the animation state of the one opened after it.
+fn exit_presence_id(id: u64) -> ElementId {
+    ElementId::NamedInteger("dialog-exit".into(), id)
 }
 
 impl WindowState {
@@ -91,6 +121,7 @@ impl WindowState {
             touch_selection_overlay: cx.new(|cx| WindowTouchSelectionOverlay::new(window, cx)),
             sheet_size: None,
             pending_focus_restore: None,
+            next_dialog_id: 0,
         }
     }
 
@@ -104,7 +135,9 @@ impl WindowState {
 
     pub(crate) fn active_text_selection_scope(&self) -> TextSelectionScopeId {
         self.active_dialogs
-            .last()
+            .iter()
+            .rev()
+            .find(|dialog| !dialog.closing)
             .map(|dialog| dialog.selection_scope)
             .or_else(|| {
                 self.active_sheet
@@ -202,37 +235,75 @@ impl WindowState {
             return None;
         }
 
-        let mut show_overlay_ix = None;
+        let mut rendered: Vec<(usize, Dialog)> = Vec::with_capacity(active_dialogs.len());
 
-        let mut dialogs = active_dialogs
-            .iter()
-            .enumerate()
-            .map(|(i, active_dialog)| {
-                let mut dialog = Dialog::new(cx);
+        for (index, active_dialog) in active_dialogs.iter().enumerate() {
+            let mut dialog = Dialog::new(cx);
 
-                dialog = (active_dialog.builder)(dialog, window, cx);
+            dialog = (active_dialog.builder)(dialog, window, cx);
 
-                // Give the dialog the focus handle, because `dialog` is a temporary value, is not possible to
-                // keep the focus handle in the dialog.
-                //
-                // So we keep the focus handle in the `active_dialog`, this is owned by the `WindowState`.
-                dialog.focus_handle = active_dialog.focus_handle.clone();
-                dialog.selection_scope = active_dialog.selection_scope;
+            // Give the dialog the focus handle, because `dialog` is a temporary value, is not possible to
+            // keep the focus handle in the dialog.
+            //
+            // So we keep the focus handle in the `active_dialog`, this is owned by the `WindowState`.
+            dialog.focus_handle = active_dialog.focus_handle.clone();
+            dialog.selection_scope = active_dialog.selection_scope;
 
-                dialog.layer_ix = i;
-                // Find the dialog which one needs to show overlay.
-                if dialog.has_overlay() {
-                    show_overlay_ix = Some(i);
+            dialog.layer_ix = index;
+
+            // Refreshed every frame so closing decides in one step whether an
+            // exit transition has to play at all.
+            let exit_duration = dialog.exit_duration(cx);
+            active_dialog.exit_enabled.set(!exit_duration.is_zero());
+
+            // Sampled every frame so the keyed transition exists while the
+            // dialog is open: it settles at 1.0 without requesting frames, and
+            // closing can then run that same value down to 0.0.
+            let mut presence =
+                Presence::new(exit_presence_id(active_dialog.id), !active_dialog.closing);
+            if active_dialog.closing {
+                let easing = cx.theme().motion_tokens().easing_exit.clone();
+                presence = presence.transition(Transition::new(exit_duration).easing(easing));
+            }
+            let sample = presence.sample(window, cx);
+
+            if active_dialog.closing {
+                // The exit has finished: stop painting and unmount.
+                if !sample.should_render() {
+                    Self::schedule_dialog_removal(root, active_dialog.id, window, cx);
+                    continue;
                 }
 
-                dialog
-            })
-            .collect::<Vec<_>>();
-
-        if let Some(ix) = show_overlay_ix {
-            if let Some(dialog) = dialogs.get_mut(ix) {
-                dialog.props.overlay_visible = true;
+                dialog.exit = Some(DialogExit {
+                    visibility: sample.progress,
+                });
             }
+
+            rendered.push((index, dialog));
+        }
+
+        if rendered.is_empty() {
+            return None;
+        }
+
+        // The overlay belongs to the newest dialog still open. With none left,
+        // the newest closing dialog keeps the dim through its exit so the
+        // backdrop fades with the surface instead of switching off at once.
+        // A closing dialog below an open overlay never paints its own backdrop:
+        // the constant dim beneath it hands over without a flash.
+        let overlay_slot = rendered
+            .iter()
+            .enumerate()
+            .filter(|(_, (index, dialog))| !active_dialogs[*index].closing && dialog.has_overlay())
+            .map(|(slot, _)| slot)
+            .next_back()
+            .or_else(|| {
+                rendered
+                    .iter()
+                    .rposition(|(_, dialog)| dialog.has_overlay())
+            });
+        if let Some(slot) = overlay_slot {
+            rendered[slot].1.props.overlay_visible = true;
         }
 
         // Named so a test can assert the layer actually reached the screen. A
@@ -241,8 +312,33 @@ impl WindowState {
         Some(
             div()
                 .debug_selector(|| "dialog-layer".to_string())
-                .children(dialogs),
+                .children(rendered.into_iter().map(|(_, dialog)| dialog)),
         )
+    }
+
+    /// Unmounts a dialog once its exit transition has finished.
+    ///
+    /// The removal is deferred because the layer runs while the window state
+    /// that owns the dialog is rendering, and removing it mid-render would
+    /// update an entity that is still on the stack.
+    fn schedule_dialog_removal(
+        root: &Entity<WindowState>,
+        dialog_id: u64,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let root = root.clone();
+        window.defer(cx, move |_, cx| {
+            root.update(cx, |state, cx| {
+                let before = state.active_dialogs.len();
+                state
+                    .active_dialogs
+                    .retain(|dialog| !(dialog.closing && dialog.id == dialog_id));
+                if state.active_dialogs.len() != before {
+                    cx.notify();
+                }
+            });
+        });
     }
 
     pub fn open_dialog<F>(
@@ -264,8 +360,11 @@ impl WindowState {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
 
+        let id = self.next_dialog_id;
+        self.next_dialog_id += 1;
         let selection_scope = self.allocate_text_selection_scope();
         self.active_dialogs.push(ActiveDialog::new(
+            id,
             focus_handle,
             previous_focused_handle,
             selection_scope,
@@ -277,12 +376,30 @@ impl WindowState {
         cx.notify();
     }
 
+    /// Closes the newest dialog that is not already closing.
+    ///
+    /// A dialog with an exit transition stays in `active_dialogs`, marked
+    /// `closing`, until [`WindowState::dialog_layer`] unmounts it once the
+    /// transition ends. Without one, it is removed as before.
     fn close_dialog_internal(&mut self) -> Option<FocusHandle> {
         self.focused_input = None;
-        self.active_dialogs
-            .pop()
-            .and_then(|d| d.previous_focused_handle)
-            .and_then(|h| h.upgrade())
+
+        let ix = self
+            .active_dialogs
+            .iter()
+            .rposition(|dialog| !dialog.closing)?;
+        let previous_focused_handle = self.active_dialogs[ix]
+            .previous_focused_handle
+            .clone()
+            .and_then(|handle| handle.upgrade());
+
+        if self.active_dialogs[ix].exit_enabled.get() {
+            self.active_dialogs[ix].closing = true;
+        } else {
+            self.active_dialogs.remove(ix);
+        }
+
+        previous_focused_handle
     }
 
     pub fn close_dialog(&mut self, window: &mut Window, cx: &mut Context<'_, WindowState>) {
@@ -299,7 +416,13 @@ impl WindowState {
         cx: &mut Context<'_, WindowState>,
     ) {
         if let Some(handle) = self.close_dialog_internal() {
-            let dialogs_count = self.active_dialogs.len();
+            // The dialog left behind for its exit transition must not look
+            // like a newly opened dialog later, so compare what stays open.
+            let open_dialogs = self
+                .active_dialogs
+                .iter()
+                .filter(|dialog| !dialog.closing)
+                .count();
 
             // Save for new dialogs opened during animation to maintain focus chain
             self.pending_focus_restore = Some(handle.downgrade());
@@ -307,9 +430,13 @@ impl WindowState {
             cx.spawn_in(window, async move |this, cx| {
                 cx.background_executor().timer(*ANIMATION_DURATION).await;
                 let _ = this.update_in(cx, |this, window, cx| {
-                    let current_dialogs_count = this.active_dialogs.len();
+                    let current_open_dialogs = this
+                        .active_dialogs
+                        .iter()
+                        .filter(|dialog| !dialog.closing)
+                        .count();
                     // Only restore focus if no new dialogs were opened during animation
-                    if current_dialogs_count == dialogs_count {
+                    if current_open_dialogs == open_dialogs {
                         window.focus(&handle, cx);
                     }
                     this.pending_focus_restore = None;
@@ -327,7 +454,14 @@ impl WindowState {
             .active_dialogs
             .first()
             .and_then(|d| d.previous_focused_handle.clone());
-        self.active_dialogs.clear();
+
+        // Dialogs with an exit transition leave by animating; the rest go now.
+        self.active_dialogs
+            .retain(|dialog| dialog.closing || dialog.exit_enabled.get());
+        for dialog in &mut self.active_dialogs {
+            dialog.closing = true;
+        }
+
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }

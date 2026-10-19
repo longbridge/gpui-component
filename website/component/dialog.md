@@ -157,7 +157,8 @@ window.open_dialog(cx, |dialog, _, _| {
 `Fade` and `FadeSlide` use the theme's normal duration and enter easing.
 `FadeSlide` applies travel after resolving window boundaries and limits it to
 available space above the surface. Reduced motion displays every entrance at
-rest immediately. Closing remains immediate for every option.
+rest immediately. Closing reverses the surface motion and fades both the
+surface and backdrop out; reduced motion and `None` close immediately.
 
 ### Action Buttons
 
