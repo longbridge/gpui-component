@@ -4,14 +4,14 @@ use gpui_kit::component::{
     checkbox::Checkbox,
     radio::{Radio, RadioGroup},
     select::{SearchableVec, Select, SelectEvent, SelectState},
-    setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+    setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
     switch::Switch,
     tab::{Tab, TabBar},
 };
-use gpui_kit::test::{TestAppContextExt, TestWindowExt};
+use gpui_kit::test::{TestAppContextExt, TestQueryExt, TestWindowExt};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, TestAppContext, Window, div, prelude::*, px,
-    size,
+    AnyWindowHandle, App, AppContext, Context, Entity, Role, SharedString, TestAppContext, Window,
+    div, prelude::*, px, size,
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
@@ -537,6 +537,71 @@ fn bool_settings_are_named_after_their_titles(cx: &mut TestAppContext) {
         assert_eq!(
             labels,
             [Some("Autosave".to_owned()), Some("Line numbers".to_owned())]
+        );
+    })
+    .unwrap();
+}
+
+struct ValueSettings;
+impl Render for ValueSettings {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let themes = vec![
+            ("dark".into(), "Dark".into()),
+            ("light".into(), "Light".into()),
+        ];
+        let items = vec![
+            SettingItem::new(
+                "Theme",
+                SettingField::dropdown(
+                    themes,
+                    |_: &App| "dark".into(),
+                    |_: SharedString, _: &mut App| {},
+                ),
+            ),
+            SettingItem::new(
+                "Font size",
+                SettingField::number_input(
+                    NumberFieldOptions::default(),
+                    |_: &App| 14.,
+                    |_: f64, _: &mut App| {},
+                ),
+            ),
+            SettingItem::new(
+                "User name",
+                SettingField::input(|_: &App| "Ada".into(), |_: SharedString, _: &mut App| {}),
+            ),
+        ];
+        let page = SettingPage::new("General")
+            .default_open(true)
+            .group(SettingGroup::new().items(items));
+
+        div()
+            .size_full()
+            .child(Settings::new("settings").pages(vec![page]))
+    }
+}
+
+/// Dropdown, number and text settings are named after their titles as well. A
+/// dropdown's button shows only the selected option, so its name has both.
+#[gpui_kit::test]
+fn value_settings_are_named_after_their_titles(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (handle, _) = common::open_window(cx, Some(size(px(800.), px(600.))), |_, cx| {
+        cx.new(|_| ValueSettings)
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.find_by_label("Theme: Dark").role(),
+            Some(Role::Button)
+        );
+        assert_eq!(
+            window.find_by_label("Font size").role(),
+            Some(Role::SpinButton)
+        );
+        assert_eq!(
+            window.find_by_label("User name").role(),
+            Some(Role::TextInput)
         );
     })
     .unwrap();
