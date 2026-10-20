@@ -16,7 +16,6 @@ members = [
     "examples/fps_monitor",
     "examples/hello_world",
     "examples/input",
-    "examples/completion",
     "examples/editor",
     "examples/syntect",
     "examples/tig",
