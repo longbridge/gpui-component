@@ -10,7 +10,11 @@
 //! composed from the input's existing public API:
 //!
 //! - `InputEvent::Change` → re-read `value()` + `cursor()` and rescan the
-//!   trigger (this owns trigger detection and dismissal).
+//!   trigger (this owns trigger detection and dismissal). Caret movement
+//!   emits no event, so the same rescan also runs against the live caret
+//!   once per frame in `render`, and every captured key revalidates the
+//!   trigger before acting: a stale menu dismisses instead of owning the
+//!   keyboard or swallowing an Enter.
 //! - `capture_action` on the input's wrapper → own `MoveUp` / `MoveDown` /
 //!   `Escape` / `IndentInline` before the input sees them while the menu is
 //!   open (keyboard ownership).
@@ -142,15 +146,23 @@ impl Example {
         // nothing matches).
         let _subscription = cx.subscribe_in(&input_state, window, {
             move |this, _, ev: &InputEvent, window, cx| match ev {
-                InputEvent::Change => this.sync_menu(window, cx),
-                // The app owns Enter: with the menu open it accepts;
-                // without it, Enter is this example's "submit".
+                InputEvent::Change => {
+                    if this.rescan_menu(cx) {
+                        cx.notify();
+                    }
+                }
+                // The app owns Enter: with a current menu it accepts; with a
+                // stale one it dismisses and submits; without a menu, Enter
+                // is this example's "submit".
                 InputEvent::PressEnter {
                     secondary: false, ..
                 } => {
-                    if this.menu.is_some() {
+                    if this.menu_is_current(cx) {
                         this.accept(window, cx);
                     } else {
+                        if this.menu.take().is_some() {
+                            cx.notify();
+                        }
                         this.submit(cx);
                     }
                 }
@@ -168,32 +180,61 @@ impl Example {
     }
 
     /// Re-scan the trigger and open, update or dismiss the menu.
-    fn sync_menu(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let input = self.input_state.read(cx);
-        let Some((token_start, query)) = active_variable_query(&input.value(), input.cursor())
-        else {
-            self.menu = None;
-            cx.notify();
-            return;
+    ///
+    /// Runs on every [`InputEvent::Change`] and, because caret movement
+    /// emits no event, once per frame at the top of `render`: the decision
+    /// always reflects the buffer and caret as they are right now, so a
+    /// menu whose token the caret has left dies instead of lingering.
+    ///
+    /// Returns `true` when the open-menu state changed (callers outside
+    /// `render` notify on it).
+    fn rescan_menu(&mut self, cx: &mut Context<Self>) -> bool {
+        let trigger = {
+            let input = self.input_state.read(cx);
+            active_variable_query(&input.value(), input.cursor())
+        };
+        let Some((token_start, query)) = trigger else {
+            return self.menu.take().is_some();
         };
 
         let items = ranked_variables(&query);
         if items.is_empty() {
             // Quiet dismissal: no "no results" ghost row.
-            self.menu = None;
-        } else {
-            // Keep the row selection stable while the filter narrows.
-            let selected = self
-                .menu
-                .as_ref()
-                .map_or(0, |menu| menu.selected.min(items.len() - 1));
-            self.menu = Some(Menu {
-                token_start,
-                items,
-                selected,
-            });
+            return self.menu.take().is_some();
         }
-        cx.notify();
+
+        // Keep the row selection stable while the filter narrows.
+        let selected = self
+            .menu
+            .as_ref()
+            .map_or(0, |menu| menu.selected.min(items.len() - 1));
+        let changed = match self.menu.as_ref() {
+            Some(menu) => {
+                menu.token_start != token_start || menu.items != items || menu.selected != selected
+            }
+            None => true,
+        };
+        self.menu = Some(Menu {
+            token_start,
+            items,
+            selected,
+        });
+        changed
+    }
+
+    /// Whether the open menu still matches the token under the caret.
+    ///
+    /// Checked before any captured key acts, so keyboard ownership never
+    /// outlives the trigger it was granted for.
+    fn menu_is_current(&self, cx: &Context<Self>) -> bool {
+        let input = self.input_state.read(cx);
+        let trigger = active_variable_query(&input.value(), input.cursor());
+        let Some((token_start, _)) = trigger else {
+            return false;
+        };
+        self.menu
+            .as_ref()
+            .is_some_and(|menu| menu.token_start == token_start)
     }
 
     /// Accept the selected candidate: replace the typed `$prefix` with
@@ -297,39 +338,75 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Caret movement emits no event, so the trigger rescan also runs
+        // here against the caret as it stands right now: a menu whose token
+        // the caret left (Home, arrows, a click) is gone this same frame and
+        // cannot capture a key. No `cx.notify()` on this path — the frame
+        // under construction already reflects the decision.
+        self.rescan_menu(cx);
         // The wrapper owns the keyboard while the menu is open: actions are
-        // captured before the input handles them, and every handler is
-        // gated on `menu.is_some()` so the input behaves normally when the
-        // menu is closed. Tab accepts (`IndentInline` is what the input
-        // context binds tab to).
+        // captured before the input handles them, gated on a menu that is
+        // still current — a stale menu dismisses and the key falls through
+        // to the input untouched. Tab accepts (`IndentInline` is what the
+        // input context binds tab to).
         let input_frame = v_flex()
             .w_full()
             .child(Input::new(&self.input_state).small())
             .capture_action(cx.listener(|this, _: &MoveUp, _, cx| {
+                if this.menu.is_none() {
+                    return;
+                }
+                if !this.menu_is_current(cx) {
+                    // Stale: dismiss, and the input keeps the key.
+                    this.menu = None;
+                    cx.notify();
+                    return;
+                }
                 if let Some(menu) = this.menu.as_mut() {
                     menu.selected = menu.selected.saturating_sub(1);
-                    cx.notify();
-                    cx.stop_propagation();
                 }
+                cx.notify();
+                cx.stop_propagation();
             }))
             .capture_action(cx.listener(|this, _: &MoveDown, _, cx| {
+                if this.menu.is_none() {
+                    return;
+                }
+                if !this.menu_is_current(cx) {
+                    // Stale: dismiss, and the input keeps the key.
+                    this.menu = None;
+                    cx.notify();
+                    return;
+                }
                 if let Some(menu) = this.menu.as_mut() {
                     menu.selected = (menu.selected + 1).min(menu.items.len() - 1);
-                    cx.notify();
-                    cx.stop_propagation();
                 }
+                cx.notify();
+                cx.stop_propagation();
             }))
             .capture_action(cx.listener(|this, _: &Escape, _, cx| {
-                if this.menu.take().is_some() {
+                if this.menu.is_some() {
+                    let current = this.menu_is_current(cx);
+                    this.menu = None;
                     cx.notify();
-                    cx.stop_propagation();
+                    if current {
+                        cx.stop_propagation();
+                    }
+                    // Stale: also let the input see the Escape.
                 }
             }))
             .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
-                if this.menu.is_some() {
-                    this.accept(window, cx);
-                    cx.stop_propagation();
+                if this.menu.is_none() {
+                    return;
                 }
+                if !this.menu_is_current(cx) {
+                    // Stale: dismiss, and tab indents as the input intended.
+                    this.menu = None;
+                    cx.notify();
+                    return;
+                }
+                this.accept(window, cx);
+                cx.stop_propagation();
             }));
 
         v_flex()
@@ -385,4 +462,57 @@ fn main() {
         })
         .expect("Failed to open window");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    // Explicit imports: `use super::*` would also pull in the kit glob
+    // re-exports, and GPUI's `#[test]` attribute macro shadows Rust's
+    // built-in one (the kit's own guidance for test modules).
+    use super::{VARIABLES, active_variable_query, ranked_variables};
+
+    #[test]
+    fn trigger_opens_at_line_start_and_after_whitespace() {
+        assert_eq!(active_variable_query("$HO", 3), Some((0, "HO".to_string())));
+        assert_eq!(
+            active_variable_query("echo $HO", 8),
+            Some((5, "HO".to_string()))
+        );
+        // Right after the `$` itself: an empty query, still a token.
+        assert_eq!(active_variable_query("echo $", 6), Some((5, String::new())));
+    }
+
+    #[test]
+    fn caret_leaving_the_token_without_editing_dismisses() {
+        // The regression behind the rescan: type `$HO`, then move the caret
+        // (Home, arrows, a click) without changing the text — no
+        // `InputEvent::Change` fires, so dismissal depends entirely on the
+        // rescan seeing the moved caret. `render` re-runs this exact
+        // function every frame.
+        let text = "echo $HO";
+        assert!(active_variable_query(text, 8).is_some());
+        assert_eq!(active_variable_query(text, 0), None); // Home
+        assert_eq!(active_variable_query(text, 4), None); // after "echo "
+        assert_eq!(active_variable_query(text, 5), None); // on the `$`
+        // Inside the token it still completes.
+        assert!(active_variable_query(text, 7).is_some());
+    }
+
+    #[test]
+    fn mid_token_dollar_never_triggers() {
+        assert_eq!(active_variable_query("a$b", 3), None);
+        assert_eq!(active_variable_query("mail$x", 6), None);
+    }
+
+    #[test]
+    fn whitespace_after_the_token_closes_it() {
+        assert_eq!(active_variable_query("echo $HO ", 9), None);
+    }
+
+    #[test]
+    fn ranking_prefix_before_substring_then_alphabetical() {
+        assert_eq!(ranked_variables("P"), vec!["PATH", "PWD"]);
+        assert_eq!(ranked_variables("").len(), VARIABLES.len());
+        assert!(ranked_variables("ZZZ").is_empty());
+    }
 }
