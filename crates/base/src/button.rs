@@ -223,12 +223,15 @@ impl RenderOnce for Button {
             .items_center()
             .justify_center()
             // A neutral line height is geometry, not visual policy: with the
-            // inherited value the text box is taller than the glyphs, so the
-            // caller's padding no longer determines the control's height and a
-            // button cannot be sized precisely. `relative(1.)` makes the text
-            // box exactly the font size; anything the caller sets refines over
-            // it, so a product that wants looser text still can.
-            .line_height(relative(1.))
+            // inherited ambient value the text box is taller than the glyphs,
+            // so the caller's padding no longer determines the control's height
+            // and a button cannot be sized precisely. `relative(1.)` matches
+            // the font size but clips descenders (`g`, `p`, `y`, `q`, `j`) when
+            // a truncated label (or other `overflow_hidden` child) clips to the
+            // line box — the same failure #3023 fixed in the styled layer.
+            // `relative(1.25)` keeps a fixed, theme-free default with room for
+            // those metrics; anything the caller sets still refines over it.
+            .line_height(relative(1.25))
             .when_some(self.role.resolve(|| Role::Button), |this, role| {
                 this.role(role)
             })
