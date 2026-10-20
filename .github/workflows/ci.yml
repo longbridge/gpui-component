@@ -181,6 +181,10 @@ jobs:
         run: >-
           cargo test -p gpui-component --features gpui-fast,test-support
           --lib tooltip::tests:: --locked
+      - name: Test Base text selection with GPUI Fast
+        run: >-
+          cargo test -p gpui-base --features gpui-fast,test-support
+          --lib text_selection::tests:: --locked
       - name: Test WebView
         run: cargo test -p gpui-webview --features gpui-fast,gpui-kit/gpui-fast --locked
 

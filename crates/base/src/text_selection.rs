@@ -220,6 +220,7 @@ pub struct TextSelectionRegistration {
     scroll_offset: Point<Pixels>,
     scope: TextSelectionScopeId,
     document_order: u64,
+    paint_order: bool,
     text_bounds: Vec<Bounds<Pixels>>,
     self_scroll: bool,
     selection_edges: Option<(Bounds<Pixels>, Bounds<Pixels>)>,
@@ -235,6 +236,7 @@ impl TextSelectionRegistration {
             scroll_offset: Point::default(),
             scope: TextSelectionScopeId::default(),
             document_order: 0,
+            paint_order: false,
             text_bounds: Vec::new(),
             self_scroll: false,
             selection_edges: None,
@@ -247,7 +249,8 @@ impl TextSelectionRegistration {
     ///
     /// Call this from the reporting element's `prepaint` or `paint`. A
     /// registration made outside a drawing element cannot be tied to one and
-    /// is swept the first frame it misses, as every registration used to be.
+    /// is swept the first frame it misses that the selection layer paints, as
+    /// every registration used to be.
     pub fn with_rendered_element(
         mut self,
         participant: &TextSelectionHandle,
@@ -301,6 +304,14 @@ impl TextSelectionRegistration {
     /// Sets the stable logical document order.
     pub fn with_document_order(mut self, document_order: u64) -> Self {
         self.document_order = document_order;
+        self
+    }
+
+    /// Places the participant in reading order by when it paints, for one
+    /// that cannot know its place: the window numbers such participants in
+    /// the order they paint (see [`Numbering`]).
+    pub(crate) fn in_paint_order(mut self) -> Self {
+        self.paint_order = true;
         self
     }
 
@@ -648,6 +659,12 @@ struct SelectableTextState {
     projected_copy_text: RefCell<Option<String>>,
     /// The participant's text as it last painted it, for hit testing.
     runs: RefCell<Vec<TextSelectionRun>>,
+    /// Whether the participant registered and has not projected its part
+    /// onto its text since: a part handed to it now is the one it paints.
+    /// Only [`Self::update_runs`] clears it, so one that paints otherwise,
+    /// or registers after painting, as a text view does, is still taken
+    /// for one yet to paint: see [`WindowSelectionState::handed_early`].
+    awaits_paint: Cell<bool>,
     local_selection: bool,
     snapshot: Option<TextSelectionSnapshot>,
     on_focus: Option<FocusCallback>,
@@ -664,6 +681,7 @@ impl SelectableTextState {
             fallback_copy_text: fallback_copy_text.into(),
             projected_copy_text: RefCell::new(None),
             runs: RefCell::new(Vec::new()),
+            awaits_paint: Cell::new(false),
             local_selection: false,
             snapshot: None,
             on_focus: None,
@@ -696,6 +714,7 @@ impl SelectableTextState {
     /// Clearing window selection invalidates the cache immediately, so copy
     /// never returns text from a previous projection while waiting to repaint.
     fn update_runs(&self, runs: &[TextSelectionRun]) -> TextSelectionProjection {
+        self.awaits_paint.set(false);
         *self.runs.borrow_mut() = runs.to_vec();
         let states = project_ranges(self.snapshot, runs);
         let mut selected_runs = runs
@@ -845,12 +864,53 @@ impl TextSelectionHandle {
         let Some(state) = WindowSelectionState::existing(window, cx) else {
             return;
         };
-        let Some(registration) = state.read(cx).register_quietly(self, registration) else {
-            return;
-        };
-        state.update(cx, |state, cx| {
-            state.register_participant(self.clone(), registration, cx)
-        });
+        if registration.paint_order && state.read(cx).painted_last.get().is_none() {
+            let state = state.downgrade();
+            window.defer(cx, move |_, cx| {
+                if let Some(state) = state.upgrade() {
+                    state.read(cx).painted_last.set(None);
+                }
+            });
+        }
+        // The end of the frame publishes the snapshots, once for every
+        // participant that registered: publishing reads all of them, and
+        // each registration doing so made a frame's registrations quadratic.
+        // The participant's own part, which what it registered moves with
+        // it, it takes now: one that registers before it paints paints it
+        // this frame. Not while a selection across participants meets numbers
+        // that cannot be trusted: stale, or being given again, those yet to
+        // paint still having their old ones.
+        //
+        // One moving an end of the selection, as a scroll moves it, changes
+        // the parts those that registered before it in the frame took: those
+        // yet to paint take theirs again. The end of the frame hands the
+        // others theirs, and tells them, and tells those of these that did
+        // not project their parts since.
+        let moves_an_end = state.read(cx).moves_an_end(self.entity_id(), &registration);
+        self.0.read(cx).awaits_paint.set(true);
+        if state.read(cx).register_quietly(self, registration) {
+            if state.read(cx).order_trusted() {
+                if moves_an_end {
+                    for (participant, part) in state.read(cx).unpainted_changed_parts(cx) {
+                        state
+                            .read(cx)
+                            .handed_early
+                            .borrow_mut()
+                            .push(participant.entity_id());
+                        participant.update(cx, |state, cx| state.set_snapshot(part, cx));
+                    }
+                } else {
+                    let part = state.read(cx).part_for(self.entity_id());
+                    if self.0.read(cx).snapshot != part {
+                        self.0.update(cx, |state, cx| state.set_snapshot(part, cx));
+                    }
+                }
+            }
+            if finish_frame_once_drawn(&state, window, cx) {
+                // Until the layer paints, if it does.
+                state.read(cx).drawn_in_part.set(true);
+            }
+        }
     }
 
     /// Projects the current snapshot onto plain-text runs and caches their copy text.
@@ -1129,6 +1189,32 @@ impl TouchSelection {
     }
 }
 
+/// How far the numbers of the participants placed in paint order
+/// ([`TextSelectionRegistration::in_paint_order`]) can be trusted.
+///
+/// Numbering them anew as they paint gives each its place only in a frame
+/// that paints them all, and a frame that draws only some views paints only
+/// some of them. So each keeps its number, and they are numbered again, in a
+/// frame that draws them all, when a selection spans participants after one
+/// took a number outside such a frame, or after two changed places. Until
+/// they are, such a selection keeps the parts it had.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Numbering {
+    /// Numbered in the order they painted in one frame.
+    #[default]
+    Settled,
+    /// One painted for the first time since, and took the next number,
+    /// which places it after the others wherever it is; or one painted
+    /// before one numbered lower than it.
+    Stale,
+    /// A selection spans participants while the numbers are stale: the
+    /// window is refreshed, and the next frame draws them all and numbers
+    /// them again.
+    Requested,
+    /// This frame numbers them again as they paint.
+    Renumbering,
+}
+
 /// Window-local generic text-selection state.
 #[derive(Default)]
 struct WindowSelectionState {
@@ -1144,7 +1230,25 @@ struct WindowSelectionState {
     did_hit_text: bool,
     frame_generation: Cell<u64>,
     finish_frame_scheduled: Cell<bool>,
-    refresh_held_cursor: bool,
+    /// Whether this frame draws only some views: a participant registering
+    /// while there is a selection asked for its end, and the selection layer
+    /// did not paint. See [`Self::has_left`].
+    drawn_in_part: Cell<bool>,
+    /// The number last given to a participant placed in paint order.
+    last_number_given: Cell<u64>,
+    /// The number of the participant placed in paint order that registered
+    /// last in this frame, forgotten once the frame is drawn.
+    painted_last: Cell<Option<u64>>,
+    numbering: Cell<Numbering>,
+    /// The participants that a moving end of the selection handed their
+    /// parts this frame, taking them for yet to paint. Those that did not
+    /// project the parts since may have painted the ones they had before:
+    /// the end of the frame tells them.
+    handed_early: RefCell<Vec<EntityId>>,
+    /// Whether a participant's touch handles' ends moved since the
+    /// snapshots were last published.
+    touch_edges_moved: Cell<bool>,
+    refresh_held_cursor: Cell<bool>,
     mouse_down_prepared: bool,
     auto_scroll: AutoScroll,
     /// Where the anchor's text was when the last synthetic wheel went out,
@@ -1156,6 +1260,9 @@ struct WindowSelectionState {
     /// This entity, so that touch changes can notify observers from paths that
     /// only hold an [`App`].
     entity_id: Option<EntityId>,
+    /// The window whose selection this is, drawn again whole to number the
+    /// participants placed in paint order again.
+    window: Option<gpui::AnyWindowHandle>,
 }
 
 impl WindowSelectionState {
@@ -1191,7 +1298,8 @@ impl WindowSelectionState {
             state.publish_snapshots(cx);
         });
     }
-    fn acquire(window_id: gpui::WindowId, cx: &mut App) -> Entity<Self> {
+    fn acquire(window: gpui::AnyWindowHandle, cx: &mut App) -> Entity<Self> {
+        let window_id = window.window_id();
         if !cx.has_global::<SelectionStateRegistry>() {
             cx.set_global(SelectionStateRegistry::default());
         }
@@ -1234,6 +1342,7 @@ impl WindowSelectionState {
             Self {
                 active_scope,
                 entity_id: Some(entity_id),
+                window: Some(window),
                 ..Self::default()
             }
         });
@@ -1245,7 +1354,7 @@ impl WindowSelectionState {
 
     #[cfg(test)]
     fn ensure(window: &Window, cx: &mut App) -> Entity<Self> {
-        Self::acquire(window.window_handle().window_id(), cx)
+        Self::acquire(window.window_handle(), cx)
     }
 
     fn existing(window: &Window, cx: &App) -> Option<Entity<Self>> {
@@ -1296,13 +1405,14 @@ impl WindowSelectionState {
     /// entity were registered again.
     pub fn finish_frame(&mut self, cx: &mut App) -> Vec<ClearHandler> {
         self.finish_frame_scheduled.set(false);
+        self.end_numbering();
         let generation = self.frame_generation.get();
         let stale = self
             .participants
-            .get_mut()
+            .borrow()
             .iter()
             .filter_map(|(id, registration)| {
-                (registration.generation != generation && !registration.registration.is_rendered())
+                self.has_left(registration)
                     .then(|| (*id, registration.participant.clone()))
             })
             .collect::<Vec<_>>();
@@ -1331,13 +1441,63 @@ impl WindowSelectionState {
                 }
             }
         }
-        self.publish_snapshots(cx);
+        // A part changed by what the frame registered after the participant
+        // painted: told, the views that painted it draw it again, as they did
+        // when registering wrote it while the window drew.
+        let mut told = self.publish_snapshots(cx);
+        // One handed its part early that did not project it since is told
+        // too: it may have painted the part it had.
+        for id in self.handed_early.take() {
+            let unpainted = self
+                .participants
+                .borrow()
+                .get(&id)
+                .and_then(|registration| registration.participant.upgrade())
+                .is_some_and(|participant| participant.read(cx).awaits_paint.get());
+            if unpainted && !told.contains(&id) {
+                told.push(id);
+            }
+        }
+        for id in told {
+            cx.notify(id);
+        }
+        if self.touch_edges_moved.take() {
+            self.touch_changed(cx);
+        }
+        self.drawn_in_part.set(false);
         self.frame_generation.set(generation.wrapping_add(1));
         handlers
     }
 
+    /// Whether the participant registered as `registration` left the window,
+    /// as the frame that just finished tells: it did not register in it, and
+    /// the element that registered it is gone. Of one registered outside a
+    /// drawing element, a frame that draws only some views says nothing: it
+    /// is taken to have left only by a frame the layer painted, as before.
+    fn has_left(&self, registration: &ParticipantRegistration) -> bool {
+        registration.generation != self.frame_generation.get()
+            && !registration.registration.is_rendered()
+            && (registration.registration.rendered.is_some() || !self.drawn_in_part.get())
+    }
+
     fn schedule_finish_frame(&self) -> bool {
         !self.finish_frame_scheduled.replace(true)
+    }
+
+    /// Starts numbering the participants placed in paint order again as they
+    /// paint this frame, if a selection asked for it.
+    fn begin_numbering(&self) {
+        if self.numbering.get() == Numbering::Requested {
+            self.numbering.set(Numbering::Renumbering);
+            self.last_number_given.set(0);
+        }
+    }
+
+    /// Ends a frame that numbered the participants placed in paint order.
+    fn end_numbering(&self) {
+        if self.numbering.get() == Numbering::Renumbering {
+            self.numbering.set(Numbering::Settled);
+        }
     }
 
     /// Whether there is a selection, or a gesture or touch selection that
@@ -1347,25 +1507,74 @@ impl WindowSelectionState {
             || self.cursor.is_some()
             || self.pending_extension_anchor.is_some()
             || self.is_selecting
-            || self.refresh_held_cursor
+            || self.refresh_held_cursor.get()
             || self.touch.active
     }
 
     /// Records this frame's geometry for a participant without updating
-    /// this state, when there is no selection for the geometry to change.
-    /// Every participant paints its geometry on every frame; doing so through
-    /// an update would mark the state, and every view that reads it, changed
-    /// on every frame. Returns the registration when it has to go through
-    /// [`Self::register_participant`].
+    /// this state. Every participant paints its geometry on every frame;
+    /// doing so through an update would mark the state changed for every
+    /// view that read it as the window drew, and they would all draw again.
+    /// Returns whether there is a selection for the geometry to change,
+    /// whose snapshots [`Self::finish_frame`] publishes.
     fn register_quietly(
         &self,
         selection: &TextSelectionHandle,
-        registration: TextSelectionRegistration,
-    ) -> Option<TextSelectionRegistration> {
-        if self.is_active() {
-            return Some(registration);
+        mut registration: TextSelectionRegistration,
+    ) -> bool {
+        let mut participants = self.participants.borrow_mut();
+        let previous = participants.get(&selection.entity_id());
+        if self.is_selecting
+            && registration.self_scroll
+            && self.anchor.as_ref().and_then(SelectionEndpoint::entity_id)
+                == Some(selection.entity_id())
+            && previous.is_some_and(|previous| {
+                previous.registration.scroll_offset != registration.scroll_offset
+                    || previous.registration.bounds != registration.bounds
+            })
+        {
+            self.refresh_held_cursor.set(true);
         }
-        self.participants.borrow_mut().insert(
+        // The handles sit on the painted ends; when those moved — a scroll, a
+        // reflow, a select-all — whoever draws the handles needs to know.
+        if self.touch.active
+            && previous.is_none_or(|previous| {
+                previous.registration.selection_edges != registration.selection_edges
+            })
+        {
+            self.touch_edges_moved.set(true);
+        }
+        if registration.paint_order {
+            registration.document_order = match previous {
+                Some(previous)
+                    if previous.registration.paint_order
+                        && self.numbering.get() != Numbering::Renumbering =>
+                {
+                    previous.registration.document_order
+                }
+                _ => {
+                    if self.numbering.get() == Numbering::Settled {
+                        self.numbering.set(Numbering::Stale);
+                    }
+                    self.last_number_given
+                        .set(self.last_number_given.get().wrapping_add(1));
+                    self.last_number_given.get()
+                }
+            };
+            // They paint in reading order, also when a frame draws only some
+            // views, so in a frame their numbers rise: one lower than the one
+            // painted before it changed places with it.
+            if self
+                .painted_last
+                .get()
+                .is_some_and(|last| registration.document_order < last)
+                && self.numbering.get() == Numbering::Settled
+            {
+                self.numbering.set(Numbering::Stale);
+            }
+            self.painted_last.set(Some(registration.document_order));
+        }
+        participants.insert(
             selection.entity_id(),
             ParticipantRegistration {
                 participant: selection.downgrade(),
@@ -1373,7 +1582,7 @@ impl WindowSelectionState {
                 generation: self.frame_generation.get(),
             },
         );
-        None
+        self.is_active()
     }
 
     /// Ends the frame as [`Self::finish_frame`] does, without updating this
@@ -1383,13 +1592,9 @@ impl WindowSelectionState {
         if self.is_active() {
             return false;
         }
-        let generation = self.frame_generation.get();
         let mut participants = self.participants.borrow_mut();
-        let gone = |registration: &ParticipantRegistration| {
-            registration.generation != generation && !registration.registration.is_rendered()
-        };
         if participants.values().any(|registration| {
-            gone(registration)
+            self.has_left(registration)
                 && registration
                     .participant
                     .upgrade()
@@ -1398,57 +1603,32 @@ impl WindowSelectionState {
             return false;
         }
         participants.retain(|_, registration| {
-            !gone(registration) && registration.participant.upgrade().is_some()
+            !self.has_left(registration) && registration.participant.upgrade().is_some()
         });
         drop(participants);
         self.finish_frame_scheduled.set(false);
-        self.frame_generation.set(generation.wrapping_add(1));
+        self.end_numbering();
+        // Nothing to tell without a selection.
+        self.handed_early.borrow_mut().clear();
+        // No handles to move without a touch selection.
+        self.touch_edges_moved.set(false);
+        self.drawn_in_part.set(false);
+        self.frame_generation
+            .set(self.frame_generation.get().wrapping_add(1));
         true
     }
 
-    /// Registers this frame's geometry for a participant.
+    /// Registers this frame's geometry for a participant, and publishes.
+    #[cfg(test)]
     pub fn register_participant(
         &mut self,
         selection: TextSelectionHandle,
         registration: TextSelectionRegistration,
         cx: &mut App,
     ) {
-        self.prune_dead_participants();
-        if self.is_selecting
-            && registration.self_scroll
-            && self.anchor.as_ref().and_then(SelectionEndpoint::entity_id)
-                == Some(selection.entity_id())
-            && self
-                .participants
-                .get_mut()
-                .get(&selection.entity_id())
-                .is_some_and(|previous| {
-                    previous.registration.scroll_offset != registration.scroll_offset
-                        || previous.registration.bounds != registration.bounds
-                })
-        {
-            self.refresh_held_cursor = true;
-        }
-        // The handles sit on the painted ends; when those moved — a scroll, a
-        // reflow, a select-all — whoever draws the handles needs to know.
-        let edges_moved = self.touch.active
-            && self
-                .participants
-                .get_mut()
-                .get(&selection.entity_id())
-                .is_none_or(|previous| {
-                    previous.registration.selection_edges != registration.selection_edges
-                });
-        self.participants.get_mut().insert(
-            selection.entity_id(),
-            ParticipantRegistration {
-                participant: selection.downgrade(),
-                registration: Rc::new(registration),
-                generation: self.frame_generation.get(),
-            },
-        );
+        self.register_quietly(&selection, registration);
         self.publish_snapshots(cx);
-        if edges_moved {
+        if self.touch_edges_moved.take() {
             self.touch_changed(cx);
         }
     }
@@ -2178,28 +2358,145 @@ impl WindowSelectionState {
         }
     }
 
-    fn publish_snapshots(&mut self, cx: &mut App) {
+    /// Hands every participant its part of the selection; returns those
+    /// whose part changed.
+    fn publish_snapshots(&mut self, cx: &mut App) -> Vec<EntityId> {
         self.prune_dead_participants();
-        let snapshot = self.snapshot();
-        let single_participant = self.single_participant();
-        for (id, registration) in self.participants.borrow().iter() {
-            let Some(participant) = registration.participant.upgrade() else {
-                continue;
-            };
-            let participant_snapshot = (registration.registration.scope == self.active_scope
-                && self.participates(*id, registration)
-                && single_participant.is_none_or(|single| single == *id))
-            .then_some(snapshot)
-            .flatten()
-            .map(|mut snapshot| {
-                snapshot.coverage = self.coverage_for(*id);
-                snapshot
-            });
-            if participant.read(cx).snapshot == participant_snapshot {
-                continue;
+        // Which participants a selection between two of them takes is told
+        // by their places in reading order.
+        if self.numbering.get() == Numbering::Stale && self.spans_participants() {
+            self.numbering.set(Numbering::Requested);
+            // Refreshed, the window draws every view again, also a cached one,
+            // which GPUI replays unless it was itself told on.
+            if let Some(window) = self.window {
+                cx.defer(move |cx| {
+                    let _ = window.update(cx, |_, window, _| window.refresh());
+                });
             }
-            participant.update(cx, |state, cx| state.set_snapshot(participant_snapshot, cx));
         }
+        // Until then, the participants keep the parts they have: those the
+        // stale numbers give would flash for a frame.
+        if !self.order_trusted() {
+            return Vec::new();
+        }
+        let changed = self.changed_parts(|_| true, cx);
+        for (participant, part) in &changed {
+            participant.update(cx, |state, cx| state.set_snapshot(*part, cx));
+        }
+        changed
+            .into_iter()
+            .map(|(participant, _)| participant.entity_id())
+            .collect()
+    }
+
+    /// The participants whose part of the selection is not the one they
+    /// hold, of those `among` keeps, with their parts.
+    fn changed_parts(
+        &self,
+        among: impl Fn(&ParticipantRegistration) -> bool,
+        cx: &App,
+    ) -> Vec<(Entity<SelectableTextState>, Option<TextSelectionSnapshot>)> {
+        let snapshot = self.snapshot();
+        let single = self.single_participant();
+        self.participants
+            .borrow()
+            .iter()
+            .filter(|(_, registration)| among(registration))
+            .filter_map(|(id, registration)| {
+                let participant = registration.participant.upgrade()?;
+                let part = self.part_of(snapshot, single, *id, registration);
+                (participant.read(cx).snapshot != part).then_some((participant, part))
+            })
+            .collect()
+    }
+
+    /// The participants that registered this frame and have yet to paint
+    /// whose part of the selection is not the one they hold, with their
+    /// parts.
+    fn unpainted_changed_parts(
+        &self,
+        cx: &App,
+    ) -> Vec<(Entity<SelectableTextState>, Option<TextSelectionSnapshot>)> {
+        let generation = self.frame_generation.get();
+        self.changed_parts(
+            |registration| {
+                registration.generation == generation
+                    && registration
+                        .participant
+                        .upgrade()
+                        .is_some_and(|participant| participant.read(cx).awaits_paint.get())
+            },
+            cx,
+        )
+    }
+
+    /// The part of `snapshot`, the selection, that the participant `id`
+    /// registered as `registration` takes; `single` is the participant
+    /// holding both of its ends, if one does.
+    fn part_of(
+        &self,
+        snapshot: Option<TextSelectionSnapshot>,
+        single: Option<EntityId>,
+        id: EntityId,
+        registration: &ParticipantRegistration,
+    ) -> Option<TextSelectionSnapshot> {
+        (registration.registration.scope == self.active_scope
+            && self.participates(id, registration)
+            && single.is_none_or(|single| single == id))
+        .then_some(snapshot)
+        .flatten()
+        .map(|mut snapshot| {
+            snapshot.coverage = self.coverage_for(id);
+            snapshot
+        })
+    }
+
+    /// The part of the selection the participant `id` takes, as it last
+    /// registered.
+    fn part_for(&self, id: EntityId) -> Option<TextSelectionSnapshot> {
+        let registration = self.participants.borrow().get(&id).cloned()?;
+        self.part_of(
+            self.snapshot(),
+            self.single_participant(),
+            id,
+            &registration,
+        )
+    }
+
+    /// Whether `id`, registering as `registration`, moves an end of the
+    /// selection: it holds one, and is not where it last registered. The
+    /// participants that registered before it in the frame took their parts
+    /// by where the end was.
+    fn moves_an_end(&self, id: EntityId, registration: &TextSelectionRegistration) -> bool {
+        let holds_an_end = [self.anchor.as_ref(), self.cursor.as_ref()]
+            .into_iter()
+            .flatten()
+            .any(|endpoint| endpoint.entity_id() == Some(id));
+        let origin = |registration: &TextSelectionRegistration| {
+            registration.bounds.origin + registration.scroll_offset
+        };
+        holds_an_end
+            && self
+                .participants
+                .borrow()
+                .get(&id)
+                .is_some_and(|previous| origin(&previous.registration) != origin(registration))
+    }
+
+    /// Whether the participants' places in reading order tell which of them
+    /// the selection takes: it is within one participant, or the numbers of
+    /// those placed in paint order are settled.
+    fn order_trusted(&self) -> bool {
+        self.numbering.get() == Numbering::Settled || !self.spans_participants()
+    }
+
+    /// Whether the selection's two ends are in two participants.
+    fn spans_participants(&self) -> bool {
+        let anchor = self.anchor.as_ref().and_then(SelectionEndpoint::entity_id);
+        let cursor = self.cursor.as_ref().and_then(SelectionEndpoint::entity_id);
+        anchor
+            .zip(cursor)
+            .is_some_and(|(anchor, cursor)| anchor != cursor)
     }
 
     fn coverage_for(&self, id: EntityId) -> TextSelectionCoverage {
@@ -2536,7 +2833,7 @@ impl TextSelection {
         cx: &mut App,
         callback: impl Fn(&mut App) + 'static,
     ) -> Subscription {
-        let state = WindowSelectionState::acquire(window.window_handle().window_id(), cx);
+        let state = WindowSelectionState::acquire(window.window_handle(), cx);
         cx.observe(&state, move |_, cx| callback(cx))
     }
 
@@ -2759,14 +3056,13 @@ impl Element for TextSelectionLayer {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        // Automatic participant order is paint order within this frame. Keep
-        // this lifecycle in base so base-only applications do not need a
-        // separate root component to reset it. Otherwise, registering the
-        // first of two selected TextViews temporarily reverses their order
-        // against the previous frame and alternates coverage forever.
+        // Text views read Base's global state as they paint: set up here, so
+        // that base-only applications need not.
         GlobalState::init(cx);
-        GlobalState::global(cx).begin_selection_frame();
         let state = retain_text_selection_state(global_id, window, cx);
+        // The participants placed in paint order paint after this, in the
+        // frame that draws them all when a selection asked for it.
+        state.read(cx).begin_numbering();
         // The handles and the menu register again as they paint this frame.
         if state.read(cx).touch.painted_any() {
             state.update(cx, |state, _| state.touch.begin_frame());
@@ -2793,11 +3089,12 @@ fn retain_text_selection_state(
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<WindowSelectionState> {
-    let window_id = window.window_handle().window_id();
+    let handle = window.window_handle();
+    let window_id = handle.window_id();
     let state = window.with_element_state::<Entity<WindowSelectionState>, _>(
         global_id.expect("TextSelection has a stable element id"),
         |retained, _| {
-            let state = retained.unwrap_or_else(|| WindowSelectionState::acquire(window_id, cx));
+            let state = retained.unwrap_or_else(|| WindowSelectionState::acquire(handle, cx));
             (state.clone(), state)
         },
     );
@@ -2820,8 +3117,18 @@ fn retain_text_selection_state(
     state
 }
 
-fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Window, cx: &mut App) {
-    if state.read(cx).schedule_finish_frame() {
+/// Finishes the frame once it is drawn, once for the frame. The layer asks
+/// as it paints, and so does a participant that registers while there is a
+/// selection: a retained layer does not paint, and the snapshots of what
+/// the participant registered are published here. Returns whether this
+/// asked first.
+fn finish_frame_once_drawn(
+    state: &Entity<WindowSelectionState>,
+    window: &mut Window,
+    cx: &mut App,
+) -> bool {
+    let first = state.read(cx).schedule_finish_frame();
+    if first {
         let state = state.downgrade();
         window.defer(cx, move |window, cx| {
             let Some(state) = state.upgrade() else {
@@ -2835,7 +3142,7 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
             // Direct participant scrolling produces no wheel event. Refresh
             // the held cursor after paint registers the new scroll geometry.
             let refresh_cursor = state.update(cx, |state, cx| {
-                if std::mem::take(&mut state.refresh_held_cursor) && state.is_selecting {
+                if state.refresh_held_cursor.take() && state.is_selecting {
                     // A handle drag holds the finger off the text; keep the
                     // same offset, or the cursor would hop between the two.
                     let position = window.mouse_position();
@@ -2854,6 +3161,12 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
             }
         });
     }
+    first
+}
+
+fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Window, cx: &mut App) {
+    state.read(cx).drawn_in_part.set(false);
+    finish_frame_once_drawn(state, window, cx);
 
     let mouse_down_state = state.downgrade();
     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
@@ -3288,6 +3601,32 @@ mod tests {
                 )
                 .with_scope(scope)
                 .with_document_order(document_order)
+                .with_text_bounds(vec![bounds]),
+                cx,
+            );
+        }
+
+        /// Registers it at `y`, placed in reading order where it paints, as
+        /// a text view is.
+        fn register_in_paint_order(
+            &self,
+            selection_state: &mut WindowSelectionState,
+            y: f32,
+            cx: &mut gpui::App,
+        ) {
+            let bounds = Bounds::new(point(px(0.), px(y)), size(px(100.), px(10.)));
+            selection_state.register_participant(
+                self.selection.clone(),
+                TextSelectionRegistration::new(
+                    Hitbox {
+                        id: HitboxId::placeholder(),
+                        bounds,
+                        content_mask: ContentMask { bounds },
+                        behavior: HitboxBehavior::Normal,
+                    },
+                    bounds,
+                )
+                .in_paint_order()
                 .with_text_bounds(vec![bounds]),
                 cx,
             );
@@ -4572,6 +4911,790 @@ mod tests {
             redraw(cx);
         }
         assert_eq!(renders.get(), before, "the reader rendered again");
+    }
+
+    /// Selectable text in a view of its own, drawn again when its selection
+    /// changes (as a text painting its selection is), counting its renders.
+    #[cfg(feature = "gpui-fast")]
+    struct CountedSelectionView {
+        selection: TextSelectionHandle,
+        renders: Rc<Cell<usize>>,
+        _changed: Subscription,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl CountedSelectionView {
+        fn new(renders: Rc<Cell<usize>>, cx: &mut Context<Self>) -> Self {
+            let selection = TextSelectionHandle::new("text", cx);
+            let view = cx.entity_id();
+            let changed = selection.subscribe(
+                move |event, cx| {
+                    if let TextSelectionEvent::SelectionChanged(_) = event {
+                        cx.defer(move |cx| cx.notify(view));
+                    }
+                },
+                cx,
+            );
+            Self {
+                selection,
+                renders,
+                _changed: changed,
+            }
+        }
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for CountedSelectionView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.renders.set(self.renders.get() + 1);
+            let selection = self.selection.clone();
+            div()
+                .h(px(20.))
+                .w_full()
+                .on_prepaint(move |bounds, window, cx| {
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    let registration = TextSelectionRegistration::new(hitbox, bounds)
+                        .with_text_bounds(vec![bounds])
+                        .with_rendered_element(&selection, window, cx);
+                    selection.register(registration, window, cx);
+                })
+        }
+    }
+
+    /// Draws a frame of the window and lets what it scheduled run.
+    #[cfg(feature = "gpui-fast")]
+    fn draw_frame(cx: &mut gpui::VisualTestContext) {
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            window.simulate_next_frame(cx);
+        });
+        cx.run_until_parked();
+    }
+
+    /// Views of selectable text, one under the other.
+    #[cfg(feature = "gpui-fast")]
+    struct SelectionsView<V> {
+        texts: Vec<gpui::Entity<V>>,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl<V: Render> Render for SelectionsView<V> {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(TextSelectionLayer)
+                .children(self.texts.clone())
+        }
+    }
+
+    /// A selection moving inside one text draws only that text's view
+    /// again: the other texts registering as they paint read neither the
+    /// window's selection state nor each other, so a view of them is
+    /// retained.
+    #[cfg(feature = "gpui-fast")]
+    #[gpui::test]
+    fn moving_a_selection_leaves_the_other_texts_retained(cx: &mut TestAppContext) {
+        let renders: Vec<_> = (0..3).map(|_| Rc::new(Cell::new(0))).collect();
+        let (_view, cx) = cx.add_window_view(|_, cx| SelectionsView {
+            texts: renders
+                .iter()
+                .map(|renders| cx.new(|cx| CountedSelectionView::new(renders.clone(), cx)))
+                .collect(),
+        });
+        draw_frame(cx);
+        let state = cx.update(|window, cx| WindowSelectionState::ensure(window, cx));
+        let drag = |x: f32, cx: &mut gpui::VisualTestContext| {
+            cx.update(|_, cx| state.update(cx, |state, cx| state.update(point(px(x), px(5.)), cx)));
+            draw_frame(cx);
+        };
+        cx.update(|_, cx| {
+            state.update(cx, |state, cx| {
+                state.begin(point(px(1.), px(5.)), false, cx)
+            })
+        });
+        drag(4., cx);
+        drag(6., cx);
+        let before: Vec<_> = renders.iter().map(|renders| renders.get()).collect();
+        for x in [8., 10., 12., 14.] {
+            drag(x, cx);
+        }
+        assert!(
+            renders[0].get() > before[0],
+            "the selected text did not render again"
+        );
+        assert_eq!(
+            renders[1].get(),
+            before[1],
+            "the second text rendered again"
+        );
+        assert_eq!(renders[2].get(), before[2], "the third text rendered again");
+    }
+
+    /// Selectable text in a view of its own, at `order` in the document,
+    /// registering only while it is `shown`.
+    #[cfg(feature = "gpui-fast")]
+    struct OrderedSelectionView {
+        selection: TextSelectionHandle,
+        order: u64,
+        shown: bool,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for OrderedSelectionView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let selection = self.selection.clone();
+            let (order, shown) = (self.order, self.shown);
+            div()
+                .h(px(20.))
+                .w_full()
+                .on_prepaint(move |bounds, window, cx| {
+                    if !shown {
+                        return;
+                    }
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    let registration = TextSelectionRegistration::new(hitbox, bounds)
+                        .with_text_bounds(vec![bounds])
+                        .with_document_order(order)
+                        .with_rendered_element(&selection, window, cx);
+                    selection.register(registration, window, cx);
+                })
+        }
+    }
+
+    /// A text that starts registering inside a selection, in a frame that
+    /// draws only its own view, gets its part of the selection once the
+    /// frame is drawn: the layer is retained and does not paint, so the
+    /// registration finishes the frame.
+    #[cfg(feature = "gpui-fast")]
+    #[gpui::test]
+    fn a_text_shown_inside_a_selection_gets_its_part(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, cx| SelectionsView {
+            texts: (0..3)
+                .map(|order| {
+                    cx.new(|cx| OrderedSelectionView {
+                        selection: TextSelectionHandle::new("text", cx),
+                        order,
+                        shown: order != 1,
+                    })
+                })
+                .collect(),
+        });
+        draw_frame(cx);
+        let state = cx.update(|window, cx| WindowSelectionState::ensure(window, cx));
+        cx.update(|_, cx| {
+            state.update(cx, |state, cx| {
+                state.begin(point(px(1.), px(5.)), false, cx);
+                state.update(point(px(8.), px(45.)), cx);
+            })
+        });
+        draw_frame(cx);
+        let middle = cx.update(|_, cx| view.read(cx).texts[1].clone());
+        middle.update(cx, |middle, cx| {
+            middle.shown = true;
+            cx.notify();
+        });
+        // The notification draws a frame of the middle text's view alone.
+        cx.run_until_parked();
+        assert!(
+            cx.update(|_, cx| middle.read(cx).selection.snapshot(cx).is_some()),
+            "the text shown inside the selection got no part of it"
+        );
+    }
+
+    /// A text view in a view of its own, as an application gives each of a
+    /// page's documents one.
+    #[cfg(feature = "gpui-fast")]
+    struct TextViewBox {
+        text: gpui::Entity<crate::text::TextViewState>,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for TextViewBox {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .h(px(40.))
+                .w(px(300.))
+                .child(crate::text::TextView::new(&self.text).selectable(true))
+        }
+    }
+
+    /// A drag across three text views, each in a view of its own, selects
+    /// the one between: the frames of the drag draw only the views whose
+    /// part changed, and those keep their places in reading order.
+    #[cfg(feature = "gpui-fast")]
+    #[gpui::test]
+    fn a_drag_across_text_views_drawn_apart_selects_the_one_between(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_view, cx) = cx.add_window_view(|_, cx| SelectionsView {
+            texts: ["First message", "Second message", "Third message"]
+                .into_iter()
+                .map(|text| {
+                    cx.new(|cx| TextViewBox {
+                        text: cx.new(|cx| crate::text::TextViewState::markdown(text, cx)),
+                    })
+                })
+                .collect(),
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_down(
+            point(px(2.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        // Within the first text, which alone is drawn again, then straight
+        // to the third, past the second.
+        for (x, y) in [(40., 10.), (80., 10.), (200., 90.)] {
+            cx.simulate_mouse_move(
+                point(px(x), px(y)),
+                MouseButton::Left,
+                gpui::Modifiers::default(),
+            );
+            cx.run_until_parked();
+        }
+        cx.simulate_mouse_up(
+            point(px(200.), px(90.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
+        assert!(
+            selected.contains("Second message"),
+            "the text view between was left out: {selected:?}"
+        );
+    }
+
+    /// Text views in one view, in the order `order` gives.
+    struct OrderedTextViews {
+        texts: Vec<gpui::Entity<crate::text::TextViewState>>,
+        order: Vec<usize>,
+    }
+
+    impl Render for OrderedTextViews {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(TextSelectionLayer)
+                .children(self.order.iter().map(|&ix| {
+                    div()
+                        .h(px(40.))
+                        .w(px(300.))
+                        .child(crate::text::TextView::new(&self.texts[ix]).selectable(true))
+                }))
+        }
+    }
+
+    /// A drag across text views that changed places selects those between
+    /// them as they are now: the views keep their places in reading order
+    /// from frame to frame, and two that changed places are placed again.
+    #[gpui::test]
+    fn a_drag_across_text_views_that_changed_places_selects_what_is_between(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|_, cx| OrderedTextViews {
+            texts: ["First message", "Second message", "Third message"]
+                .into_iter()
+                .map(|text| cx.new(|cx| crate::text::TextViewState::markdown(text, cx)))
+                .collect(),
+            order: vec![0, 1, 2],
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        // A drag across them places them in reading order; then the last two
+        // change places.
+        drag_from_the_top_to(50., cx);
+        view.update(cx, |view, cx| {
+            view.order = vec![0, 2, 1];
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        // To the second, now the last, past the third, now between.
+        drag_from_the_top_to(90., cx);
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
+        assert!(
+            selected.contains("Third message"),
+            "the text view between was left out by its old place: {selected:?}"
+        );
+    }
+
+    /// Text views at the top and the bottom, and between them, while shown, one
+    /// in a cached view of its own; 40px high each.
+    struct CachedTextViews {
+        top: gpui::Entity<crate::text::TextViewState>,
+        middle: Option<gpui::Entity<CachedTextView>>,
+        bottom: gpui::Entity<crate::text::TextViewState>,
+    }
+
+    struct CachedTextView(gpui::Entity<crate::text::TextViewState>);
+
+    impl Render for CachedTextView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::text::TextView::new(&self.0).selectable(true)
+        }
+    }
+
+    impl Render for CachedTextViews {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let text = |state| {
+                div()
+                    .h(px(40.))
+                    .w(px(300.))
+                    .child(crate::text::TextView::new(state).selectable(true))
+            };
+            div()
+                .size_full()
+                .child(TextSelectionLayer)
+                .child(text(&self.top))
+                .when_some(self.middle.clone(), |this, middle| {
+                    this.child(
+                        div()
+                            .h(px(40.))
+                            .w(px(300.))
+                            .child(middle.cached(gpui::StyleRefinement::default().size_full())),
+                    )
+                })
+                .child(text(&self.bottom))
+        }
+    }
+
+    /// Drags from the top of the first text view down to the text at `y`.
+    fn drag_from_the_top_to(y: f32, cx: &mut gpui::VisualTestContext) {
+        cx.simulate_mouse_down(
+            point(px(2.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        cx.simulate_mouse_move(
+            point(px(200.), px(y)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+        cx.simulate_mouse_up(
+            point(px(200.), px(y)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.run_until_parked();
+    }
+
+    /// The frame that numbers the text views again draws a cached view too,
+    /// which GPUI replays unless the view itself was told on: a text view in
+    /// it would keep a place after the others.
+    #[gpui::test]
+    fn a_text_view_in_a_cached_view_is_numbered_again(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|_, cx| CachedTextViews {
+            top: cx.new(|cx| crate::text::TextViewState::markdown("First message", cx)),
+            middle: None,
+            bottom: cx.new(|cx| crate::text::TextViewState::markdown("Third message", cx)),
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        // A drag across them places them in reading order; then the one in a
+        // cached view appears between them, after the others in number.
+        drag_from_the_top_to(50., cx);
+        view.update(cx, |view, cx| {
+            let middle = cx.new(|cx| crate::text::TextViewState::markdown("Second message", cx));
+            view.middle = Some(cx.new(|_| CachedTextView(middle)));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        drag_from_the_top_to(90., cx);
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
+        assert!(
+            selected.contains("Second message"),
+            "the text view in the cached view kept its place after the others: {selected:?}"
+        );
+    }
+
+    /// A selection across text views whose numbers went stale keeps the
+    /// parts it had until a frame numbers them again: the parts the stale
+    /// numbers give would flash for a frame.
+    #[gpui::test]
+    fn a_selection_across_stale_numbers_waits_for_new_ones(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut state = WindowSelectionState::default();
+            let shown = FakeParticipant::new("shown", cx);
+            let first = FakeParticipant::new("first", cx);
+            let second = FakeParticipant::new("second", cx);
+            let third = FakeParticipant::new("third", cx);
+            // A frame numbers them 1, 2 and 3.
+            state.numbering.set(Numbering::Requested);
+            state.begin_numbering();
+            first.register_in_paint_order(&mut state, 10., cx);
+            second.register_in_paint_order(&mut state, 20., cx);
+            third.register_in_paint_order(&mut state, 30., cx);
+            let _ = state.finish_frame(cx);
+            // One shown above them takes 4.
+            shown.register_in_paint_order(&mut state, 0., cx);
+            state.begin(point(px(1.), px(1.)), false, cx);
+            state.update(point(px(20.), px(21.)), cx);
+            assert!(
+                third.selection.snapshot(cx).is_none(),
+                "the third took a part by the stale numbers"
+            );
+            // The next frame numbers them again, and the parts follow.
+            state.begin_numbering();
+            for (text, y) in [(&shown, 0.), (&first, 10.), (&second, 20.), (&third, 30.)] {
+                text.register_in_paint_order(&mut state, y, cx);
+            }
+            let _ = state.finish_frame(cx);
+            assert!(
+                first.selection.snapshot(cx).is_some(),
+                "the first got no part"
+            );
+            assert!(
+                third.selection.snapshot(cx).is_none(),
+                "the third got a part"
+            );
+        });
+    }
+
+    /// The selection layer sets up Base's global state, which text views read
+    /// as they paint, for applications that do not initialize Base.
+    #[gpui::test]
+    fn a_text_view_draws_in_the_layer_without_base_initialized(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, cx| OrderedTextViews {
+            texts: vec![cx.new(|cx| crate::text::TextViewState::markdown("Message", cx))],
+            order: vec![0],
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+    }
+
+    /// Three selectable texts in one view, `top` below its top, the middle
+    /// one only while it has a handle.
+    struct PlainTextsView {
+        top: Pixels,
+        middle: Option<TextSelectionHandle>,
+    }
+
+    impl Render for PlainTextsView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let middle = self.middle.clone();
+            div().size_full().child(TextSelectionLayer).child(
+                div()
+                    .pt(self.top)
+                    .w(px(300.))
+                    .child(
+                        div().h(px(40.)).child(
+                            crate::SelectableText::new("first", "first text").document_order(0),
+                        ),
+                    )
+                    .child(div().h(px(40.)).when_some(middle, |this, middle| {
+                        this.child(
+                            crate::SelectableText::with_handle("middle", middle, "middle text")
+                                .document_order(1),
+                        )
+                    }))
+                    .child(
+                        div().h(px(40.)).child(
+                            crate::SelectableText::new("last", "last text").document_order(2),
+                        ),
+                    ),
+            )
+        }
+    }
+
+    /// Drags in a [`PlainTextsView`] from inside its first text to inside its
+    /// last, and draws the window again, as an application does when a
+    /// text's selection changes ([`TextSelectionHandle::refresh_window_on_change`]).
+    fn drag_over_plain_texts(top: Pixels, cx: &mut gpui::VisualTestContext) {
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_down(
+            point(px(20.), top + px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(20.), top + px(90.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(20.), top + px(90.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            window.refresh();
+            let _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+    }
+
+    /// A selection across texts that move, as a scroll moves them, copies
+    /// what it selected: each selectable text gets its part of the selection
+    /// where it is now as it registers, before it paints, and one that
+    /// painted before the selection's other end moved is drawn again.
+    #[gpui::test]
+    fn a_selection_moved_with_its_texts_copies_what_it_selected(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|_, cx| PlainTextsView {
+            top: px(0.),
+            middle: Some(TextSelectionHandle::new("middle text", cx)),
+        });
+        drag_over_plain_texts(px(0.), cx);
+        let selected = cx.update(|window, cx| TextSelection::selected_text(window, cx));
+        assert!(
+            selected.contains("middle text") && !selected.starts_with("first text"),
+            "the drag did not select part of the first text: {selected:?}"
+        );
+        view.update(cx, |view, cx| {
+            view.top = px(15.);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            cx.update(|window, cx| TextSelection::selected_text(window, cx)),
+            selected,
+        );
+    }
+
+    /// A text that registers before the selection's other end, in the frame
+    /// a scroll moves them in, paints its part where that end is now: the
+    /// end moving hands it its part again, before it paints.
+    #[gpui::test]
+    fn a_text_before_a_moved_end_paints_its_part_where_the_end_is(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let middle = cx.update(|cx| TextSelectionHandle::new("middle text", cx));
+        let (view, cx) = cx.add_window_view(|_, _| PlainTextsView {
+            top: px(0.),
+            middle: Some(middle.clone()),
+        });
+        drag_over_plain_texts(px(0.), cx);
+        // Moved and drawn in one update: a test window dirty at the end of
+        // one is drawn again, and the copy text would be that frame's.
+        let painted = cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.top = px(75.);
+                cx.notify();
+            });
+            let _ = window.draw(cx);
+            middle.0.read(cx).projected_copy_text.borrow().clone()
+        });
+        assert_eq!(
+            painted,
+            Some("middle text".to_string()),
+            "the middle text painted its part by where the last text was"
+        );
+    }
+
+    /// Above a gap, a participant that registers as it prepaints and paints
+    /// its part as [`TextSelectionHandle::snapshot`] gives it, not projecting
+    /// it; below, one that registers as it paints, as a text view does.
+    /// Neither is drawn again when its selection changes.
+    struct SnapshotPaintersView {
+        above: TextSelectionHandle,
+        below: TextSelectionHandle,
+        gap: Pixels,
+        painted: Rc<Cell<Option<TextSelectionSnapshot>>>,
+    }
+
+    impl Render for SnapshotPaintersView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let (above, below) = (self.above.clone(), self.below.clone());
+            let painted = self.painted.clone();
+            div()
+                .size_full()
+                .child(TextSelectionLayer)
+                .child(
+                    gpui::canvas(
+                        move |bounds, window, cx| {
+                            let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                            let registration = TextSelectionRegistration::new(hitbox, bounds)
+                                .with_text_bounds(vec![bounds])
+                                .with_document_order(0);
+                            above.register(registration, window, cx);
+                            above
+                        },
+                        move |_, above, _, cx| painted.set(above.snapshot(cx)),
+                    )
+                    .h(px(20.))
+                    .w_full(),
+                )
+                .child(div().h(self.gap))
+                .child(
+                    gpui::canvas(
+                        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+                        move |bounds, hitbox, window, cx| {
+                            let registration = TextSelectionRegistration::new(hitbox, bounds)
+                                .with_text_bounds(vec![bounds])
+                                .with_document_order(1);
+                            below.register(registration, window, cx);
+                        },
+                    )
+                    .h(px(20.))
+                    .w_full(),
+                )
+        }
+    }
+
+    /// A participant handed its part as a moved end of the selection
+    /// registers, after it painted the part it had, is told at the end of
+    /// the frame: one that paints from its snapshot, not projecting its part,
+    /// is drawn again with the part it was handed.
+    #[gpui::test]
+    fn a_text_handed_its_part_after_it_painted_is_drawn_again(cx: &mut TestAppContext) {
+        let painted = Rc::new(Cell::new(None));
+        let (view, cx) = cx.add_window_view(|_, cx| SnapshotPaintersView {
+            above: TextSelectionHandle::new("above", cx),
+            below: TextSelectionHandle::new("below", cx),
+            gap: px(20.),
+            painted: painted.clone(),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let state = cx.update(|window, cx| WindowSelectionState::ensure(window, cx));
+        cx.update(|_, cx| {
+            state.update(cx, |state, cx| {
+                state.begin(point(px(1.), px(5.)), false, cx);
+                state.update(point(px(8.), px(45.)), cx);
+            })
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+        let above = cx.update(|_, cx| view.read(cx).above.clone());
+        assert!(
+            cx.update(|_, cx| above.snapshot(cx)).is_some(),
+            "the drag did not select the text above"
+        );
+        // The text below moves down, as a scroll moves it, and registers as
+        // it paints, after the text above painted.
+        view.update(cx, |view, cx| {
+            view.gap = px(95.);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            painted.get(),
+            cx.update(|_, cx| above.snapshot(cx)),
+            "the text above kept painting the part it had"
+        );
+    }
+
+    /// A selectable text shown inside a selection paints its part of it: it
+    /// gets the part as it registers, before it paints.
+    #[gpui::test]
+    fn a_text_shown_inside_a_selection_paints_its_part(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|_, _| PlainTextsView {
+            top: px(0.),
+            middle: None,
+        });
+        drag_over_plain_texts(px(0.), cx);
+        let middle = cx.update(|_, cx| TextSelectionHandle::new("middle text", cx));
+        view.update(cx, |view, cx| {
+            view.middle = Some(middle.clone());
+            cx.notify();
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            cx.update(|_, cx| middle.0.read(cx).projected_copy_text.borrow().clone()),
+            Some("middle text".to_string()),
+        );
+    }
+
+    /// Selectable text in a view of its own that registers without tying the
+    /// registration to its element, and is not drawn again when its
+    /// selection changes.
+    #[cfg(feature = "gpui-fast")]
+    struct UntiedSelectionView {
+        selection: TextSelectionHandle,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for UntiedSelectionView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let selection = self.selection.clone();
+            div()
+                .h(px(20.))
+                .w_full()
+                .on_prepaint(move |bounds, window, cx| {
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    let registration = TextSelectionRegistration::new(hitbox, bounds)
+                        .with_text_bounds(vec![bounds]);
+                    selection.register(registration, window, cx);
+                })
+        }
+    }
+
+    /// An [`UntiedSelectionView`] above a [`CountedSelectionView`].
+    #[cfg(feature = "gpui-fast")]
+    struct UntiedAboveCountedView {
+        untied: gpui::Entity<UntiedSelectionView>,
+        counted: gpui::Entity<CountedSelectionView>,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for UntiedAboveCountedView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(TextSelectionLayer)
+                .child(self.untied.clone())
+                .child(self.counted.clone())
+        }
+    }
+
+    /// A selection from a participant that registers outside a drawing
+    /// element stays through a frame that draws only another view: such a
+    /// frame says nothing of the views it did not draw.
+    #[cfg(feature = "gpui-fast")]
+    #[gpui::test]
+    fn a_frame_drawing_another_view_keeps_an_untied_participant(cx: &mut TestAppContext) {
+        let renders = Rc::new(Cell::new(0));
+        let (view, cx) = cx.add_window_view(|_, cx| UntiedAboveCountedView {
+            untied: cx.new(|cx| UntiedSelectionView {
+                selection: TextSelectionHandle::new("untied", cx),
+            }),
+            counted: cx.new(|cx| CountedSelectionView::new(renders.clone(), cx)),
+        });
+        draw_frame(cx);
+        let state = cx.update(|window, cx| WindowSelectionState::ensure(window, cx));
+        let before = renders.get();
+        cx.update(|_, cx| {
+            state.update(cx, |state, cx| {
+                state.begin(point(px(1.), px(5.)), false, cx);
+                state.update(point(px(8.), px(25.)), cx);
+            })
+        });
+        draw_frame(cx);
+        assert!(
+            renders.get() > before,
+            "the counted text did not render again"
+        );
+        let counted = cx.update(|_, cx| view.read(cx).counted.read(cx).selection.clone());
+        assert!(
+            cx.update(|_, cx| counted.snapshot(cx).is_some()),
+            "the selection was cleared"
+        );
     }
 
     #[gpui::test]

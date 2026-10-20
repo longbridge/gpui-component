@@ -1,7 +1,7 @@
 #[cfg(not(target_family = "wasm"))]
 use std::time::Instant;
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     rc::{Rc, Weak},
 };
 #[cfg(target_family = "wasm")]
@@ -27,9 +27,6 @@ pub struct GlobalState {
     /// apart from what views read of this global: pushing and popping as
     /// they draw is not a change of it.
     text_view_state_stack: RefCell<Vec<Entity<TextViewState>>>,
-    /// The order the next selectable text painted this frame takes, which
-    /// changes as text paints without changing this global.
-    selection_document_order: Cell<u64>,
     /// When a finger last went down. A tap reaches controls as a mouse press;
     /// this is how they tell it from one.
     last_touch: Option<Instant>,
@@ -44,7 +41,6 @@ impl GlobalState {
             deferred_popovers: Vec::new(),
             suppress_text_selection: false,
             text_view_state_stack: RefCell::new(Vec::new()),
-            selection_document_order: Cell::new(1),
             last_touch: None,
         }
     }
@@ -113,16 +109,12 @@ impl GlobalState {
         self.text_view_state_stack.borrow_mut().pop();
     }
 
+    /// Does nothing: text views keep their places in reading order from
+    /// frame to frame, so a frame no longer numbers them anew. Kept for
+    /// callers from before.
     #[doc(hidden)]
-    pub fn begin_selection_frame(&self) {
-        self.selection_document_order.set(1);
-    }
-
-    pub(crate) fn next_selection_document_order(&self) -> u64 {
-        let order = self.selection_document_order.get();
-        self.selection_document_order.set(order.wrapping_add(1));
-        order
-    }
+    #[deprecated(note = "text views keep their places in reading order; this does nothing")]
+    pub fn begin_selection_frame(&self) {}
 
     /// Returns the application menus.
     pub fn app_menus(&self) -> &[OwnedMenu] {

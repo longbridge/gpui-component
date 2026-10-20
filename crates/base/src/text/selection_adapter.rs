@@ -301,22 +301,21 @@ impl TextViewSelectionAdapter {
         self.frame.borrow_mut().text_bounds.extend(bounds);
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn register(
         &self,
         hitbox: Hitbox,
         bounds: Bounds<Pixels>,
         scroll_offset: Point<Pixels>,
-        document_order: u64,
         self_scroll: bool,
         window: &mut Window,
         cx: &mut App,
     ) {
         let frame = self.frame.borrow();
         self.selection.set_hit_test_runs(&frame.text_runs, cx);
+        // A text view's place in the document is where it paints.
         let registration = TextSelectionRegistration::new(hitbox, bounds)
             .with_scroll_offset(scroll_offset)
-            .with_document_order(document_order)
+            .in_paint_order()
             .with_text_bounds(frame.text_bounds.clone())
             .with_self_scroll(self_scroll)
             .with_rendered_element(&self.selection, window, cx);
