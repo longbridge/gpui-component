@@ -7,8 +7,9 @@ use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    UTF16Selection, WeakFocusHandle, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    Render, ScrollHandle, ScrollWheelEvent, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, UTF16Selection, WeakFocusHandle, Window, actions, div, point,
+    prelude::FluentBuilder as _, px,
 };
 use gpui::{Autocapitalize, TextInputAction, TextInputConfiguration};
 use ropey::{Rope, RopeSlice};
@@ -42,7 +43,9 @@ use crate::input::{
     InputExtras as _, Position, RopeExt as _, element::RIGHT_MARGIN, layout::LastLayout,
 };
 use crate::overscroll::Overscroll;
-use crate::{AutoScroll, StepAction};
+use crate::{AutoScroll, StepAction, TestSupportExt as _};
+
+pub(super) const EDITOR_ELEMENT_ID: &str = "input-state";
 
 /// Vertical clearance to retain when revealing a text position.
 pub(crate) enum ScrollPadding {
@@ -516,6 +519,7 @@ pub struct InputBaseState<M: InputModeKind> {
     /// colours once and then never see them as unset again, which is the same
     /// freeze in a different place.
     projected_editor_style: InputEditorStyle,
+    accessibility: Option<InputAccessibility>,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -562,6 +566,74 @@ pub struct InputBaseState<M: InputModeKind> {
     _subscriptions: Vec<Subscription>,
 
     pub(super) auto_scroll: AutoScroll,
+}
+
+/// Accessibility presentation for the editor's existing keyboard-focus boundary.
+///
+/// Frames and their addon controls keep their own identities. This projection
+/// does not create a focus handle or register another text Tab stop. The engine
+/// supplies the live value and guards accessibility actions against its current
+/// disabled, read-only and masked state.
+#[derive(Clone, Debug)]
+pub struct InputAccessibility {
+    role: Option<gpui::Role>,
+    label: Option<SharedString>,
+    placeholder: Option<SharedString>,
+    accessibility_id: Option<SharedString>,
+    value_exposed: bool,
+}
+
+impl InputAccessibility {
+    pub fn new(role: Option<gpui::Role>) -> Self {
+        Self {
+            role,
+            label: None,
+            placeholder: None,
+            accessibility_id: None,
+            value_exposed: true,
+        }
+    }
+
+    pub fn with_label(mut self, label: Option<SharedString>) -> Self {
+        self.label = label;
+        self
+    }
+
+    pub fn with_placeholder(mut self, placeholder: Option<SharedString>) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    pub fn with_accessibility_id(mut self, id: Option<SharedString>) -> Self {
+        self.accessibility_id = id;
+        self
+    }
+
+    /// Suppress values for secret content even when the mask is revealed.
+    pub fn with_value_exposed(mut self, exposed: bool) -> Self {
+        self.value_exposed = exposed;
+        self
+    }
+
+    pub fn role(&self) -> Option<gpui::Role> {
+        self.role
+    }
+
+    pub fn label(&self) -> Option<&SharedString> {
+        self.label.as_ref()
+    }
+
+    pub fn placeholder(&self) -> Option<&SharedString> {
+        self.placeholder.as_ref()
+    }
+
+    pub fn accessibility_id(&self) -> Option<&SharedString> {
+        self.accessibility_id.as_ref()
+    }
+
+    pub fn value_exposed(&self) -> bool {
+        self.value_exposed
+    }
 }
 
 /// Read-only styling data exposed to presentation facades.
@@ -924,6 +996,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             mask_pattern_set: false,
             editor_style: InputEditorStyle::default(),
             projected_editor_style: InputEditorStyle::default(),
+            accessibility: None,
             diagnostic_popover: None,
             context_menu_handler: None,
             pending_context_menu: None,
@@ -1017,6 +1090,32 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
         self.editor_style = style.clone();
         self.projected_editor_style = style;
+    }
+
+    /// Project semantics onto the editor, never onto a second focus owner.
+    pub fn set_accessibility(&mut self, accessibility: InputAccessibility) {
+        self.accessibility = Some(accessibility);
+    }
+
+    fn handle_accessibility_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.disabled {
+            self.focus(window, cx);
+        }
+    }
+
+    fn handle_accessibility_set_value(
+        &mut self,
+        data: Option<&gpui::accesskit::ActionData>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(gpui::accesskit::ActionData::Value(value)) = data else {
+            return;
+        };
+        // The action may have been queued before editability changed.
+        if self.is_editable() {
+            self.replace_all(value.to_string(), window, cx);
+        }
     }
 
     /// Set presentation padding for multi-line text and its scrollbar layout.
@@ -4837,9 +4936,44 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
         }
 
         let element = div()
-            .id("input-state")
+            .id(EDITOR_ELEMENT_ID)
             .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
+            .when_some(self.accessibility.as_ref(), |this, accessibility| {
+                this.when_some(accessibility.role, |this, role| this.role(role))
+                    .when_some(accessibility.label.clone(), |this, label| {
+                        this.aria_label(label)
+                    })
+                    .when_some(accessibility.placeholder.clone(), |this, placeholder| {
+                        this.aria_placeholder(placeholder)
+                    })
+                    .when_some(accessibility.accessibility_id.clone(), |this, id| {
+                        this.accessibility_id(id)
+                    })
+                    .when(
+                        accessibility.value_exposed
+                            && !self.masked
+                            && (window.is_a11y_active() || cfg!(feature = "test-support")),
+                        |this| this.aria_value(self.text.to_string()),
+                    )
+                    .on_a11y_action(gpui::AccessibleAction::Focus, {
+                        let entity = entity.clone();
+                        move |_, window, cx| {
+                            entity.update(cx, |state, cx| {
+                                state.handle_accessibility_focus(window, cx)
+                            });
+                        }
+                    })
+                    .when(self.is_editable(), |this| {
+                        this.on_a11y_action(gpui::AccessibleAction::SetValue, {
+                            let entity = entity.clone();
+                            move |data, window, cx| {
+                                entity.update(cx, |state, cx| {
+                                    state.handle_accessibility_set_value(data, window, cx)
+                                });
+                            }
+                        })
+                    })
+            })
             .when(self.is_editable(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::backspace))
                     .on_action(window.listener_for(&entity, InputBaseState::delete))
@@ -4975,12 +5109,97 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
         // Actions only one mode handles are registered by that mode, where
         // `Self` is concrete enough to name its own entity type.
         M::register_actions(element, &entity, window)
+            .test_support()
+            .track_focus(&self.focus_handle)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn accessibility_actions_recheck_live_editability(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (state, cx) = cx.add_window_view(|window, cx| {
+            crate::input::InputState::new(window, cx).default_value("initial")
+        });
+        let changes = Rc::new(Cell::new(0));
+        let observed = changes.clone();
+        let _subscription = cx.update(|_, cx| {
+            cx.subscribe(&state, move |_, event: &InputEvent, _| {
+                if matches!(event, InputEvent::Change) {
+                    observed.set(observed.get() + 1);
+                }
+            })
+        });
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.handle_accessibility_set_value(None, window, cx);
+                state.handle_accessibility_focus(window, cx);
+                assert!(state.focus_handle.is_focused(window));
+            });
+            window.draw(cx).clear(cx);
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "initial");
+        assert_eq!(changes.get(), 0);
+
+        let action = gpui::accesskit::ActionData::Value("updated🦀".into());
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.handle_accessibility_set_value(Some(&action), window, cx)
+            });
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "updated🦀");
+        assert_eq!(changes.get(), 1);
+        for disabled in [false, true] {
+            cx.update(|window, cx| {
+                window.blur(cx);
+                state.update(cx, |state, cx| {
+                    state.set_disabled(disabled, cx);
+                    state.set_readonly(!disabled, cx);
+                    state.handle_accessibility_focus(window, cx);
+                    assert_eq!(state.focus_handle.is_focused(window), !disabled);
+                    let rejected = gpui::accesskit::ActionData::Value("rejected".into());
+                    state.handle_accessibility_set_value(Some(&rejected), window, cx);
+                });
+            });
+            assert_eq!(state.read_with(cx, |state, _| state.value()), "updated🦀");
+            assert_eq!(changes.get(), 1);
+        }
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_disabled(false, cx);
+                state.set_readonly(false, cx);
+                state.handle_accessibility_focus(window, cx);
+            });
+            window.draw(cx).clear(cx);
+            window.dispatch_action(Box::new(Undo), cx);
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "initial");
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_masked(true, window, cx);
+                state.handle_accessibility_set_value(Some(&action), window, cx);
+            });
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "updated🦀");
+    }
+
+    #[gpui::test]
+    fn accessibility_set_value_preserves_exact_editor_text(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (editor, cx) = cx.add_window_view(|window, cx| {
+            crate::input::EditorState::new(window, cx).language("rust")
+        });
+        let action = gpui::accesskit::ActionData::Value("(".into());
+        cx.update(|window, cx| {
+            editor.update(cx, |editor, cx| {
+                editor.handle_accessibility_set_value(Some(&action), window, cx)
+            });
+        });
+        assert_eq!(editor.read_with(cx, |editor, _| editor.value()), "(");
+    }
 
     #[gpui::test]
     fn revealing_a_password_keeps_text_assistance_disabled(cx: &mut TestAppContext) {
