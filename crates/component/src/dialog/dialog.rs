@@ -4,12 +4,12 @@ use gpui_base::TestSupportExt as _;
 use std::{rc::Rc, sync::LazyLock, time::Duration};
 
 use gpui::{
-    Action, Anchor, Animation, AnimationExt as _, AnyElement, App, BoxShadow, ClickEvent, Edges,
-    FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
+    Action, Anchor, AnyElement, App, BoxShadow, ClickEvent, Edges, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
     prelude::FluentBuilder, px,
 };
-use gpui_base::{ElementExt as _, TextSelectionScopeId};
+use gpui_base::{ElementExt as _, TextSelectionScopeId, motion::Transition};
 use rust_i18n::t;
 
 use crate::{
@@ -298,14 +298,13 @@ impl IntoElement for BaseDialogRoot {
     }
 }
 
-/// The exit transition of a dialog that has been closed.
+/// The shared entrance and exit sample for a mounted dialog.
 ///
-/// Built by [`WindowState::dialog_layer`](crate::root) each frame while the
-/// dialog leaves; absent when the dialog is open.
+/// Built by the window dialog layer with stable per-dialog identity.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct DialogExit {
-    /// `1.0` when the close starts, `0.0` once the dialog is gone.
+pub(crate) struct DialogMotion {
     pub(crate) visibility: f32,
+    pub(crate) closing: bool,
 }
 
 /// A modal to display content in a dialog box.
@@ -327,8 +326,8 @@ pub struct Dialog {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) layer_ix: usize,
     pub(crate) selection_scope: TextSelectionScopeId,
-    /// Set while the dialog is closing, see [`DialogExit`].
-    pub(crate) exit: Option<DialogExit>,
+    pub(crate) motion: Option<DialogMotion>,
+    pub(crate) id: usize,
 }
 
 pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
@@ -375,7 +374,8 @@ impl Dialog {
             layer_ix: 0,
             selection_scope: TextSelectionScopeId::default(),
             button_props: DialogButtonProps::default(),
-            exit: None,
+            motion: None,
+            id: 0,
         }
     }
 
@@ -558,6 +558,18 @@ impl Dialog {
         }
     }
 
+    pub(crate) fn motion_transition(&self, cx: &App) -> Transition {
+        let transition = Transition::new(self.exit_duration(cx));
+        // Use the same curve in both directions: changing the curve at the
+        // reversal would resample the entrance at a different position.
+        if self.props.entrance == DialogEntrance::SlideDown {
+            transition.ease(cubic_bezier(1. / 3., 0.72, 2. / 3., 1.))
+        } else {
+            let easing = cx.theme().motion_tokens().easing_enter.clone();
+            transition.ease(move |delta| easing.sample(delta).clamp(0., 1.))
+        }
+    }
+
     pub(crate) fn has_overlay(&self) -> bool {
         self.props.overlay
     }
@@ -648,19 +660,11 @@ impl RenderOnce for Dialog {
         let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + layer_offset;
         let entrance = self.props.entrance;
         let motion = cx.theme().motion_tokens();
-        let exit = self.exit;
-        let closing = exit.is_some();
-        // 1.0 while the dialog is at rest, shrinking to 0.0 as it leaves.
-        let exit_visibility = exit.map_or(1.0, |exit| exit.visibility.clamp(0., 1.));
-        // The exiting dialog paints its own fading dim: base's backdrop stops
-        // every press, and the app below is already usable again.
+        let closing = self.motion.is_some_and(|motion| motion.closing);
+        let visibility = self
+            .motion
+            .map_or(1.0, |motion| motion.visibility.clamp(0., 1.));
         let fade_overlay = closing && self.props.overlay_visible;
-        // The entrance plays once, on the way in. A closing dialog renders the
-        // trajectory back out from `exit_visibility` instead.
-        let animated = !closing
-            && entrance != DialogEntrance::None
-            && !cx.reduce_motion()
-            && (entrance == DialogEntrance::SlideDown || !motion.duration_normal.is_zero());
         let travel = motion.distance_short.to_pixels(window.rem_size());
         let width = self
             .props
@@ -685,24 +689,6 @@ impl RenderOnce for Dialog {
         if let Some(pb) = self.style.padding.bottom {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
         }
-
-        // x1 = 1/3, x2 = 2/3 make the bezier's time mapping the identity,
-        // preserving the trajectory this dialog was tuned with before
-        // `cubic_bezier` solved for x; vaul's (0.32, 0.72, 0., 1.) is far
-        // more front-loaded under the CSS-correct solver.
-        let animation = if entrance == DialogEntrance::SlideDown {
-            Animation::new(*ANIMATION_DURATION).with_easing(cubic_bezier(
-                1. / 3.,
-                0.72,
-                2. / 3.,
-                1.,
-            ))
-        } else {
-            let easing = motion.easing_enter.clone();
-            // The delta drives opacity, so keep an overshooting theme curve in range.
-            Animation::new(motion.duration_normal)
-                .with_easing(move |delta| easing.sample(delta).clamp(0., 1.))
-        };
 
         // The newest dialog still open owns Escape, the backdrop, and the
         // focus trap; a closing dialog keeps its layer only to finish leaving.
@@ -731,7 +717,7 @@ impl RenderOnce for Dialog {
                         self.base
                             .take()
                             .expect("Dialog base host is always present")
-                            .layer(layer_ix, is_topmost)
+                            .layer(self.id, is_topmost)
                             .focus_handle(self.focus_handle.clone())
                             .close_on_escape(self.props.keyboard && !closing)
                             .close_on_backdrop_press(self.props.overlay_closable && !closing)
@@ -772,7 +758,7 @@ impl RenderOnce for Dialog {
                                 .margin(margin)
                                 .child(
                                     v_flex()
-                                        .id(layer_ix)
+                                        .id("surface")
                                         .test_support()
                                         .debug_selector(move || format!("dialog-{layer_ix}"))
                                         .bg(cx.theme().tokens.background)
@@ -858,127 +844,65 @@ impl RenderOnce for Dialog {
                                                         .icon(IconName::Close)
                                                 })
                                         }))
-                                        .map(|surface| {
-                                            if closing {
-                                                // The popup paints inside the base host's
-                                                // deferred draw, so the layer opacity cannot
-                                                // reach it: fade the surface itself.
-                                                surface
-                                                    .opacity(exit_visibility)
-                                                    .shadow(dialog_shadow(exit_visibility))
-                                                    .text_selection_scope(selection_scope)
-                                                    .into_any_element()
-                                            } else if animated {
-                                                // The base host paints its popup in a
-                                                // deferred pass, so opacity on the layer
-                                                // cannot reach it: fade the surface itself.
-                                                let fades_in = matches!(
-                                                    entrance,
-                                                    DialogEntrance::Fade
-                                                        | DialogEntrance::FadeSlide
-                                                );
-                                                surface
-                                                    .with_animation(
-                                                        "slide-down-shadow",
-                                                        animation.clone(),
-                                                        move |surface, delta| {
-                                                            let surface = surface
-                                                                .shadow(dialog_shadow(delta));
-                                                            if fades_in {
-                                                                surface.opacity(delta)
-                                                            } else {
-                                                                surface
-                                                            }
-                                                        },
-                                                    )
-                                                    .text_selection_scope(selection_scope)
-                                                    .into_any_element()
-                                            } else {
-                                                surface
-                                                    .shadow(dialog_shadow(1.))
-                                                    .text_selection_scope(selection_scope)
-                                                    .into_any_element()
-                                            }
+                                        .when(closing, |surface| {
+                                            // The shield is painted after the content, so
+                                            // descendant hitboxes cannot receive input.
+                                            surface
+                                                .capture_any_mouse_down(|_, _, cx| {
+                                                    cx.stop_propagation()
+                                                })
+                                                .capture_any_mouse_up(|_, _, cx| {
+                                                    cx.stop_propagation()
+                                                })
+                                                .capture_key_down(|_, window, cx| {
+                                                    window.prevent_default();
+                                                    cx.stop_propagation();
+                                                })
+                                                .capture_key_up(|_, _, cx| cx.stop_propagation())
+                                                .child(
+                                                    div()
+                                                        .absolute()
+                                                        .inset_0()
+                                                        .occlude()
+                                                        .on_any_mouse_down(|_, _, cx| {
+                                                            cx.stop_propagation()
+                                                        })
+                                                        .on_scroll_wheel(|_, _, cx| {
+                                                            cx.stop_propagation()
+                                                        }),
+                                                )
                                         })
+                                        // Base paints its popup in a deferred pass; the
+                                        // surface must apply opacity itself.
+                                        .opacity(visibility)
+                                        .shadow(dialog_shadow(visibility))
+                                        .text_selection_scope(selection_scope)
                                         .map(|surface| {
-                                            if closing {
-                                                if entrance == DialogEntrance::FadeSlide {
-                                                    let mut surface = EntranceSurface::new(
-                                                        surface,
-                                                        travel,
-                                                        window_paddings.top + margin,
-                                                    );
-                                                    surface.progress = exit_visibility;
-                                                    surface.into_any_element()
-                                                } else {
-                                                    surface
-                                                }
-                                            } else if animated
-                                                && entrance == DialogEntrance::FadeSlide
-                                            {
-                                                EntranceSurface::new(
-                                                    surface,
+                                            if entrance == DialogEntrance::FadeSlide {
+                                                let mut surface = EntranceSurface::new(
+                                                    surface.into_any_element(),
                                                     travel,
                                                     window_paddings.top + margin,
-                                                )
-                                                .with_animation(
-                                                    "dialog-settle",
-                                                    animation.clone(),
-                                                    |mut surface, delta| {
-                                                        surface.progress = delta;
-                                                        surface
-                                                    },
-                                                )
-                                                .into_any_element()
+                                                );
+                                                surface.progress = visibility;
+                                                surface.into_any_element()
                                             } else {
-                                                surface
+                                                surface.into_any_element()
                                             }
                                         }),
                                 )
-                                .map(|positioner| {
-                                    if closing {
-                                        if entrance == DialogEntrance::SlideDown {
-                                            positioner
-                                                .position(point(
-                                                    window_paddings.left + x,
-                                                    window_paddings.top + y * exit_visibility,
-                                                ))
-                                                .into_any_element()
-                                        } else {
-                                            positioner.into_any_element()
-                                        }
-                                    } else if animated && entrance == DialogEntrance::SlideDown {
-                                        positioner
-                                            .with_animation(
-                                                "slide-down",
-                                                animation.clone(),
-                                                move |this, delta| {
-                                                    this.position(point(
-                                                        window_paddings.left + x,
-                                                        window_paddings.top + y * delta,
-                                                    ))
-                                                },
-                                            )
-                                            .into_any_element()
-                                    } else {
-                                        positioner.into_any_element()
-                                    }
-                                }),
+                                .when(
+                                    entrance == DialogEntrance::SlideDown,
+                                    |positioner| {
+                                        positioner.position(point(
+                                            window_paddings.left + x,
+                                            window_paddings.top + y * visibility,
+                                        ))
+                                    },
+                                ),
                             ),
                     )
-                    .map(|layer| {
-                        if closing {
-                            layer.opacity(exit_visibility).into_any_element()
-                        } else if animated {
-                            layer
-                                .with_animation("fade-in", animation, |layer, delta| {
-                                    layer.opacity(delta)
-                                })
-                                .into_any_element()
-                        } else {
-                            layer.into_any_element()
-                        }
-                    }),
+                    .opacity(visibility),
             )
             .into_any_element()
     }
@@ -1052,7 +976,7 @@ pub(crate) mod tests {
     ) {
         cx.update(|window, cx| window.open_dialog(cx, build));
         cx.run_until_parked();
-        // One frame mounts the layer, the next paints it at rest.
+        // Mount the layer and paint the current animation sample.
         cx.update(|window, cx| window.draw(cx).clear(cx));
         cx.update(|window, cx| window.draw(cx).clear(cx));
     }
@@ -1216,6 +1140,8 @@ pub(crate) mod tests {
             dialog.title("Closing").child("body").margin_top(px(300.))
         });
 
+        cx.background_executor.advance_clock(*ANIMATION_DURATION);
+        frame(cx);
         cx.update(|window, cx| window.close_dialog(cx));
         frame(cx);
         // The exit starts from the resting position and the dialog is already
@@ -1285,6 +1211,8 @@ pub(crate) mod tests {
         let cx = window(cx, size(px(1000.), px(800.)));
         cx.update(|_, cx| cx.set_reduce_motion(false));
         open(cx, |dialog, _, _| dialog.title("First").child("body"));
+        cx.background_executor.advance_clock(*ANIMATION_DURATION);
+        frame(cx);
         cx.update(|window, cx| window.close_dialog(cx));
         frame(cx);
 
@@ -1312,7 +1240,7 @@ pub(crate) mod tests {
             assert!(state.active_dialogs[0].focus_handle().is_focused(window));
             assert!(window.has_active_dialog(cx));
         });
-        assert!(cx.debug_bounds("dialog-0").is_some());
+        assert_eq!(surface(cx, 0).top(), px(80.));
         assert!(cx.debug_bounds("dialog-1").is_none());
     }
 
@@ -1325,6 +1253,8 @@ pub(crate) mod tests {
         open(cx, |dialog, _, _| dialog.title("First").child("body"));
         open(cx, |dialog, _, _| dialog.title("Second").child("body"));
 
+        cx.background_executor.advance_clock(*ANIMATION_DURATION);
+        frame(cx);
         cx.update(|window, cx| window.close_dialog(cx));
         frame(cx);
         cx.update(|window, cx| {
@@ -1371,6 +1301,8 @@ pub(crate) mod tests {
         cx.simulate_click(backdrop_point, gpui::Modifiers::default());
         assert_eq!(clicks.get(), 0, "an open dialog blocked the application");
 
+        cx.background_executor.advance_clock(*ANIMATION_DURATION);
+        frame(cx);
         cx.update(|window, cx| window.close_dialog(cx));
         frame(cx);
         cx.simulate_click(backdrop_point, gpui::Modifiers::default());
@@ -1438,6 +1370,8 @@ pub(crate) mod tests {
                 .margin_top(px(300.))
                 .entrance(DialogEntrance::Fade)
         });
+        cx.background_executor.advance_clock(*ANIMATION_DURATION);
+        frame(cx);
         cx.update(|window, cx| window.close_dialog(cx));
         frame(cx);
         assert_eq!(
@@ -1454,6 +1388,107 @@ pub(crate) mod tests {
             alpha > 0.0 && alpha < 1.0,
             "the closing surface should fade, but its background is {alpha}"
         );
+    }
+
+    #[gpui::test]
+    fn closing_during_entrance_reverses_from_the_current_sample(cx: &mut TestAppContext) {
+        for entrance in [
+            DialogEntrance::SlideDown,
+            DialogEntrance::Fade,
+            DialogEntrance::FadeSlide,
+        ] {
+            let cx = window(cx, size(px(1000.), px(800.)));
+            cx.update(|_, cx| cx.set_reduce_motion(false));
+            open(cx, move |dialog, _, _| {
+                dialog
+                    .title("Interrupted")
+                    .child("body")
+                    .margin_top(px(300.))
+                    .entrance(entrance)
+            });
+            cx.background_executor
+                .advance_clock(Duration::from_millis(40));
+            frame(cx);
+            let before = surface(cx, 0);
+            let alpha = surface_alpha(cx);
+            assert!(alpha > 0. && alpha < 1.);
+            cx.update(|window, cx| window.close_dialog(cx));
+            frame(cx);
+            assert_eq!(surface(cx, 0), before, "{entrance:?} jumped on close");
+            assert!((surface_alpha(cx) - alpha).abs() < 0.001);
+            cx.background_executor
+                .advance_clock(Duration::from_millis(20));
+            frame(cx);
+            assert!(surface_alpha(cx) < alpha);
+            assert!(surface(cx, 0).top() <= before.top());
+        }
+    }
+
+    #[gpui::test]
+    fn exiting_content_rejects_clicks_focus_and_text_input(cx: &mut TestAppContext) {
+        use crate::input::{Input, InputState};
+        use gpui::Focusable as _;
+
+        for deferred in [false, true] {
+            let cx = window(cx, size(px(1000.), px(800.)));
+            let input = cx.update(|window, cx| cx.new(|cx| InputState::new(window, cx)));
+            let clicks = Rc::new(Cell::new(0));
+            let counter = clicks.clone();
+            let field = input.clone();
+            cx.update(|_, cx| cx.set_reduce_motion(false));
+            open(cx, move |dialog, _, _| {
+                let counter = counter.clone();
+                dialog
+                    .title("Form")
+                    .child(
+                        div()
+                            .debug_selector(|| "exit-input".into())
+                            .child(Input::new(&field)),
+                    )
+                    .footer(
+                        div().debug_selector(|| "exit-button".into()).child(
+                            Button::new("custom")
+                                .label("Custom action")
+                                .w_full()
+                                .on_click(move |_, _, _| counter.set(counter.get() + 1)),
+                        ),
+                    )
+            });
+            cx.background_executor.advance_clock(*ANIMATION_DURATION);
+            frame(cx);
+            let button = cx.debug_bounds("exit-button").unwrap().center();
+            cx.simulate_click(button, gpui::Modifiers::default());
+            assert_eq!(clicks.get(), 1);
+            cx.update(|window, cx| input.focus_handle(cx).focus(window, cx));
+            cx.simulate_input("before");
+            assert_eq!(input.read_with(cx, |input, _| input.value()), "before");
+            cx.update(|window, cx| {
+                if deferred {
+                    Dialog::defer_close_dialog(window, cx);
+                } else {
+                    window.close_dialog(cx);
+                }
+            });
+            frame(cx);
+            let button = cx.debug_bounds("exit-button").unwrap().center();
+            cx.simulate_click(button, gpui::Modifiers::default());
+            assert_eq!(clicks.get(), 1, "a closing footer button ran its callback");
+            let field = cx.debug_bounds("exit-input").unwrap().center();
+            cx.simulate_click(field, gpui::Modifiers::default());
+            cx.simulate_input("after");
+            assert_eq!(input.read_with(cx, |input, _| input.value()), "before");
+            for key in ["tab", "shift-tab"] {
+                cx.simulate_keystrokes(key);
+                frame(cx);
+                cx.update(|window, cx| assert!(!input.focus_handle(cx).is_focused(window)));
+            }
+            // Keyboard/a11y focus requests must not revive the exiting scope.
+            cx.update(|window, cx| input.focus_handle(cx).focus(window, cx));
+            frame(cx);
+            cx.update(|window, cx| assert!(!input.focus_handle(cx).is_focused(window)));
+            cx.simulate_input("after");
+            assert_eq!(input.read_with(cx, |input, _| input.value()), "before");
+        }
     }
 
     /// The most opaque background painted at the surface's current bounds.
