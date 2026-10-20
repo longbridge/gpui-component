@@ -205,6 +205,12 @@ Dock:
     zh-HK: 展開
     zh-TW: 展開
     it: Espandi
+  Unavailable Panel:
+    en: This panel isn’t available in this version.
+    zh-CN: 当前版本无法显示该面板。
+    zh-HK: 目前版本無法顯示此面板。
+    zh-TW: 目前版本無法顯示此面板。
+    it: Questo pannello non è disponibile in questa versione.
 ColorPicker:
   Palette:
     en: Palette
