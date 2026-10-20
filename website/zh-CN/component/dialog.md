@@ -142,7 +142,7 @@ window.open_dialog(cx, |dialog, _, _| {
 });
 ```
 
-`Fade` 和 `FadeSlide` 使用主题的普通动画时长及入场缓动。`FadeSlide` 在完成窗口边界定位后施加偏移，移动距离不会超过弹窗上方的可用空间。启用 reduced motion 时，所有方式都会立即显示最终状态。所有方式均保持立即关闭。
+`Fade` 和 `FadeSlide` 使用主题的普通动画时长及入场缓动。`FadeSlide` 在完成窗口边界定位后施加偏移，移动距离不会超过弹窗上方的可用空间。启用 reduced motion 时，所有方式都会立即显示最终状态。关闭时会反向播放弹窗的位移，并让弹窗与遮罩一起淡出；启用 reduced motion 或使用 `None` 时仍然立即关闭。
 
 ### 操作按钮
 
