@@ -2823,11 +2823,16 @@ impl<M: InputModeKind> Element for TextElement<M> {
             // visible lines have already been shaped, so keep their widest
             // measured width as a lower bound. Caching it with the candidate
             // keeps the scroll extent stable while scrolling the line away.
-            let widest_laid_out_line = lines
-                .iter()
-                .map(|line| line.longest_width)
-                .max()
-                .unwrap_or(px(0.));
+            // Empty inputs lay out the placeholder, which is not scrollable content.
+            let widest_laid_out_line = if is_empty {
+                px(0.)
+            } else {
+                lines
+                    .iter()
+                    .map(|line| line.longest_width)
+                    .max()
+                    .unwrap_or(px(0.))
+            };
 
             let longest_row = state.display_map.longest_row();
             let longest_line = state.text.slice_line(longest_row);
@@ -4068,6 +4073,28 @@ mod tests {
             "scrolling to the end ({offset:?}) leaves the caret at {caret:?} past {:?}",
             input_bounds.right()
         );
+    }
+
+    #[gpui::test]
+    fn horizontal_scroll_extent_excludes_placeholder(cx: &mut TestAppContext) {
+        let (editor, window) = decoration_editor(cx, "", false);
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            let empty_width = editor.read(cx).scroll_size.width;
+
+            for placeholder in ["W".repeat(300), "Short hint".to_string()] {
+                editor.update(cx, |state, cx| {
+                    state.set_placeholder(placeholder, window, cx);
+                });
+                window.draw(cx).clear(cx);
+                assert_eq!(
+                    editor.read(cx).scroll_size.width,
+                    empty_width,
+                    "placeholder must not create horizontal scrollable content"
+                );
+            }
+        });
     }
 
     #[gpui::test]
