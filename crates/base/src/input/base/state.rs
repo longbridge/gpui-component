@@ -631,7 +631,7 @@ impl InputAccessibility {
         self.accessibility_id.as_ref()
     }
 
-    pub fn is_value_exposed(&self) -> bool {
+    pub fn value_exposed(&self) -> bool {
         self.value_exposed
     }
 }
