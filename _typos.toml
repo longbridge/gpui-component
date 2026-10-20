@@ -1,5 +1,12 @@
 [default]
-extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
+# The v0.8.0 release notes credit two contributors whose GitHub handles the
+# tokenizer reads as misspelled words; ignoring the exact handles keeps the
+# rest of the file checked.
+extend-ignore-re = [
+    '\\u\{[0-9A-Fa-f]+\}',
+    '@UncertaintyDeterminesYou4ndMe',
+    '@alex-vas',
+]
 
 [default.extend-words]
 # Official Lucide icon name for the astroid curve.
