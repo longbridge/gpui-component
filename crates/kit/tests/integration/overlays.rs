@@ -84,7 +84,11 @@ impl Render for Workspace {
 
 #[gpui_kit::test]
 async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::init);
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        // Validation and scoped input should not depend on animation progress.
+        cx.set_reduce_motion(true);
+    });
     let (handle, _) = common::open_window(cx, Some(size(px(800.), px(700.))), |window, cx| {
         let view = cx.new(|cx| Workspace {
             saved: cx.new(|cx| InputState::new(window, cx)),
@@ -103,7 +107,7 @@ async fn dialog_validates_scoped_input_saves_and_dismisses_notification(cx: &mut
     })
     .await;
     cx.update_window(handle.into(), |_, window, cx| {
-        let dialog = window.within("dialog").find(0usize).bounds();
+        let dialog = window.within("dialog").find("surface").bounds();
         assert!(dialog.left() >= px(0.) && dialog.right() <= window.viewport_size().width);
         assert!(dialog.top() >= px(0.) && dialog.bottom() <= window.viewport_size().height);
         window.within("dialog").click("ok", cx);
