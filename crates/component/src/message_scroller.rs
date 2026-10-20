@@ -342,9 +342,19 @@ impl RenderOnce for MessageScroller {
         // GPUI's `list` lays rows out at the full list width and offsets them
         // only by vertical padding, so the horizontal component of the list
         // style must be carried by every row wrapper instead.
+        //
+        // The vertical padding rides on the rows as well. A list measures its
+        // scroll extent from its items alone, so a list that carries padding
+        // of its own reports a scroll range that stops short of its end: the
+        // scrollbar thumb can never reach the last row, the tail never
+        // resumes, and the list never reports itself as scrolled to the end.
+        // Padding on the rows is part of the content, so the extent covers
+        // it.
         let mut list_style = self.list_style;
         let row_inset_left = list_style.padding.left.take();
         let row_inset_right = list_style.padding.right.take();
+        let row_inset_top = list_style.padding.top.take();
+        let row_inset_bottom = list_style.padding.bottom.take();
 
         // Read the count outside the row closure: the list holds a mutable
         // borrow of its state while rendering rows, so the closure must not
@@ -355,9 +365,15 @@ impl RenderOnce for MessageScroller {
                 .w_full()
                 .min_w_0()
                 .px_3()
-                // Spacing between rows only, like a CSS gap: the list's own
-                // bottom padding owns the gap after the last row.
+                // Spacing between rows only, like a CSS gap: the last row's
+                // own bottom padding owns the gap after it.
                 .when(index + 1 < item_count, |this| this.pb_8())
+                // The list's own vertical padding, carried by the first and
+                // the last row.
+                .when(index == 0, |this| this.pt_2())
+                .when(index + 1 == item_count, |this| this.pb_2())
+                .when_some(row_inset_top, |this, top| this.pt(top))
+                .when_some(row_inset_bottom, |this, bottom| this.pb(bottom))
                 .when_some(row_inset_left, |this, left| this.pl(left))
                 .when_some(row_inset_right, |this, right| this.pr(right))
                 .refine_style(&row_style)
@@ -366,7 +382,6 @@ impl RenderOnce for MessageScroller {
         })
         .size_full()
         .min_h_0()
-        .py_2()
         .refine_style(&list_style);
 
         let viewport = div()
@@ -551,6 +566,54 @@ mod tests {
             (after_wheel.item_ix, after_wheel.offset_in_item),
             (11, px(0.))
         );
+    }
+
+    /// A scrollbar drag to the bottom of the track must reach the end of the
+    /// content: the thumb's range is the list's scroll extent, and an extent
+    /// that stops short of the end leaves the reader above the last row,
+    /// with the tail-follow off and the jump button showing.
+    #[gpui::test]
+    fn the_scrollbar_drag_range_reaches_the_end_of_the_content(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.new(|cx| MessageScrollerState::new(10, cx));
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            move |_, _| ScrollerHarness { state }
+        });
+        let draw = |cx: &mut gpui::VisualTestContext| {
+            cx.run_until_parked();
+            cx.update(|window, cx| {
+                _ = window.draw(cx);
+            });
+        };
+        draw(cx);
+
+        // Drag the thumb to the bottom of the track: the scrollbar maps that
+        // to the largest offset it reports for the list.
+        cx.update(|_, cx| {
+            let list_state = state.read(cx).list_state.clone();
+            list_state.scrollbar_drag_started();
+            let max = list_state.max_offset_for_scrollbar().y;
+            list_state.set_offset_from_scrollbar(gpui::point(px(0.), -max));
+            list_state.scrollbar_drag_ended();
+        });
+
+        cx.update(|_, cx| {
+            let list_state = state.read(cx).list_state.clone();
+            assert_eq!(
+                list_state.is_scrolled_to_end(),
+                Some(true),
+                "the drag must land on the end of the content"
+            );
+            assert!(
+                list_state.is_following_tail(),
+                "the drag to the end must resume the tail"
+            );
+            assert!(
+                !state.read(cx).is_scrolled_up(),
+                "the jump-to-latest button must hide at the end of the content"
+            );
+        });
     }
 
     #[gpui::test]
