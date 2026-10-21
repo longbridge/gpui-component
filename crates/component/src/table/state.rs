@@ -16,7 +16,7 @@ use gpui::{
     AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, ElementId, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
     MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
+    StatefulInteractiveElement as _, Styled, Task, TextAlign, UniformListScrollHandle, Window, div,
     prelude::FluentBuilder, px, uniform_list,
 };
 use rust_i18n::t;
@@ -1524,6 +1524,13 @@ where
             .overflow_hidden()
             .whitespace_nowrap()
             .table_cell_size(self.options.size)
+            // Text alignment is inherited, so this aligns the header name and
+            // the delegate's cell text without changing how cells lay out.
+            .map(|this| match col_group.column.align {
+                TextAlign::Center => this.text_center(),
+                TextAlign::Right => this.text_right(),
+                _ => this,
+            })
             .map(|this| match col_padding {
                 Some(padding) => this
                     .pl(padding.left)
