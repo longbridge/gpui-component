@@ -369,11 +369,17 @@ impl RenderOnce for MessageScroller {
                 // own bottom padding owns the gap after it.
                 .when(index + 1 < item_count, |this| this.pb_8())
                 // The list's own vertical padding, carried by the first and
-                // the last row.
-                .when(index == 0, |this| this.pt_2())
-                .when(index + 1 == item_count, |this| this.pb_2())
-                .when_some(row_inset_top, |this, top| this.pt(top))
-                .when_some(row_inset_bottom, |this, bottom| this.pb(bottom))
+                // the last row. A custom padding replaces the default on the
+                // row that carries it; it must not reach the rows between
+                // them, or every message would carry the list's padding.
+                .when(index == 0, |this| match row_inset_top {
+                    Some(top) => this.pt(top),
+                    None => this.pt_2(),
+                })
+                .when(index + 1 == item_count, |this| match row_inset_bottom {
+                    Some(bottom) => this.pb(bottom),
+                    None => this.pb_2(),
+                })
                 .when_some(row_inset_left, |this, left| this.pl(left))
                 .when_some(row_inset_right, |this, right| this.pr(right))
                 .refine_style(&row_style)
@@ -614,6 +620,96 @@ mod tests {
                 "the jump-to-latest button must hide at the end of the content"
             );
         });
+    }
+
+    struct PaddedScrollerHarness {
+        state: Entity<MessageScrollerState>,
+        list_style: StyleRefinement,
+    }
+
+    impl gpui::Render for PaddedScrollerHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size(px(400.)).child(
+                MessageScroller::new("messages", self.state.clone(), |_, _, _| div().h(px(40.)))
+                    .scrollbar(false)
+                    .jump_button(false)
+                    .with_list_style(self.list_style.clone()),
+            )
+        }
+    }
+
+    /// A custom list padding must ride on the first and the last row, the
+    /// way the list's own padding does. Carried by every row it would give
+    /// every message the list's padding instead of giving it to the list.
+    #[gpui::test]
+    fn a_custom_list_padding_rides_on_the_first_and_the_last_row(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+
+        let first = cx.new(|cx| MessageScrollerState::new(10, cx));
+        let second = cx.new(|cx| MessageScrollerState::new(10, cx));
+        let third = cx.new(|cx| MessageScrollerState::new(10, cx));
+
+        let (_, first_cx) = cx.add_window_view({
+            let state = first.clone();
+            move |_, _| PaddedScrollerHarness {
+                state,
+                list_style: StyleRefinement::default().pt(px(20.)).pb(px(40.)),
+            }
+        });
+        let (_, second_cx) = cx.add_window_view({
+            let state = second.clone();
+            move |_, _| PaddedScrollerHarness {
+                state,
+                list_style: StyleRefinement::default().pt(px(20.)).pb(px(20.)),
+            }
+        });
+        let (_, third_cx) = cx.add_window_view({
+            let state = third.clone();
+            move |_, _| PaddedScrollerHarness {
+                state,
+                list_style: StyleRefinement::default().pt(px(40.)).pb(px(20.)),
+            }
+        });
+
+        let draw = |context: &mut gpui::VisualTestContext| {
+            context.run_until_parked();
+            context.update(|window, cx| {
+                _ = window.draw(cx);
+            });
+        };
+        draw(&mut first_cx);
+        draw(&mut second_cx);
+        draw(&mut third_cx);
+
+        let extent = |state: &Entity<MessageScrollerState>,
+                      context: &mut gpui::VisualTestContext| {
+            context.update(|_, cx| {
+                state
+                    .read(cx)
+                    .list_state
+                    .clone()
+                    .max_offset_for_scrollbar()
+                    .y
+            })
+        };
+
+        let first_extent = extent(&first, &mut first_cx);
+        let second_extent = extent(&second, &mut second_cx);
+        let third_extent = extent(&third, &mut third_cx);
+
+        // The bottom inset rides on the last row only, so the content grows
+        // by the difference between the two bottom insets, not once per row.
+        assert_eq!(
+            first_extent - second_extent,
+            px(20.),
+            "the bottom inset must ride on the last row only"
+        );
+        // The top inset rides on the first row only.
+        assert_eq!(
+            third_extent - second_extent,
+            px(20.),
+            "the top inset must ride on the first row only"
+        );
     }
 
     #[gpui::test]
