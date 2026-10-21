@@ -17,7 +17,9 @@ use super::{
     DiffAnnotation, DiffConflictResolution, DiffFile, DiffFileStatus, DiffInlineUnit,
     DiffLinePosition, DiffLineRange, DiffMode, DiffSide,
     conflict::ConflictPart,
-    presentation::{FilePresentation, PresentationOptions, SyntaxHighlighters},
+    presentation::{
+        DiffSyntaxHighlighter, FilePresentation, PresentationOptions, SyntaxHighlighters,
+    },
     selection::SelectionGeometry,
 };
 
@@ -225,6 +227,7 @@ pub struct DiffState {
     selection_cursor: Option<DiffLinePosition>,
     selecting: bool,
     presentation_options: PresentationOptions,
+    syntax_highlighter: Option<DiffSyntaxHighlighter>,
     presentations: Vec<Option<Arc<FilePresentation>>>,
     viewport: Size<Pixels>,
     layout: Option<LayoutKey>,
@@ -359,6 +362,7 @@ impl DiffState {
                 inline_max_line_length: 1000,
                 syntax_max_line_length: 1000,
             },
+            syntax_highlighter: None,
             viewport: Size::default(),
             layout: None,
             content_width: px(0.),
@@ -424,6 +428,29 @@ impl DiffState {
         self.presentation_options.syntax_max_line_length = length;
         self.reset_presentation();
         self
+    }
+
+    /// Highlights syntax with the application's highlighter instead of GPUI
+    /// Kit's. See [`DiffSyntaxHighlighter`].
+    pub fn with_syntax_highlighter(mut self, highlighter: DiffSyntaxHighlighter) -> Self {
+        self.syntax_highlighter = Some(highlighter);
+        self.reset_presentation();
+        self
+    }
+
+    /// Replaces the application's highlighter, or returns to GPUI Kit's with
+    /// `None`, preparing syntax again without resetting selection or scrolling.
+    /// Set a new highlighter when its colors change, since the styles it
+    /// returned are kept.
+    pub fn set_syntax_highlighter(
+        &mut self,
+        highlighter: Option<DiffSyntaxHighlighter>,
+        cx: &mut Context<Self>,
+    ) {
+        self.syntax_highlighter = highlighter;
+        self.reset_presentation();
+        self.ensure_presentation(cx);
+        cx.notify();
     }
 
     /// Changes the number of lines each disclosure reveals, preserving selection and scrolling.
@@ -1391,17 +1418,20 @@ impl DiffState {
             return;
         }
         let options = self.presentation_options;
+        let custom = self.syntax_highlighter.clone();
         self.preparing = Some(generation);
         self._presentation = cx.spawn(async move |this, cx| {
             let mut highlighters = Some(SyntaxHighlighters::default());
             for (ix, file) in pending {
                 let mut moved = highlighters.take();
+                let custom = custom.clone();
                 let (presentation, returned) = cx
                     .background_spawn(async move {
                         let presentation = FilePresentation::prepare(
                             &file,
                             options,
                             moved.get_or_insert_default(),
+                            custom.as_ref(),
                         );
                         (presentation, moved)
                     })

@@ -554,3 +554,48 @@ fn patch_navigation_and_selection_use_supplied_source_coordinates(cx: &mut TestA
     })
     .unwrap();
 }
+
+#[gpui::test]
+fn setting_a_syntax_highlighter_prepares_the_files_again(cx: &mut TestAppContext) {
+    use gpui::{FontWeight, HighlightStyle};
+    use gpui_base::input::HighlightStyleResolver;
+    use std::sync::Arc;
+
+    struct NoTheme;
+    impl HighlightStyleResolver for NoTheme {
+        fn style(&self, _: &str) -> Option<HighlightStyle> {
+            None
+        }
+    }
+    let highlighter = |weight| -> super::DiffSyntaxHighlighter {
+        let style = HighlightStyle {
+            font_weight: Some(weight),
+            ..Default::default()
+        };
+        Arc::new(move |_, text: &str| vec![(0..text.find(' ').unwrap_or(text.len()), style)])
+    };
+    let file = document("let a = 1;\n", "let a = 2;\n").with_language("rust");
+    let state = cx.new(|cx| {
+        DiffState::new([file.clone()], cx).with_syntax_highlighter(highlighter(FontWeight::BOLD))
+    });
+    let weight = |cx: &mut TestAppContext| {
+        state.update(cx, |state, cx| {
+            state.ensure_presentation(cx);
+        });
+        cx.run_until_parked();
+        state.read_with(cx, |state, _| {
+            let presentation = state.presentations()[0].as_ref()?;
+            let line = &file.lines(DiffSide::Modified)[0];
+            presentation
+                .syntax_highlights(line, DiffSide::Modified, 0, &NoTheme)
+                .first()
+                .and_then(|(_, style)| style.font_weight)
+        })
+    };
+    assert_eq!(weight(cx), Some(FontWeight::BOLD));
+
+    state.update(cx, |state, cx| {
+        state.set_syntax_highlighter(Some(highlighter(FontWeight::LIGHT)), cx);
+    });
+    assert_eq!(weight(cx), Some(FontWeight::LIGHT));
+}
