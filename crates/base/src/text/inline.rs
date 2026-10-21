@@ -5,7 +5,10 @@ use std::{
     mem,
     ops::Range,
     rc::Rc,
-    sync::{Arc, Mutex, Weak},
+    sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use gpui::{
@@ -279,8 +282,14 @@ thread_local! {
 }
 
 /// Dead entries (states that were dropped without a final paint, e.g. a
-/// replaced document) are swept once the table grows past this many.
+/// replaced document) are swept once the table grows past this many, or at
+/// the next hand-over after an [`InlineState`] was dropped.
 const RETAINED_SWEEP_AT: usize = 4096;
+
+/// How many [`InlineState`]s were dropped since the table was last swept.
+/// States drop on whichever thread lets go of them last (the background
+/// parse included), so this is a global count rather than part of the table.
+static DROPPED_STATES: AtomicUsize = AtomicUsize::new(0);
 
 fn state_key(state: &Arc<Mutex<InlineState>>) -> usize {
     Arc::as_ptr(state) as usize
@@ -309,11 +318,20 @@ fn has_retained_layout(state: &Arc<Mutex<InlineState>>) -> bool {
 fn retain_layout(state: &Arc<Mutex<InlineState>>, retained: RetainedLayout) {
     RETAINED_LAYOUTS.with(|layouts| {
         let mut layouts = layouts.borrow_mut();
-        if layouts.len() >= RETAINED_SWEEP_AT {
+        if DROPPED_STATES.swap(0, Ordering::Relaxed) > 0 || layouts.len() >= RETAINED_SWEEP_AT {
             layouts.retain(|_, retained| retained.state.strong_count() > 0);
         }
         layouts.insert(state_key(state), retained);
     });
+}
+
+impl Drop for InlineState {
+    fn drop(&mut self) {
+        // Its retained layout, if any, is dead now: sweep at the next
+        // hand-over instead of keeping its shaped lines until the table
+        // fills up.
+        DROPPED_STATES.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 impl InlineState {
@@ -2631,5 +2649,46 @@ mod retained_layout_tests {
                 .count()
         });
         assert_eq!(alive, 3, "one live layout per remaining fragment");
+    }
+
+    /// A text view that is dropped (a closed document, a list row that is
+    /// gone) gives its shaped text back at the next frame, rather than once
+    /// the table has filled up with thousands of paragraphs.
+    #[gpui::test]
+    fn dropping_a_text_view_releases_its_layouts(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let paragraphs = (0..40)
+            .map(|index| format!("Paragraph {index} of the old document."))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (view, cx) = cx.add_window_view(|_, cx| Once {
+            state: cx.new(|cx| TextViewState::markdown(&paragraphs, cx)),
+        });
+        cx.run_until_parked();
+        for _ in 0..2 {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+
+        view.update(cx, |view, cx| {
+            view.state = cx.new(|cx| TextViewState::markdown("A new document.", cx));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        for _ in 0..2 {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+
+        let (retained, alive) = RETAINED_LAYOUTS.with(|layouts| {
+            let layouts = layouts.borrow();
+            (
+                layouts.len(),
+                layouts
+                    .values()
+                    .filter(|retained| retained.state.strong_count() > 0)
+                    .count(),
+            )
+        });
+        assert_eq!(alive, 1, "the new document's paragraph");
+        assert_eq!(retained, alive, "no layout of the dropped document is left");
     }
 }
