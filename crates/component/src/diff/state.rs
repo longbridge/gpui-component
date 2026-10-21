@@ -7,9 +7,9 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext as _, Context, ElementId, EventEmitter, FocusHandle, Focusable, ListAlignment,
-    ListOffset, ListState, Pixels, ScrollHandle, SharedString, Size, Subscription, Task, Window,
-    WindowId, point, px,
+    App, AppContext as _, Context, ElementId, EventEmitter, FocusHandle, Focusable, HighlightStyle,
+    ListAlignment, ListOffset, ListState, Pixels, ScrollHandle, SharedString, Size, Subscription,
+    Task, Window, WindowId, point, px,
 };
 use gpui_base::{TextSelection, TextSelectionContentKey, TextSelectionEvent, TextSelectionHandle};
 
@@ -431,18 +431,39 @@ impl DiffState {
     }
 
     /// Highlights syntax with the application's highlighter instead of GPUI
-    /// Kit's. See [`DiffSyntaxHighlighter`].
-    pub fn with_syntax_highlighter(mut self, highlighter: DiffSyntaxHighlighter) -> Self {
-        self.syntax_highlighter = Some(highlighter);
+    /// Kit's. Given a file's [language](DiffFile::language) and the source
+    /// text of one side of one hunk, it returns byte ranges into that text
+    /// with their styles; a range that splits a character is ignored.
+    ///
+    /// It runs on the background executor, once for each side of each hunk,
+    /// so an unterminated comment in one hunk cannot color the next. Styles
+    /// are kept as returned rather than resolved against the theme when a line
+    /// paints; set a new highlighter when its colors change.
+    pub fn with_syntax_highlighter<F>(mut self, highlighter: F) -> Self
+    where
+        F: Fn(&str, &str) -> Vec<(Range<usize>, HighlightStyle)> + Send + Sync + 'static,
+    {
+        self.syntax_highlighter = Some(Arc::new(highlighter));
         self.reset_presentation();
         self
     }
 
-    /// Replaces the application's highlighter, or returns to GPUI Kit's with
-    /// `None`, preparing syntax again without resetting selection or scrolling.
-    /// Set a new highlighter when its colors change, since the styles it
-    /// returned are kept.
-    pub fn set_syntax_highlighter(
+    /// Replaces the application's highlighter, preparing syntax again without
+    /// resetting selection or scrolling. See [`Self::with_syntax_highlighter`].
+    pub fn set_syntax_highlighter<F>(&mut self, highlighter: F, cx: &mut Context<Self>)
+    where
+        F: Fn(&str, &str) -> Vec<(Range<usize>, HighlightStyle)> + Send + Sync + 'static,
+    {
+        self.replace_syntax_highlighter(Some(Arc::new(highlighter)), cx);
+    }
+
+    /// Returns to GPUI Kit's highlighter, preparing syntax again without
+    /// resetting selection or scrolling.
+    pub fn clear_syntax_highlighter(&mut self, cx: &mut Context<Self>) {
+        self.replace_syntax_highlighter(None, cx);
+    }
+
+    fn replace_syntax_highlighter(
         &mut self,
         highlighter: Option<DiffSyntaxHighlighter>,
         cx: &mut Context<Self>,

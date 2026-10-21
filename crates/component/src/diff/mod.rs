@@ -13,7 +13,7 @@ mod state;
 pub use conflict::{DiffConflict, DiffConflictResolution};
 pub use document::{DiffFile, DiffFileStatus, DiffLinePosition, DiffLineRange, DiffSide};
 pub use parser::DiffParseError;
-pub use presentation::{DiffInlineUnit, DiffSyntaxHighlighter};
+pub use presentation::DiffInlineUnit;
 pub use state::{DiffEvent, DiffState};
 
 use std::{collections::HashMap, rc::Rc, sync::Arc};

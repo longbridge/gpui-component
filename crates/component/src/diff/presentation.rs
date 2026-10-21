@@ -38,16 +38,9 @@ pub(crate) struct PresentationOptions {
 /// because building one compiles its language's queries.
 pub(crate) type SyntaxHighlighters = HashMap<SharedString, SyntaxHighlighter>;
 
-/// Highlights a [`Diff`](super::Diff) with the application's own highlighter
-/// instead of GPUI Kit's: given a file's [language](DiffFile::language) and
-/// the source text of one side of one hunk, it returns byte ranges into that
-/// text with their styles.
-///
-/// It runs on the background executor, once for each side of each hunk, so
-/// an unterminated comment in one hunk cannot color the next. Styles are
-/// kept as returned rather than resolved against the theme when a line
-/// paints; set a new highlighter when its colors change.
-pub type DiffSyntaxHighlighter =
+/// The application's highlighter, set with
+/// [`DiffState::with_syntax_highlighter`](super::DiffState::with_syntax_highlighter).
+pub(crate) type DiffSyntaxHighlighter =
     Arc<dyn Fn(&str, &str) -> Vec<(Range<usize>, HighlightStyle)> + Send + Sync>;
 
 /// What a syntax span is painted with.
@@ -120,8 +113,13 @@ impl FilePresentation {
                 side,
                 options.syntax_max_line_length,
                 &mut |language, text| match custom {
+                    // A range that splits a character, such as one counted in
+                    // characters rather than bytes, cannot be painted.
                     Some(highlight) => highlight(language, text)
                         .into_iter()
+                        .filter(|(range, _)| {
+                            text.is_char_boundary(range.start) && text.is_char_boundary(range.end)
+                        })
                         .map(|(range, style)| (range, SyntaxPaint::Style(style)))
                         .collect(),
                     None => highlighters
@@ -518,6 +516,29 @@ mod tests {
             Some(&highlighter),
         );
         assert!(styles(&presentation, DiffSide::Modified, 0).is_empty());
+
+        // `é` is two bytes, so 5..6 splits it: counted in characters, not bytes.
+        let file =
+            DiffFile::parse("--- a/a.rs\n+++ b/a.rs\n@@ -1 +1 @@\n-let é = 1;\n+let é = 2;\n")
+                .unwrap()
+                .remove(0);
+        let split: DiffSyntaxHighlighter =
+            Arc::new(move |_, _| vec![(0..3, bold), (5..6, bold), (4..6, bold)]);
+        let presentation = FilePresentation::prepare(
+            &file,
+            OPTIONS,
+            &mut SyntaxHighlighters::default(),
+            Some(&split),
+        );
+        assert_eq!(
+            presentation.syntax_highlights(
+                &file.lines(DiffSide::Modified)[0],
+                DiffSide::Modified,
+                0,
+                &NoTheme
+            ),
+            [(0..3, bold), (4..6, bold)]
+        );
     }
 
     #[cfg(feature = "tree-sitter-rust")]

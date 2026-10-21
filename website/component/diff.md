@@ -291,18 +291,19 @@ renders with line change colors.
 An application that highlights code itself can color the diff the same way with
 `with_syntax_highlighter`, which needs no grammar feature. The function receives
 the file's language and the text of one side of one hunk, and returns byte ranges
-into that text with their styles:
+into that text with their styles; a range that splits a character is ignored:
 
 ```rust
-let highlighter: DiffSyntaxHighlighter = Arc::new(|language, text| {
-    my_highlighter::highlight(language, text)
+let state = cx.new(|cx| {
+    DiffState::new(files, cx).with_syntax_highlighter(|language, text| {
+        my_highlighter::highlight(language, text)
+    })
 });
-let state = cx.new(|cx| DiffState::new(files, cx).with_syntax_highlighter(highlighter));
 ```
 
 It runs on the same background thread, one hunk side at a time. Its styles are
 kept as returned, so call `set_syntax_highlighter` with a new function when its
-colors change, or with `None` to return to the built-in highlighter.
+colors change, or `clear_syntax_highlighter` to return to the built-in highlighter.
 
 Changed lines paired across the two sides also emphasize the words that differ.
 `with_inline_unit(Some(DiffInlineUnit::Character))` compares characters instead,
