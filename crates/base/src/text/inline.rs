@@ -1,6 +1,6 @@
 use gpui::Corners;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     mem,
     ops::Range,
@@ -279,6 +279,8 @@ struct RetainedLayout {
 
 thread_local! {
     static RETAINED_LAYOUTS: RefCell<HashMap<usize, RetainedLayout>> = RefCell::new(HashMap::new());
+    /// [`DROPPED_STATES`] when this thread's table was last swept.
+    static SWEPT_AT_DROPS: Cell<usize> = const { Cell::new(0) };
 }
 
 /// Dead entries (states that were dropped without a final paint, e.g. a
@@ -286,9 +288,10 @@ thread_local! {
 /// the next hand-over after an [`InlineState`] was dropped.
 const RETAINED_SWEEP_AT: usize = 4096;
 
-/// How many [`InlineState`]s were dropped since the table was last swept.
-/// States drop on whichever thread lets go of them last (the background
-/// parse included), so this is a global count rather than part of the table.
+/// How many [`InlineState`]s have been dropped. States drop on whichever
+/// thread lets go of them last (the background parse included), so this is a
+/// global count; each thread's table remembers the count it last swept at
+/// ([`SWEPT_AT_DROPS`]), so that one thread's sweep does not use up another's.
 static DROPPED_STATES: AtomicUsize = AtomicUsize::new(0);
 
 fn state_key(state: &Arc<Mutex<InlineState>>) -> usize {
@@ -318,8 +321,12 @@ fn has_retained_layout(state: &Arc<Mutex<InlineState>>) -> bool {
 fn retain_layout(state: &Arc<Mutex<InlineState>>, retained: RetainedLayout) {
     RETAINED_LAYOUTS.with(|layouts| {
         let mut layouts = layouts.borrow_mut();
-        if DROPPED_STATES.swap(0, Ordering::Relaxed) > 0 || layouts.len() >= RETAINED_SWEEP_AT {
+        // Read before sweeping: a state dropped during the sweep is swept at
+        // the next hand-over.
+        let dropped = DROPPED_STATES.load(Ordering::Relaxed);
+        if dropped != SWEPT_AT_DROPS.get() || layouts.len() >= RETAINED_SWEEP_AT {
             layouts.retain(|_, retained| retained.state.strong_count() > 0);
+            SWEPT_AT_DROPS.set(dropped);
         }
         layouts.insert(state_key(state), retained);
     });
@@ -2532,6 +2539,8 @@ mod retained_layout_tests {
         TestAppContext, Window, div, px,
     };
 
+    use std::sync::{Arc, Mutex};
+
     use super::RETAINED_LAYOUTS;
     use crate::text::{TextView, TextViewState};
 
@@ -2573,6 +2582,51 @@ mod retained_layout_tests {
 
         let retained = RETAINED_LAYOUTS.with(|layouts| layouts.borrow().len());
         assert_eq!(retained, 2, "one layout per paragraph state");
+    }
+
+    fn hand_over(text: &'static str) -> Arc<Mutex<super::InlineState>> {
+        let state = Arc::new(Mutex::new(super::InlineState::default()));
+        super::retain_layout(
+            &state,
+            super::RetainedLayout {
+                state: Arc::downgrade(&state),
+                styled_text: gpui::StyledText::new(text),
+                text: text.into(),
+                runs: Vec::new(),
+                text_style: gpui::TextStyle::default(),
+            },
+        );
+        state
+    }
+
+    /// Tables are per thread and the drop count is global: a hand-over on
+    /// another thread (tests run side by side) must not use up the drops
+    /// that this thread's table still has to sweep.
+    #[test]
+    fn a_sweep_on_another_thread_leaves_this_threads_dead_layouts_to_it() {
+        let dropped = hand_over("dropped");
+        drop(dropped);
+        // The other thread's state outlives this thread's next hand-over, so
+        // its drop does not count as a new one here.
+        let other = std::thread::spawn(|| hand_over("other thread"))
+            .join()
+            .unwrap();
+        let _kept = hand_over("kept");
+        drop(other);
+
+        let (retained, alive) = RETAINED_LAYOUTS.with(|layouts| {
+            let layouts = layouts.borrow();
+            let alive = layouts
+                .values()
+                .filter(|retained| retained.state.strong_count() > 0)
+                .count();
+            (layouts.len(), alive)
+        });
+        assert_eq!(
+            (retained, alive),
+            (1, 1),
+            "only the live state's layout is left"
+        );
     }
 
     struct Once {
@@ -2674,21 +2728,29 @@ mod retained_layout_tests {
             cx.notify();
         });
         cx.run_until_parked();
-        for _ in 0..2 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-        }
 
-        let (retained, alive) = RETAINED_LAYOUTS.with(|layouts| {
-            let layouts = layouts.borrow();
-            (
-                layouts.len(),
-                layouts
+        // The old state drops once nothing holds it (its background parse,
+        // the last frame's elements); the first hand-over after that sweeps
+        // it. Each frame draws the new paragraph, so it hands one over.
+        let count = || {
+            RETAINED_LAYOUTS.with(|layouts| {
+                let layouts = layouts.borrow();
+                let alive = layouts
                     .values()
                     .filter(|retained| retained.state.strong_count() > 0)
-                    .count(),
-            )
-        });
-        assert_eq!(alive, 1, "the new document's paragraph");
-        assert_eq!(retained, alive, "no layout of the dropped document is left");
+                    .count();
+                (layouts.len(), alive)
+            })
+        };
+        let mut frames = 0;
+        while frames < 3 && count() != (1, 1) {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            frames += 1;
+        }
+        assert_eq!(
+            count(),
+            (1, 1),
+            "within {frames} frames only the new document's paragraph is left"
+        );
     }
 }
