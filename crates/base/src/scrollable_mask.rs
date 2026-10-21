@@ -27,10 +27,22 @@ const CLAIM_EPSILON: Pixels = px(0.5);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HorizontalScrollClaim {
     /// When the step was handled.
-    pub at: Instant,
+    at: Instant,
     /// How far the content moved: positive moves it right (reveals what is on
     /// the left), negative moves it left.
-    pub delta_x: Pixels,
+    delta_x: Pixels,
+}
+
+impl HorizontalScrollClaim {
+    /// When the step was handled.
+    pub fn at(&self) -> Instant {
+        self.at
+    }
+
+    /// How far the content moved: positive moves it right, negative moves it left.
+    pub fn delta_x(&self) -> Pixels {
+        self.delta_x
+    }
 }
 
 /// The last scroll step a horizontal [`ScrollableMask`] used to move its
@@ -585,14 +597,14 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
 
                     // Record whether this step actually moves the content
                     // (see [`last_horizontal_scroll_claim`]). The current offset
-                    // is clamped first: the shared offset may sit past the edge
-                    // until the next prepaint.
+                    // is clamped for comparison only: the next offset must use
+                    // the raw value, which may sit past the edge until prepaint.
                     if !delta.x.is_zero() {
                         let axis_max = (scroll_handle.content_size().width
                             - scroll_handle.viewport_bounds().size.width)
                             .max(px(0.));
                         let current = offset.x.clamp(-axis_max, px(0.));
-                        let moved = (current + delta.x).clamp(-axis_max, px(0.)) - current;
+                        let moved = (offset.x + delta.x).clamp(-axis_max, px(0.)) - current;
                         if moved.abs() >= CLAIM_EPSILON {
                             LAST_HORIZONTAL_SCROLL_CLAIM.set(Some(HorizontalScrollClaim {
                                 at: Instant::now(),
@@ -1019,14 +1031,36 @@ mod tests {
         });
         assert!(last_horizontal_scroll_claim().is_none());
 
-        // A swipe that moves the content claims it.
+        // Reversing an overscroll without re-entering the range does not move
+        // content. Seed the transient offset explicitly to avoid a frame clamp.
+        scroll_handle.set_offset(point(px(40.), px(0.)));
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(-10.), px(0.))),
+            ..Default::default()
+        });
+        assert!(last_horizontal_scroll_claim().is_none());
+        assert_eq!(scroll_handle.offset().x, px(30.));
+
+        // Only the part of a step that re-enters the range counts as movement.
         cx.simulate_event(ScrollWheelEvent {
             position: point(px(10.), px(10.)),
             delta: ScrollDelta::Pixels(point(px(-40.), px(0.))),
             ..Default::default()
         });
         let claim = last_horizontal_scroll_claim().expect("a moving step claims");
-        assert_eq!(claim.delta_x, px(-40.));
+        assert_eq!(claim.delta_x(), px(-10.));
+        assert_eq!(scroll_handle.offset().x, px(-10.));
+
+        // Ignored input keeps the last meaningful claim intact.
+        for delta in [point(px(0.), px(-40.)), point(px(-0.25), px(0.))] {
+            cx.simulate_event(ScrollWheelEvent {
+                position: point(px(10.), px(10.)),
+                delta: ScrollDelta::Pixels(delta),
+                ..Default::default()
+            });
+            assert_eq!(last_horizontal_scroll_claim(), Some(claim));
+        }
     }
 
     fn setup_horizontal_area_test<'a>(
