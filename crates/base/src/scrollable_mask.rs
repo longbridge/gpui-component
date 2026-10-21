@@ -1,5 +1,7 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+
+use instant::Instant;
 
 use gpui::{
     App, Axis, BorderStyle, Bounds, ContentMask, Edges, Element, ElementId, GlobalElementId,
@@ -11,6 +13,38 @@ use gpui::{
 use gpui::{Corners, Pixels};
 
 use crate::{AxisExt, OngoingScrollExt as _, ScrollbarHandle, StyledExt as _};
+
+thread_local! {
+    static LAST_HORIZONTAL_SCROLL_CLAIM: Cell<Option<HorizontalScrollClaim>> =
+        const { Cell::new(None) };
+}
+
+/// Offsets closer than this count as unchanged, so a sub-pixel residue left at
+/// an edge does not read as room to scroll.
+const CLAIM_EPSILON: Pixels = px(0.5);
+
+/// A scroll step that a horizontal [`ScrollableMask`] used to move its content.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HorizontalScrollClaim {
+    /// When the step was handled.
+    pub at: Instant,
+    /// How far the content moved: positive moves it right (reveals what is on
+    /// the left), negative moves it left.
+    pub delta_x: Pixels,
+}
+
+/// The last scroll step a horizontal [`ScrollableMask`] used to move its
+/// content, i.e. one that changed the clamped offset rather than pushing
+/// against an edge.
+///
+/// Hosts that put their own pan gesture over GPUI content (e.g. a swipe that
+/// opens a side drawer on mobile) use it to let a horizontal strip such as a
+/// markdown table scroll first: while the strip still has room in the swipe's
+/// direction it claims the swipe; once it reaches that edge the claims stop and
+/// the host may take over. Read on the thread that dispatches input.
+pub fn last_horizontal_scroll_claim() -> Option<HorizontalScrollClaim> {
+    LAST_HORIZONTAL_SCROLL_CLAIM.get()
+}
 
 /// Default element id for a mask: the call site, so two masks built in
 /// different places never share their per-gesture axis lock.
@@ -549,6 +583,24 @@ impl<H: ScrollbarHandle + Clone> Element for ScrollableMask<H> {
                         return;
                     }
 
+                    // Record whether this step actually moves the content
+                    // (see [`last_horizontal_scroll_claim`]). The current offset
+                    // is clamped first: the shared offset may sit past the edge
+                    // until the next prepaint.
+                    if !delta.x.is_zero() {
+                        let axis_max = (scroll_handle.content_size().width
+                            - scroll_handle.viewport_bounds().size.width)
+                            .max(px(0.));
+                        let current = offset.x.clamp(-axis_max, px(0.));
+                        let moved = (current + delta.x).clamp(-axis_max, px(0.)) - current;
+                        if moved.abs() >= CLAIM_EPSILON {
+                            LAST_HORIZONTAL_SCROLL_CLAIM.set(Some(HorizontalScrollClaim {
+                                at: Instant::now(),
+                                delta_x: moved,
+                            }));
+                        }
+                    }
+
                     offset.x += delta.x;
 
                     // NOTE: `set_offset` does not clamp (clamping happens in
@@ -941,6 +993,40 @@ mod tests {
         });
 
         assert_eq!(scroll_handle.offset().x, px(-40.));
+    }
+
+    #[gpui::test]
+    fn horizontal_scroll_area_claims_only_steps_that_move(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            move |_, _| HorizontalScrollAreaTest {
+                scroll_handle: scroll_handle.clone(),
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        // At the left edge, a swipe toward the start has no room: no claim.
+        LAST_HORIZONTAL_SCROLL_CLAIM.set(None);
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(40.), px(0.))),
+            ..Default::default()
+        });
+        assert!(last_horizontal_scroll_claim().is_none());
+
+        // A swipe that moves the content claims it.
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(-40.), px(0.))),
+            ..Default::default()
+        });
+        let claim = last_horizontal_scroll_claim().expect("a moving step claims");
+        assert_eq!(claim.delta_x, px(-40.));
     }
 
     fn setup_horizontal_area_test<'a>(
