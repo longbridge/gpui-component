@@ -247,6 +247,20 @@ Diff::new(&self.diff)
 启用相应的 Cargo grammar feature，例如 `tree-sitter-rust`；`tree-sitter-languages`
 包含全部内置语法；也可以改用更轻量的 `syntect` feature，见 [Editor](editor.md)。未启用 grammar 时仍显示已有代码和整行变更颜色。
 
+应用自己做语法高亮时，可以用 `with_syntax_highlighter` 让 Diff 使用同一套高亮，不需要启用任何 grammar feature。
+这个函数接收文件的语言和某个 hunk 一侧的文本，返回该文本内的字节范围及其样式；切在字符中间的范围会被忽略：
+
+```rust
+let state = cx.new(|cx| {
+    DiffState::new(files, cx).with_syntax_highlighter(|language, text| {
+        my_highlighter::highlight(language, text)
+    })
+});
+```
+
+它在同一个后台线程中运行，每次处理一个 hunk 的一侧。返回的样式会原样保留，因此颜色变化时要用新的函数调用
+`set_syntax_highlighter`；调用 `clear_syntax_highlighter` 则恢复内置高亮。
+
 两侧配对的变更行还会强调不同的单词。`with_inline_unit(Some(DiffInlineUnit::Character))`
 改为按字符比较，`None` 只强调整行。几乎没有相同内容的配对行不做行内强调，因为标出几乎每个单词只会增加干扰。
 
