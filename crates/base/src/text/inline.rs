@@ -1,4 +1,8 @@
+#[cfg(target_family = "wasm")]
+use async_channel::bounded;
 use gpui::Corners;
+#[cfg(not(target_family = "wasm"))]
+use smol::channel::bounded;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -12,15 +16,16 @@ use std::{
 };
 
 use gpui::{
-    App, BorderStyle, Bounds, ClickEvent, CursorStyle, Edges, Element, ElementId, GlobalElementId,
-    Half, HighlightStyle, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId,
-    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, StyledText, TextAlign, TextLayout, TextRun, TextStyle, Window, point, px, quad,
-    size,
+    App, BorderStyle, Bounds, ClickEvent, CursorStyle, Edges, Element, ElementId, Global,
+    GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
+    IntoElement, LayoutId, MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Point, SharedString, StyledText, Task, TextAlign, TextLayout, TextRun,
+    TextStyle, Window, point, px, quad, size,
 };
 
 use crate::{
     GlobalState, TextSelection,
+    async_util::Sender,
     input::Selection,
     text::TextViewMultiClickKind,
     text::node::LinkMark,
@@ -240,7 +245,7 @@ pub(super) struct Inline {
 }
 
 /// The inline text state, used RefCell to keep the selection state.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub(crate) struct InlineState {
     /// The text that actually rendering, matched with selection.
     pub(super) text: SharedString,
@@ -249,6 +254,16 @@ pub(crate) struct InlineState {
     /// the leaf reports its geometry to the collector installed by
     /// `editor_host::collect_leaf_geometry`. `None` for every plain `TextView`.
     pub(crate) editor_key: Option<u64>,
+    /// UI owners of retained layouts; cleanup metadata is not document state.
+    pub(super) cleanup_senders: Vec<Sender<()>>,
+}
+
+impl PartialEq for InlineState {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+            && self.selection == other.selection
+            && self.editor_key == other.editor_key
+    }
 }
 
 /// One frame's [`StyledText`], kept for the next frame's [`Inline`] of the
@@ -284,8 +299,8 @@ thread_local! {
 }
 
 /// Dead entries (states that were dropped without a final paint, e.g. a
-/// replaced document) are swept once the table grows past this many, or at
-/// the next hand-over after an [`InlineState`] was dropped.
+/// replaced document) are swept once the table grows past this many, or by
+/// the UI cleanup task after an [`InlineState`] was dropped.
 const RETAINED_SWEEP_AT: usize = 4096;
 
 /// How many [`InlineState`]s have been dropped. States drop on whichever
@@ -293,6 +308,41 @@ const RETAINED_SWEEP_AT: usize = 4096;
 /// global count; each thread's table remembers the count it last swept at
 /// ([`SWEPT_AT_DROPS`]), so that one thread's sweep does not use up another's.
 static DROPPED_STATES: AtomicUsize = AtomicUsize::new(0);
+
+struct RetainedLayoutCleanup {
+    sender: Sender<()>,
+    _task: Task<()>,
+}
+
+impl Global for RetainedLayoutCleanup {}
+
+impl Drop for RetainedLayoutCleanup {
+    fn drop(&mut self) {
+        // Release the local task's channel waker on its owning thread before
+        // cancelling it. Another app's drops must not wake a retired executor.
+        self.sender.close();
+    }
+}
+
+pub(super) fn init(cx: &mut App) {
+    if cx.has_global::<RetainedLayoutCleanup>() {
+        return;
+    }
+    sweep_retained_layouts();
+
+    // One pending notification is enough to sweep every dead entry. In
+    // particular, closing a document must not require another Inline to draw.
+    let (sender, receiver) = bounded(1);
+    let task = cx.foreground_executor().spawn(async move {
+        while receiver.recv().await.is_ok() {
+            sweep_retained_layouts();
+        }
+    });
+    cx.set_global(RetainedLayoutCleanup {
+        sender,
+        _task: task,
+    });
+}
 
 fn state_key(state: &Arc<Mutex<InlineState>>) -> usize {
     Arc::as_ptr(state) as usize
@@ -318,26 +368,50 @@ fn has_retained_layout(state: &Arc<Mutex<InlineState>>) -> bool {
     RETAINED_LAYOUTS.with(|layouts| layouts.borrow().contains_key(&state_key(state)))
 }
 
-fn retain_layout(state: &Arc<Mutex<InlineState>>, retained: RetainedLayout) {
+fn sweep_retained_layouts() {
     RETAINED_LAYOUTS.with(|layouts| {
         let mut layouts = layouts.borrow_mut();
-        // Read before sweeping: a state dropped during the sweep is swept at
-        // the next hand-over.
-        let dropped = DROPPED_STATES.load(Ordering::Relaxed);
+        // Read before sweeping: a state dropped during the sweep wakes another
+        // cleanup and must not be acknowledged by this pass.
+        let dropped = DROPPED_STATES.load(Ordering::Acquire);
         if dropped != SWEPT_AT_DROPS.get() || layouts.len() >= RETAINED_SWEEP_AT {
             layouts.retain(|_, retained| retained.state.strong_count() > 0);
             SWEPT_AT_DROPS.set(dropped);
         }
-        layouts.insert(state_key(state), retained);
+    });
+}
+
+fn retain_layout(
+    state: &Arc<Mutex<InlineState>>,
+    retained: RetainedLayout,
+    cleanup: Option<&Sender<()>>,
+) {
+    if let Some(cleanup) = cleanup
+        && let Ok(mut state) = state.lock()
+    {
+        state.cleanup_senders.retain(|sender| !sender.is_closed());
+        if !state
+            .cleanup_senders
+            .iter()
+            .any(|sender| sender.same_channel(cleanup))
+        {
+            state.cleanup_senders.push(cleanup.clone());
+        }
+    }
+    sweep_retained_layouts();
+    RETAINED_LAYOUTS.with(|layouts| {
+        layouts.borrow_mut().insert(state_key(state), retained);
     });
 }
 
 impl Drop for InlineState {
     fn drop(&mut self) {
-        // Its retained layout, if any, is dead now: sweep at the next
-        // hand-over instead of keeping its shaped lines until the table
-        // fills up.
-        DROPPED_STATES.fetch_add(1, Ordering::Relaxed);
+        // A state can drop on the parser thread after its last frame. Wake
+        // the UI owners even when there will be no further layout hand-over.
+        DROPPED_STATES.fetch_add(1, Ordering::Release);
+        for sender in &self.cleanup_senders {
+            _ = sender.try_send(());
+        }
     }
 }
 
@@ -475,7 +549,7 @@ impl Inline {
     /// frame (the same document shown twice), this one keeps its own: the
     /// table holds one layout per state, and an element must never be left
     /// to paint without its shaped text.
-    fn retain_styled_text(&mut self) {
+    fn retain_styled_text(&mut self, cx: &App) {
         if self.handed_over || self.retained_key.is_none() || has_retained_layout(&self.state) {
             return;
         }
@@ -491,6 +565,8 @@ impl Inline {
                 runs,
                 text_style,
             },
+            cx.try_global::<RetainedLayoutCleanup>()
+                .map(|cleanup| &cleanup.sender),
         );
         self.handed_over = true;
     }
@@ -1014,7 +1090,7 @@ impl Element for Inline {
         self.request_reveal(window);
 
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-        self.retain_styled_text();
+        self.retain_styled_text(cx);
         hitbox
     }
 
@@ -1275,7 +1351,7 @@ impl Element for Inline {
         }
 
         drop(state);
-        self.retain_styled_text();
+        self.retain_styled_text(cx);
     }
 }
 
@@ -2584,7 +2660,10 @@ mod retained_layout_tests {
         assert_eq!(retained, 2, "one layout per paragraph state");
     }
 
-    fn hand_over(text: &'static str) -> Arc<Mutex<super::InlineState>> {
+    fn hand_over(
+        text: &'static str,
+        cleanup: Option<&crate::async_util::Sender<()>>,
+    ) -> Arc<Mutex<super::InlineState>> {
         let state = Arc::new(Mutex::new(super::InlineState::default()));
         super::retain_layout(
             &state,
@@ -2595,6 +2674,7 @@ mod retained_layout_tests {
                 runs: Vec::new(),
                 text_style: gpui::TextStyle::default(),
             },
+            cleanup,
         );
         state
     }
@@ -2604,14 +2684,14 @@ mod retained_layout_tests {
     /// that this thread's table still has to sweep.
     #[test]
     fn a_sweep_on_another_thread_leaves_this_threads_dead_layouts_to_it() {
-        let dropped = hand_over("dropped");
+        let dropped = hand_over("dropped", None);
         drop(dropped);
         // The other thread's state outlives this thread's next hand-over, so
         // its drop does not count as a new one here.
-        let other = std::thread::spawn(|| hand_over("other thread"))
+        let other = std::thread::spawn(|| hand_over("other thread", None))
             .join()
             .unwrap();
-        let _kept = hand_over("kept");
+        let _kept = hand_over("kept", None);
         drop(other);
 
         let (retained, alive) = RETAINED_LAYOUTS.with(|layouts| {
@@ -2627,6 +2707,25 @@ mod retained_layout_tests {
             (1, 1),
             "only the live state's layout is left"
         );
+    }
+
+    #[gpui::test]
+    fn a_background_drop_releases_layouts_without_another_hand_over(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| {
+            hand_over(
+                "last paragraph",
+                Some(&cx.global::<super::RetainedLayoutCleanup>().sender),
+            )
+        });
+        assert_eq!(RETAINED_LAYOUTS.with(|layouts| layouts.borrow().len()), 1);
+
+        cx.background_executor
+            .spawn(async move { drop(state) })
+            .detach();
+        cx.run_until_parked();
+
+        assert!(RETAINED_LAYOUTS.with(|layouts| layouts.borrow().is_empty()));
     }
 
     struct Once {
@@ -2751,6 +2850,49 @@ mod retained_layout_tests {
             count(),
             (1, 1),
             "within {frames} frames only the new document's paragraph is left"
+        );
+    }
+
+    struct Removable {
+        state: Option<Entity<TextViewState>>,
+    }
+
+    impl Render for Removable {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(300.))
+                .children(self.state.as_ref().map(TextView::new))
+        }
+    }
+
+    #[gpui::test]
+    fn closing_the_last_text_view_releases_its_layouts(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let paragraphs = (0..40)
+            .map(|index| format!("Paragraph {index} of the closed document."))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (view, cx) = cx.add_window_view(|_, cx| Removable {
+            state: Some(cx.new(|cx| TextViewState::markdown(&paragraphs, cx))),
+        });
+        cx.run_until_parked();
+        for _ in 0..2 {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+        assert_eq!(RETAINED_LAYOUTS.with(|layouts| layouts.borrow().len()), 40);
+
+        view.update(cx, |view, cx| {
+            view.state = None;
+            cx.notify();
+        });
+        for _ in 0..3 {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.run_until_parked();
+        }
+
+        assert!(
+            RETAINED_LAYOUTS.with(|layouts| layouts.borrow().is_empty()),
+            "closing the last document must not need another text layout to release it"
         );
     }
 }
