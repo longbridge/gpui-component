@@ -520,6 +520,9 @@ pub struct InputBaseState<M: InputModeKind> {
     /// freeze in a different place.
     projected_editor_style: InputEditorStyle,
     accessibility: Option<InputAccessibility>,
+    /// What paints in place of Base's editor scrollbar, when a consumer
+    /// supplies its own.
+    pub(super) scrollbar_renderer: Option<crate::input::EditorScrollbarRenderer>,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -997,6 +1000,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             editor_style: InputEditorStyle::default(),
             projected_editor_style: InputEditorStyle::default(),
             accessibility: None,
+            scrollbar_renderer: None,
             diagnostic_popover: None,
             context_menu_handler: None,
             pending_context_menu: None,
@@ -1122,6 +1126,20 @@ impl<M: InputModeKind> InputBaseState<M> {
     #[doc(hidden)]
     pub fn set_editor_paddings(&mut self, paddings: Edges<Pixels>) {
         self.editor_paddings = paddings;
+    }
+
+    /// Supply the element painted in place of the editor's scrollbar, or
+    /// `None` to keep Base's. The renderer is called where the editor paints
+    /// its scrollbar, with that frame's [`EditorScrollbarContext`]. Like
+    /// [`Self::set_editor_style`], this does not notify, so it can be called
+    /// while rendering.
+    ///
+    /// [`EditorScrollbarContext`]: crate::input::EditorScrollbarContext
+    pub fn set_scrollbar_renderer(
+        &mut self,
+        renderer: Option<crate::input::EditorScrollbarRenderer>,
+    ) {
+        self.scrollbar_renderer = renderer;
     }
 
     pub fn apply_highlighter_fold_candidates(

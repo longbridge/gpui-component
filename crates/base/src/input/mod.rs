@@ -63,6 +63,7 @@ mod movement;
 mod native;
 #[path = "base/rope_ext.rs"]
 mod rope_ext;
+mod scrollbar_presentation;
 #[path = "editor/search.rs"]
 mod search;
 #[path = "base/selection.rs"]
@@ -70,6 +71,7 @@ mod selection;
 #[path = "base/state.rs"]
 mod state;
 mod textarea;
+pub use scrollbar_presentation::{EditorScrollbarContext, EditorScrollbarRenderer};
 #[path = "base/touch.rs"]
 mod touch;
 #[path = "base/undo_manager.rs"]

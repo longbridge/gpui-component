@@ -262,15 +262,31 @@ impl<M: InputModeKind> Element for EditorScrollbar<M> {
             scroll_handle.set_offset(snapshot.cursor_scroll_offset);
         }
 
-        let mut scrollbar = if !snapshot.soft_wrap {
-            Scrollbar::new(&scroll_handle)
+        let renderer = state.scrollbar_renderer.clone();
+        let mut scrollbar = if let Some(renderer) = renderer {
+            let presentation = super::EditorScrollbarContext {
+                handle: scroll_handle,
+                viewport: snapshot.layout.bounds,
+                scroll_viewport: snapshot.layout.scroll_viewport_size,
+                content: snapshot.layout.scroll_size,
+                axis: if snapshot.soft_wrap {
+                    crate::ScrollbarAxis::Vertical
+                } else {
+                    crate::ScrollbarAxis::Both
+                },
+            };
+            renderer(presentation, window, cx)
         } else {
-            Scrollbar::vertical(&scroll_handle)
-        }
-        .viewport_bounds(snapshot.layout.bounds)
-        .scroll_viewport_size(snapshot.layout.scroll_viewport_size)
-        .scroll_size(snapshot.layout.scroll_size)
-        .into_any_element();
+            if !snapshot.soft_wrap {
+                Scrollbar::new(&scroll_handle)
+            } else {
+                Scrollbar::vertical(&scroll_handle)
+            }
+            .viewport_bounds(snapshot.layout.bounds)
+            .scroll_viewport_size(snapshot.layout.scroll_viewport_size)
+            .scroll_size(snapshot.layout.scroll_size)
+            .into_any_element()
+        };
 
         scrollbar.prepaint_as_root(
             snapshot.layout.bounds.origin,
@@ -3812,6 +3828,62 @@ mod tests {
             assert_eq!(
                 state.last_bounds.unwrap().origin.y,
                 text_origin.y + px(stretch)
+            );
+        });
+    }
+
+    /// A scrollbar supplied through `set_scrollbar_renderer` gets the editor's own
+    /// scroll range: its track spans the padded viewport, while the content
+    /// size minus the scroll viewport is exactly how far the editor scrolls.
+    #[gpui::test]
+    fn scrollbar_renderer_receives_the_editors_scroll_range(cx: &mut TestAppContext) {
+        use crate::ScrollbarHandle as _;
+
+        let text = (0..60)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (editor, window) = decoration_editor(cx, &text, true);
+        let presented = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            editor.update(cx, |state, cx| {
+                state.set_scroll_bounce(false, cx);
+                state.set_editor_paddings(Edges {
+                    top: px(10.),
+                    bottom: px(10.),
+                    ..Default::default()
+                });
+                let presented = presented.clone();
+                state.set_scrollbar_renderer(Some(std::rc::Rc::new(move |context, _, _| {
+                    *presented.borrow_mut() = Some(context);
+                    gpui::Empty.into_any_element()
+                })));
+            });
+            window.draw(cx).clear(cx);
+            editor.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &gpui::ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
+                        touch_phase: gpui::TouchPhase::Moved,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+
+            let context: crate::input::EditorScrollbarContext = presented
+                .borrow()
+                .clone()
+                .expect("the editor presents its scrollbar");
+            let track = context.viewport_bounds().size.height;
+            let scroll_viewport = context.scroll_viewport_size().height;
+            assert_eq!(track - scroll_viewport, px(20.));
+            assert_eq!(
+                -context.offset().y,
+                context.content_size().height - scroll_viewport
             );
         });
     }
