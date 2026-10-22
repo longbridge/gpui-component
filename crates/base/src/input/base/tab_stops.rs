@@ -33,7 +33,40 @@ pub(crate) fn expand_tabs(line: &mut ShapedLine, stop: Pixels) {
 
 /// The width of `layout` (shaped from `text`) once its tabs are expanded.
 pub(crate) fn expanded_width(layout: &LineLayout, text: &str, stop: Pixels) -> Pixels {
-    expanded_layout(layout, text, stop).map_or(layout.width, |layout| layout.width)
+    if stop <= px(0.) {
+        return layout.width;
+    }
+
+    layout.width
+        + tab_shifts(layout, text, stop)
+            .last()
+            .map_or(px(0.), |(_, shift)| shift)
+}
+
+/// Cumulative shifts after each tab, in text order.
+fn tab_shifts<'a>(
+    layout: &'a LineLayout,
+    text: &'a str,
+    stop: Pixels,
+) -> impl Iterator<Item = (usize, Pixels)> + 'a {
+    let mut glyphs = layout.runs.iter().flat_map(|run| &run.glyphs).peekable();
+    // Tab boundaries increase monotonically. Keep the cursor between lookups
+    // instead of restarting LineLayout::x_for_index's scan for every tab.
+    let mut x_for_index = move |index| {
+        while glyphs.peek().is_some_and(|glyph| glyph.index < index) {
+            glyphs.next();
+        }
+        glyphs.peek().map_or(layout.width, |glyph| glyph.position.x)
+    };
+
+    text.match_indices('\t')
+        .scan(px(0.), move |shift, (ix, _)| {
+            let start = x_for_index(ix) + *shift;
+            let end = x_for_index(ix + 1) + *shift;
+            let next_stop = stop * ((start / stop).floor() + 1.);
+            *shift += next_stop - end;
+            Some((ix, *shift))
+        })
 }
 
 /// `layout` with its tabs widened, or `None` when it has none to widen.
@@ -42,16 +75,8 @@ fn expanded_layout(layout: &LineLayout, text: &str, stop: Pixels) -> Option<Line
         return None;
     }
 
-    // The total shift of everything after each tab, in text order.
-    let mut shifts: Vec<(usize, Pixels)> = Vec::new();
-    let mut shift = px(0.);
-    for (ix, _) in text.match_indices('\t') {
-        let start = layout.x_for_index(ix) + shift;
-        let end = layout.x_for_index(ix + 1) + shift;
-        let next_stop = stop * ((start / stop).floor() + 1.);
-        shift += next_stop - end;
-        shifts.push((ix, shift));
-    }
+    let shifts: Vec<_> = tab_shifts(layout, text, stop).collect();
+    let shift = shifts.last().map_or(px(0.), |(_, shift)| *shift);
 
     let shift_after = |index: usize| {
         let tabs_before = shifts.partition_point(|&(tab, _)| tab < index);
@@ -174,5 +199,45 @@ mod tests {
             expanded_width(&layout(text, 10., 0.), text, px(40.)),
             px(40.)
         );
+    }
+
+    #[test]
+    fn tab_stops_cross_shaped_runs_and_multibyte_characters() {
+        let text = "é\t中\t\tz\t";
+        let mut shaped = layout(text, 10., 28.);
+        let remaining = shaped.runs[0].glyphs.split_off(3);
+        shaped.runs.push(ShapedRun {
+            font_id: FontId(1),
+            glyphs: remaining,
+        });
+
+        let expanded = expanded_layout(&shaped, text, px(40.)).unwrap();
+        let positions: Vec<_> = expanded
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .map(|glyph| f32::from(glyph.position.x))
+            .collect();
+        assert_eq!(positions, vec![0., 10., 40., 50., 80., 120., 130.]);
+        assert_eq!(expanded.width, px(160.));
+        assert_eq!(expanded_width(&shaped, text, px(40.)), expanded.width);
+        assert_eq!(expanded_width(&shaped, text, px(0.)), shaped.width);
+    }
+
+    #[test]
+    fn expands_long_tab_separated_lines() {
+        let count = 16_384;
+        let text = "\tx".repeat(count);
+        let shaped = layout(&text, 10., 0.);
+        let expected_width = px(count as f32 * 40. + 10.);
+        let expanded = expanded_layout(&shaped, &text, px(40.)).unwrap();
+
+        assert_eq!(expanded.width, expected_width);
+        assert_eq!(expanded_width(&shaped, &text, px(40.)), expected_width);
+        for (ix, glyphs) in expanded.runs[0].glyphs.chunks_exact(2).enumerate() {
+            let tab_start = if ix == 0 { 0. } else { ix as f32 * 40. + 10. };
+            assert_eq!(glyphs[0].position.x, px(tab_start));
+            assert_eq!(glyphs[1].position.x, px((ix + 1) as f32 * 40.));
+        }
     }
 }
