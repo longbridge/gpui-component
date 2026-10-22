@@ -78,12 +78,8 @@ fn plot_appear_easing(t: f32) -> f32 {
     1. - (1. - t).powi(4)
 }
 
-/// How long the scrollbar stays visible after the last scroll, drag, or hover.
-const SCROLLBAR_IDLE: Duration = Duration::from_secs(2);
 /// How long the scrollbar takes to appear.
 const SCROLLBAR_ENTER: Duration = Duration::from_millis(300);
-/// How long the scrollbar takes to fade away once the idle hold expires.
-const SCROLLBAR_EXIT: Duration = Duration::from_millis(500);
 /// How long the thumb takes to reach its hovered or resting width.
 const SCROLLBAR_EXPAND: Duration = Duration::from_millis(300);
 
@@ -129,11 +125,13 @@ fn plot_motion(motion: &MotionTokens) -> gpui_base::PlotMotion {
 ///
 /// Scrolling and track hover reveal a scrollbar by fading it in place. In hover
 /// mode, pointing at the thumb slides it in from the nearest edge as it fades.
-fn scrollbar_motion(mode: ScrollbarMode) -> gpui_base::ScrollbarMotion {
+/// The idle hold and the fade-out come from [`MotionTokens`], so an application
+/// can tune them through [`Theme::update`].
+fn scrollbar_motion(mode: ScrollbarMode, motion: &MotionTokens) -> gpui_base::ScrollbarMotion {
     gpui_base::ScrollbarMotion::default()
-        .with_idle(SCROLLBAR_IDLE)
+        .with_idle(motion.scrollbar_idle)
         .with_enter(SCROLLBAR_ENTER)
-        .with_exit(SCROLLBAR_EXIT)
+        .with_exit(motion.scrollbar_exit)
         .with_expand(SCROLLBAR_EXPAND)
         .with_entrance(gpui_base::ScrollbarEntrance::Fade)
         .with_thumb_hover_entrance(match mode {
@@ -410,7 +408,7 @@ impl Theme {
             tokens: self.semantic_tokens(),
             scrollbar: gpui_base::ScrollbarTheme::new()
                 .with_mode(self.scrollbar_mode)
-                .with_motion(scrollbar_motion(self.scrollbar_mode))
+                .with_motion(scrollbar_motion(self.scrollbar_mode, &self.motion))
                 .with_styles(
                     gpui_base::ScrollbarStyles::default()
                         .track(|style| style.bg(self.scrollbar))
@@ -1046,9 +1044,9 @@ mod base_theme_projection_tests {
 
             Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx);
             let motion = gpui_base::Theme::global(cx).scrollbar.motion();
-            assert_eq!(motion.idle(), SCROLLBAR_IDLE);
+            assert_eq!(motion.idle(), Duration::from_secs(2));
             assert_eq!(motion.enter(), SCROLLBAR_ENTER);
-            assert_eq!(motion.exit(), SCROLLBAR_EXIT);
+            assert_eq!(motion.exit(), Duration::from_millis(500));
             assert_eq!(motion.expand(), SCROLLBAR_EXPAND);
             assert_eq!(
                 motion.entrance(),
@@ -1063,6 +1061,32 @@ mod base_theme_projection_tests {
                 motion.thumb_hover_entrance(),
                 gpui_base::ScrollbarEntrance::SlideAndFade
             );
+        });
+    }
+
+    #[gpui::test]
+    fn scrollbar_idle_and_exit_follow_the_motion_tokens(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            init(cx);
+
+            Theme::update(cx, |theme| {
+                theme.motion.scrollbar_idle = Duration::from_millis(700);
+                theme.motion.scrollbar_exit = Duration::from_millis(150);
+            });
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
+            assert_eq!(motion.idle(), Duration::from_millis(700));
+            assert_eq!(motion.exit(), Duration::from_millis(150));
+            assert_eq!(motion.enter(), SCROLLBAR_ENTER);
+            assert_eq!(motion.expand(), SCROLLBAR_EXPAND);
+
+            // Mode and theme changes re-project the scrollbar; the tuned
+            // timing must survive them.
+            Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);
+            Theme::change(ThemeMode::Dark, None, cx);
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
+            assert_eq!(motion.idle(), Duration::from_millis(700));
+            assert_eq!(motion.exit(), Duration::from_millis(150));
+            assert_styled_projection(cx);
         });
     }
 
@@ -1087,7 +1111,7 @@ mod base_theme_projection_tests {
         assert_eq!(base.scrollbar.mode(), theme.scrollbar_mode);
         assert_eq!(
             base.scrollbar.motion(),
-            scrollbar_motion(theme.scrollbar_mode)
+            scrollbar_motion(theme.scrollbar_mode, &theme.motion)
         );
         assert_eq!(base.resizable.handle, Some(theme.border));
         assert_eq!(base.resizable.active_handle, Some(theme.drag_border));
