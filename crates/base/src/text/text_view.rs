@@ -784,14 +784,14 @@ impl Element for TextView {
             if let Ok(mut line_spans) = state.read(cx).line_spans.lock() {
                 line_spans.clear();
             }
-            // Descendant `Inline`s report their line spans through the state
-            // stack during prepaint (in addition to the paint-time push below).
-            GlobalState::global(cx).push_text_view_state(state.clone());
         }
+        // Descendants read the view through the state stack during prepaint
+        // (in addition to the paint-time push below): `Inline`s report their
+        // line spans when `max_lines` is set, and table cells look for the
+        // selection anchor.
+        GlobalState::global(cx).push_text_view_state(state.clone());
         request_layout.element.prepaint(window, cx);
-        if max_lines_active {
-            GlobalState::global(cx).pop_text_view_state();
-        }
+        GlobalState::global(cx).pop_text_view_state();
 
         let mut clip_bottom = None;
         if max_lines_active {
@@ -1661,6 +1661,81 @@ mod tests {
             0,
             "finished table selection must not continuously request frames"
         );
+    }
+
+    /// A drag that starts in a table cell selects only in that cell, also when
+    /// the pointer leaves the cell. A drag that starts outside the table still
+    /// selects through it.
+    #[gpui::test]
+    fn table_drag_from_a_cell_stays_in_that_cell(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| TableSelectionTestRoot {
+            text_view: cx.new(|cx| {
+                TextViewState::markdown(
+                    "Intro\n\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell A | Cell B |\n| Cell C | Cell D |",
+                    cx,
+                )
+            }),
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let text_bounds = root.read_with(cx, |root, cx| {
+            root.text_view.read(cx).selection_adapter.text_bounds()
+        });
+        assert_eq!(text_bounds.len(), 7, "{text_bounds:?}");
+        let [intro, _, _, cell_a, cell_b, _, cell_d] = text_bounds[..] else {
+            unreachable!()
+        };
+        let table = cx
+            .debug_bounds("table-selection-root")
+            .expect("table bounds");
+        let start_of = |bounds: Bounds<Pixels>| point(bounds.left() + px(0.1), bounds.center().y);
+        let end_of = |bounds: Bounds<Pixels>| point(bounds.right() - px(0.1), bounds.center().y);
+
+        let mut drag = |start, end| {
+            cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.simulate_mouse_move(end, MouseButton::Left, Modifiers::default());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let selected = root.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+            let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+            (selected.trim().to_string(), copied.trim().to_string())
+        };
+
+        // Down and right, out of the table: the rest of the cell, nothing else.
+        let below = point(table.right() - px(2.), table.bottom() - px(1.));
+        let expected = ("Cell A".to_string(), "Cell A".to_string());
+        assert_eq!(drag(start_of(cell_a), below), expected);
+
+        // Back along its line into the cell before it, and up and out of the
+        // table: the start of the cell, nothing else.
+        let expected = ("Cell B".to_string(), "Cell B".to_string());
+        let left = point(cell_a.center().x, cell_b.center().y);
+        assert_eq!(drag(end_of(cell_b), left), expected);
+        let above = point(table.left() + px(2.), intro.top());
+        assert_eq!(drag(end_of(cell_b), above), expected);
+
+        // From the paragraph before the table, the selection goes through it.
+        let (selected, copied) = drag(start_of(intro), end_of(cell_d));
+        for text in ["Intro", "Header 1", "Cell A", "Cell B", "Cell C", "Cell D"] {
+            assert!(selected.contains(text), "{text} not in {selected:?}");
+            assert!(copied.contains(text), "{text} not in {copied:?}");
+        }
+
+        // Copy before the frame that paints the last move: Copy projects the
+        // selection itself and keeps it in the cell too.
+        cx.simulate_mouse_down(start_of(cell_a), MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_move(end_of(cell_a), MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_move(below, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::default());
+        let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+        assert_eq!(copied.trim(), "Cell A");
     }
 
     struct InlineImageTextViewTestRoot {

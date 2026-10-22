@@ -18,7 +18,7 @@ use gpui::{
 };
 
 use crate::{
-    AutoScroll, ElementExt, TextSelection,
+    AutoScroll, ElementExt, GlobalState, TextSelection,
     async_util::{Receiver, Sender, unbounded},
     input::{self, SelectAll},
     text::{
@@ -957,6 +957,19 @@ impl TextViewState {
             return None;
         }
         self.selection_adapter.selection_points(cx)
+    }
+
+    /// [`Self::selection_points`] for the text that paints now: a drag that
+    /// started in a table cell selects only in that cell (see
+    /// [`GlobalState::confine_selection_to_table_cell`]). Call it only while
+    /// painting, so the cell the text is in is known.
+    pub(crate) fn painted_selection_points(
+        &self,
+        cx: &App,
+    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+        let (anchor, cursor) = self.selection_points(cx)?;
+        let global = GlobalState::global(cx);
+        global.confine_selection_to_table_cell(global.table_cell(), anchor, cursor)
     }
 
     pub(crate) fn has_selection(&self, cx: &App) -> bool {

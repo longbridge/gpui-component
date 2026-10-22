@@ -1,8 +1,9 @@
 use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
 use crate::{
-    TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint, TextSelectionEvent,
-    TextSelectionHandle, TextSelectionRegistration, TextSelectionRun, TextSelectionSnapshot,
+    GlobalState, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
+    TextSelectionEvent, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+    TextSelectionSnapshot,
 };
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 
@@ -97,7 +98,8 @@ pub(super) struct TextViewSelectionAdapter {
 struct PaintedText {
     text_bounds: Vec<Bounds<Pixels>>,
     text_runs: Vec<TextSelectionRun>,
-    copy_projections: Vec<CopyProjection>,
+    /// Each with the table cell it painted in, if any.
+    copy_projections: Vec<(CopyProjection, Option<Bounds<Pixels>>)>,
     /// The caret boxes at the first and last selected character painted this
     /// frame, where the touch handles go.
     selection_edges: Option<(Bounds<Pixels>, Bounds<Pixels>)>,
@@ -121,6 +123,15 @@ impl CopyProjection {
             Self::Text(projection) => projection.project(start, end),
             Self::InlineObject(projection) => projection.project(start, end),
             Self::CustomBlock(projection) => projection.project(start, end),
+        }
+    }
+
+    /// Selects nothing: the selection started in a table cell this is not in.
+    fn deselect(&self) {
+        match self {
+            Self::Text(projection) => projection.reset(),
+            Self::InlineObject(projection) => projection.deselect(),
+            Self::CustomBlock(projection) => projection.deselect(),
         }
     }
 }
@@ -214,11 +225,15 @@ impl TextViewSelectionAdapter {
                         // Only represented source states are refreshed.
                         // Offscreen AST selections retain their logical ends.
                         let frame = frame_for_copy.borrow();
-                        for projection in &frame.copy_projections {
+                        for (projection, _) in &frame.copy_projections {
                             projection.reset();
                         }
-                        for projection in &frame.copy_projections {
-                            projection.project(start, end);
+                        let global = GlobalState::global(cx);
+                        for (projection, cell) in &frame.copy_projections {
+                            match global.confine_selection_to_table_cell(*cell, start, end) {
+                                Some((start, end)) => projection.project(start, end),
+                                None => projection.deselect(),
+                            }
                         }
                     }
                 }
@@ -273,8 +288,13 @@ impl TextViewSelectionAdapter {
         self.frame.borrow_mut().copy_projections.clear();
     }
 
-    pub(super) fn register_copy_projection(&self, projection: CopyProjection) {
-        self.frame.borrow_mut().copy_projections.push(projection);
+    /// Registers `projection` as it paints, with the table cell it is in.
+    pub(super) fn register_copy_projection(&self, projection: CopyProjection, cx: &App) {
+        let cell = GlobalState::global(cx).table_cell();
+        self.frame
+            .borrow_mut()
+            .copy_projections
+            .push((projection, cell));
     }
 
     pub(super) fn begin_frame(&self) {
