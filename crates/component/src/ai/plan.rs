@@ -164,6 +164,7 @@ impl RenderOnce for Plan {
                                 .child(div().pt_0p5().child(step.status.indicator(cx)))
                                 .child(
                                     div()
+                                        .flex_1()
                                         .min_w_0()
                                         .when(finished, |this| this.text_color(muted_foreground))
                                         .when(step.status == TraceStatus::Completed, |this| {

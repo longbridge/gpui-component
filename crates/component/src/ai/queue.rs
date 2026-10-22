@@ -122,6 +122,7 @@ impl Queue {
             .child(div().pt_0p5().child(status.indicator(cx)))
             .child(
                 v_flex()
+                    .flex_1()
                     .min_w_0()
                     .gap_0p5()
                     .child(
