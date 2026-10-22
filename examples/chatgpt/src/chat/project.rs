@@ -249,6 +249,7 @@ impl ChatView {
                     )
                     .child(
                         v_flex()
+                            .items_start()
                             .gap_1()
                             .child(
                                 div()
@@ -269,8 +270,6 @@ impl ChatView {
                                 let id = conversation.id.clone();
                                 Button::new(SharedString::from(format!("project-chat-{id}")))
                                     .ghost()
-                                    .w_full()
-                                    .justify_start()
                                     .icon(Icon::new(gpui_kit::assets::IconName::MessageSquare))
                                     .label(conversation.title.clone())
                                     .on_click(cx.listener(move |this, _, _, cx| {

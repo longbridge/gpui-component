@@ -105,7 +105,12 @@ impl ChatView {
                             .map(|image| Self::render_generated_image(id, image, view.clone(), cx)),
                     )
                     .when_some(message.markdown, |this, markdown| {
-                        this.child(TextView::new(&markdown).selectable(true).stream_fade(true))
+                        this.child(
+                            TextView::new(&markdown)
+                                .w_full()
+                                .selectable(true)
+                                .stream_fade(true),
+                        )
                     })
                     .when(finished && !message.sources.is_empty(), |this| {
                         let view = view.clone();

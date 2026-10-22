@@ -96,12 +96,12 @@ impl ChatView {
                 SidebarHeader::new().child(
                     v_flex()
                         .w_full()
+                        .items_start()
                         .gap_2()
                         .child(
                             Button::new("new-chat")
                                 .ghost()
                                 .small()
-                                .w_full()
                                 .icon(Icon::new(LucideIcon::SquarePen))
                                 .label("New chat")
                                 .on_click(cx.listener(|this, _, _, cx| this.new_chat(None, cx))),
@@ -109,6 +109,7 @@ impl ChatView {
                         .child(
                             Input::new(&self.search)
                                 .small()
+                                .w_full()
                                 .prefix(Icon::new(IconName::Search).xsmall())
                                 .cleanable(true),
                         ),
