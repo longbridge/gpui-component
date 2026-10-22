@@ -17,6 +17,12 @@ pub struct MotionTokens {
     pub spring_move: Spring,
     pub distance_short: Rems,
     pub distance_medium: Rems,
+    /// How long a scrollbar stays visible after the last scroll, drag, or
+    /// hover, default 2s.
+    pub scrollbar_idle: Duration,
+    /// How long a scrollbar takes to fade away once the idle hold expires,
+    /// default 500ms.
+    pub scrollbar_exit: Duration,
 }
 
 impl Default for MotionTokens {
@@ -38,6 +44,8 @@ impl Default for MotionTokens {
                 .with_epsilon(0.1),
             distance_short: rems(0.25),
             distance_medium: rems(0.5),
+            scrollbar_idle: Duration::from_secs(2),
+            scrollbar_exit: Duration::from_millis(500),
         }
     }
 }
