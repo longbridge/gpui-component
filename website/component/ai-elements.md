@@ -216,3 +216,6 @@ of the context window is used and opens a token breakdown when activated.
 | `Suggestion`, `Suggestions` | One-click prompts |
 | `FileTree`, `FileTreeEntry`, `FileChange` | Changed files as a folder tree |
 | `Checkpoint` | Restorable point in the transcript |
+
+See `examples/chatgpt` for a complete client that signs in with ChatGPT and
+streams the OpenAI Responses API through these elements.

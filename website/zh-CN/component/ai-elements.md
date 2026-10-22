@@ -163,3 +163,5 @@ PromptInput::new("prompt", &self.prompt)
 | `Suggestion`, `Suggestions` | 一键发送的提示 |
 | `FileTree`, `FileTreeEntry`, `FileChange` | 以文件夹树显示的已修改文件 |
 | `Checkpoint` | 对话记录中可恢复的位置 |
+
+完整示例见 `examples/chatgpt`：一个使用 ChatGPT 账号登录、通过这些元素流式调用 OpenAI Responses API 的客户端。
