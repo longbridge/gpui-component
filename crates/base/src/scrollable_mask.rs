@@ -1032,7 +1032,8 @@ mod tests {
         assert!(last_horizontal_scroll_claim().is_none());
 
         // Reversing an overscroll without re-entering the range does not move
-        // content. Seed the transient offset explicitly to avoid a frame clamp.
+        // content. Seed the transient offset explicitly: each simulated event
+        // draws the window, and the frame clamps the overscroll back to 0.
         scroll_handle.set_offset(point(px(40.), px(0.)));
         cx.simulate_event(ScrollWheelEvent {
             position: point(px(10.), px(10.)),
@@ -1040,9 +1041,10 @@ mod tests {
             ..Default::default()
         });
         assert!(last_horizontal_scroll_claim().is_none());
-        assert_eq!(scroll_handle.offset().x, px(30.));
+        assert_eq!(scroll_handle.offset().x, px(0.));
 
         // Only the part of a step that re-enters the range counts as movement.
+        scroll_handle.set_offset(point(px(30.), px(0.)));
         cx.simulate_event(ScrollWheelEvent {
             position: point(px(10.), px(10.)),
             delta: ScrollDelta::Pixels(point(px(-40.), px(0.))),
