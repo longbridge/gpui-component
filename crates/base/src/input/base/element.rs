@@ -1986,9 +1986,11 @@ impl<M: InputModeKind> TextElement<M> {
 
     /// Asks the scroll containers around a focused input to bring it into
     /// view, once when it gains focus and again whenever the fully visible
-    /// part of the window changes (an on-screen keyboard opening or closing,
-    /// whether it resizes the window or is reported as an inset), so manual
-    /// scrolling in between is left alone.
+    /// part of the window changes, so manual scrolling in between is left
+    /// alone. Ancestors must support autoscroll requests; inset-only keyboard
+    /// avoidance additionally requires the ancestor to use the fully visible
+    /// viewport for its scrolling bounds and scroll range. Stock GPUI's List
+    /// uses layout bounds and does not avoid inset-only occlusion.
     ///
     /// A single-line input asks for all of itself. A taller one asks for the
     /// line with the caret, or its top part when it has no caret.
@@ -3835,16 +3837,20 @@ mod tests {
     struct RevealHarness {
         input: Entity<crate::input::InputState>,
         list: ListState,
+        show_input: bool,
     }
 
     impl Render for RevealHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             let input = self.input.clone();
+            let show_input = self.show_input;
             list(self.list.clone(), move |ix, _, _| {
                 if ix == 0 {
                     div().h(px(180.)).into_any_element()
                 } else {
-                    div().child(input.clone()).into_any_element()
+                    div()
+                        .when(show_input, |this| this.child(input.clone()))
+                        .into_any_element()
                 }
             })
             .size_full()
@@ -3862,6 +3868,7 @@ mod tests {
             RevealHarness {
                 input: state,
                 list: list_state.clone(),
+                show_input: true,
             }
         });
         let input = input.unwrap();
@@ -3895,6 +3902,37 @@ mod tests {
         assert!(revealed(&mut cx));
 
         // Scrolling away while focused is left alone.
+        list_state.scroll_to(ListOffset::default());
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(at_top());
+
+        // A temporarily unmounted input does not prepaint while unfocused.
+        // Its blur event must still reset the reveal cache before remounting.
+        cx.update(|_, cx| {
+            window
+                .update(cx, |view, window, cx| {
+                    view.show_input = false;
+                    window.blur(cx);
+                    cx.notify();
+                })
+                .unwrap();
+        });
+        draw(&mut cx);
+        cx.update(|_, cx| {
+            window
+                .update(cx, |view, window, cx| {
+                    view.show_input = true;
+                    input.update(cx, |state, cx| state.focus(window, cx));
+                    cx.notify();
+                })
+                .unwrap();
+        });
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(!at_top());
+        assert!(revealed(&mut cx));
+
         list_state.scroll_to(ListOffset::default());
         draw(&mut cx);
         draw(&mut cx);

@@ -3868,6 +3868,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.revealed_viewport = None;
         if M::is_context_menu_open(self, cx) {
             return;
         }
