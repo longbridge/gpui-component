@@ -25,6 +25,7 @@ pub struct TextViewStyle {
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
     inline_code: HighlightStyle,
+    inline_code_size_scale: f32,
     /// The table body background, or the theme surface when `None`. Only
     /// [`Self::on_text_color`] sets it, to let a table on an inverted surface
     /// show that surface.
@@ -48,6 +49,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_size_scale == other.inline_code_size_scale
             && self.table_background == other.table_background
             && self.is_dark == other.is_dark
     }
@@ -91,6 +93,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
+            inline_code_size_scale: 0.875,
             table_background: None,
             is_dark,
         }
@@ -167,6 +170,16 @@ impl TextViewStyle {
     /// which keeps [`TextViewStyle::default`] usable without a theme.
     pub fn with_inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Sets inline-code font size relative to the surrounding text. The
+    /// default is 0.875. A scale that is not finite and positive leaves the
+    /// current one unchanged.
+    pub fn with_inline_code_size_scale(mut self, scale: f32) -> Self {
+        if scale.is_finite() && scale > 0. {
+            self.inline_code_size_scale = scale;
+        }
         self
     }
 
@@ -271,6 +284,11 @@ impl TextViewStyle {
         self.inline_code
     }
 
+    /// Inline-code font size relative to the surrounding text.
+    pub fn inline_code_size_scale(&self) -> f32 {
+        self.inline_code_size_scale
+    }
+
     /// Whether content-specific assets should use their dark variant.
     pub fn is_dark(&self) -> bool {
         self.is_dark
@@ -358,6 +376,19 @@ mod tests {
     use gpui::{Styled as _, px};
 
     use super::*;
+
+    #[test]
+    fn inline_code_size_scale_takes_only_finite_positive_values() {
+        let style = TextViewStyle::default();
+        assert_eq!(style.inline_code_size_scale(), 0.875);
+        let body_size = style.clone().with_inline_code_size_scale(1.);
+        assert_eq!(body_size.inline_code_size_scale(), 1.);
+        assert!(body_size != style);
+        for invalid in [0., -1., f32::NAN, f32::INFINITY] {
+            let unchanged = body_size.clone().with_inline_code_size_scale(invalid);
+            assert_eq!(unchanged.inline_code_size_scale(), 1., "{invalid}");
+        }
+    }
 
     #[test]
     fn selection_layout_fingerprint_covers_callback_table_and_theme_fields() {

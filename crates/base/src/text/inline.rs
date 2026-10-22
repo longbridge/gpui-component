@@ -175,33 +175,42 @@ pub(super) fn text_runs(
     runs
 }
 
-/// Splits text into contiguous ranges sharing one font size. GPUI runs can
-/// vary the font but not its size, so each range needs its own shaped line.
+/// Splits text into contiguous ranges sharing one font size and code-box
+/// treatment. GPUI runs can vary the font but not its size. Code must also
+/// remain separate from prose at the same size, because its padding and
+/// rounded background apply to the entire shaped fragment.
 pub(super) fn text_size_ranges(
     text_len: usize,
     highlights: &[(Range<usize>, InlineHighlight)],
 ) -> Vec<(Range<usize>, f32)> {
     let mut ranges: Vec<(Range<usize>, f32)> = Vec::new();
-    let mut push = |range: Range<usize>, scale: f32| {
+    let mut previous_is_code = false;
+    let mut push = |range: Range<usize>, scale: f32, is_code: bool| {
         if range.is_empty() {
             return;
         }
         if let Some((last, last_scale)) = ranges.last_mut()
             && *last_scale == scale
             && last.end == range.start
+            && previous_is_code == is_code
         {
             last.end = range.end;
         } else {
             ranges.push((range, scale));
         }
+        previous_is_code = is_code;
     };
     let mut cursor = 0;
     for (range, highlight) in highlights {
-        push(cursor..range.start, 1.);
-        push(range.clone(), highlight.font_size_scale.unwrap_or(1.));
+        push(cursor..range.start, 1., false);
+        push(
+            range.clone(),
+            highlight.font_size_scale.unwrap_or(1.),
+            highlight.font_size_scale.is_some(),
+        );
         cursor = range.end;
     }
-    push(cursor..text_len, 1.);
+    push(cursor..text_len, 1., false);
     ranges
 }
 

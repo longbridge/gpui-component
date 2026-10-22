@@ -2162,6 +2162,71 @@ mod tests {
     }
 
     #[test]
+    fn same_size_inline_code_background_does_not_extend_over_prose() {
+        use super::super::inline::test_fonts::{BODY, MONO, WideMonoTextSystem};
+        use gpui::{Empty, HighlightStyle, TestApp};
+
+        let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+        let mut window = app.open_window(|_, _| Empty);
+        for font_size in [px(14.), px(28.)] {
+            let style = TextStyle {
+                font_family: BODY.into(),
+                font_size: AbsoluteLength::Pixels(font_size),
+                ..Default::default()
+            };
+            let items = vec![MeasureItem::Text {
+                text: "before code after".into(),
+                links: vec![],
+                highlights: vec![(
+                    7..11,
+                    InlineHighlight {
+                        style: HighlightStyle {
+                            background_color: Some(gpui::red()),
+                            ..Default::default()
+                        },
+                        font_family: Some(MONO.into()),
+                        font_size_scale: Some(1.),
+                    },
+                )],
+            }];
+            window.update(|_, window, cx| {
+                let layout = layout_flow(&items, &[None], &style, None, window, cx);
+                assert_eq!(layout.fragments.len(), 3);
+                for fragment in &layout.fragments {
+                    let PositionedFragment::Text {
+                        text,
+                        size,
+                        code_background,
+                        ..
+                    } = fragment
+                    else {
+                        panic!("expected text fragment");
+                    };
+                    if text.as_ref() == "code" {
+                        let (background, color) = code_background.expect("inline code background");
+                        assert_eq!(color, gpui::red());
+                        assert_eq!(background.size.width, size.width);
+                        assert_eq!(
+                            size.width,
+                            WideMonoTextSystem::width_of("code", MONO, font_size)
+                                + px(INLINE_CODE_PADDING * 2.)
+                        );
+                    } else {
+                        assert!(
+                            code_background.is_none(),
+                            "prose must not receive a code box"
+                        );
+                        assert_eq!(
+                            size.width,
+                            WideMonoTextSystem::width_of(text, BODY, font_size)
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    #[test]
     fn inline_code_size_is_relative_and_uses_the_native_body_baseline() {
         use super::super::inline::test_fonts::{BODY, MONO, WideMonoTextSystem};
         use gpui::{Empty, TestApp};
