@@ -125,6 +125,9 @@ offset and a 16px bottom margin, so the title and footer stay visible while the
 body scrolls. `w`, `max_w`, `h`, and `margin_top` apply within those limits;
 a dialog that already fits keeps its requested size and default position.
 
+Call `.centered()` to center the dialog vertically instead of using `margin_top`.
+The same window margins still constrain the surface.
+
 ### Dialog Options
 
 ```rust
