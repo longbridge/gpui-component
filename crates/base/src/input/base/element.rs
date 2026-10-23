@@ -3846,8 +3846,8 @@ mod tests {
     }
 
     /// A scrollbar supplied through `set_scrollbar_renderer` gets the editor's own
-    /// scroll range: its track spans the padded viewport, while the content
-    /// size minus the scroll viewport is exactly how far the editor scrolls.
+    /// scroll range through the standard ScrollbarHandle contract, so a
+    /// scrollbar can drag to the same end as wheel scrolling.
     #[gpui::test]
     fn scrollbar_renderer_receives_the_editors_scroll_range(cx: &mut TestAppContext) {
         use crate::ScrollbarHandle as _;
@@ -3869,8 +3869,10 @@ mod tests {
                 });
                 let presented = presented.clone();
                 state.set_scrollbar_renderer(Some(std::rc::Rc::new(move |context, _, _| {
-                    *presented.borrow_mut() = Some(context);
-                    gpui::Empty.into_any_element()
+                    *presented.borrow_mut() = Some(context.clone());
+                    Scrollbar::vertical(&context)
+                        .mode(crate::ScrollbarMode::Always)
+                        .into_any_element()
                 })));
             });
             window.draw(cx).clear(cx);
@@ -3886,19 +3888,42 @@ mod tests {
                 );
             });
             window.draw(cx).clear(cx);
-
-            let context: crate::input::EditorScrollbarContext = presented
-                .borrow()
-                .clone()
-                .expect("the editor presents its scrollbar");
-            let track = context.viewport_bounds().size.height;
-            let scroll_viewport = context.scroll_viewport_size().height;
-            assert_eq!(track - scroll_viewport, px(20.));
-            assert_eq!(
-                -context.offset().y,
-                context.content_size().height - scroll_viewport
-            );
         });
+
+        let context = presented.borrow().clone().unwrap();
+        let track = context.viewport_bounds();
+        let wheel_end = context.offset();
+        assert!(wheel_end.y < px(0.));
+        assert_eq!(
+            track.size.height - context.scroll_viewport_size().height,
+            px(20.)
+        );
+        cx.update(|window, cx| {
+            context.set_offset(Point::default());
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
+
+        let grab = point(track.right() - px(5.), track.top() + px(10.));
+        let end = point(grab.x, track.bottom() - px(1.));
+        cx.simulate_mouse_down(grab, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_move(
+            end,
+            Some(gpui::MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_up(end, gpui::MouseButton::Left, gpui::Modifiers::default());
+
+        assert_eq!(
+            editor.read_with(&cx, |state, _| state.scroll_offset()),
+            wheel_end
+        );
+        assert_eq!(
+            context.content_size().height - track.size.height,
+            -wheel_end.y
+        );
     }
 
     impl Render for TextareaHarness {

@@ -5,6 +5,8 @@ use std::rc::Rc;
 
 /// Current-frame editor geometry and its retained scroll offset.
 /// The editor applies caret scrolling before invoking the presentation callback.
+/// Like other [`ScrollbarHandle`] implementations, the content size includes
+/// the viewport's padding, so subtracting the track size gives the scroll range.
 #[derive(Clone)]
 pub struct EditorScrollbarContext {
     pub(crate) handle: ScrollHandle,
@@ -19,9 +21,10 @@ impl EditorScrollbarContext {
         self.axis
     }
 
-    /// The viewport without the editor's padding. The scroll range is the
-    /// content size minus this size; `viewport_bounds` keeps the padding and
-    /// is where the scrollbar's track belongs.
+    /// The editor's viewport without padding, for consumers that need its
+    /// text layout size. Scrollbars should use [`ScrollbarHandle::content_size`]
+    /// and [`ScrollbarHandle::viewport_bounds`] to calculate the scroll range;
+    /// both include the padding around this viewport.
     pub fn scroll_viewport_size(&self) -> Size<Pixels> {
         self.scroll_viewport
     }
@@ -32,7 +35,7 @@ impl ScrollbarHandle for EditorScrollbarContext {
         self.viewport
     }
     fn content_size(&self) -> Size<Pixels> {
-        self.content
+        self.content + (self.viewport.size - self.scroll_viewport)
     }
     fn offset(&self) -> Point<Pixels> {
         self.handle.offset()
