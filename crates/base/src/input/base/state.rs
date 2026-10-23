@@ -767,6 +767,8 @@ impl<M: InputModeKind> InputBaseState<M> {
         let wrap_width = (width - RIGHT_MARGIN).max(px(1.));
         self.display_map.set_font(font, font_size, cx);
         self.display_map
+            .set_tab_size(self.mode.tab_size().tab_size, cx);
+        self.display_map
             .on_layout_changed(self.soft_wrap.then_some(wrap_width), cx);
         self.display_map
             .set_wrapping_indent(self.wrapping_indent, cx);
@@ -6043,7 +6045,7 @@ mod tests {
     use crate::theme::Theme;
     use gpui::{TestAppContext, VisualTestContext, size};
 
-    use crate::input::{EditorMode, EditorState, InputMode, LanguageConfig, TextareaMode};
+    use crate::input::{EditorMode, EditorState, InputMode, LanguageConfig, TabSize, TextareaMode};
 
     fn set_test_syntax_provider(
         provider: Rc<dyn crate::input::SyntaxContextProvider>,
@@ -9250,6 +9252,38 @@ mod tests {
                 assert_eq!(rows, 2);
             }
         }
+    }
+
+    #[gpui::test]
+    fn test_prewrap_uses_the_configured_tab_stops(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let font = window.text_style().font();
+            let font_size = px(14.);
+            let font_id = window.text_system().resolve_font(&font);
+            let space_width = window.text_system().layout_width(font_id, font_size, ' ');
+            cx.new(|cx| {
+                let mut state = crate::input::EditorState::new(window, cx)
+                    .tab_size(TabSize {
+                        tab_size: 4,
+                        hard_tabs: true,
+                    })
+                    .default_value("\t\t");
+                for (tab_size, expected_rows) in [(4, 2), (2, 1), (8, 2)] {
+                    state.set_tab_size(
+                        TabSize {
+                            tab_size,
+                            hard_tabs: true,
+                        },
+                        cx,
+                    );
+                    state.prewrap(font.clone(), font_size, space_width * 5. + RIGHT_MARGIN, cx);
+                    assert_eq!(state.display_map().wrap_row_count(), expected_rows);
+                }
+                state
+            });
+            gpui::EmptyView
+        });
     }
 
     /// Prewrap counts with the state's wrapping indent, as the first layout

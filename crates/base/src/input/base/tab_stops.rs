@@ -59,14 +59,17 @@ fn tab_shifts<'a>(
         glyphs.peek().map_or(layout.width, |glyph| glyph.position.x)
     };
 
-    text.match_indices('\t')
-        .scan(px(0.), move |shift, (ix, _)| {
-            let start = x_for_index(ix) + *shift;
-            let end = x_for_index(ix + 1) + *shift;
-            let next_stop = stop * ((start / stop).floor() + 1.);
-            *shift += next_stop - end;
-            Some((ix, *shift))
-        })
+    // Keep the cumulative shift in double precision. Rounding it to Pixels
+    // after every tab can put a stop just below its boundary, making the next
+    // tab land on that same stop instead of advancing.
+    let stop = f64::from(f32::from(stop));
+    text.match_indices('\t').scan(0_f64, move |shift, (ix, _)| {
+        let start = f64::from(f32::from(x_for_index(ix))) + *shift;
+        let end = f64::from(f32::from(x_for_index(ix + 1)));
+        let next_stop = stop * ((start / stop).floor() + 1.);
+        *shift = next_stop - end;
+        Some((ix, px(*shift as f32)))
+    })
 }
 
 /// `layout` with its tabs widened, or `None` when it has none to widen.
@@ -182,6 +185,26 @@ mod tests {
         let text = "abcd\te";
         let expanded = expanded_layout(&layout(text, 10., 0.), text, px(40.)).unwrap();
         assert_eq!(xs(&expanded)[5], 80.);
+    }
+
+    #[test]
+    fn fractional_stops_keep_consecutive_tabs_advancing() {
+        let text = format!("{}x", "\t".repeat(256));
+        for stop in [14.4, 16.8, 28.8, 33.6] {
+            for tab_advance in [0., 28.] {
+                let shaped = layout(&text, 10., tab_advance);
+                let expanded = expanded_layout(&shaped, &text, px(stop)).unwrap();
+                for (index, glyph) in expanded.runs[0].glyphs.iter().enumerate() {
+                    let expected = stop * index as f32;
+                    assert!(
+                        (f32::from(glyph.position.x) - expected).abs() < 0.001,
+                        "stop {stop}, tab advance {tab_advance}, glyph {index}: {:?}",
+                        glyph.position.x,
+                    );
+                }
+                assert_eq!(expanded_width(&shaped, &text, px(stop)), expanded.width);
+            }
+        }
     }
 
     #[test]
