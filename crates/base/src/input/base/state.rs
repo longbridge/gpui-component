@@ -2643,6 +2643,15 @@ impl<M: InputModeKind> InputBaseState<M> {
         if window.default_prevented() {
             return;
         }
+        // A tap asks for the virtual keyboard. Focus alone does not when it
+        // moves from another input, or stays here, after the user hid it.
+        if event.button == MouseButton::Left
+            && crate::GlobalState::is_touch_press(cx)
+            && !self.disabled
+            && !self.readonly
+        {
+            window.request_virtual_keyboard();
+        }
         self.undo_manager.break_transaction_coalescing();
         // Treat every press like a cursor move: take focus now rather than
         // after GPUI's focus observer runs, show the caret at once and restart
