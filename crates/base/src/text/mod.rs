@@ -30,6 +30,7 @@ pub use style::*;
 pub use text_view::*;
 
 pub(crate) fn init(cx: &mut App) {
+    inline::init(cx);
     state::init(cx);
 }
 
