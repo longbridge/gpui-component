@@ -13,8 +13,9 @@ use sum_tree::{Bias, Dimensions, SumTree};
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::input::{
-    Point as TreeSitterPoint, RopeExt,
+    Point as TreeSitterPoint, RopeExt, TabSize,
     layout::{LastLayout, WhitespaceIndicators},
+    tab_stops::{expanded_width, tab_stop_width},
 };
 
 /// Controls how soft-wrapped continuation lines are indented.
@@ -224,6 +225,8 @@ pub(crate) struct TextWrapper {
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
     wrapping_indent: WrappingIndent,
+    /// Spaces per tab stop, so tabs are measured as they are drawn.
+    tab_size: usize,
     /// The lines by split \n
     pub(crate) lines: SumTree<LineItem>,
 
@@ -240,6 +243,7 @@ impl TextWrapper {
             font_size,
             wrap_width,
             wrapping_indent: WrappingIndent::default(),
+            tab_size: TabSize::default().tab_size,
             lines: SumTree::new(&()),
             inline_metrics: Rc::from([]),
             _initialized: false,
@@ -334,6 +338,17 @@ impl TextWrapper {
         self.update_all(&self.text.clone(), cx);
     }
 
+    /// Returns whether the tab size changed, and so the wrapping.
+    pub(crate) fn set_tab_size(&mut self, tab_size: usize, cx: &mut App) -> bool {
+        if tab_size == self.tab_size {
+            return false;
+        }
+
+        self.tab_size = tab_size;
+        self.update_all(&self.text.clone(), cx);
+        true
+    }
+
     pub(crate) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         if self.font.eq(&font) && self.font_size == font_size {
             return;
@@ -377,6 +392,7 @@ impl TextWrapper {
         let font = self.font.clone();
         let font_size = self.font_size;
         let wrapping_indent = self.wrapping_indent;
+        let tab_stop = tab_stop_width(&text_system, &font, font_size, self.tab_size);
         self._update(
             changed_text,
             range,
@@ -410,21 +426,20 @@ impl TextWrapper {
                         wrap_width,
                         wrapping_indent,
                         |text| {
-                            text_system
-                                .layout_line(
-                                    text,
-                                    font_size,
-                                    &[gpui::TextRun {
-                                        len: text.len(),
-                                        font: font.clone(),
-                                        color: gpui::black(),
-                                        background_color: None,
-                                        underline: None,
-                                        strikethrough: None,
-                                    }],
-                                    None,
-                                )
-                                .width
+                            let layout = text_system.layout_line(
+                                text,
+                                font_size,
+                                &[gpui::TextRun {
+                                    len: text.len(),
+                                    font: font.clone(),
+                                    color: gpui::black(),
+                                    background_color: None,
+                                    underline: None,
+                                    strikethrough: None,
+                                }],
+                                None,
+                            );
+                            expanded_width(&layout, text, tab_stop)
                         },
                     );
                 }
