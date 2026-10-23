@@ -24,6 +24,7 @@ use super::{
     InputBaseState, PrepaintCaretGeometry, RangeDecorationStyle, TextDecoration,
     layout::{LastLayout, WhitespaceIndicators},
     mode::LayoutMode,
+    tab_stops::{expand_tabs, expanded_width, tab_stop_width},
 };
 
 fn diagnostic_highlight_style(
@@ -133,6 +134,7 @@ pub(super) struct LongestLineKey {
     font: gpui::Font,
     text_size: Pixels,
     wrap_width: Option<Pixels>,
+    tab_size: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2097,13 +2099,21 @@ impl<M: InputModeKind> TextElement<M> {
             return Self::layout_token_lines(state, last_layout, font_size, runs, window);
         }
 
+        let tab_stop = tab_stop_width(
+            window.text_system(),
+            &window.text_style().font(),
+            font_size,
+            state.mode.tab_size().tab_size,
+        );
+
         if is_single_line {
             let text: SharedString = display_text.to_string().into();
             let aligned_runs = align_runs_to_char_boundaries(&text, runs);
             let line_runs = aligned_runs.as_deref().unwrap_or(runs);
-            let shaped_line = window
+            let mut shaped_line = window
                 .text_system()
                 .shape_line(text, font_size, line_runs, None);
+            expand_tabs(&mut shaped_line, tab_stop);
 
             let line_layout = LineLayout::new()
                 .lines(smallvec::smallvec![shaped_line])
@@ -2170,9 +2180,10 @@ impl<M: InputModeKind> TextElement<M> {
                 let sub_line: SharedString = line_text[range.clone()].to_string().into();
                 let line_runs =
                     align_runs_to_char_boundaries(&sub_line, &line_runs).unwrap_or(line_runs);
-                let shaped_line = window
+                let mut shaped_line = window
                     .text_system()
                     .shape_line(sub_line, font_size, &line_runs, None);
+                expand_tabs(&mut shaped_line, tab_stop);
 
                 line_has_background |= has_background(&line_runs);
                 wrapped_lines.push(shaped_line);
@@ -2628,6 +2639,8 @@ impl<M: InputModeKind> Element for TextElement<M> {
         // frames. Scrolling and everything measured from it stay exact.
         let mut stretch = self.state.update(cx, |state, cx| {
             state.display_map.set_font(font, text_size, cx);
+            let tab_size = state.mode.tab_size().tab_size;
+            state.display_map.set_tab_size(tab_size, cx);
             state.display_map.ensure_text_prepared(&state.text, cx);
             if cx.reduce_motion() {
                 state.overscroll.reset();
@@ -2859,6 +2872,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 font: style.font(),
                 text_size,
                 wrap_width,
+                tab_size: state.mode.tab_size().tab_size,
             };
             let cached = state
                 .longest_line_width
@@ -2868,23 +2882,22 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 Some((_, width)) => width.max(widest_laid_out_line),
                 None => {
                     let longest_line: SharedString = longest_line.to_string().into();
-                    window
-                        .text_system()
-                        .shape_line(
-                            longest_line.clone(),
-                            text_size,
-                            &[TextRun {
-                                len: longest_line.len(),
-                                font: key.font.clone(),
-                                color: gpui::black(),
-                                background_color: None,
-                                underline: None,
-                                strikethrough: None,
-                            }],
-                            wrap_width,
-                        )
-                        .width
-                        .max(widest_laid_out_line)
+                    let tab_stop =
+                        tab_stop_width(window.text_system(), &key.font, text_size, key.tab_size);
+                    let shaped = window.text_system().shape_line(
+                        longest_line.clone(),
+                        text_size,
+                        &[TextRun {
+                            len: longest_line.len(),
+                            font: key.font.clone(),
+                            color: gpui::black(),
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        }],
+                        wrap_width,
+                    );
+                    expanded_width(&shaped, &longest_line, tab_stop).max(widest_laid_out_line)
                 }
             };
             state

@@ -70,6 +70,8 @@ mod search;
 mod selection;
 #[path = "base/state.rs"]
 mod state;
+#[path = "base/tab_stops.rs"]
+mod tab_stops;
 mod textarea;
 pub use scrollbar_presentation::{EditorScrollbarContext, EditorScrollbarRenderer};
 #[path = "base/touch.rs"]
