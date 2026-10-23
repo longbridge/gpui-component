@@ -86,6 +86,16 @@ impl TextView {
             stream_fade: None,
         }
     }
+    /// Sets whether links are underlined at rest. Defaults to `true`.
+    pub fn link_underline(mut self, underline: bool) -> Self {
+        self.inner = self.inner.link_underline(underline);
+        self
+    }
+    /// Sets whether links are underlined while hovered. Defaults to `false`.
+    pub fn link_underline_on_hover(mut self, underline: bool) -> Self {
+        self.inner = self.inner.link_underline_on_hover(underline);
+        self
+    }
     /// Sets the style, folded onto the one derived from the active theme.
     pub fn style(mut self, style: TextViewStyle) -> Self {
         self.text_style = Some(style);

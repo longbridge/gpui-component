@@ -15,6 +15,8 @@ pub struct TextViewStyle {
     foreground: Hsla,
     muted_foreground: Hsla,
     link: Hsla,
+    link_underline: bool,
+    link_underline_on_hover: bool,
     selection: Hsla,
     code_background: Hsla,
     border: Hsla,
@@ -38,6 +40,8 @@ impl PartialEq for TextViewStyle {
             && self.foreground == other.foreground
             && self.muted_foreground == other.muted_foreground
             && self.link == other.link
+            && self.link_underline == other.link_underline
+            && self.link_underline_on_hover == other.link_underline_on_hover
             && self.selection == other.selection
             && self.code_background == other.code_background
             && self.border == other.border
@@ -78,6 +82,8 @@ impl TextViewStyle {
             foreground: colors.foreground,
             muted_foreground: colors.muted_foreground,
             link: colors.primary,
+            link_underline: true,
+            link_underline_on_hover: false,
             selection: colors.selection,
             code_background: colors.accent,
             border: colors.border,
@@ -111,6 +117,18 @@ impl TextViewStyle {
     /// Sets the link text color.
     pub fn with_link(mut self, color: Hsla) -> Self {
         self.link = color;
+        self
+    }
+
+    /// Sets whether links are underlined at rest. Defaults to `true`.
+    pub fn with_link_underline(mut self, underline: bool) -> Self {
+        self.link_underline = underline;
+        self
+    }
+
+    /// Sets whether links are underlined while hovered. Defaults to `false`.
+    pub fn with_link_underline_on_hover(mut self, underline: bool) -> Self {
+        self.link_underline_on_hover = underline;
         self
     }
 
@@ -218,6 +236,16 @@ impl TextViewStyle {
     /// The link text color.
     pub fn link(&self) -> Hsla {
         self.link
+    }
+
+    /// Whether links are underlined at rest.
+    pub fn is_link_underlined(&self) -> bool {
+        self.link_underline
+    }
+
+    /// Whether links are underlined while hovered.
+    pub fn is_link_underlined_on_hover(&self) -> bool {
+        self.link_underline_on_hover
     }
 
     /// The background painted behind selected text.
@@ -383,6 +411,8 @@ mod tests {
         assert!(base != base.clone().with_table_cell(table));
 
         assert!(base != base.clone().with_dark(true));
+        assert!(base != base.clone().with_link_underline(false));
+        assert!(base != base.clone().with_link_underline_on_hover(true));
     }
 
     #[test]

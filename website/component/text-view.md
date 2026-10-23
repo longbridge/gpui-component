@@ -490,3 +490,25 @@ markdown(source)
         gpui_kit::div().child(format!("Run {}", code_block.lang().unwrap_or_default()))
     })
 ```
+
+## Linked plain text
+
+Use explicit UTF-8 byte ranges when the content is plain text rather than Markdown:
+
+```rust
+use gpui_kit::component::text::{TextView, TextViewLink, TextViewState};
+
+let state = cx.new(|cx| TextViewState::linked_text(
+    "Visit GPUI Kit",
+    vec![TextViewLink::new(6..14, "https://gpui-kit.com")],
+    cx,
+));
+TextView::new(&state)
+    .link_underline(false)
+    .link_underline_on_hover(true)
+```
+
+Links must be in ascending range order without overlaps. Invalid, overlapping,
+or non-UTF-8-boundary ranges are ignored. Use `set_linked_text(text, links, cx)`
+to replace the text and links together. `on_link_click` overrides opening the
+URL. Links are underlined at rest by default; hover underlines default to off.
