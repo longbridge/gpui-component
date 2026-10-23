@@ -68,7 +68,7 @@ fn parse_hex(value: &str) -> Option<Hsla> {
 /// Formats a color as `#RRGGBB`, or `#RRGGBBAA` when it is translucent.
 fn hex_string(color: Hsla) -> String {
     let rgba = Rgba::from(color);
-    let channel = |value: f32| (value * 255.) as u32;
+    let channel = |value: f32| (value.clamp(0., 1.) * 255.).round() as u8;
     if rgba.a < 1. {
         format!(
             "#{:02X}{:02X}{:02X}{:02X}",
@@ -801,7 +801,7 @@ mod tests {
     #[test]
     fn formats_alpha_only_when_translucent() {
         assert_eq!(hex_string(hsla(0., 1., 0.5, 1.)), "#FF0000");
-        assert_eq!(hex_string(hsla(0., 1., 0.5, 0.5)), "#FF00007F");
+        assert_eq!(hex_string(hsla(0., 1., 0.5, 0.5)), "#FF000080");
     }
 
     fn state(cx: &mut TestAppContext) -> (Entity<ColorPickerState>, &mut gpui::VisualTestContext) {
