@@ -1,11 +1,11 @@
 ---
 title: Input Group
-description: 将输入框、文本域与文本、图标、按钮和工具栏组合使用。
+description: 将输入框、文本域、代码编辑器与附加区域和工具栏组合使用。
 ---
 
 # Input Group
 
-使用 `InputGroup` 可以在输入框或文本域周围添加文本、图标、按钮和工具栏，
+使用 `InputGroup` 可以在 `Input`、`Textarea` 或 `Editor` 周围添加文本、图标、按钮和工具栏，
 并将它们放在同一个外框内。简单的前缀或后缀可以使用 [Input](./input.md)。
 
 下面的示例定义了可用于 GPUI Kit 应用的视图。应用初始化方式见
@@ -97,6 +97,7 @@ cx.notify();
 | `InputGroup` | 将一个输入控件与多个附加区域组合使用 |
 | `InputGroupInput` | 放入组合中的 [Input](./input.md)，使用 `InputState` |
 | `InputGroupTextarea` | 放入组合中的 [Textarea](./textarea.md)，使用 `TextareaState` |
+| `Editor` | 放入组合中的 [Editor](./editor.md)，使用 `EditorState` |
 | `InputGroupAddon` | 放置文本、图标、按钮或自定义内容 |
 | `InputGroupButton` | 带有紧凑组合样式的 [Button](./button.md) |
 | `InputGroupText` | 显示辅助文字、前后缀或计数 |

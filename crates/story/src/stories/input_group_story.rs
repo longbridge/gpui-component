@@ -208,7 +208,7 @@ impl Story for InputGroupStory {
     }
 
     fn description() -> &'static str {
-        "Compose inputs and textareas with icons, text, actions, and toolbars in one frame."
+        "Compose inputs, textareas, and editors with icons, text, actions, and toolbars in one frame."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {

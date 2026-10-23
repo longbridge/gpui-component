@@ -9,17 +9,17 @@ fn validation_takes_precedence_over_focus_and_remains_visible_when_disabled() {
             mode,
             ..Default::default()
         };
-        let focused = GroupAppearance::new(&theme, true, false, false);
+        let focused = GroupAppearance::new(&theme, true, false, false, false);
         assert_eq!(focused.border, theme.ring);
         assert_eq!(focused.ring, Some(theme.ring.opacity(0.5)));
 
-        let disabled = GroupAppearance::new(&theme, true, true, false);
+        let disabled = GroupAppearance::new(&theme, true, true, false, false);
         assert_eq!(disabled.border, theme.input);
         assert_eq!(disabled.ring, None);
 
         for focused in [false, true] {
             for disabled in [false, true] {
-                let invalid = GroupAppearance::new(&theme, focused, disabled, true);
+                let invalid = GroupAppearance::new(&theme, focused, disabled, true, false);
                 assert_eq!(invalid.border, theme.danger);
                 assert_eq!(
                     invalid.ring,

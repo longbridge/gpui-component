@@ -173,7 +173,10 @@ impl RenderOnce for InputGroup {
         }
         let control = control.map(|input| render_control(input, presentation, multiline));
         let theme = cx.theme();
-        let appearance = GroupAppearance::new(theme, focused, disabled, self.invalid);
+        let code_editor = state
+            .as_ref()
+            .is_some_and(|state| state.presentation(cx).is_code_editor());
+        let appearance = GroupAppearance::new(theme, focused, disabled, self.invalid, code_editor);
         let radius = theme.radius;
         let foreground = theme.foreground;
         let show_ring = theme.focus_ring && self.focus_ring;
@@ -295,8 +298,21 @@ struct GroupAppearance {
 }
 
 impl GroupAppearance {
-    fn new(theme: &crate::Theme, focused: bool, disabled: bool, invalid: bool) -> Self {
-        let background = if disabled {
+    fn new(
+        theme: &crate::Theme,
+        focused: bool,
+        disabled: bool,
+        invalid: bool,
+        code_editor: bool,
+    ) -> Self {
+        let background = if code_editor {
+            let background = theme.editor_background();
+            if disabled {
+                background.opacity(0.5)
+            } else {
+                background
+            }
+        } else if disabled {
             theme.input.opacity(if theme.is_dark() { 0.8 } else { 0.5 })
         } else if theme.is_dark() {
             theme.input.opacity(0.3)

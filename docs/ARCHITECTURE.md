@@ -340,16 +340,20 @@ gutter, and scrollbar geometry local to the editing engine.
 
 ### Input groups
 
-`gpui-component::input::InputGroup` composes one `Input` or `Textarea` with typed
-addons and buttons in a shared frame. It owns no editing state: the control is
-the ordinary styled `Input`, rendered without its own border, background and
-focus ring, so every capability the input gains — paste hooks, touch
-selection, native menus, accessibility — reaches a group without being
-mirrored. `InputGroup` owns the outer border, radius, focus and error
-treatment, and four logical addon regions; `InputGroupButton` wraps a `Button`
-with compact presentation and sizes through `Sizable`. Textarea viewport
-geometry remains with the editing engine. Validation appearance is
-caller-controlled, separately from edit acceptance.
+`gpui-component::input::InputGroup` composes one `Input`, `Textarea`, or
+`Editor` with typed addons and buttons in a shared frame. It owns no editing
+state: `Textarea` converts to the ordinary styled `Input` when added; `Editor`
+converts when the group renders so it can read the theme's code font and line
+height. The control is rendered without its own border, background and focus
+ring, so every capability the input gains — paste hooks, touch selection,
+native menus, accessibility — reaches a group without being mirrored.
+`InputGroup` owns the outer border, radius, focus and error treatment, and four
+logical addon regions; `InputGroupButton` wraps a `Button` with compact
+presentation and sizes through `Sizable`. For an `Editor`, the group uses the
+theme's editor background so the frame, gutter fallback, and completion
+overlays share one surface. `Textarea` and `Editor` viewport geometry remains
+with the editing engine. Validation appearance is caller-controlled, separately
+from edit acceptance.
 
 Platform-specific behavior is isolated behind adapters. For example, folding is
 disabled on WebAssembly, time uses `web_time` where needed, and native text

@@ -1,12 +1,13 @@
 ---
 title: Input Group
-description: Combine inputs and textareas with text, icons, buttons, and toolbars.
+description: Compose inputs, textareas, and editors with addons and toolbars.
 ---
 
 # Input Group
 
-Use `InputGroup` to place text, icons, buttons, or toolbars around an input or
-textarea inside one frame. For a simple prefix or suffix, use [Input](./input.md).
+Use `InputGroup` to place text, icons, buttons, or toolbars around an `Input`,
+`Textarea`, or `Editor` inside one frame. For a simple prefix or suffix, use
+[Input](./input.md).
 
 The examples below define views for an initialized GPUI Kit application. See
 [Getting Started](../docs/getting-started.md) for application setup.
@@ -98,6 +99,7 @@ refresh after a programmatic update.
 | `InputGroup` | Combine one input with any number of addons |
 | `InputGroupInput` | An [Input](./input.md) placed in the group, using `InputState` |
 | `InputGroupTextarea` | A [Textarea](./textarea.md) placed in the group, using `TextareaState` |
+| `Editor` | An [Editor](./editor.md) placed in the group, using `EditorState` |
 | `InputGroupAddon` | Position text, icons, buttons, or custom content |
 | `InputGroupButton` | A [Button](./button.md) with compact input-group presentation |
 | `InputGroupText` | Display helper text, a prefix, suffix, or counter |
