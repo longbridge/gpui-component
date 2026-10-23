@@ -1031,24 +1031,30 @@ mod tests {
         });
         assert!(last_horizontal_scroll_claim().is_none());
 
-        // Reversing an overscroll without re-entering the range does not move
-        // content. Seed the transient offset explicitly: each simulated event
-        // draws the window, and the frame clamps the overscroll back to 0.
-        scroll_handle.set_offset(point(px(40.), px(0.)));
-        cx.simulate_event(ScrollWheelEvent {
-            position: point(px(10.), px(10.)),
-            delta: ScrollDelta::Pixels(point(px(-10.), px(0.))),
-            ..Default::default()
-        });
-        assert!(last_horizontal_scroll_claim().is_none());
-        assert_eq!(scroll_handle.offset().x, px(0.));
+        // The overscroll only lasts until the next prepaint clamps it, and
+        // `simulate_event` draws after each event, so dispatch these steps
+        // within one update.
+        cx.update(|window, cx| {
+            let mut dispatch = |delta_x: f32| {
+                window.dispatch_event(
+                    gpui::PlatformInput::ScrollWheel(ScrollWheelEvent {
+                        position: point(px(10.), px(10.)),
+                        delta: ScrollDelta::Pixels(point(px(delta_x), px(0.))),
+                        ..Default::default()
+                    }),
+                    cx,
+                );
+            };
 
-        // Only the part of a step that re-enters the range counts as movement.
-        scroll_handle.set_offset(point(px(30.), px(0.)));
-        cx.simulate_event(ScrollWheelEvent {
-            position: point(px(10.), px(10.)),
-            delta: ScrollDelta::Pixels(point(px(-40.), px(0.))),
-            ..Default::default()
+            // Reversing an overscroll without re-entering the range does not
+            // move content.
+            scroll_handle.set_offset(point(px(40.), px(0.)));
+            dispatch(-10.);
+            assert!(last_horizontal_scroll_claim().is_none());
+            assert_eq!(scroll_handle.offset().x, px(30.));
+
+            // Only the part of a step that re-enters the range counts as movement.
+            dispatch(-40.);
         });
         let claim = last_horizontal_scroll_claim().expect("a moving step claims");
         assert_eq!(claim.delta_x(), px(-10.));
