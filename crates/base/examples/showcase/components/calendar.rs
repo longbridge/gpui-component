@@ -7,7 +7,7 @@ impl BaseShowcase {
             .w(px(250.))
             .p_3()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(super::example_rgb(0xd4d4d4))
             .item(|item, state, _, _| {
                 match state.kind() {
                     CalendarItemKind::Previous | CalendarItemKind::Next => item
@@ -15,7 +15,7 @@ impl BaseShowcase {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(rgb(0xf5f5f5))),
+                        .hover(|s| s.bg(super::example_rgb(0xf5f5f5))),
                     CalendarItemKind::MonthToggle | CalendarItemKind::YearToggle => item
                         .px_1()
                         .h_7()
@@ -23,29 +23,32 @@ impl BaseShowcase {
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .hover(|s| s.bg(rgb(0xf5f5f5))),
+                        .hover(|s| s.bg(super::example_rgb(0xf5f5f5))),
                     CalendarItemKind::Weekday => item
                         .size_8()
                         .flex()
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .text_color(rgb(0x737373)),
+                        .text_color(super::example_rgb(0x737373)),
                     CalendarItemKind::Day => item
                         .size_8()
                         .flex()
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .when(state.is_muted(), |s| s.text_color(rgb(0xa3a3a3)))
+                        .when(state.is_muted(), |s| {
+                            s.text_color(super::example_rgb(0xa3a3a3))
+                        })
                         .when(state.is_today() && !state.is_active(), |s| {
-                            s.border_1().border_color(rgb(0xd4d4d4))
+                            s.border_1().border_color(super::example_rgb(0xd4d4d4))
                         })
                         .when(state.is_active(), |s| {
-                            s.bg(rgb(0x171717)).text_color(rgb(0xffffff))
+                            s.bg(super::example_rgb(0x171717))
+                                .text_color(super::example_rgb(0xffffff))
                         })
                         .when(!state.is_disabled() && !state.is_active(), |s| {
-                            s.hover(|s| s.bg(rgb(0xf5f5f5)))
+                            s.hover(|s| s.bg(super::example_rgb(0xf5f5f5)))
                         }),
                     CalendarItemKind::Month | CalendarItemKind::Year => item
                         .w(px(74.))
@@ -55,9 +58,12 @@ impl BaseShowcase {
                         .justify_center()
                         .text_xs()
                         .when(state.is_active(), |s| {
-                            s.bg(rgb(0x171717)).text_color(rgb(0xffffff))
+                            s.bg(super::example_rgb(0x171717))
+                                .text_color(super::example_rgb(0xffffff))
                         })
-                        .when(!state.is_active(), |s| s.hover(|s| s.bg(rgb(0xf5f5f5)))),
+                        .when(!state.is_active(), |s| {
+                            s.hover(|s| s.bg(super::example_rgb(0xf5f5f5)))
+                        }),
                 }
                 .into_any_element()
             })

@@ -1,17 +1,22 @@
 mod components;
+// Components and Motion are standalone example apps. The WASM host embeds
+// both, so each deliberately instantiates its own thread-local active palette.
+#[allow(clippy::duplicate_mod)]
+#[path = "../shared/palette.rs"]
+mod palette;
 mod syntect_highlighter;
 
 use gpui::{
-    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
+    AnyElement, App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Window,
-    WindowOptions, actions, div, prelude::FluentBuilder as _, px, rgb, size,
+    WindowOptions, actions, div, prelude::FluentBuilder as _, px, size,
 };
 #[cfg(not(target_family = "wasm"))]
 use gpui::{KeyBinding, WindowBounds};
 use gpui_base::ResizeHandleContext;
 use gpui_base::dock::{
     DockArea, DockAreaRenderer, DockContext, DockLayout, DockPlacement, DropIndicator, NodeId,
-    Panel, PanelEvent, PanelView, TabGroupContext, TabGroupRenderer, TileContext, TilesRenderer,
+    Panel, PanelEvent, PanelView, TabGroupContext, TabGroupRenderer,
 };
 use gpui_base::input::InputEditorStyle;
 use gpui_base::input::{EditorState, InputState, TextareaState};
@@ -22,13 +27,15 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, AutoScroll, Avatar, AvatarFallback, Button, Calendar,
     CalendarItemKind, CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible,
     ColorPicker, ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop,
-    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState,
-    Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
-    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
-    TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
-    Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
-    TreeState, VirtualListScrollHandle, v_virtual_list,
+    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, NavMotion,
+    NavOperation, NavStack, NavStackState, OtpState, Popup, Scrollbar, ScrollbarMode, Select,
+    Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb, SwitchTrack,
+    Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, TextSelectionEvent,
+    TextSelectionHandle, TextSelectionLayer, TextViewState, Textarea, TimeFieldState,
+    TimePrecision, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Toolbar, ToolbarGroup,
+    Tooltip, Tree, TreeItem, TreeState, VirtualListScrollHandle, v_virtual_list,
 };
+use palette::{activate as activate_palette, canvas as example_canvas, example_rgb};
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
 use std::{rc::Rc, sync::Arc};
@@ -88,6 +95,7 @@ pub const COMPONENTS: &[&str] = &[
     "hover-card",
     "input",
     "link",
+    "nav-stack",
     "number-input",
     "otp-input",
     "pagination",
@@ -105,23 +113,29 @@ pub const COMPONENTS: &[&str] = &[
     "table",
     "tabs",
     "text-selection",
+    "text-view",
     "textarea",
+    "time-field",
     "toast",
     "toggle",
     "toggle-group",
+    "toolbar",
     "tooltip",
     "tree",
     "virtual-list",
 ];
 
 pub struct BaseShowcase {
-    component: String,
-    navigation_enabled: bool,
+    /// The shell: the overview at the root, and the component opened from it
+    /// above. A showcase started on one component has that page as its root.
+    pages: gpui::Entity<NavStackState>,
     checkbox_checked: bool,
     radio_selected: usize,
     switch_checked: bool,
     toggle_pressed: bool,
     toggle_group_selection: u8,
+    toolbar_action: gpui::SharedString,
+    toolbar_search: gpui::Entity<InputState>,
     selected_tab: usize,
     select_open: bool,
     select_index: usize,
@@ -140,10 +154,12 @@ pub struct BaseShowcase {
     popup_open: bool,
     page: usize,
     slider: gpui::Entity<SliderState>,
+    stack: gpui::Entity<NavStackState>,
     input: gpui::Entity<InputState>,
     textarea: gpui::Entity<TextareaState>,
     editor: gpui::Entity<EditorState>,
     otp: gpui::Entity<OtpState>,
+    time_field: gpui::Entity<TimeFieldState>,
     calendar: gpui::Entity<CalendarState>,
     tree: gpui::Entity<TreeState>,
     date_focus: gpui::FocusHandle,
@@ -156,12 +172,14 @@ pub struct BaseShowcase {
     text_selection_auto_scroll: AutoScroll,
     text_selection_active: bool,
     text_selection_text: String,
+    text_view: gpui::Entity<TextViewState>,
     #[cfg(test)]
     text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
     pub fn new(component: impl Into<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        activate_palette(window, cx);
         let component = component.into();
         let input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -172,15 +190,36 @@ impl BaseShowcase {
                     "Hello GPUI"
                 });
             state.set_editor_style(InputEditorStyle {
-                foreground: rgb(0x171717).into(),
-                muted_foreground: rgb(0x737373).into(),
+                foreground: example_rgb(0x171717).into(),
+                muted_foreground: example_rgb(0x737373).into(),
                 selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
-                caret: rgb(0x171717).into(),
+                caret: example_rgb(0x171717).into(),
+                ..InputEditorStyle::default()
+            });
+            state
+        });
+        let toolbar_search = cx.new(|cx| {
+            let mut state = InputState::new(window, cx).placeholder("Search");
+            state.set_editor_style(InputEditorStyle {
+                foreground: example_rgb(0x171717).into(),
+                muted_foreground: example_rgb(0x737373).into(),
+                selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
+                caret: example_rgb(0x171717).into(),
                 ..InputEditorStyle::default()
             });
             state
         });
         let otp = cx.new(|cx| OtpState::new(6, window, cx).default_value("12"));
+        let time_field = cx.new(|cx| {
+            let mut state = TimeFieldState::new(window, cx).precision(TimePrecision::Second);
+            state.set_time(
+                chrono::NaiveTime::from_hms_opt(9, 30, 0).unwrap_or_default(),
+                window,
+                cx,
+            );
+            state
+        });
+        cx.observe(&time_field, |_, _, cx| cx.notify()).detach();
         let textarea = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .rows(3)
@@ -189,10 +228,10 @@ impl BaseShowcase {
         let textarea_base = textarea.clone();
         textarea_base.update(cx, |state, _| {
             state.set_editor_style(InputEditorStyle {
-                foreground: rgb(0x171717).into(),
-                muted_foreground: rgb(0x737373).into(),
+                foreground: example_rgb(0x171717).into(),
+                muted_foreground: example_rgb(0x737373).into(),
                 selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
-                caret: rgb(0x171717).into(),
+                caret: example_rgb(0x171717).into(),
                 ..InputEditorStyle::default()
             });
         });
@@ -214,10 +253,10 @@ impl BaseShowcase {
                 cx,
             );
             state.set_editor_style(InputEditorStyle {
-                foreground: rgb(0x171717).into(),
-                muted_foreground: rgb(0x737373).into(),
+                foreground: example_rgb(0x171717).into(),
+                muted_foreground: example_rgb(0x737373).into(),
                 selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
-                caret: rgb(0x171717).into(),
+                caret: example_rgb(0x171717).into(),
                 highlight_styles: Arc::new(ShowcaseHighlightStyles),
                 ..InputEditorStyle::default()
             });
@@ -225,10 +264,10 @@ impl BaseShowcase {
         let combobox_query = cx.new(|cx| {
             let mut state = InputState::new(window, cx).placeholder("Search frameworks…");
             state.set_editor_style(InputEditorStyle {
-                foreground: rgb(0x171717).into(),
-                muted_foreground: rgb(0x737373).into(),
+                foreground: example_rgb(0x171717).into(),
+                muted_foreground: example_rgb(0x737373).into(),
                 selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
-                caret: rgb(0x171717).into(),
+                caret: example_rgb(0x171717).into(),
                 ..InputEditorStyle::default()
             });
             state
@@ -246,13 +285,22 @@ impl BaseShowcase {
             editor.update(cx, |state, cx| state.focus(window, cx));
         } else if component == "otp-input" {
             otp.update(cx, |state, cx| state.focus(window, cx));
+        } else if component == "time-field" {
+            time_field.update(cx, |state, cx| state.focus(window, cx));
         }
 
         let slider = cx.new(|_| SliderState::new().min(0.).max(100.).default_value(64.));
         cx.observe(&slider, |_, _, cx| cx.notify()).detach();
 
+        let stack = cx.new(|_| NavStackState::new());
+        stack.update(cx, |state, cx| {
+            let root = cx.new(|_| components::ShowcasePage::new(1, stack.downgrade()));
+            state.push(root, NavMotion::Immediate, cx);
+        });
+        cx.observe(&stack, |_, _, cx| cx.notify()).detach();
+
         let color_picker =
-            cx.new(|cx| ColorPickerState::new(window, cx).default_value(rgb(0x2563eb)));
+            cx.new(|cx| ColorPickerState::new(window, cx).default_value(example_rgb(0x2563eb)));
         cx.observe(&color_picker, |_, _, cx| cx.notify()).detach();
 
         let text_selection_handles = [
@@ -287,14 +335,23 @@ impl BaseShowcase {
                 .detach();
         }
 
-        Self {
-            navigation_enabled: component == "overview",
-            component,
+        let showcase = cx.weak_entity();
+        let pages = cx.new(|_| NavStackState::new());
+        pages.update(cx, |pages, cx| {
+            let root = cx.new(|_| ComponentPage::new(component, showcase));
+            pages.push(root, NavMotion::Immediate, cx);
+        });
+        cx.observe(&pages, |_, _, cx| cx.notify()).detach();
+
+        let this = Self {
+            pages,
             checkbox_checked: true,
             radio_selected: 0,
             switch_checked: true,
             toggle_pressed: true,
             toggle_group_selection: 0,
+            toolbar_action: "No command yet".into(),
+            toolbar_search,
             selected_tab: 0,
             select_open: false,
             select_index: 0,
@@ -313,10 +370,12 @@ impl BaseShowcase {
             popup_open: false,
             page: 3,
             slider,
+            stack,
             input,
             textarea,
             editor,
             otp,
+            time_field,
             calendar: cx.new(|cx| CalendarState::new(window, cx)),
             tree: cx.new(|cx| {
                 TreeState::new(cx).items(vec![
@@ -344,13 +403,46 @@ impl BaseShowcase {
             text_selection_auto_scroll: AutoScroll::default(),
             text_selection_active: false,
             text_selection_text: String::new(),
+            text_view: cx.new(|cx| TextViewState::markdown(components::TEXT_VIEW_MARKDOWN, cx)),
             #[cfg(test)]
             text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
-        }
+        };
+        cx.observe_window_appearance(window, |this, window, cx| {
+            activate_palette(window, cx);
+            this.refresh_editor_styles(cx);
+            cx.notify();
+        })
+        .detach();
+        this
+    }
+
+    fn refresh_editor_styles(&self, cx: &mut Context<Self>) {
+        let style = || InputEditorStyle {
+            foreground: example_rgb(0x171717).into(),
+            muted_foreground: example_rgb(0x737373).into(),
+            selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
+            caret: example_rgb(0x171717).into(),
+            ..InputEditorStyle::default()
+        };
+        self.input
+            .update(cx, |state, _| state.set_editor_style(style()));
+        self.textarea
+            .update(cx, |state, _| state.set_editor_style(style()));
+        self.combobox_query
+            .update(cx, |state, _| state.set_editor_style(style()));
+        self.toolbar_search
+            .update(cx, |state, _| state.set_editor_style(style()));
+        self.editor.update(cx, |state, _| {
+            state.set_editor_style(InputEditorStyle {
+                highlight_styles: Arc::new(ShowcaseHighlightStyles),
+                ..style()
+            });
+        });
     }
 
     fn overview(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let entity = cx.entity().downgrade();
+        let showcase = cx.weak_entity();
+        let pages = self.pages.clone();
         div()
             .w(px(720.))
             .max_w_full()
@@ -371,13 +463,14 @@ impl BaseShowcase {
                     .child(
                         div()
                             .text_sm()
-                            .text_color(rgb(0x737373))
+                            .text_color(example_rgb(0x737373))
                             .child("Choose a component to open its interactive example."),
                     ),
             )
             .child(div().w_full().grid().grid_cols(3).gap_1().children(
                 COMPONENTS.iter().enumerate().map(|(ix, name)| {
-                    let entity = entity.clone();
+                    let showcase = showcase.clone();
+                    let pages = pages.clone();
                     Button::new(("overview-item", ix))
                         .h_9()
                         .px_3()
@@ -385,14 +478,14 @@ impl BaseShowcase {
                         .items_center()
                         .justify_start()
                         .border_1()
-                        .border_color(rgb(0xd4d4d4))
-                        .bg(rgb(0xffffff))
+                        .border_color(example_rgb(0xd4d4d4))
+                        .bg(example_rgb(0xffffff))
                         .text_xs()
                         .child(*name)
                         .on_click(move |_, _, cx| {
-                            _ = entity.update(cx, |this, cx| {
-                                this.component = (*name).to_owned();
-                                cx.notify();
+                            pages.update(cx, |pages, cx| {
+                                let page = cx.new(|_| ComponentPage::new(*name, showcase.clone()));
+                                pages.push(page, NavMotion::Animated, cx);
                             });
                         })
                 }),
@@ -402,7 +495,88 @@ impl BaseShowcase {
 
 impl Render for BaseShowcase {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = match self.component.as_str() {
+        activate_palette(window, cx);
+        let (depth, has_forward) = {
+            let pages = self.pages.read(cx);
+            (pages.depth(), pages.forward_views().len() > 0)
+        };
+        let show_bar = depth > 1 || has_forward;
+        let pages = self.pages.clone();
+        let nav_button = |id: &'static str, label: &'static str| {
+            Button::new(id)
+                .h_7()
+                .px_2()
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_1()
+                .border_color(example_rgb(0x171717))
+                .child(label)
+        };
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(example_canvas())
+            .text_color(example_rgb(0x171717))
+            .text_xs()
+            .font_family(".SystemUIFont")
+            .child(TextSelectionLayer)
+            .when(show_bar, |this| {
+                this.child(
+                    div()
+                        .h_10()
+                        .flex_none()
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .border_b_1()
+                        .border_color(example_rgb(0xe5e5e5))
+                        .when(depth > 1, |this| {
+                            let pages = pages.clone();
+                            this.child(nav_button("back", "Back").on_click(move |_, _, cx| {
+                                pages.update(cx, |pages, cx| {
+                                    pages.pop(NavMotion::Animated, cx);
+                                });
+                            }))
+                        })
+                        .when(has_forward, |this| {
+                            let pages = pages.clone();
+                            this.child(nav_button("forward", "Forward").on_click(
+                                move |_, _, cx| {
+                                    pages.update(cx, |pages, cx| {
+                                        pages.forward(NavMotion::Animated, cx);
+                                    });
+                                },
+                            ))
+                        }),
+                )
+            })
+            .child(
+                NavStack::new(&self.pages)
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .transition(gpui_base::motion::Transition::new(
+                        std::time::Duration::from_millis(220),
+                    ))
+                    .item(|page, _, _| components::slide(page)),
+            )
+    }
+}
+
+impl BaseShowcase {
+    /// One page of the shell: a component's example in its scroll area, or
+    /// the overview. Called from [`ComponentPage`], which is why it takes the
+    /// component rather than reading a field.
+    fn render_page(
+        &mut self,
+        component: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let content = match component {
             "accordion" => self.accordion(cx).into_any_element(),
             "alert-dialog" => self.alert_dialog(cx).into_any_element(),
             "avatar" => self.avatar().into_any_element(),
@@ -429,64 +603,33 @@ impl Render for BaseShowcase {
             "resizable" => self.resizable().into_any_element(),
             "scrollbar" => self.scrollbar().into_any_element(),
             "slider" => self.slider(cx).into_any_element(),
+            "nav-stack" => self.nav_stack().into_any_element(),
             "select" => self.select(false, cx).into_any_element(),
             "sheet" => self.sheet(cx).into_any_element(),
             "switch" => self.switch(cx).into_any_element(),
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
             "text-selection" => self.text_selection(window, cx).into_any_element(),
+            "text-view" => self.text_view(window).into_any_element(),
             "textarea" => self.textarea().into_any_element(),
+            "time-field" => self.time_field(cx).into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
             "toggle-group" => self.toggle_group(cx).into_any_element(),
+            "toolbar" => self.toolbar(cx).into_any_element(),
             "tooltip" => self.tooltip(cx).into_any_element(),
             "tree" => self.tree().into_any_element(),
             "dock" => self.dock(cx).into_any_element(),
             "virtual-list" => self.virtual_list(cx).into_any_element(),
             _ => self.overview(cx).into_any_element(),
         };
-        let show_back = self.navigation_enabled && self.component != "overview";
         // Surfaces rather than parts: these take the whole viewport.
-        let fills_viewport = matches!(self.component.as_str(), "dock");
-        let entity = cx.entity().downgrade();
+        let fills_viewport = component == "dock";
+        let is_text_view = component == "text-view";
         div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x171717))
-            .text_xs()
-            .font_family("Inter Variable")
-            .child(TextSelectionLayer)
-            .when(show_back, |this| {
-                this.child(
-                    div()
-                        .h_10()
-                        .flex_none()
-                        .px_3()
-                        .flex()
-                        .items_center()
-                        .border_b_1()
-                        .border_color(rgb(0xe5e5e5))
-                        .child(
-                            Button::new("back-to-overview")
-                                .h_7()
-                                .px_2()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .border_1()
-                                .border_color(rgb(0x171717))
-                                .child("All components")
-                                .on_click(move |_, _, cx| {
-                                    _ = entity.update(cx, |this, cx| {
-                                        this.component = "overview".to_owned();
-                                        cx.notify();
-                                    });
-                                }),
-                        ),
-                )
-            })
             .child(
                 div()
                     .id("showcase-scroll")
@@ -508,14 +651,43 @@ impl Render for BaseShowcase {
                             .p_4()
                             .child(
                                 div()
-                                    .map(|this| match fills_viewport {
-                                        true => this.flex_1().size_full().min_h(px(420.)),
-                                        false => this.flex_none(),
+                                    .map(|this| match (fills_viewport, is_text_view) {
+                                        (true, _) => this.flex_1().size_full().min_h(px(420.)),
+                                        (false, true) => this.flex_1().w_full().max_w(px(720.)),
+                                        (false, false) => this.flex_none(),
                                     })
                                     .child(content),
                             ),
                     ),
             )
+            .into_any_element()
+    }
+}
+
+/// A page of the shell. It holds nothing but the component's name: the
+/// example's state lives on the showcase, and rendering goes back there.
+struct ComponentPage {
+    component: String,
+    showcase: gpui::WeakEntity<BaseShowcase>,
+}
+
+impl ComponentPage {
+    fn new(component: impl Into<String>, showcase: gpui::WeakEntity<BaseShowcase>) -> Self {
+        Self {
+            component: component.into(),
+            showcase,
+        }
+    }
+}
+
+impl Render for ComponentPage {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let component = self.component.clone();
+        self.showcase
+            .update(cx, |showcase, cx| {
+                showcase.render_page(&component, window, cx)
+            })
+            .unwrap_or_else(|_| div().into_any_element())
     }
 }
 
@@ -534,10 +706,13 @@ pub fn run(app: Application, component: impl Into<String>) {
             })
             .detach();
         }
+        // The web platform resolves GPUI's `.SystemUIFont` alias to IBM Plex Sans and
+        // ships no fonts of its own, so the family has to be bundled or the first
+        // text layout panics and the canvas stays blank (see #2933).
         #[cfg(target_family = "wasm")]
         cx.text_system()
             .add_fonts(vec![Cow::Borrowed(
-                include_bytes!("../../../story-web/fonts/Inter-Regular.ttf").as_slice(),
+                include_bytes!("../../../story-web/fonts/IBMPlexSans-Regular.ttf").as_slice(),
             )])
             .expect("failed to load gpui-base example font");
         let options = WindowOptions {
@@ -558,9 +733,12 @@ pub fn run_embedded(app: Application, component: impl Into<String>) -> gpui::App
     let component = component.into();
     app.run_embedded(move |cx: &mut App| {
         gpui_base::init(cx);
+        // The web platform resolves GPUI's `.SystemUIFont` alias to IBM Plex Sans and
+        // ships no fonts of its own, so the family has to be bundled or the first
+        // text layout panics and the canvas stays blank (see #2933).
         cx.text_system()
             .add_fonts(vec![Cow::Borrowed(
-                include_bytes!("../../../story-web/fonts/Inter-Regular.ttf").as_slice(),
+                include_bytes!("../../../story-web/fonts/IBMPlexSans-Regular.ttf").as_slice(),
             )])
             .expect("failed to load gpui-base example font");
         cx.open_window(WindowOptions::default(), move |window, cx| {
@@ -572,6 +750,7 @@ pub fn run_embedded(app: Application, component: impl Into<String>) -> gpui::App
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(dead_code)]
 pub fn run_native(component: &str) {
     run(gpui_platform::application(), component.to_owned());
 }

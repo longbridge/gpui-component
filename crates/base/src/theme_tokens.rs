@@ -3,7 +3,7 @@
 //! These tokens describe visual roles and scales. They intentionally do not
 //! contain component names such as `button`, `table`, or `sidebar`.
 
-use gpui::{BoxShadow, FontWeight, Hsla, Pixels, SharedString, point, px};
+use gpui::{BoxShadow, FontWeight, Hsla, Pixels, SharedString, hsla, point, px, rgb};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +16,7 @@ pub struct SemanticThemeTokens {
     pub shadow: ShadowTokens,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ColorTokens {
     pub background: Hsla,
     pub foreground: Hsla,
@@ -35,6 +35,74 @@ pub struct ColorTokens {
     pub border: Hsla,
     pub input: Hsla,
     pub ring: Hsla,
+    /// Background painted behind selected text.
+    ///
+    /// Selection quads are painted under the glyphs, so this is a translucent
+    /// wash that leaves the text legible. It carries a serde default so
+    /// palettes written before the token existed still load.
+    #[serde(default = "ColorTokens::default_selection")]
+    pub selection: Hsla,
+}
+
+impl Default for ColorTokens {
+    fn default() -> Self {
+        Self::light()
+    }
+}
+
+impl ColorTokens {
+    /// Default light palette, aligned with gpui-component's Default Light theme.
+    pub fn light() -> Self {
+        Self {
+            background: hsla(0., 0., 1., 1.),
+            foreground: hsla(0., 0., 0.039, 1.),
+            surface: hsla(0., 0., 1., 1.),
+            surface_foreground: hsla(0., 0., 0.039, 1.),
+            primary: hsla(0., 0., 0.09, 1.),
+            primary_foreground: hsla(0., 0., 0.98, 1.),
+            secondary: hsla(0., 0., 0.898, 1.),
+            secondary_foreground: hsla(0., 0., 0.09, 1.),
+            muted: hsla(0., 0., 0.961, 1.),
+            muted_foreground: hsla(0., 0., 0.451, 1.),
+            accent: hsla(0., 0., 0.961, 1.),
+            accent_foreground: hsla(0., 0., 0.09, 1.),
+            destructive: hsla(0., 0.842, 0.602, 1.),
+            destructive_foreground: hsla(0., 0., 0.98, 1.),
+            border: hsla(0., 0., 0.898, 1.),
+            input: hsla(0., 0., 0.898, 1.),
+            ring: hsla(0., 0., 0.639, 1.),
+            selection: Hsla::from(rgb(0x55a0fc)).alpha(0.3),
+        }
+    }
+
+    /// Default dark palette, aligned with gpui-component's Default Dark theme.
+    pub fn dark() -> Self {
+        Self {
+            background: hsla(0., 0., 0.039, 1.),
+            foreground: hsla(0., 0., 0.98, 1.),
+            surface: hsla(0., 0., 0.039, 1.),
+            surface_foreground: hsla(0., 0., 0.98, 1.),
+            primary: hsla(0., 0., 0.98, 1.),
+            primary_foreground: hsla(0., 0., 0.09, 1.),
+            secondary: hsla(0., 0., 0.149, 1.),
+            secondary_foreground: hsla(0., 0., 0.98, 1.),
+            muted: hsla(0., 0., 0.149, 1.),
+            muted_foreground: hsla(0., 0., 0.639, 1.),
+            accent: hsla(0., 0., 0.149, 1.),
+            accent_foreground: hsla(0., 0., 0.98, 1.),
+            destructive: hsla(0., 0.906, 0.708, 1.),
+            destructive_foreground: hsla(0., 0.722, 0.506, 1.),
+            border: hsla(0., 0., 0.149, 1.),
+            input: hsla(0., 0., 47. / 255., 1.),
+            ring: hsla(0., 0., 0.451, 1.),
+            selection: Hsla::from(rgb(0x1d4ed8)).alpha(0.3),
+        }
+    }
+
+    /// The selection color a palette falls back to when it predates the token.
+    fn default_selection() -> Hsla {
+        Self::light().selection
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -161,5 +229,23 @@ fn box_shadow(x: f32, y: f32, blur: f32, spread: f32, color: Hsla) -> BoxShadow 
         blur_radius: px(blur),
         spread_radius: px(spread),
         inset: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ColorTokens;
+
+    #[test]
+    fn default_colors_are_the_light_palette_and_both_palettes_are_readable() {
+        let light = ColorTokens::light();
+        let dark = ColorTokens::dark();
+
+        assert_eq!(ColorTokens::default(), light);
+        assert_eq!(light.background.l, 1.);
+        assert!(light.foreground.l < light.background.l);
+        assert!(dark.background.l < dark.foreground.l);
+        assert_eq!(light.primary.a, 1.);
+        assert_eq!(dark.primary.a, 1.);
     }
 }

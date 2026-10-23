@@ -1,4 +1,5 @@
 use std::{
+    cell::{Cell, RefCell},
     collections::HashMap,
     ops::Range,
     rc::Rc,
@@ -7,12 +8,16 @@ use std::{
 
 use gpui::{
     App, AppContext as _, Bounds, Context, Element, ElementId, Entity, EntityId, EventEmitter,
-    Global, GlobalElementId, Half, Hitbox, InspectorElementId, IntoElement, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollWheelEvent, SharedString,
-    Style, Subscription, TextLayout, WeakEntity, Window,
+    Global, GlobalElementId, Half, Hitbox, HitboxBehavior, Hsla, InputEvent as _,
+    InspectorElementId, IntoElement, LayoutId, LongPressEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollWheelEvent, SharedString,
+    Style, Subscription, TextLayout, TouchDragEvent, TouchPhase, WeakEntity, Window, point, px,
 };
 
 use crate::text_boundary::{line_range_at, word_range_at};
+use crate::touch_selection::{
+    EdgeDrag, SelectionEdge, TouchHandle, TouchSelectionSnapshot, caret_in_view,
+};
 use crate::{AutoScroll, GlobalState};
 
 /// An opaque selection layer identifier.
@@ -199,6 +204,15 @@ impl TextSelectionSnapshot {
     }
 }
 
+/// Retained element state proving a participant is still in the window.
+///
+/// A participant reports its geometry from `paint`, which a cached view
+/// (`Entity::cached`) skips: GPUI replays the recorded frame instead. The
+/// element's retained state is replayed with it, so this marker outlives the
+/// frames whose paint never ran, and dies with the frame that drops the
+/// element for good.
+struct RenderedMarker;
+
 /// Per-frame geometry reported by a [`TextSelectionHandle`] participant.
 pub struct TextSelectionRegistration {
     hitbox: Hitbox,
@@ -207,6 +221,9 @@ pub struct TextSelectionRegistration {
     scope: TextSelectionScopeId,
     document_order: u64,
     text_bounds: Vec<Bounds<Pixels>>,
+    self_scroll: bool,
+    selection_edges: Option<(Bounds<Pixels>, Bounds<Pixels>)>,
+    rendered: Option<WeakEntity<RenderedMarker>>,
 }
 
 impl TextSelectionRegistration {
@@ -219,7 +236,54 @@ impl TextSelectionRegistration {
             scope: TextSelectionScopeId::default(),
             document_order: 0,
             text_bounds: Vec::new(),
+            self_scroll: false,
+            selection_edges: None,
+            rendered: None,
         }
+    }
+
+    /// Ties this registration to the retained state of the element reporting
+    /// it, so that a frame replayed from that element's cached view keeps it.
+    ///
+    /// Call this from the reporting element's `prepaint` or `paint`. A
+    /// registration made outside a drawing element cannot be tied to one and
+    /// is swept the first frame it misses, as every registration used to be.
+    pub fn with_rendered_element(
+        mut self,
+        participant: &TextSelectionHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
+        self.rendered = Some(
+            window
+                .use_keyed_state(
+                    ElementId::NamedInteger(
+                        "text-selection-participant".into(),
+                        participant.entity_id().as_u64(),
+                    ),
+                    cx,
+                    |_, _| RenderedMarker,
+                )
+                .downgrade(),
+        );
+        self
+    }
+
+    /// Whether the element that reported this registration is still part of
+    /// the window, even if it did not paint the frame that just finished.
+    fn is_rendered(&self) -> bool {
+        self.rendered
+            .as_ref()
+            .is_some_and(|marker| marker.upgrade().is_some())
+    }
+
+    /// Marks a participant that scrolls its own content in response to
+    /// [`TextSelectionEvent::AutoScroll`]. Drag auto-scroll then drives it
+    /// directly, measured against its own bounds, instead of synthesizing a
+    /// wheel event for the nearest scrollable ancestor.
+    pub(crate) fn with_self_scroll(mut self, self_scroll: bool) -> Self {
+        self.self_scroll = self_scroll;
+        self
     }
 
     /// Sets the participant's content scroll offset.
@@ -243,6 +307,14 @@ impl TextSelectionRegistration {
     /// Sets the glyph-bearing bounds used to reject blank-only gestures.
     pub fn with_text_bounds(mut self, text_bounds: Vec<Bounds<Pixels>>) -> Self {
         self.text_bounds = text_bounds;
+        self
+    }
+
+    /// Sets where the participant painted the two ends of its selection: the
+    /// caret line box before its first selected character and the one after
+    /// its last, in window coordinates. The touch handles are drawn there.
+    pub fn with_selection_edges(mut self, start: Bounds<Pixels>, end: Bounds<Pixels>) -> Self {
+        self.selection_edges = Some((start, end));
         self
     }
 
@@ -274,6 +346,11 @@ impl TextSelectionRegistration {
     /// Returns the glyph-bearing bounds used to reject blank-only gestures.
     pub fn text_bounds(&self) -> &[Bounds<Pixels>] {
         &self.text_bounds
+    }
+
+    /// Returns the caret line boxes at the participant's selection ends.
+    pub const fn selection_edges(&self) -> Option<(Bounds<Pixels>, Bounds<Pixels>)> {
+        self.selection_edges
     }
 }
 
@@ -389,7 +466,25 @@ fn selection_range_for_run(
         return None;
     }
 
+    if run.text.is_empty() {
+        return None;
+    }
+
     let line_height = run.layout.line_height();
+    // Each character is tested with its row's top and height, so a run whose
+    // rows all miss the band, or all lie strictly inside it with no endpoint
+    // on any row, has the same answer for every character. Decide those
+    // without the walk below, which scans the layout twice per character.
+    let (rows_top, rows_bottom) = text_rows_extent(&run.layout, line_height);
+    let band_top = selection_start.y.min(selection_end.y);
+    let band_bottom = selection_start.y.max(selection_end.y);
+    if rows_bottom <= band_top || rows_top > band_bottom {
+        return None;
+    }
+    if band_top < rows_top && band_bottom >= rows_bottom {
+        return Some(0..run.text.len());
+    }
+
     let mut range = None;
     for (offset, character) in run.text.char_indices() {
         let next_offset = offset + character.len_utf8();
@@ -414,6 +509,28 @@ fn selection_range_for_run(
         }
     }
     range
+}
+
+/// The top of the first laid-out row of `text_layout` and the bottom of its
+/// last one, each row `line_height` tall as a selection band test sees it.
+///
+/// Both ends are accumulated the way [`TextLayout::position_for_index`] places
+/// rows, so comparisons against them agree with a per-character walk to the
+/// bit. The last laid-out row may hold no character such a walk tests (a
+/// trailing empty line, or a row whose only character is placed at the end of
+/// the row before it); callers treat the extent as covering, never as exact.
+pub(crate) fn text_rows_extent(text_layout: &TextLayout, line_height: Pixels) -> (Pixels, Pixels) {
+    let top = text_layout.bounds().top();
+    let layout_line_height = text_layout.line_height();
+    let lines = text_layout.line_layouts();
+    let mut last_line_top = top;
+    for line in lines.iter().take(lines.len().saturating_sub(1)) {
+        last_line_top += line.size(layout_line_height).height;
+    }
+    let last_row_top = lines.last().map_or(top, |line| {
+        last_line_top + line.wrap_boundaries.len() as f32 * layout_line_height
+    });
+    (top, last_row_top + line_height)
 }
 
 fn points_for_multi_click(
@@ -491,6 +608,11 @@ pub enum TextSelectionEvent {
     AutoScroll(Option<Pixels>),
     /// Window selection cleared the participant's participant-local state.
     Cleared,
+    /// The touch selection the participant takes part in changed: it
+    /// appeared, its ends moved, a handle drag began or ended, or it went
+    /// away. The participant paints the handles and lays their hitboxes out
+    /// from the ends it painted last frame, so it renders once more.
+    TouchSelectionChanged,
 }
 
 struct CopyItem {
@@ -521,8 +643,11 @@ fn dispatch_clear_handlers(handlers: Vec<ClearHandler>, cx: &mut App) {
 
 struct SelectableTextState {
     fallback_copy_text: String,
-    projected_copy_text: Option<String>,
-    runs: Vec<TextSelectionRun>,
+    /// The selected text as the participant last painted it. Painting
+    /// projects it, which is not a change of the participant.
+    projected_copy_text: RefCell<Option<String>>,
+    /// The participant's text as it last painted it, for hit testing.
+    runs: RefCell<Vec<TextSelectionRun>>,
     local_selection: bool,
     snapshot: Option<TextSelectionSnapshot>,
     on_focus: Option<FocusCallback>,
@@ -537,8 +662,8 @@ impl SelectableTextState {
     fn new(fallback_copy_text: impl Into<String>) -> Self {
         Self {
             fallback_copy_text: fallback_copy_text.into(),
-            projected_copy_text: None,
-            runs: Vec::new(),
+            projected_copy_text: RefCell::new(None),
+            runs: RefCell::new(Vec::new()),
             local_selection: false,
             snapshot: None,
             on_focus: None,
@@ -556,7 +681,7 @@ impl SelectableTextState {
     /// Sets the text copied by this participant when it participates in selection.
     fn set_fallback_copy_text(&mut self, text: impl Into<String>) {
         self.fallback_copy_text = text.into();
-        self.projected_copy_text = None;
+        *self.projected_copy_text.get_mut() = None;
     }
 
     /// Marks participant-local selection (for example select-all) as active.
@@ -570,8 +695,8 @@ impl SelectableTextState {
     /// Call this once per painted run. A snapshot change or
     /// Clearing window selection invalidates the cache immediately, so copy
     /// never returns text from a previous projection while waiting to repaint.
-    fn update_runs(&mut self, runs: &[TextSelectionRun]) -> TextSelectionProjection {
-        self.runs = runs.to_vec();
+    fn update_runs(&self, runs: &[TextSelectionRun]) -> TextSelectionProjection {
+        *self.runs.borrow_mut() = runs.to_vec();
         let states = project_ranges(self.snapshot, runs);
         let mut selected_runs = runs
             .iter()
@@ -590,7 +715,7 @@ impl SelectableTextState {
             })
             .collect::<Vec<_>>();
         selected_runs.sort_by_key(|(order, index, _)| (*order, *index));
-        self.projected_copy_text =
+        *self.projected_copy_text.borrow_mut() =
             Some(selected_runs.into_iter().map(|(_, _, text)| text).collect());
         states
     }
@@ -622,13 +747,19 @@ impl SelectableTextState {
             return;
         }
         self.snapshot = snapshot;
-        self.projected_copy_text = None;
+        *self.projected_copy_text.get_mut() = None;
         cx.emit(TextSelectionEvent::SelectionChanged(snapshot));
+    }
+
+    /// Whether clearing the participant would change anything: it is part
+    /// of the window selection, or selected on its own.
+    fn has_selection_to_clear(&self) -> bool {
+        self.snapshot.is_some() || self.local_selection
     }
 
     fn clear_state(&mut self, cx: &mut Context<Self>) -> Option<ClearHandler> {
         self.snapshot = None;
-        self.projected_copy_text = None;
+        *self.projected_copy_text.get_mut() = None;
         self.local_selection = false;
         cx.emit(TextSelectionEvent::Cleared);
         cx.emit(TextSelectionEvent::SelectionChanged(None));
@@ -651,10 +782,17 @@ impl SelectableTextState {
             callback: self.copy.clone(),
             fallback: self
                 .projected_copy_text
+                .borrow()
                 .clone()
                 .unwrap_or_else(|| self.fallback_copy_text.clone()),
         })
     }
+}
+
+/// The touch handles a participant laid out for a frame, with their hitboxes.
+#[derive(Default)]
+pub struct TouchHandleLayout {
+    hitboxes: Vec<(SelectionEdge, Hitbox)>,
 }
 
 /// A stable, participant-neutral handle for text that participates in window selection.
@@ -707,6 +845,9 @@ impl TextSelectionHandle {
         let Some(state) = WindowSelectionState::existing(window, cx) else {
             return;
         };
+        let Some(registration) = state.read(cx).register_quietly(self, registration) else {
+            return;
+        };
         state.update(cx, |state, cx| {
             state.register_participant(self.clone(), registration, cx)
         });
@@ -714,7 +855,12 @@ impl TextSelectionHandle {
 
     /// Projects the current snapshot onto plain-text runs and caches their copy text.
     pub fn update_runs(&self, runs: &[TextSelectionRun], cx: &mut App) -> TextSelectionProjection {
-        self.0.update(cx, |state, _| state.update_runs(runs))
+        self.0.read(cx).update_runs(runs)
+    }
+
+    // Rich text renders its own selection; retain geometry only for word hit testing.
+    pub(crate) fn set_hit_test_runs(&self, runs: &[TextSelectionRun], cx: &mut App) {
+        *self.0.read(cx).runs.borrow_mut() = runs.to_vec();
     }
 
     /// Subscribes to participant selection notifications.
@@ -754,6 +900,109 @@ impl TextSelectionHandle {
     /// Sets a participant-specific copy projection.
     pub fn copy_with(&self, callback: impl Fn(&mut App) -> String + 'static, cx: &mut App) {
         self.0.update(cx, |state, _| state.copy_with(callback));
+    }
+
+    /// Lays out the touch handles at the ends of this participant's
+    /// selection, as they were painted last frame, and gives each a hitbox
+    /// where the finger takes it. Call during the participant's prepaint;
+    /// hand the result to [`Self::paint_touch_handles`].
+    pub fn prepaint_touch_handles(&self, window: &mut Window, cx: &App) -> TouchHandleLayout {
+        let Some(state) = WindowSelectionState::existing(window, cx) else {
+            return TouchHandleLayout::default();
+        };
+        let hitboxes = state
+            .read(cx)
+            .touch_handles_of(self.entity_id())
+            .into_iter()
+            .map(|(edge, caret)| {
+                let hitbox = window.insert_hitbox(
+                    TouchHandle::hit_bounds(edge, caret),
+                    HitboxBehavior::BlockMouse,
+                );
+                (edge, hitbox)
+            })
+            .collect();
+        TouchHandleLayout { hitboxes }
+    }
+
+    /// Paints the touch handles at the ends of this participant's selection,
+    /// in `color`, where the participant is in the paint order — so whatever
+    /// is drawn over the text is drawn over its handles too. Call at the end
+    /// of the participant's paint, after [`Self::register`] for the frame.
+    ///
+    /// The handles take the finger's drag from there; Base moves the
+    /// selection with it.
+    pub fn paint_touch_handles(
+        &self,
+        layout: &TouchHandleLayout,
+        color: Hsla,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(state) = WindowSelectionState::existing(window, cx) else {
+            return;
+        };
+        for (edge, caret) in state.read(cx).touch_handles_of(self.entity_id()) {
+            TouchHandle::paint(edge, caret, color, window);
+        }
+        let bounds: Vec<Bounds<Pixels>> = layout
+            .hitboxes
+            .iter()
+            .map(|(_, hitbox)| hitbox.bounds)
+            .collect();
+        if !state.read(cx).handles_painted_at(self.entity_id(), &bounds) {
+            state.update(cx, |state, _| {
+                state.register_handles(self.entity_id(), bounds)
+            });
+        }
+        for (edge, hitbox) in &layout.hitboxes {
+            let edge = *edge;
+            // Touch: the drag is offered on the first touch, before it can
+            // become a tap, a long press or a pan.
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let state = state.downgrade();
+                move |event: &TouchDragEvent, phase, window, cx| {
+                    if !phase.bubble()
+                        || event.phase != TouchPhase::Started
+                        || window.default_prevented()
+                        || !hitbox.is_hovered(window)
+                    {
+                        return;
+                    }
+                    let Some(state) = state.upgrade() else {
+                        return;
+                    };
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    state.update(cx, |state, cx| {
+                        state.begin_edge_drag(edge, event.position, window, cx)
+                    });
+                    WindowSelectionState::resolve_content_keys(&state, cx);
+                }
+            });
+            // Mouse: the same drag for a pointer.
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let state = state.downgrade();
+                move |event: &MouseDownEvent, phase, window, cx| {
+                    if !phase.bubble()
+                        || event.button != MouseButton::Left
+                        || !hitbox.is_hovered(window)
+                    {
+                        return;
+                    }
+                    let Some(state) = state.upgrade() else {
+                        return;
+                    };
+                    cx.stop_propagation();
+                    state.update(cx, |state, cx| {
+                        state.begin_edge_drag(edge, event.position, window, cx)
+                    });
+                    WindowSelectionState::resolve_content_keys(&state, cx);
+                }
+            });
+        }
     }
 
     /// Sets a participant-specific lookup for stable virtualized content keys.
@@ -819,24 +1068,99 @@ impl SelectionEndpoint {
     }
 }
 
+/// What a long press left behind: the handles and the edit menu.
+///
+/// The presentation layer draws both and reports their bounds each frame, so
+/// that a press on a handle or a menu item is not taken for a press on the
+/// text underneath, which would clear the very selection they belong to.
+#[derive(Default)]
+struct TouchSelection {
+    /// The current selection was made by touch and carries handles.
+    active: bool,
+    menu_open: bool,
+    drag: Option<EdgeDrag>,
+    /// Where the menu was painted this frame, and the frame before: a press
+    /// arrives between frames, and the surfaces may have moved in the one
+    /// that has not painted yet.
+    ui_bounds: Vec<Bounds<Pixels>>,
+    previous_ui_bounds: Vec<Bounds<Pixels>>,
+    /// Where each participant last painted its handles. A participant drawn
+    /// from an earlier frame, which does not paint again, still shows its
+    /// handles where it painted them; one that paints again replaces them.
+    handle_bounds: HashMap<EntityId, Vec<Bounds<Pixels>>>,
+    /// The ends as last laid out: `(start, end, start_visible, end_visible)`.
+    /// A frame in which no participant paints a selection — the cursor sits
+    /// between two characters mid-drag — would otherwise lose the handle the
+    /// finger holds, and with it the rest of the drag.
+    last_edges: std::cell::Cell<Option<(Bounds<Pixels>, Bounds<Pixels>, bool, bool)>>,
+}
+
+impl TouchSelection {
+    fn covers(&self, position: Point<Pixels>) -> bool {
+        self.active
+            && self
+                .ui_bounds
+                .iter()
+                .chain(&self.previous_ui_bounds)
+                .chain(self.handle_bounds.values().flatten())
+                .any(|bounds| bounds.contains(&position))
+    }
+
+    /// Whether the handles or the menu were painted in either of the last
+    /// two frames, which [`Self::begin_frame`] has to shift.
+    fn painted_any(&self) -> bool {
+        !self.ui_bounds.is_empty() || !self.previous_ui_bounds.is_empty()
+    }
+
+    /// A new frame begins: what was painted last frame is kept one frame more.
+    fn begin_frame(&mut self) {
+        self.previous_ui_bounds = std::mem::take(&mut self.ui_bounds);
+    }
+
+    /// Drops the handles and the menu; returns whether there were any.
+    fn reset(&mut self) -> bool {
+        let had = self.active;
+        self.handle_bounds.clear();
+        self.active = false;
+        self.menu_open = false;
+        self.drag = None;
+        self.last_edges.set(None);
+        had
+    }
+}
+
 /// Window-local generic text-selection state.
 #[derive(Default)]
 struct WindowSelectionState {
-    participants: HashMap<EntityId, ParticipantRegistration>,
+    /// What each participant painted this frame, or last painted. Painting
+    /// reports it without changing the selection: see
+    /// [`WindowSelectionState::register_quietly`].
+    participants: RefCell<HashMap<EntityId, ParticipantRegistration>>,
     active_scope: TextSelectionScopeId,
     anchor: Option<SelectionEndpoint>,
     cursor: Option<SelectionEndpoint>,
     pending_extension_anchor: Option<SelectionEndpoint>,
     is_selecting: bool,
     did_hit_text: bool,
-    frame_generation: u64,
-    finish_frame_scheduled: bool,
+    frame_generation: Cell<u64>,
+    finish_frame_scheduled: Cell<bool>,
+    refresh_held_cursor: bool,
     mouse_down_prepared: bool,
+    auto_scroll: AutoScroll,
+    /// Where the anchor's text was when the last synthetic wheel went out,
+    /// and how many went out without moving it. A container at its end
+    /// cannot scroll further; pushing it on would only make one that
+    /// bounces stretch and snap back on every tick.
+    auto_scroll_stall: (Option<(Bounds<Pixels>, Point<Pixels>)>, u8),
+    touch: TouchSelection,
+    /// This entity, so that touch changes can notify observers from paths that
+    /// only hold an [`App`].
+    entity_id: Option<EntityId>,
 }
 
 impl WindowSelectionState {
     fn resolve_content_keys(state: &Entity<Self>, cx: &mut App) {
-        let pending = state.update(cx, |state, _| {
+        let pending = state.read_with(cx, |state, _| {
             [
                 state
                     .anchor
@@ -848,6 +1172,11 @@ impl WindowSelectionState {
                     .and_then(|endpoint| endpoint.content_key_resolver.clone()),
             ]
         });
+        // Nothing to resolve and no selection to publish: an event that
+        // changed nothing does not change the state either.
+        if pending.iter().all(Option::is_none) && !state.read(cx).is_active() {
+            return;
+        }
         let resolved =
             pending.map(|pending| pending.and_then(|(callback, point)| callback(point, cx)));
         state.update(cx, |state, cx| {
@@ -904,6 +1233,7 @@ impl WindowSelectionState {
             .detach();
             Self {
                 active_scope,
+                entity_id: Some(entity_id),
                 ..Self::default()
             }
         });
@@ -954,35 +1284,125 @@ impl WindowSelectionState {
     /// Registrations are stamped with the current generation while any sibling
     /// is painting. Sweeping only after paint makes registration independent of
     /// whether a participant or the lifecycle element paints first.
+    ///
+    /// A missed generation alone does not mean the participant left the window:
+    /// a cached view replays its recorded frame, painting the same text at the
+    /// same place without running any of its elements. Such a participant keeps
+    /// the registration it last reported, which still describes what is on
+    /// screen; only one whose element GPUI has dropped is swept.
+    ///
+    /// Removing an endpoint also retires the window's gesture. Clearing only
+    /// the participant snapshot would restore that selection if its retained
+    /// entity were registered again.
     pub fn finish_frame(&mut self, cx: &mut App) -> Vec<ClearHandler> {
-        self.finish_frame_scheduled = false;
+        self.finish_frame_scheduled.set(false);
+        let generation = self.frame_generation.get();
         let stale = self
             .participants
+            .get_mut()
             .iter()
             .filter_map(|(id, registration)| {
-                (registration.generation != self.frame_generation)
+                (registration.generation != generation && !registration.registration.is_rendered())
                     .then(|| (*id, registration.participant.clone()))
             })
             .collect::<Vec<_>>();
-        let mut handlers = Vec::new();
+        let endpoint_departed = stale.iter().any(|(id, _)| {
+            [
+                self.anchor.as_ref(),
+                self.cursor.as_ref(),
+                self.pending_extension_anchor.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|endpoint| endpoint.entity_id() == Some(*id))
+        });
+        let mut handlers = if endpoint_departed {
+            self.clear_state(cx)
+        } else {
+            Vec::new()
+        };
         for (id, participant) in stale {
-            self.participants.remove(&id);
-            if let Some(participant) = participant.upgrade() {
+            self.participants.get_mut().remove(&id);
+            if let Some(participant) = participant.upgrade()
+                && participant.read(cx).has_selection_to_clear()
+            {
                 if let Some(handler) = participant.update(cx, |state, cx| state.clear_state(cx)) {
                     handlers.push(handler);
                 }
             }
         }
         self.publish_snapshots(cx);
-        self.frame_generation = self.frame_generation.wrapping_add(1);
+        self.frame_generation.set(generation.wrapping_add(1));
         handlers
     }
 
-    fn schedule_finish_frame(&mut self) -> bool {
-        if self.finish_frame_scheduled {
+    fn schedule_finish_frame(&self) -> bool {
+        !self.finish_frame_scheduled.replace(true)
+    }
+
+    /// Whether there is a selection, or a gesture or touch selection that
+    /// may make one: what painting the participants reports can change it.
+    fn is_active(&self) -> bool {
+        self.anchor.is_some()
+            || self.cursor.is_some()
+            || self.pending_extension_anchor.is_some()
+            || self.is_selecting
+            || self.refresh_held_cursor
+            || self.touch.active
+    }
+
+    /// Records this frame's geometry for a participant without updating
+    /// this state, when there is no selection for the geometry to change.
+    /// Every participant paints its geometry on every frame; doing so through
+    /// an update would mark the state, and every view that reads it, changed
+    /// on every frame. Returns the registration when it has to go through
+    /// [`Self::register_participant`].
+    fn register_quietly(
+        &self,
+        selection: &TextSelectionHandle,
+        registration: TextSelectionRegistration,
+    ) -> Option<TextSelectionRegistration> {
+        if self.is_active() {
+            return Some(registration);
+        }
+        self.participants.borrow_mut().insert(
+            selection.entity_id(),
+            ParticipantRegistration {
+                participant: selection.downgrade(),
+                registration: Rc::new(registration),
+                generation: self.frame_generation.get(),
+            },
+        );
+        None
+    }
+
+    /// Ends the frame as [`Self::finish_frame`] does, without updating this
+    /// state, when there is no selection and no participant that left the
+    /// window has one to clear. Returns whether it could.
+    fn finish_frame_quietly(&self, cx: &App) -> bool {
+        if self.is_active() {
             return false;
         }
-        self.finish_frame_scheduled = true;
+        let generation = self.frame_generation.get();
+        let mut participants = self.participants.borrow_mut();
+        let gone = |registration: &ParticipantRegistration| {
+            registration.generation != generation && !registration.registration.is_rendered()
+        };
+        if participants.values().any(|registration| {
+            gone(registration)
+                && registration
+                    .participant
+                    .upgrade()
+                    .is_some_and(|participant| participant.read(cx).has_selection_to_clear())
+        }) {
+            return false;
+        }
+        participants.retain(|_, registration| {
+            !gone(registration) && registration.participant.upgrade().is_some()
+        });
+        drop(participants);
+        self.finish_frame_scheduled.set(false);
+        self.frame_generation.set(generation.wrapping_add(1));
         true
     }
 
@@ -994,15 +1414,43 @@ impl WindowSelectionState {
         cx: &mut App,
     ) {
         self.prune_dead_participants();
-        self.participants.insert(
+        if self.is_selecting
+            && registration.self_scroll
+            && self.anchor.as_ref().and_then(SelectionEndpoint::entity_id)
+                == Some(selection.entity_id())
+            && self
+                .participants
+                .get_mut()
+                .get(&selection.entity_id())
+                .is_some_and(|previous| {
+                    previous.registration.scroll_offset != registration.scroll_offset
+                        || previous.registration.bounds != registration.bounds
+                })
+        {
+            self.refresh_held_cursor = true;
+        }
+        // The handles sit on the painted ends; when those moved — a scroll, a
+        // reflow, a select-all — whoever draws the handles needs to know.
+        let edges_moved = self.touch.active
+            && self
+                .participants
+                .get_mut()
+                .get(&selection.entity_id())
+                .is_none_or(|previous| {
+                    previous.registration.selection_edges != registration.selection_edges
+                });
+        self.participants.get_mut().insert(
             selection.entity_id(),
             ParticipantRegistration {
                 participant: selection.downgrade(),
                 registration: Rc::new(registration),
-                generation: self.frame_generation,
+                generation: self.frame_generation.get(),
             },
         );
         self.publish_snapshots(cx);
+        if edges_moved {
+            self.touch_changed(cx);
+        }
     }
 
     /// Starts a selection gesture using bounds hit testing (useful to adapters/tests).
@@ -1045,16 +1493,54 @@ impl WindowSelectionState {
         self.pending_extension_anchor = None;
         self.is_selecting = false;
         self.did_hit_text = false;
+        if self.touch.reset() {
+            self.touch_changed(cx);
+        }
         self.prune_dead_participants();
         self.participants
+            .borrow()
             .values()
             .filter_map(|registration| registration.participant.upgrade())
             .filter_map(|participant| participant.update(cx, |state, cx| state.clear_state(cx)))
             .collect()
     }
 
+    /// Tells whoever draws the handles and the menu that they changed.
+    ///
+    /// Deferred, because the change may come from a participant painting its
+    /// selection ends: a notification raised inside a draw marks the view
+    /// dirty but starts no frame, and the handles would sit where they were
+    /// until something else redrew the window.
+    ///
+    /// The participants in the selection hear it too: they paint the
+    /// handles, and lay the handles' hitboxes out from the ends they painted
+    /// last frame, so they render once more. A participant under a cached
+    /// view would otherwise not, and the next frame would replay this one,
+    /// with no hitbox where a handle is.
+    fn touch_changed(&self, cx: &mut App) {
+        let participants = self
+            .participants
+            .borrow()
+            .values()
+            .filter_map(|registration| registration.participant.upgrade())
+            .filter(|participant| participant.read(cx).snapshot.is_some())
+            .collect::<Vec<_>>();
+        let entity_id = self.entity_id;
+        cx.defer(move |cx| {
+            for participant in participants {
+                participant.update(cx, |_, cx| {
+                    cx.emit(TextSelectionEvent::TouchSelectionChanged)
+                });
+            }
+            if let Some(entity_id) = entity_id {
+                cx.notify(entity_id);
+            }
+        });
+    }
+
     fn copy_items(&self, cx: &App) -> Vec<CopyItem> {
         self.participants
+            .borrow()
             .values()
             .filter_map(|registration| {
                 let participant = registration.participant.upgrade()?;
@@ -1070,10 +1556,29 @@ impl WindowSelectionState {
         resolve_copy_items(self.copy_items(cx), cx)
     }
 
+    /// Whether the current endpoints take in at least one character of some
+    /// participant's painted text, as opposed to two points with nothing
+    /// between them.
+    fn selects_text(&self, cx: &App) -> bool {
+        self.snapshot().is_some()
+            && self.participants.borrow().values().any(|registration| {
+                registration
+                    .participant
+                    .upgrade()
+                    .is_some_and(|participant| {
+                        let participant = participant.read(cx);
+                        project_ranges(participant.snapshot, &participant.runs.borrow())
+                            .ranges()
+                            .iter()
+                            .any(|range| range.as_ref().is_some_and(|range| !range.is_empty()))
+                    })
+            })
+    }
+
     /// Returns whether a drag or a participant-local selection is active.
     pub fn has_selection(&self, cx: &App) -> bool {
         self.snapshot().is_some()
-            || self.participants.values().any(|registration| {
+            || self.participants.borrow().values().any(|registration| {
                 registration
                     .participant
                     .upgrade()
@@ -1088,8 +1593,8 @@ impl WindowSelectionState {
         }
         let anchor_endpoint = self.anchor.as_ref()?;
         let cursor_endpoint = self.cursor.as_ref()?;
-        let anchor = anchor_endpoint.resolve(&self.participants)?;
-        let cursor = cursor_endpoint.resolve(&self.participants)?;
+        let anchor = anchor_endpoint.resolve(&self.participants.borrow())?;
+        let cursor = cursor_endpoint.resolve(&self.participants.borrow())?;
         (anchor != cursor).then(|| {
             TextSelectionSnapshot::new(anchor_endpoint.snapshot(), cursor_endpoint.snapshot())
                 .with_selecting(self.is_selecting)
@@ -1111,15 +1616,306 @@ impl WindowSelectionState {
         self.pending_extension_anchor = None;
         self.is_selecting = false;
         self.did_hit_text = false;
+        if self.touch.reset() {
+            self.touch_changed(cx);
+        }
         self.prune_dead_participants();
         let handlers = self
             .participants
+            .borrow()
             .values()
             .filter_map(|registration| registration.participant.upgrade())
             .filter_map(|participant| participant.update(cx, |state, cx| state.clear_state(cx)))
             .collect();
         self.pending_extension_anchor = pending_extension_anchor;
         handlers
+    }
+
+    /// The touch selection laid out for its handles and edit menu.
+    ///
+    /// The ends come from the participants: the first selected character of
+    /// the earliest participant in document order and the last of the latest.
+    /// A participant whose selection is entirely scrolled away paints no ends,
+    /// so the handles disappear with the text they mark.
+    fn touch_selection(&self) -> Option<TouchSelectionSnapshot> {
+        if !self.touch.active {
+            return None;
+        }
+        // Each end with its owner's viewport: an end scrolled out of its
+        // participant gets no handle.
+        let mut start: Option<(u64, Bounds<Pixels>, bool)> = None;
+        let mut end: Option<(u64, Bounds<Pixels>, bool)> = None;
+        for registration in self.participants.borrow().values() {
+            let geometry = &registration.registration;
+            if geometry.scope != self.active_scope || registration.participant.upgrade().is_none() {
+                continue;
+            }
+            let Some((edge_start, edge_end)) = geometry.selection_edges else {
+                continue;
+            };
+            let order = geometry.document_order;
+            let viewport = geometry.hitbox.bounds;
+            if start.is_none_or(|(best, ..)| order < best) {
+                start = Some((order, edge_start, caret_in_view(edge_start, viewport)));
+            }
+            if end.is_none_or(|(best, ..)| order >= best) {
+                end = Some((order, edge_end, caret_in_view(edge_end, viewport)));
+            }
+        }
+        let edges = match (start, end) {
+            (Some((_, start, start_visible)), Some((_, end, end_visible))) => {
+                let edges = (start, end, start_visible, end_visible);
+                self.touch.last_edges.set(Some(edges));
+                edges
+            }
+            _ if self.touch.drag.is_some() => self.touch.last_edges.get()?,
+            _ => return None,
+        };
+        let (start, end, start_visible, end_visible) = edges;
+        Some(
+            TouchSelectionSnapshot::new(start, end)
+                .with_edge_visible(SelectionEdge::Start, start_visible)
+                .with_edge_visible(SelectionEdge::End, end_visible)
+                .with_menu_open(self.touch.menu_open)
+                .with_dragging(self.touch.drag.map(|drag| drag.edge())),
+        )
+    }
+
+    /// The handles `participant` paints: the start when no participant
+    /// earlier in document order has a selection end, the end when none
+    /// later has. Participants paint in document order, so a later one that
+    /// takes the end over has registered its ends by the time it asks.
+    fn touch_handles_of(&self, participant: EntityId) -> Vec<(SelectionEdge, Bounds<Pixels>)> {
+        if !self.touch.active {
+            return Vec::new();
+        }
+        let Some(own) = self.participants.borrow().get(&participant).cloned() else {
+            return Vec::new();
+        };
+        let Some((start, end)) = own.registration.selection_edges else {
+            return Vec::new();
+        };
+        if start == end {
+            return Vec::new();
+        }
+        let order = own.registration.document_order;
+        let participants = self.participants.borrow();
+        let others = participants.iter().filter(|(id, registration)| {
+            **id != participant
+                && registration.registration.scope == self.active_scope
+                && registration.registration.selection_edges.is_some()
+                && registration.participant.upgrade().is_some()
+        });
+        let (mut earlier, mut later) = (false, false);
+        for (_, registration) in others {
+            let other = registration.registration.document_order;
+            earlier |= other < order;
+            later |= other > order;
+        }
+        let viewport = own.registration.hitbox.bounds;
+        let mut handles = Vec::with_capacity(2);
+        if !earlier && caret_in_view(start, viewport) {
+            handles.push((SelectionEdge::Start, start));
+        }
+        if !later && caret_in_view(end, viewport) {
+            handles.push((SelectionEdge::End, end));
+        }
+        handles
+    }
+
+    /// Keeps the selection a long press made, and opens the edit menu over it.
+    fn keep_touch_selection(&mut self, cx: &mut App) {
+        self.touch.active = self.snapshot().is_some();
+        self.touch.menu_open = self.touch.active;
+        self.touch.drag = None;
+        self.touch_changed(cx);
+    }
+
+    /// Records where the menu is painted this frame.
+    fn register_touch_ui(&mut self, bounds: Bounds<Pixels>) {
+        self.touch.ui_bounds.push(bounds);
+    }
+
+    /// Whether `bounds` are where `participant` painted its handles last.
+    fn handles_painted_at(&self, participant: EntityId, bounds: &[Bounds<Pixels>]) -> bool {
+        self.touch
+            .handle_bounds
+            .get(&participant)
+            .map_or(bounds.is_empty(), |painted| painted == bounds)
+    }
+
+    /// Records where `participant` painted its handles, which replace those
+    /// it painted before.
+    fn register_handles(&mut self, participant: EntityId, bounds: Vec<Bounds<Pixels>>) {
+        self.touch.handle_bounds.insert(participant, bounds);
+    }
+
+    fn close_edit_menu(&mut self, cx: &mut App) {
+        if !self.touch.menu_open {
+            return;
+        }
+        self.touch.menu_open = false;
+        self.touch_changed(cx);
+    }
+
+    /// The handles follow the text, but the menu would sit over whatever
+    /// scrolls underneath it: it steps aside while a finger scrolls and comes
+    /// back over the handles once the finger lifts.
+    fn edit_menu_on_scroll(&mut self, phase: TouchPhase, cx: &mut App) {
+        if !self.touch.active || self.touch.drag.is_some() {
+            return;
+        }
+        match phase {
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                if !self.touch.menu_open {
+                    self.touch.menu_open = true;
+                    self.touch_changed(cx);
+                }
+            }
+            _ => self.close_edit_menu(cx),
+        }
+    }
+
+    /// Selects all of the participant the touch selection started in.
+    ///
+    /// This stays a point selection — anchored on the participant's first
+    /// line of text, ending on its last — rather than switching the
+    /// participant to a local select-all: one selection, painted, reported
+    /// and copied the one way, with handles that drag on from its ends.
+    fn select_all_touched(&mut self, cx: &mut App) {
+        if !self.touch.active {
+            return;
+        }
+        let Some((participant, registration)) = self.anchor_registration() else {
+            return;
+        };
+        // From the participant's text runs, not its painted line bounds:
+        // those are clipped to the viewport, and a message taller than the
+        // screen would only select what is on it.
+        let (anchor, cursor) = {
+            let runs = &participant.read(cx).runs.borrow();
+            let (Some(first), Some(last)) = (
+                runs.iter().min_by_key(|run| run.document_order),
+                runs.iter().max_by_key(|run| run.document_order),
+            ) else {
+                return;
+            };
+            let (Some(start), Some(end)) = (
+                first.layout.position_for_index(0),
+                last.layout.position_for_index(last.text.len()),
+            ) else {
+                return;
+            };
+            // Just inside the first and the last glyph, mid-line, so both
+            // land on text.
+            let inset = px(1.);
+            (
+                point(start.x + inset, start.y + first.layout.line_height() / 2.),
+                point(end.x - inset, end.y + last.layout.line_height() / 2.),
+            )
+        };
+        let content_key_resolver = participant.read(cx).content_key_resolver.clone();
+        let to_endpoint = |window_point: Point<Pixels>| {
+            let content_point =
+                window_point - registration.bounds.origin - registration.scroll_offset;
+            SelectionEndpoint {
+                participant: Some(participant.downgrade()),
+                point: content_point,
+                inside: true,
+                inside_text: true,
+                content_key: None,
+                content_key_resolver: content_key_resolver
+                    .clone()
+                    .map(|resolver| (resolver, content_point)),
+            }
+        };
+        self.anchor = Some(to_endpoint(anchor));
+        self.cursor = Some(to_endpoint(cursor));
+        self.did_hit_text = true;
+        self.is_selecting = false;
+        self.touch.menu_open = true;
+        self.publish_snapshots(cx);
+        self.touch_changed(cx);
+    }
+
+    /// Starts dragging one end of the touch selection from `finger`.
+    ///
+    /// The selection is rebuilt from the painted ends, anchored at the end that
+    /// stays: a select-all or a word selection becomes an ordinary point
+    /// selection which the drag then extends.
+    fn begin_edge_drag(
+        &mut self,
+        edge: SelectionEdge,
+        finger: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(snapshot) = self.touch_selection() else {
+            return;
+        };
+        let handlers = self.prepare_for_mouse_down(false, cx);
+        dispatch_clear_handlers(handlers, cx);
+        let held = snapshot.edge(edge.opposite());
+        // Just inside the held end, so the anchor lands on the character it
+        // marks rather than on the boundary between two participants.
+        let nudge = px(1.);
+        let anchor_point = match edge {
+            SelectionEdge::Start => point(held.left() - nudge, held.center().y),
+            SelectionEdge::End => point(held.left() + nudge, held.center().y),
+        };
+        let anchor = self.endpoint(anchor_point, None, cx);
+        let drag = EdgeDrag::begin(edge, snapshot.edge(edge), finger);
+        let cursor = self.endpoint(drag.text_position(finger), Some(window), cx);
+        self.did_hit_text = anchor.inside_text || cursor.inside_text;
+        self.anchor = Some(anchor);
+        self.cursor = Some(cursor);
+        self.is_selecting = true;
+        self.touch.active = true;
+        self.touch.menu_open = false;
+        self.touch.drag = Some(drag);
+        self.publish_snapshots(cx);
+        self.touch_changed(cx);
+    }
+
+    fn update_edge_drag(&mut self, finger: Point<Pixels>, window: &Window, cx: &mut Context<Self>) {
+        let Some(drag) = self.touch.drag else {
+            return;
+        };
+        let before = self.cursor.clone();
+        self.update_in_window(drag.text_position(finger), window, cx);
+        // A handle never collapses the selection: at the other end it stops,
+        // and the finger has to pass that end, onto text, to swap the two.
+        if !self.selects_text(cx) {
+            self.cursor = before;
+            self.publish_snapshots(cx);
+            return;
+        }
+        // Dragging one end past the other swaps them: the cursor now lies
+        // before the anchor, so the finger holds what became the start.
+        if let Some(points) = self
+            .snapshot()
+            .and_then(|snapshot| snapshot.window_points())
+        {
+            let (anchor, cursor) = (points.anchor(), points.cursor());
+            let cursor_first = cursor.y < anchor.y || (cursor.y == anchor.y && cursor.x < anchor.x);
+            let edge = if cursor_first {
+                SelectionEdge::Start
+            } else {
+                SelectionEdge::End
+            };
+            if let Some(drag) = self.touch.drag.as_mut() {
+                drag.set_edge(edge);
+            }
+        }
+        self.touch_changed(cx);
+    }
+
+    fn end_edge_drag(&mut self, cx: &mut App) {
+        if self.touch.drag.take().is_none() {
+            return;
+        }
+        self.end(cx);
+        self.keep_touch_selection(cx);
     }
 
     fn begin_in_window(
@@ -1132,8 +1928,16 @@ impl WindowSelectionState {
         self.begin_impl(position, extend, true, Some(window), cx);
     }
 
-    fn update_in_window(&mut self, position: Point<Pixels>, window: &Window, cx: &mut App) {
-        self.update_in_window_with_active_drag(position, cx.has_active_drag(), window, cx);
+    fn update_in_window(
+        &mut self,
+        position: Point<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !cx.has_active_drag() {
+            self.update_impl(position, Some(window), cx);
+            self.update_auto_scroll(position, window, cx);
+        }
     }
 
     fn select_at(
@@ -1157,11 +1961,17 @@ impl WindowSelectionState {
         else {
             return;
         };
-        let points = points_for_multi_click(&participant.read(cx).runs, position, click_count);
+        let points =
+            points_for_multi_click(&participant.read(cx).runs.borrow(), position, click_count);
         let Some((anchor, cursor)) = points else {
             return;
         };
-        let Some(registration) = self.participants.get(&participant.entity_id()) else {
+        let Some(registration) = self
+            .participants
+            .borrow()
+            .get(&participant.entity_id())
+            .cloned()
+        else {
             return;
         };
         let content_key_resolver = participant.read(cx).content_key_resolver.clone();
@@ -1188,6 +1998,7 @@ impl WindowSelectionState {
         self.publish_snapshots(cx);
     }
 
+    #[cfg(test)]
     fn update_in_window_with_active_drag(
         &mut self,
         position: Point<Pixels>,
@@ -1220,7 +2031,7 @@ impl WindowSelectionState {
                     .or_else(|| self.anchor.clone())
             })
             .flatten()
-            .filter(|anchor| anchor.resolve(&self.participants).is_some());
+            .filter(|anchor| anchor.resolve(&self.participants.borrow()).is_some());
         if !extend && !already_prepared {
             self.clear(cx);
         }
@@ -1249,7 +2060,9 @@ impl WindowSelectionState {
         let endpoint = self.endpoint(position, window, cx);
         self.did_hit_text |= endpoint.inside_text;
         self.cursor = Some(endpoint);
-        self.update_anchor_auto_scroll(position, cx);
+        if window.is_none() {
+            self.update_participant_auto_scroll(position, cx);
+        }
         self.publish_snapshots(cx);
     }
 
@@ -1274,7 +2087,7 @@ impl WindowSelectionState {
             Rc<TextSelectionRegistration>,
         )> = None;
 
-        for registration in self.participants.values() {
+        for registration in self.participants.borrow().values() {
             if registration.registration.scope != self.active_scope
                 || registration.participant.upgrade().is_none()
             {
@@ -1369,7 +2182,7 @@ impl WindowSelectionState {
         self.prune_dead_participants();
         let snapshot = self.snapshot();
         let single_participant = self.single_participant();
-        for (id, registration) in &self.participants {
+        for (id, registration) in self.participants.borrow().iter() {
             let Some(participant) = registration.participant.upgrade() else {
                 continue;
             };
@@ -1382,6 +2195,9 @@ impl WindowSelectionState {
                 snapshot.coverage = self.coverage_for(*id);
                 snapshot
             });
+            if participant.read(cx).snapshot == participant_snapshot {
+                continue;
+            }
             participant.update(cx, |state, cx| state.set_snapshot(participant_snapshot, cx));
         }
     }
@@ -1396,8 +2212,12 @@ impl WindowSelectionState {
         if anchor == cursor {
             return TextSelectionCoverage::Bounded;
         }
-        let anchor_order = self.participants[&anchor].registration.document_order;
-        let cursor_order = self.participants[&cursor].registration.document_order;
+        let anchor_order = self.participants.borrow()[&anchor]
+            .registration
+            .document_order;
+        let cursor_order = self.participants.borrow()[&cursor]
+            .registration
+            .document_order;
         if id != anchor && id != cursor {
             TextSelectionCoverage::Full
         } else if (id == anchor) == (anchor_order < cursor_order) {
@@ -1420,10 +2240,10 @@ impl WindowSelectionState {
         let Some(cursor) = self.cursor.as_ref().and_then(SelectionEndpoint::entity_id) else {
             return false;
         };
-        let Some(anchor_registration) = self.participants.get(&anchor) else {
+        let Some(anchor_registration) = self.participants.borrow().get(&anchor).cloned() else {
             return false;
         };
-        let Some(cursor_registration) = self.participants.get(&cursor) else {
+        let Some(cursor_registration) = self.participants.borrow().get(&cursor).cloned() else {
             return false;
         };
         let start = anchor_registration
@@ -1439,35 +2259,144 @@ impl WindowSelectionState {
             || id == cursor
     }
 
-    fn update_anchor_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
-        let Some(anchor) = self.anchor.as_ref().filter(|anchor| anchor.inside) else {
+    fn update_auto_scroll(
+        &mut self,
+        position: Point<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        // A finished gesture keeps its anchor for shift-click extension; only
+        // a live drag may scroll.
+        if !self.is_selecting {
+            return;
+        }
+        let Some((_, registration)) = self.anchor_registration() else {
             return;
         };
-        let Some(participant) = anchor.participant.as_ref().and_then(WeakEntity::upgrade) else {
+        // Exactly one writer per drag: a participant that scrolls its own
+        // content is notified directly; anything else gets a synthetic wheel.
+        if registration.self_scroll {
+            self.auto_scroll.stop();
+            self.update_participant_auto_scroll(position, cx);
+            return;
+        }
+        // The content mask is the nearest clipping viewport established by a
+        // scrollable ancestor. It remains stable as the participant itself
+        // moves, so selection keeps scrolling the same related region even
+        // after the anchor text has moved out of view.
+        let visible_bounds = registration.hitbox.content_mask.bounds;
+        // Keeps the synthesized wheel event hit-testing inside the mask.
+        const HIT_TEST_INSET: Pixels = px(1.);
+        // A collapsed mask leaves an empty clamp range below — stop.
+        if visible_bounds.size.width < HIT_TEST_INSET * 2.
+            || visible_bounds.size.height < HIT_TEST_INSET * 2.
+        {
+            self.stop_anchor_auto_scroll(cx);
+            return;
+        }
+        let delta = AutoScroll::compute_delta(position.y, visible_bounds);
+        let event_position = point(
+            position.x.clamp(
+                visible_bounds.left() + HIT_TEST_INSET,
+                visible_bounds.right() - HIT_TEST_INSET,
+            ),
+            position.y.clamp(
+                visible_bounds.top() + HIT_TEST_INSET,
+                visible_bounds.bottom() - HIT_TEST_INSET,
+            ),
+        );
+        self.auto_scroll.last_drag_position = Some(event_position);
+        self.auto_scroll_stall = (None, 0);
+        let window = window.window_handle();
+        self.auto_scroll.set(delta, cx, move |delta, state, cx| {
+            let Some(position) = state.auto_scroll.last_drag_position else {
+                return;
+            };
+            // Hold off once the container has shown, over a few ticks, that
+            // it has nowhere left to go; the next move of the finger asks
+            // again.
+            const STALLED_TICKS: u8 = 3;
+            let geometry = state
+                .anchor_registration()
+                .map(|(_, registration)| (registration.bounds, registration.scroll_offset));
+            let (last, stalled) = &mut state.auto_scroll_stall;
+            if *last == geometry {
+                *stalled = stalled.saturating_add(1);
+                if *stalled >= STALLED_TICKS {
+                    return;
+                }
+            } else {
+                *last = geometry;
+                *stalled = 0;
+            }
+            let window = window;
+            cx.defer(move |cx| {
+                _ = window.update(cx, |_, window, cx| {
+                    window.dispatch_event(
+                        ScrollWheelEvent {
+                            position,
+                            delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                            ..Default::default()
+                        }
+                        .to_platform_input(),
+                        cx,
+                    );
+                });
+            });
+        });
+    }
+
+    /// Drives the anchor participant's own scrolling, measured against the
+    /// visible portion of the participant's element bounds.
+    fn update_participant_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
+        let Some((participant, registration)) = self.anchor_registration() else {
             return;
         };
-        let Some(registration) = self.participants.get(&participant.entity_id()) else {
-            return;
+        let visible_bounds = registration
+            .bounds
+            .intersect(&registration.hitbox.content_mask.bounds);
+        let delta = if visible_bounds.size.width > px(0.) && visible_bounds.size.height > px(0.) {
+            AutoScroll::compute_delta(position.y, visible_bounds)
+        } else {
+            None
         };
-        let delta = AutoScroll::compute_delta(position.y, registration.registration.bounds);
         participant.update(cx, |state, cx| state.set_auto_scroll(delta, cx));
     }
 
-    fn stop_anchor_auto_scroll(&self, cx: &mut App) {
-        let Some(participant) = self
-            .anchor
-            .as_ref()
-            .filter(|anchor| anchor.inside)
-            .and_then(|anchor| anchor.participant.as_ref())
-            .and_then(WeakEntity::upgrade)
-        else {
+    fn stop_anchor_auto_scroll(&mut self, cx: &mut App) {
+        self.auto_scroll.stop();
+        let Some(participant) = self.anchor_participant() else {
             return;
         };
         participant.update(cx, |state, cx| state.set_auto_scroll(None, cx));
     }
 
+    /// The live participant owning the anchor of the current gesture.
+    fn anchor_participant(&self) -> Option<Entity<SelectableTextState>> {
+        self.anchor
+            .as_ref()
+            .filter(|anchor| anchor.inside)?
+            .participant
+            .as_ref()?
+            .upgrade()
+    }
+
+    /// The anchor participant together with its current frame registration.
+    fn anchor_registration(
+        &self,
+    ) -> Option<(Entity<SelectableTextState>, Rc<TextSelectionRegistration>)> {
+        let participant = self.anchor_participant()?;
+        let registration = self
+            .participants
+            .borrow()
+            .get(&participant.entity_id())?
+            .clone();
+        Some((participant, registration.registration.clone()))
+    }
+
     fn prune_dead_participants(&mut self) {
         self.participants
+            .get_mut()
             .retain(|_, registration| registration.participant.upgrade().is_some());
     }
 }
@@ -1544,6 +2473,23 @@ fn with_text_selection_scope<T>(
 pub struct TextSelection;
 
 impl TextSelection {
+    /// Returns whether `position` hits selectable text in the active scope.
+    ///
+    /// Uses the current frame's registered text geometry and hitboxes without
+    /// starting or changing a selection. Blank space and text outside the active
+    /// selection scope do not match. A containing control can yield a long press
+    /// to the window's text selection before claiming the gesture itself.
+    /// Call during pointer dispatch with the event's position, so the hitboxes
+    /// reflect the point being queried. Touch-selection controls do not match.
+    pub fn is_selectable_at(position: Point<Pixels>, window: &Window, cx: &mut App) -> bool {
+        live_text_selection_state(window, cx).is_some_and(|state| {
+            state.update(cx, |state, cx| {
+                !state.touch.covers(position)
+                    && state.endpoint(position, Some(window), cx).inside_text
+            })
+        })
+    }
+
     /// Returns the currently selected text in logical document order.
     pub fn selected_text(window: &mut Window, cx: &mut App) -> String {
         let Some(state) = live_text_selection_state(window, cx) else {
@@ -1582,6 +2528,81 @@ impl TextSelection {
         }
     }
 
+    /// Calls `callback` whenever the touch selection changes: it appears, its
+    /// handles move, its menu opens or closes, or it goes away. Whoever draws
+    /// the handles and the menu re-renders from here.
+    pub fn observe_touch_selection(
+        window: &Window,
+        cx: &mut App,
+        callback: impl Fn(&mut App) + 'static,
+    ) -> Subscription {
+        let state = WindowSelectionState::acquire(window.window_handle().window_id(), cx);
+        cx.observe(&state, move |_, cx| callback(cx))
+    }
+
+    /// Returns the selection a long press made, laid out for its handles and
+    /// edit menu, or `None` when the selection was made with a pointer.
+    pub fn touch_selection(window: &Window, cx: &App) -> Option<TouchSelectionSnapshot> {
+        WindowSelectionState::existing(window, cx)?
+            .read(cx)
+            .touch_selection()
+    }
+
+    /// Records where a touch handle or the edit menu is painted this frame, so
+    /// that pressing it does not clear the selection it belongs to. Call from
+    /// paint, every frame the surface is shown.
+    pub fn register_touch_ui(bounds: Bounds<Pixels>, window: &Window, cx: &mut App) {
+        if let Some(state) = WindowSelectionState::existing(window, cx) {
+            state.update(cx, |state, _| state.register_touch_ui(bounds));
+        }
+    }
+
+    /// Closes the edit menu and keeps the selection with its handles.
+    pub fn close_edit_menu(window: &mut Window, cx: &mut App) {
+        if let Some(state) = live_text_selection_state(window, cx) {
+            state.update(cx, |state, cx| state.close_edit_menu(cx));
+        }
+    }
+
+    /// Selects all of the text the touch selection started in, keeping the
+    /// handles and the edit menu over the result.
+    pub fn select_all(window: &mut Window, cx: &mut App) {
+        if let Some(state) = live_text_selection_state(window, cx) {
+            state.update(cx, |state, cx| state.select_all_touched(cx));
+        }
+    }
+
+    /// Starts dragging one end of the touch selection from `finger`. The other
+    /// end stays; the menu closes until [`Self::end_edge_drag`].
+    pub fn begin_edge_drag(
+        edge: SelectionEdge,
+        finger: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if let Some(state) = live_text_selection_state(window, cx) {
+            state.update(cx, |state, cx| {
+                state.begin_edge_drag(edge, finger, window, cx)
+            });
+            WindowSelectionState::resolve_content_keys(&state, cx);
+        }
+    }
+
+    /// Moves the dragged end to the text under `finger`.
+    pub fn update_edge_drag(finger: Point<Pixels>, window: &mut Window, cx: &mut App) {
+        if let Some(state) = live_text_selection_state(window, cx) {
+            state.update(cx, |state, cx| state.update_edge_drag(finger, window, cx));
+            WindowSelectionState::resolve_content_keys(&state, cx);
+        }
+    }
+
+    /// Ends the handle drag and reopens the edit menu over the result.
+    pub fn end_edge_drag(window: &mut Window, cx: &mut App) {
+        if let Some(state) = live_text_selection_state(window, cx) {
+            state.update(cx, |state, cx| state.end_edge_drag(cx));
+        }
+    }
+
     /// Activates the opaque selection scope for this window.
     pub fn activate_scope(scope: TextSelectionScopeId, window: &mut Window, cx: &mut App) {
         let Some(state) = WindowSelectionState::existing(window, cx) else {
@@ -1593,6 +2614,9 @@ impl TextSelection {
                 .insert(window.window_handle().window_id(), scope);
             return;
         };
+        if state.read(cx).active_scope == scope {
+            return;
+        }
         let handlers = state.update(cx, |state, cx| state.set_active_scope_state(scope, cx));
         dispatch_clear_handlers(handlers, cx);
     }
@@ -1735,7 +2759,19 @@ impl Element for TextSelectionLayer {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        TextSelectionLayerPrepaintState(retain_text_selection_state(global_id, window, cx))
+        // Automatic participant order is paint order within this frame. Keep
+        // this lifecycle in base so base-only applications do not need a
+        // separate root component to reset it. Otherwise, registering the
+        // first of two selected TextViews temporarily reverses their order
+        // against the previous frame and alternates coverage forever.
+        GlobalState::init(cx);
+        GlobalState::global(cx).begin_selection_frame();
+        let state = retain_text_selection_state(global_id, window, cx);
+        // The handles and the menu register again as they paint this frame.
+        if state.read(cx).touch.painted_any() {
+            state.update(cx, |state, _| state.touch.begin_frame());
+        }
+        TextSelectionLayerPrepaintState(state)
     }
 
     fn paint(
@@ -1765,24 +2801,57 @@ fn retain_text_selection_state(
             (state.clone(), state)
         },
     );
-    if !cx.has_global::<SelectionStateRegistry>() {
-        cx.set_global(SelectionStateRegistry::default());
+    // Registered once: writing the global again every frame would change it,
+    // and every view that reads it, on every frame.
+    let registered = cx.has_global::<SelectionStateRegistry>()
+        && cx
+            .global::<SelectionStateRegistry>()
+            .0
+            .get(&window_id)
+            .is_some_and(|registered| registered.entity_id() == state.entity_id());
+    if !registered {
+        if !cx.has_global::<SelectionStateRegistry>() {
+            cx.set_global(SelectionStateRegistry::default());
+        }
+        cx.global_mut::<SelectionStateRegistry>()
+            .0
+            .insert(window_id, state.downgrade());
     }
-    cx.global_mut::<SelectionStateRegistry>()
-        .0
-        .insert(window_id, state.downgrade());
     state
 }
 
 fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Window, cx: &mut App) {
-    if state.update(cx, |state, _| state.schedule_finish_frame()) {
+    if state.read(cx).schedule_finish_frame() {
         let state = state.downgrade();
-        window.on_next_frame(move |_, cx| {
+        window.defer(cx, move |window, cx| {
             let Some(state) = state.upgrade() else {
                 return;
             };
+            if state.read(cx).finish_frame_quietly(cx) {
+                return;
+            }
             let handlers = state.update(cx, |state, cx| state.finish_frame(cx));
             dispatch_clear_handlers(handlers, cx);
+            // Direct participant scrolling produces no wheel event. Refresh
+            // the held cursor after paint registers the new scroll geometry.
+            let refresh_cursor = state.update(cx, |state, cx| {
+                if std::mem::take(&mut state.refresh_held_cursor) && state.is_selecting {
+                    // A handle drag holds the finger off the text; keep the
+                    // same offset, or the cursor would hop between the two.
+                    let position = window.mouse_position();
+                    let position = state
+                        .touch
+                        .drag
+                        .map_or(position, |drag| drag.text_position(position));
+                    state.update_in_window(position, window, cx);
+                    true
+                } else {
+                    false
+                }
+            });
+            if refresh_cursor {
+                WindowSelectionState::resolve_content_keys(&state, cx);
+            }
         });
     }
 
@@ -1794,6 +2863,11 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
         let Some(state) = mouse_down_state.upgrade() else {
             return;
         };
+        // A press on a handle or on the edit menu acts on the selection; it
+        // must not clear it.
+        if state.read(cx).touch.covers(event.position) {
+            return;
+        }
         if phase.capture() {
             GlobalState::init(cx);
             GlobalState::reset_text_selection_suppression(cx);
@@ -1820,10 +2894,122 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
             if GlobalState::is_text_selection_suppressed(cx) {
                 return;
             }
+            let touch = GlobalState::is_touch_press(cx);
             state.update(cx, |state, cx| {
-                state.select_at(event.position, event.click_count, window, cx)
+                state.select_at(event.position, event.click_count, window, cx);
+                // A double tap is touch's other way to select a word, and it
+                // gets the handles and the menu like a long press does.
+                if touch {
+                    state.keep_touch_selection(cx);
+                }
             });
             WindowSelectionState::resolve_content_keys(&state, cx);
+        }
+    });
+
+    // Every touch is offered as a drag first; that is how a tap's mouse
+    // events are later told apart from a mouse's.
+    window.on_mouse_event(move |event: &TouchDragEvent, phase, _, cx| {
+        if phase.capture() && event.phase == TouchPhase::Started {
+            GlobalState::note_touch(cx);
+        }
+    });
+
+    // Touch panning remains scrolling until a long press actually hits text.
+    // Claiming the gesture keeps subsequent moves out of the pan recognizer.
+    let long_press_state = state.downgrade();
+    window.on_mouse_event(move |event: &LongPressEvent, phase, window, cx| {
+        if !phase.bubble() {
+            return;
+        }
+        let Some(state) = long_press_state.upgrade() else {
+            return;
+        };
+        if event.phase == TouchPhase::Started {
+            if window.default_prevented()
+                || state.read(cx).touch.covers(event.start_position)
+                || !state.update(cx, |state, cx| {
+                    state
+                        .endpoint(event.start_position, Some(window), cx)
+                        .inside_text
+                })
+            {
+                return;
+            }
+            GlobalState::init(cx);
+            GlobalState::reset_text_selection_suppression(cx);
+            let handlers = state.update(cx, |state, cx| state.prepare_for_mouse_down(false, cx));
+            dispatch_clear_handlers(handlers, cx);
+            let selected = state.update(cx, |state, cx| {
+                state.select_at(event.start_position, 2, window, cx);
+                state.anchor.is_some()
+            });
+            if !selected {
+                return;
+            }
+            window.capture_long_press(&state);
+        } else if !window.has_long_press_capture(&state) {
+            return;
+        } else {
+            state.update(cx, |state, cx| match event.phase {
+                TouchPhase::Moved => {
+                    state.is_selecting = true;
+                    state.update_in_window(event.position, window, cx);
+                }
+                TouchPhase::Ended | TouchPhase::Cancelled => {
+                    state.end(cx);
+                    // The finger is up; the selection it made gets its
+                    // handles and the edit menu.
+                    state.keep_touch_selection(cx);
+                }
+                _ => {}
+            });
+        }
+        window.prevent_default();
+        cx.stop_propagation();
+        WindowSelectionState::resolve_content_keys(&state, cx);
+    });
+
+    // A handle drag in progress follows the finger or the pointer wherever
+    // it goes, whether or not the handle it took is laid out this frame.
+    let drag_state = state.downgrade();
+    window.on_mouse_event(move |event: &TouchDragEvent, phase, window, cx| {
+        if !phase.bubble() || event.phase == TouchPhase::Started {
+            return;
+        }
+        let Some(state) = drag_state.upgrade() else {
+            return;
+        };
+        if state.read(cx).touch.drag.is_none() {
+            return;
+        }
+        cx.stop_propagation();
+        state.update(cx, |state, cx| match event.phase {
+            TouchPhase::Moved => state.update_edge_drag(event.position, window, cx),
+            _ => state.end_edge_drag(cx),
+        });
+        WindowSelectionState::resolve_content_keys(&state, cx);
+    });
+    let drag_state = state.downgrade();
+    window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+        if phase.bubble()
+            && event.pressed_button == Some(MouseButton::Left)
+            && let Some(state) = drag_state.upgrade()
+            && state.read(cx).touch.drag.is_some()
+        {
+            state.update(cx, |state, cx| {
+                state.update_edge_drag(event.position, window, cx)
+            });
+            WindowSelectionState::resolve_content_keys(&state, cx);
+        }
+    });
+    let drag_state = state.downgrade();
+    window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+        if phase.bubble()
+            && event.button == MouseButton::Left
+            && let Some(state) = drag_state.upgrade()
+        {
+            state.update(cx, |state, cx| state.end_edge_drag(cx));
         }
     });
 
@@ -1831,8 +3017,15 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
     window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
         if phase.bubble()
             && let Some(state) = mouse_move_state.upgrade()
+            // Moving the pointer only moves a selection being made.
+            && state.read(cx).is_selecting
         {
             state.update(cx, |state, cx| {
+                // A handle drag maps the pointer through the handle's offset;
+                // the raw pointer must not fight it.
+                if state.touch.drag.is_some() {
+                    return;
+                }
                 state.update_in_window(event.position, window, cx)
             });
             WindowSelectionState::resolve_content_keys(&state, cx);
@@ -1852,12 +3045,32 @@ fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Windo
     });
 
     let scroll_state = state.downgrade();
-    window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
-        if phase.bubble()
-            && let Some(state) = scroll_state.upgrade()
-        {
+    window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+        let Some(state) = scroll_state.upgrade() else {
+            return;
+        };
+        // On capture, before a scroll container can stop the event: one
+        // stretched past its end swallows the whole stream, the lift
+        // included, and the menu would never come back.
+        if phase.capture() {
+            if state.read(cx).touch.active {
+                state.update(cx, |state, cx| {
+                    state.edit_menu_on_scroll(event.touch_phase, cx)
+                });
+            }
+            return;
+        }
+        // A scroll only moves a selection being made under the pointer.
+        if phase.bubble() && state.read(cx).is_selecting {
             let position = window.mouse_position();
-            state.update(cx, |state, cx| state.update_in_window(position, window, cx));
+            state.update(cx, |state, cx| {
+                // A handle drag holds the finger off the text; keep its offset.
+                let position = state
+                    .touch
+                    .drag
+                    .map_or(position, |drag| drag.text_position(position));
+                state.update_in_window(position, window, cx)
+            });
             WindowSelectionState::resolve_content_keys(&state, cx);
         }
     });
@@ -2954,7 +4167,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn stale_live_participants_are_removed_when_the_next_frame_begins(cx: &mut TestAppContext) {
+    fn unmounted_selection_does_not_revive_when_the_participant_returns(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let mut selection_state = WindowSelectionState::default();
             let participant = FakeParticipant::new("stale", cx);
@@ -2968,36 +4181,12 @@ mod tests {
             selection_state.begin(point(px(1.), px(1.)), false, cx);
             selection_state.update(point(px(8.), px(1.)), cx);
             selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "stale");
 
             selection_state.finish_frame(cx);
             selection_state.finish_frame(cx);
             assert_eq!(selection_state.selected_text(cx), "");
             assert!(participant.selection.snapshot(cx).is_none());
-        });
-    }
-
-    #[gpui::test]
-    fn clear_stops_anchor_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
-        let commands = Rc::new(RefCell::new(Vec::new()));
-        let observed = commands.clone();
-        let (mut selection_state, participant) = cx.update(|cx| {
-            let selection_state = WindowSelectionState::default();
-            let participant = FakeParticipant::new("scroll", cx);
-            participant
-                .selection
-                .subscribe(
-                    move |event, _| {
-                        if let TextSelectionEvent::AutoScroll(delta) = event {
-                            observed.borrow_mut().push(*delta);
-                        }
-                    },
-                    cx,
-                )
-                .detach();
-            (selection_state, participant)
-        });
-        cx.run_until_parked();
-        cx.update(|cx| {
             participant.register(
                 &mut selection_state,
                 0.,
@@ -3005,14 +4194,175 @@ mod tests {
                 0,
                 cx,
             );
+            assert_eq!(selection_state.selected_text(cx), "");
+            assert!(participant.selection.snapshot(cx).is_none());
 
             selection_state.begin(point(px(1.), px(1.)), false, cx);
-            selection_state.update(point(px(1.), px(25.)), cx);
-            selection_state.clear(cx);
+            selection_state.update(point(px(8.), px(1.)), cx);
+            selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "stale");
         });
-        cx.run_until_parked();
-        assert!(commands.borrow().iter().any(Option::is_some));
-        assert_eq!(commands.borrow().last(), Some(&None));
+    }
+
+    #[gpui::test]
+    fn removing_an_unselected_participant_preserves_the_current_selection(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut selection_state = WindowSelectionState::default();
+            let selected = FakeParticipant::new("selected", cx);
+            let unrelated = FakeParticipant::new("unrelated", cx);
+            let scope = TextSelectionScopeId::default();
+            selected.register(&mut selection_state, 0., scope, 0, cx);
+            unrelated.register(&mut selection_state, 20., scope, 1, cx);
+            selection_state.begin(point(px(1.), px(1.)), false, cx);
+            selection_state.update(point(px(8.), px(1.)), cx);
+            selection_state.end(cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+
+            selection_state.finish_frame(cx);
+            selected.register(&mut selection_state, 0., scope, 0, cx);
+            selection_state.finish_frame(cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+            unrelated.register(&mut selection_state, 20., scope, 1, cx);
+            assert_eq!(selection_state.selected_text(cx), "selected");
+        });
+    }
+
+    #[gpui::test]
+    fn removing_either_range_endpoint_discards_the_shared_selection(cx: &mut TestAppContext) {
+        for remove_anchor in [true, false] {
+            cx.update(|cx| {
+                let mut selection_state = WindowSelectionState::default();
+                let anchor = FakeParticipant::new("anchor", cx);
+                let cursor = FakeParticipant::new("cursor", cx);
+                let scope = TextSelectionScopeId::default();
+                anchor.register(&mut selection_state, 0., scope, 0, cx);
+                cursor.register(&mut selection_state, 20., scope, 1, cx);
+                selection_state.begin(point(px(1.), px(1.)), false, cx);
+                selection_state.update(point(px(8.), px(21.)), cx);
+                selection_state.end(cx);
+                assert_eq!(selection_state.selected_text(cx), "anchor\ncursor");
+                selection_state.finish_frame(cx);
+
+                if remove_anchor {
+                    cursor.register(&mut selection_state, 20., scope, 1, cx);
+                } else {
+                    anchor.register(&mut selection_state, 0., scope, 0, cx);
+                }
+                selection_state.finish_frame(cx);
+                assert_eq!(selection_state.selected_text(cx), "");
+                anchor.register(&mut selection_state, 0., scope, 0, cx);
+                cursor.register(&mut selection_state, 20., scope, 1, cx);
+                assert_eq!(selection_state.selected_text(cx), "");
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn clear_or_unmount_stops_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
+        for unmount in [false, true] {
+            let commands = Rc::new(RefCell::new(Vec::new()));
+            let observed = commands.clone();
+            let (mut selection_state, participant) = cx.update(|cx| {
+                let selection_state = WindowSelectionState::default();
+                let participant = FakeParticipant::new("scroll", cx);
+                participant
+                    .selection
+                    .subscribe(
+                        move |event, _| {
+                            if let TextSelectionEvent::AutoScroll(delta) = event {
+                                observed.borrow_mut().push(*delta);
+                            }
+                        },
+                        cx,
+                    )
+                    .detach();
+                (selection_state, participant)
+            });
+            cx.run_until_parked();
+            cx.update(|cx| {
+                participant.register(
+                    &mut selection_state,
+                    0.,
+                    TextSelectionScopeId::default(),
+                    0,
+                    cx,
+                );
+
+                selection_state.begin(point(px(1.), px(1.)), false, cx);
+                selection_state.update(point(px(1.), px(25.)), cx);
+                if unmount {
+                    selection_state.finish_frame(cx);
+                    selection_state.finish_frame(cx);
+                } else {
+                    selection_state.clear(cx);
+                }
+            });
+            cx.run_until_parked();
+            assert!(commands.borrow().iter().any(Option::is_some));
+            assert_eq!(commands.borrow().last(), Some(&None));
+        }
+    }
+
+    #[gpui::test]
+    fn drag_auto_scroll_stops_when_the_content_mask_collapses(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, cx| WindowSelectionView {
+            selection: TextSelectionHandle::new("unused", cx),
+        });
+        window
+            .update(cx, |_, window, cx| {
+                let state = cx.new(|_| WindowSelectionState::default());
+                let participant = FakeParticipant::new("participant", cx);
+                state.update(cx, |state, cx| {
+                    participant.register(state, 0., TextSelectionScopeId::default(), 0, cx);
+                    state.begin(point(px(1.), px(1.)), false, cx);
+                });
+                // The scrollable ancestor got clipped away mid-drag, so the
+                // refreshed registration carries a collapsed content mask.
+                let collapsed = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(0.)));
+                state.update(cx, |state, cx| {
+                    state.register_participant(
+                        participant.selection.clone(),
+                        TextSelectionRegistration::new(
+                            Hitbox {
+                                id: HitboxId::placeholder(),
+                                bounds: collapsed,
+                                content_mask: ContentMask { bounds: collapsed },
+                                behavior: HitboxBehavior::Normal,
+                            },
+                            collapsed,
+                        )
+                        .with_text_bounds(vec![collapsed]),
+                        cx,
+                    );
+                    state.update_in_window(point(px(1.), px(50.)), window, cx);
+                    assert!(!state.auto_scroll.is_active());
+                    assert!(state.auto_scroll.last_drag_position.is_none());
+                });
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn pointer_moves_after_a_click_do_not_auto_scroll(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, cx| WindowSelectionView {
+            selection: TextSelectionHandle::new("unused", cx),
+        });
+        window
+            .update(cx, |_, window, cx| {
+                let state = cx.new(|_| WindowSelectionState::default());
+                let participant = FakeParticipant::new("participant", cx);
+                state.update(cx, |state, cx| {
+                    participant.register(state, 0., TextSelectionScopeId::default(), 0, cx);
+                    // A click on text keeps its anchor so shift-click can extend it.
+                    state.begin(point(px(1.), px(1.)), false, cx);
+                    state.end(cx);
+                    assert!(state.anchor.is_some());
+
+                    state.update_in_window(point(px(1.), px(50.)), window, cx);
+                    assert!(!state.auto_scroll.is_active());
+                });
+            })
+            .unwrap();
     }
 
     #[gpui::test]
@@ -3121,6 +4471,7 @@ mod tests {
                 state
                     .read(cx)
                     .participants
+                    .borrow()
                     .contains_key(&selection.entity_id())
             );
         });
@@ -3151,6 +4502,76 @@ mod tests {
             TextSelection::clear(window, cx);
             assert_eq!(TextSelection::selected_text(window, cx), "");
         });
+    }
+
+    /// A view reading the window's selection state, beside selectable text,
+    /// counting its renders.
+    #[cfg(feature = "gpui-fast")]
+    struct SelectionStateReader {
+        renders: Rc<Cell<usize>>,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for SelectionStateReader {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            self.renders.set(self.renders.get() + 1);
+            if let Some(state) = WindowSelectionState::existing(window, cx) {
+                let _ = state.read(cx).participants.borrow().len();
+            }
+            div().size_full()
+        }
+    }
+
+    /// The selectable text of a [`ToggleSelectionElementView`] beside a
+    /// [`SelectionStateReader`].
+    #[cfg(feature = "gpui-fast")]
+    struct ReaderBesideSelectionView {
+        text: gpui::Entity<ToggleSelectionElementView>,
+        reader: gpui::Entity<SelectionStateReader>,
+    }
+
+    #[cfg(feature = "gpui-fast")]
+    impl Render for ReaderBesideSelectionView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(self.reader.clone())
+                .child(self.text.clone())
+        }
+    }
+
+    /// Selectable text drawn again, nothing about its selection changed,
+    /// writes neither the window's selection state nor its own: a view
+    /// reading them is retained, as it would not be had they changed.
+    #[cfg(feature = "gpui-fast")]
+    #[gpui::test]
+    fn redrawing_selectable_text_leaves_its_readers_retained(cx: &mut TestAppContext) {
+        let renders = Rc::new(Cell::new(0));
+        let (view, cx) = cx.add_window_view(|_, cx| ReaderBesideSelectionView {
+            text: cx.new(|cx| ToggleSelectionElementView {
+                enabled: true,
+                selection: TextSelectionHandle::new("text", cx),
+            }),
+            reader: cx.new(|_| SelectionStateReader {
+                renders: renders.clone(),
+            }),
+        });
+        let text = cx.update(|_, cx| view.read(cx).text.clone());
+        let redraw = |cx: &mut gpui::VisualTestContext| {
+            text.update(cx, |_, cx| cx.notify());
+            cx.update(|window, cx| {
+                let _ = window.draw(cx);
+                window.simulate_next_frame(cx);
+            });
+            cx.run_until_parked();
+        };
+        redraw(cx);
+        redraw(cx);
+        let before = renders.get();
+        for _ in 0..4 {
+            redraw(cx);
+        }
+        assert_eq!(renders.get(), before, "the reader rendered again");
     }
 
     #[gpui::test]
@@ -3188,7 +4609,6 @@ mod tests {
             assert!(!TextSelection::has_selection(window, cx));
             assert_eq!(TextSelection::selected_text(window, cx), "");
             assert!(!selection.has_local_selection(cx));
-            TextSelection::clear(window, cx);
         });
 
         view.update(cx, |view, cx| {
@@ -3207,7 +4627,6 @@ mod tests {
         let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
         cx.update(|window, cx| {
             let _ = window.draw(cx);
-            assert!(window.simulate_next_frame(cx) > 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert!(live_text_selection_state(window, cx).is_some());

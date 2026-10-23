@@ -7,6 +7,7 @@
 //! to be able to see them.
 
 mod benchmark;
+mod dock;
 mod fs;
 mod host_api;
 mod http_request;
@@ -15,3 +16,5 @@ mod process;
 mod render;
 mod snapshot;
 mod standard_runtime;
+mod structure;
+mod template;

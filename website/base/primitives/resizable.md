@@ -12,29 +12,39 @@ Like every `gpui-base` primitive, Resizable supplies behavior and semantic struc
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/native/src/bin/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
-cargo run -p gpui-base --example components -- resizable
+cargo run -p gpui-base-examples -- resizable
 ```
 
 ## Import
 
 ```rust
-use gpui_base::{ResizablePanel, ResizablePanelGroup, ResizableState, h_resizable, resizable_panel};
+use gpui_kit::base::{ResizablePanel, ResizablePanelGroup, ResizableState, h_resizable, resizable_panel};
 ```
 
 ## Anatomy and API
 
 The example composes `ResizablePanel`, `ResizablePanelGroup`, `ResizableState`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/resizable.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/resizable.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/resizable.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/resizable.rs). Native and browser previews compile this same file.
 
 ## State and events
 
-Panel sizes live in resizable state; dragging handles updates adjacent panels subject to minimums.
+Panel sizes live in resizable state; dragging handles updates adjacent panels subject to minimums. When the container resizes, the panels keep their proportions, except a panel marked `fixed()`, which keeps its size.
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
+
+## Handle appearance
+
+Base owns a handle's hit band, its cursor and the drag; what is painted inside it is the consumer's. `ResizeHandleRenderer` is handed a `ResizeHandleContext` carrying the axis and a `ResizeHandleState` — `Idle`, `Hovered`, `Pressed` or `Dragging`. The last two are tracked by base because a drag takes the pointer out of the nine-pixel band almost at once, so GPUI's hover reads false for most of a drag.
+
+Returning `None` keeps base's own one-pixel line, so a renderer can override some handles and leave the rest alone.
+
+## Standalone handle
+
+`resize_handle(id, axis)` builds the same handle for an edge no panel group owns. The drag goes through the handle's own `on_drag`, and what it resizes stays with the caller. The handle also implements `InteractiveElement` and `StatefulInteractiveElement`, so `on_drag_move`, `on_hover`, `on_double_click` and any other listener attach the usual way. `inside(HandleEdge)` keeps the band within its container; without it the band straddles the boundary.
 
 ## Complete Rust example
 

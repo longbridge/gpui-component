@@ -19,7 +19,7 @@ use crate::{
     engine::ShellRuntime,
     materialize::{
         Behavior, Children, StateStyles, dispatch_change, finish, tracked_focus, warn_ignored_key,
-        warn_unhonoured_a11y, with_active_and_focus, with_hover,
+        warn_unhonoured_a11y, with_active_and_focus, with_hover, with_input_handlers,
     },
 };
 
@@ -67,5 +67,6 @@ pub(in crate::materialize) fn toggle(
 
     let toggle = with_hover(toggle, &states);
     let toggle = with_active_and_focus(toggle, &states);
+    let toggle = with_input_handlers(toggle, &behavior, runtime);
     finish(toggle, refinement, children)
 }

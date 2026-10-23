@@ -1,6 +1,15 @@
-use std::rc::{Rc, Weak};
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
+use std::{
+    cell::{Cell, RefCell},
+    rc::{Rc, Weak},
+};
+#[cfg(target_family = "wasm")]
+use web_time::Instant;
 
-use gpui::{App, Global, OwnedMenu};
+use gpui::{App, Entity, Global, OwnedMenu};
+
+use crate::text::TextViewState;
 
 /// Holds the deferred interaction context open for as long as it is alive.
 ///
@@ -14,6 +23,16 @@ pub struct GlobalState {
     app_menus: Vec<OwnedMenu>,
     deferred_popovers: Vec<Weak<()>>,
     suppress_text_selection: bool,
+    /// The text views being prepainted or painted, innermost last. Kept
+    /// apart from what views read of this global: pushing and popping as
+    /// they draw is not a change of it.
+    text_view_state_stack: RefCell<Vec<Entity<TextViewState>>>,
+    /// The order the next selectable text painted this frame takes, which
+    /// changes as text paints without changing this global.
+    selection_document_order: Cell<u64>,
+    /// When a finger last went down. A tap reaches controls as a mouse press;
+    /// this is how they tell it from one.
+    last_touch: Option<Instant>,
 }
 
 impl Global for GlobalState {}
@@ -24,7 +43,26 @@ impl GlobalState {
             app_menus: Vec::new(),
             deferred_popovers: Vec::new(),
             suppress_text_selection: false,
+            text_view_state_stack: RefCell::new(Vec::new()),
+            selection_document_order: Cell::new(1),
+            last_touch: None,
         }
+    }
+
+    /// Records that a finger went down. Called from the touch drag GPUI
+    /// offers on every touch, before it becomes a tap, a long press or a pan.
+    pub fn note_touch(cx: &mut App) {
+        Self::init(cx);
+        Self::global_mut(cx).last_touch = Some(Instant::now());
+    }
+
+    /// Whether the press being handled came from a finger: a touch went
+    /// down recently enough that the mouse events of a tap are still
+    /// arriving. A double tap takes up to twice the tap interval.
+    pub fn is_touch_press(cx: &App) -> bool {
+        cx.try_global::<Self>()
+            .and_then(|state| state.last_touch)
+            .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(1))
     }
 
     /// Ensures that the Base global exists.
@@ -61,6 +99,29 @@ impl GlobalState {
 
     pub fn global_mut(cx: &mut App) -> &mut Self {
         cx.global_mut::<Self>()
+    }
+
+    pub(crate) fn text_view_state(&self) -> Option<Entity<TextViewState>> {
+        self.text_view_state_stack.borrow().last().cloned()
+    }
+
+    pub(crate) fn push_text_view_state(&self, state: Entity<TextViewState>) {
+        self.text_view_state_stack.borrow_mut().push(state);
+    }
+
+    pub(crate) fn pop_text_view_state(&self) {
+        self.text_view_state_stack.borrow_mut().pop();
+    }
+
+    #[doc(hidden)]
+    pub fn begin_selection_frame(&self) {
+        self.selection_document_order.set(1);
+    }
+
+    pub(crate) fn next_selection_document_order(&self) -> u64 {
+        let order = self.selection_document_order.get();
+        self.selection_document_order.set(order.wrapping_add(1));
+        order
     }
 
     /// Returns the application menus.

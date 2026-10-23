@@ -7,14 +7,14 @@ impl BaseShowcase {
             .w_72()
             .text_xs()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(super::example_rgb(0xd4d4d4))
             .child(
                 Tabs::new("example-tabs")
                     .flex()
                     .px_2()
                     .pt_1()
                     .border_b_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(super::example_rgb(0xd4d4d4))
                     .children(
                         ["Overview", "Activity", "Settings"]
                             .into_iter()
@@ -29,9 +29,9 @@ impl BaseShowcase {
                                     .items_center()
                                     .border_b_2()
                                     .border_color(if self.selected_tab == index {
-                                        rgb(0x171717)
+                                        super::example_rgb(0x171717)
                                     } else {
-                                        rgb(0xffffff)
+                                        super::example_rgb(0xffffff)
                                     })
                                     .when(self.selected_tab == index, |this| {
                                         this.font_weight(gpui::FontWeight::SEMIBOLD)
@@ -51,19 +51,19 @@ impl BaseShowcase {
                     0 => div().child("Workspace overview").child(
                         div()
                             .mt_1()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("12 components · 4 contributors · updated today"),
                     ),
                     1 => div().child("Recent activity").child(
                         div()
                             .mt_1()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("Button example was updated 8 minutes ago."),
                     ),
                     _ => div().child("Project settings").child(
                         div()
                             .mt_1()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("Manage notifications and member access."),
                     ),
                 }),

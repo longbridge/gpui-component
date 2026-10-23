@@ -1,8 +1,8 @@
 {
   "// why": [
-    "This file exists so an editor resolves `from \"gpui\"` and knows what the",
-    "module holds. Without it the imports are opaque and the 700-odd style",
-    "methods are invisible.",
+    "This file exists so an editor resolves `from \"gpui\"` and `from",
+    "\"gpui-base\"` and knows what each module holds. Without it the imports",
+    "are opaque and the 700-odd style methods are invisible.",
     "",
     "`noImplicitAny` is on: every parameter and every piece of state carries a",
     "type, written as JSDoc rather than TypeScript. That gives the compiler the",

@@ -9,7 +9,7 @@ impl BaseShowcase {
                     .px_3()
                     .py_1()
                     .text_xs()
-                    .text_color(rgb(0x171717))
+                    .text_color(super::example_rgb(0x171717))
                     .underline()
                     .child("Hover over gpui-base"),
             )
@@ -19,9 +19,9 @@ impl BaseShowcase {
                     .w(px(210.))
                     .p_2()
                     .text_xs()
-                    .bg(rgb(0xffffff))
+                    .bg(super::example_rgb(0xffffff))
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(super::example_rgb(0xd4d4d4))
                     .child(
                         div()
                             .flex()
@@ -34,7 +34,7 @@ impl BaseShowcase {
                                     .items_center()
                                     .justify_center()
                                     .border_1()
-                                    .border_color(rgb(0x171717))
+                                    .border_color(super::example_rgb(0x171717))
                                     .text_sm()
                                     .child("G"),
                             )
@@ -42,7 +42,7 @@ impl BaseShowcase {
                                 div().text_sm().child("gpui-base").child(
                                     div()
                                         .text_sm()
-                                        .text_color(rgb(0x737373))
+                                        .text_color(super::example_rgb(0x737373))
                                         .child("@gpui-base"),
                                 ),
                             ),
@@ -51,7 +51,7 @@ impl BaseShowcase {
                         div()
                             .mt_2()
                             .text_sm()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("Unstyled primitives for GPUI."),
                     )
             })

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 880 680" width="100%" role="img" aria-labelledby="t d">
+  <title id="t">gpui-shell: how a script becomes pixels</title>
+  <desc id="d">A loop drawn across four layers. In the JavaScript layer, render(cx) describes elements without ever holding one. Crossing the engine seam into gpui-shell, the builder calls are recorded into SpecArena, plain single-use data. materialize replays those operations into real GPUI elements in pure Rust, never calling back into the script. The elements are built from gpui-base, which ships behavior with no styling, so every color, size and gap comes from the script. GPUI lays out and paints them. An input event travels back up: the shell finds this pass's handler in CallbackArena, opens a fresh CallScope, and calls the script handler, which mutates its own state and calls cx.notify() — starting the next pass.</desc>
+
+  <defs>
+    <style>
+      :root{
+        --band:rgba(20,20,22,.035);
+        --band-line:rgba(20,20,22,.10);
+        --band-hi:rgba(37,99,235,.07);
+        --seam:rgba(20,20,22,.055);
+        --card:#ffffff;
+        --card-line:rgba(20,20,22,.16);
+        --card-hi:rgba(37,99,235,.06);
+        --ink:#18181b;
+        --muted:#6b7078;
+        --line:rgba(20,20,22,.42);
+        --accent:#2563eb;
+      }
+
+      text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+      .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+      .h1{fill:var(--ink);font-size:16px;font-weight:650}
+      .lede{fill:var(--muted);font-size:11.5px}
+      .layer{fill:var(--ink);font-size:12.5px;font-weight:650}
+      .layer-sub{fill:var(--muted);font-size:11px}
+      .seam-name{fill:var(--accent);font-size:12px;font-weight:650}
+      .name{fill:var(--ink);font-size:14px;font-weight:600}
+      .band-name{fill:var(--ink);font-size:13px;font-weight:600}
+      .fact{fill:var(--ink);font-size:11.5px}
+      .note{fill:var(--muted);font-size:11px}
+      .tag{fill:var(--muted);font-size:10.5px;font-weight:600}
+      .edge{fill:var(--accent);font-size:11px;font-weight:600}
+      .claim{fill:var(--accent);font-size:11px;font-weight:600}
+
+      .band{fill:var(--band);stroke:var(--band-line);stroke-width:1}
+      .card{fill:var(--card);stroke:var(--card-line);stroke-width:1}
+      .seam{fill:var(--seam)}
+      .seam-edge{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 4;opacity:.6}
+      .flow{fill:none;stroke:var(--line);stroke-width:1.4}
+      .arrowhead{fill:var(--line)}
+      .token-halo{fill:var(--accent);opacity:.16}
+      .token-core{fill:var(--accent)}
+
+      .stage{animation:stage 7s linear infinite}
+      .stage-band{animation:stageband 7s linear infinite}
+      .stage-band-long{animation:stagebandlong 7s linear infinite}
+
+      @keyframes stage{
+        0%,4%{stroke:var(--accent);fill:var(--card-hi)}
+        10%,100%{stroke:var(--card-line);fill:var(--card)}
+      }
+      @keyframes stageband{
+        0%,4%{stroke:var(--accent);fill:var(--band-hi)}
+        10%,100%{stroke:var(--band-line);fill:var(--band)}
+      }
+      @keyframes stagebandlong{
+        0%,24%{stroke:var(--accent);fill:var(--band-hi)}
+        30%,100%{stroke:var(--band-line);fill:var(--band)}
+      }
+
+      @media (prefers-reduced-motion: reduce){
+        .stage,.stage-band,.stage-band-long{animation:none}
+        .token{display:none}
+      }
+    </style>
+
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path class="arrowhead" d="M0,0 L10,5 L0,10 Z"/>
+    </marker>
+
+    <path id="loop" fill="none" stroke="none"
+          d="M328,106 L328,624 Q328,638 342,638 L666,638 Q680,638 680,624 L680,106 Q680,92 666,92 L342,92 Q328,92 328,106 Z"/>
+  </defs>
+
+  <text class="h1" x="24" y="30">gpui-shell</text>
+  <text class="lede" x="24" y="50">A script describes elements. Rust materializes them. GPUI paints. An event starts the next pass.</text>
+
+  <!-- layer bands -->
+  <rect class="band" x="160" y="72"  width="688" height="128" rx="12"/>
+  <rect class="band" x="160" y="220" width="688" height="252" rx="12"/>
+  <rect class="band stage-band"      x="160" y="492" width="688" height="68" rx="12" style="animation-delay:-5.47s"/>
+  <rect class="band stage-band-long" x="160" y="580" width="688" height="76" rx="12" style="animation-delay:-5.13s"/>
+
+  <text class="layer"     x="24" y="132">JavaScript</text>
+  <text class="layer-sub" x="24" y="148">main.js</text>
+  <text class="layer"     x="24" y="342">gpui-shell</text>
+  <text class="layer-sub" x="24" y="358">crates/shell</text>
+  <text class="layer"     x="24" y="522">gpui-base</text>
+  <text class="layer-sub" x="24" y="538">behavior only</text>
+  <text class="layer"     x="24" y="614">gpui</text>
+  <text class="layer-sub" x="24" y="630">rendering</text>
+
+  <!-- the engine seam -->
+  <path class="seam" d="M160,232 Q160,220 172,220 L836,220 Q848,220 848,232 L848,260 L160,260 Z"/>
+  <path class="seam-edge" d="M160,260 L848,260"/>
+  <text class="seam-name" x="180" y="245">engine seam</text>
+  <text class="note" x="278" y="245">the only Rust that knows what a script value is</text>
+  <text class="note" x="828" y="245" text-anchor="end">QuickJS, behind a cargo feature</text>
+
+  <!-- flow: describe, down the left -->
+  <path class="flow" d="M328,184 L328,278" marker-end="url(#arrow)"/>
+  <path class="flow" d="M328,350 L328,388" marker-end="url(#arrow)"/>
+  <path class="flow" d="M328,450 L328,492" marker-end="url(#arrow)"/>
+  <path class="flow" d="M328,560 L328,580" marker-end="url(#arrow)"/>
+  <text class="edge" x="340" y="205">describe</text>
+  <text class="edge" x="340" y="373">replay</text>
+  <text class="note" x="340" y="475">AnyElement</text>
+  <text class="edge" x="340" y="574">paint</text>
+
+  <!-- flow: event, up the right -->
+  <path class="flow" d="M680,580 L680,560" marker-end="url(#arrow)"/>
+  <path class="flow" d="M680,492 L680,450" marker-end="url(#arrow)"/>
+  <path class="flow" d="M680,388 L680,350" marker-end="url(#arrow)"/>
+  <path class="flow" d="M680,278 L680,184" marker-end="url(#arrow)"/>
+  <text class="edge" x="668" y="574" text-anchor="end">event</text>
+  <text class="note" x="668" y="475" text-anchor="end">on_click fires</text>
+  <text class="note" x="668" y="373" text-anchor="end">handler lookup</text>
+  <text class="edge" x="668" y="205" text-anchor="end">fresh cx</text>
+
+  <!-- flow: notify, closing the loop -->
+  <path class="flow" d="M680,114 L680,106 Q680,92 666,92 L342,92 Q328,92 328,106 L328,114" marker-end="url(#arrow)"/>
+  <text class="edge" x="504" y="86" text-anchor="middle">cx.notify()</text>
+
+  <!-- script layer -->
+  <rect class="card stage" x="176" y="114" width="304" height="70" rx="9" style="animation-delay:0s"/>
+  <text class="name mono" x="196" y="137">render(cx)</text>
+  <text class="fact"      x="196" y="156">describes elements — it never holds one</text>
+  <text class="note mono" x="196" y="173">v_flex().gap_2().bg("surface")</text>
+
+  <rect class="card stage" x="528" y="114" width="304" height="70" rx="9" style="animation-delay:-1.76s"/>
+  <text class="name mono" x="548" y="137">.on_click((e, cx) =&gt; …)</text>
+  <text class="fact"      x="548" y="156">mutates its own state, then asks to repaint</text>
+  <text class="note mono" x="548" y="173">this.count += 1; cx.notify()</text>
+
+  <!-- shell layer -->
+  <rect class="card stage" x="176" y="278" width="304" height="72" rx="9" style="animation-delay:-6.32s"/>
+  <text class="name mono" x="196" y="302">SpecArena</text>
+  <text class="tag" x="460" y="302" text-anchor="end">single use</text>
+  <text class="fact" x="196" y="321">plain data — no elements, no entities</text>
+  <text class="note" x="196" y="338">SpecOp: style · method · callback</text>
+
+  <rect class="card stage" x="176" y="388" width="304" height="62" rx="9" style="animation-delay:-5.89s"/>
+  <text class="name mono" x="196" y="412">Materialize</text>
+  <text class="fact" x="196" y="431">pure Rust — it never calls the script</text>
+  <text class="note" x="196" y="445">one pass, depth first</text>
+
+  <rect class="card stage" x="528" y="278" width="304" height="72" rx="9" style="animation-delay:-2.42s"/>
+  <text class="name mono" x="548" y="302">CallScope</text>
+  <text class="tag" x="812" y="302" text-anchor="end">phase: Event</text>
+  <text class="fact" x="548" y="321">a fresh cx, valid only for this call</text>
+  <text class="note" x="548" y="338">a cx kept from an earlier call throws</text>
+
+  <rect class="card stage" x="528" y="388" width="304" height="62" rx="9" style="animation-delay:-2.81s"/>
+  <text class="name mono" x="548" y="412">CallbackArena</text>
+  <text class="fact" x="548" y="431">CallbackId → the handler from this pass</text>
+  <text class="note" x="548" y="445">a stale id is dropped, not dispatched</text>
+
+  <!-- base layer -->
+  <text class="band-name" x="192" y="522">Button · Checkbox · Input · Dock</text>
+  <text class="note"      x="192" y="540">behavior, focus and state — no styling at all</text>
+  <text class="claim"     x="832" y="530" text-anchor="end">so every color, size and gap comes from the script</text>
+
+  <!-- gpui layer -->
+  <path class="flow" d="M328,580 L328,624 Q328,638 342,638 L666,638 Q680,638 680,624 L680,580"/>
+  <text class="band-name" x="192" y="602">layout · paint · GPU</text>
+  <text class="note"      x="832" y="602" text-anchor="end">hit test · scroll · IME</text>
+  <text class="note"      x="504" y="624" text-anchor="middle">the script is never on this path</text>
+
+  <!-- the travelling token -->
+  <g class="token">
+    <circle class="token-halo" r="9"/>
+    <circle class="token-core" r="4"/>
+    <animateMotion dur="7s" repeatCount="indefinite" rotate="0">
+      <mpath href="#loop" xlink:href="#loop"/>
+    </animateMotion>
+  </g>
+</svg>

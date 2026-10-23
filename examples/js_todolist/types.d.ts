@@ -1,11 +1,11 @@
 // The application's own shapes.
 //
-// Hand-written, unlike `gpui.d.ts`: the runtime knows what `div()` returns, and
+// Hand-written, unlike `gpui-kit.d.ts`: the runtime knows what `div()` returns, and
 // has no idea what a todo is. Declaring them here rather than as `@typedef`
 // blocks in the source keeps the type in one place and the annotations at the
 // call sites down to a name.
 
-/** One item on the list, and the only shape `store` round-trips. */
+/** One item on the list, and the only shape storage round-trips. */
 interface Todo {
   id: number;
   caption: string;

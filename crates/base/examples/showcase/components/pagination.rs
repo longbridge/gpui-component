@@ -1,6 +1,5 @@
 use gpui::{
     Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
-    rgb,
 };
 use gpui_base::{Button, Pagination, PaginationItem, PaginationState};
 
@@ -32,9 +31,10 @@ impl BaseShowcase {
                             .items_center()
                             .justify_center()
                             .border_1()
-                            .border_color(rgb(0xd4d4d4))
+                            .border_color(super::example_rgb(0xd4d4d4))
                             .when(page == state.current_page(), |this| {
-                                this.bg(rgb(0x171717)).text_color(rgb(0xffffff))
+                                this.bg(super::example_rgb(0x171717))
+                                    .text_color(super::example_rgb(0xffffff))
                             })
                             .on_click(move |_, window, cx| state.request_page(page, window, cx))
                             .child(page.to_string())

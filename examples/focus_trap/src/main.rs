@@ -1,5 +1,5 @@
-use gpui::*;
-use gpui_component::{button::*, h_flex, v_flex, *};
+use gpui_kit::component::{button::*, h_flex, v_flex, *};
+use gpui_kit::*;
 
 pub struct Example {
     trap1_handle: FocusHandle,
@@ -133,23 +133,17 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = gpui_platform::application();
+    let app = gpui_kit::application();
 
     app.run(move |cx| {
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         let window_options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(800.), px(600.)), cx)),
             ..Default::default()
         };
 
-        cx.spawn(async move |cx| {
-            cx.open_window(window_options, |window, cx| {
-                let view = cx.new(|cx| Example::new(cx));
-                cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
-            })
+        gpui_kit::open_window(window_options, cx, |_, cx| cx.new(|cx| Example::new(cx)))
             .expect("Failed to open window");
-        })
-        .detach();
     });
 }

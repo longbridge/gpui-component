@@ -38,6 +38,11 @@ impl InputModeKind for EditorMode {
     fn reset_annotations(state: &mut InputBaseState<Self>) {
         state.extras.hover_popover = None;
         state.extras.decorations.clear();
+        state.extras.range_decorations.clear();
+    }
+
+    fn editing_syntax_context(state: &InputBaseState<Self>, offset: usize) -> super::SyntaxContext {
+        state.syntax_context_at(offset)
     }
 
     fn adjust_annotations(
@@ -46,6 +51,10 @@ impl InputModeKind for EditorMode {
         new_len: usize,
     ) {
         state.extras.decorations.adjust_for_edit(range, new_len);
+        state
+            .extras
+            .range_decorations
+            .adjust_for_edit(range, new_len);
     }
 
     fn refresh_language_features(
@@ -157,13 +166,29 @@ impl InputModeKind for EditorMode {
         highlighter.update(Some(edit), text, folding, window, cx);
     }
 
+    fn drive_highlighter_batch(
+        highlighter: &std::rc::Rc<std::cell::RefCell<Option<Box<dyn super::InputHighlighter>>>>,
+        edits: &[(super::InputEdit, ropey::Rope)],
+        folding: bool,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        let mut highlighter = highlighter.borrow_mut();
+        let Some(highlighter) = highlighter.as_mut() else {
+            return;
+        };
+        highlighter.update_batch(edits, folding, window, cx);
+    }
+
     fn register_actions(
         element: Stateful<Div>,
         entity: &Entity<InputBaseState<Self>>,
         window: &mut Window,
     ) -> Stateful<Div> {
         element
+            .key_context("Input mode=editor")
             .on_action(window.listener_for(entity, InputBaseState::on_action_toggle_code_actions))
+            .on_action(window.listener_for(entity, InputBaseState::on_action_show_completions))
             .on_action(window.listener_for(entity, InputBaseState::on_action_go_to_definition))
     }
 }
@@ -180,6 +205,11 @@ impl EditorState {
     /// The LSP providers, mutably. Configure the providers through this.
     pub fn lsp_mut(&mut self) -> &mut super::Lsp {
         &mut self.extras.lsp
+    }
+
+    /// Syntax context at `offset`, or `Code` when the language has no provider.
+    pub(crate) fn syntax_context_at(&self, offset: usize) -> super::SyntaxContext {
+        self.mode.syntax_context_at(&self.text, offset)
     }
 }
 
@@ -207,6 +237,10 @@ impl RenderOnce for Editor {
 impl crate::input::InputExtras for super::EditorExtras {
     fn decoration_layers(&self) -> Vec<&[super::TextDecoration]> {
         self.decorations.iter().collect()
+    }
+
+    fn range_decorations(&self, ranges: &[std::ops::Range<usize>]) -> Vec<&super::RangeDecoration> {
+        self.range_decorations.intersecting(ranges)
     }
 
     fn semantic_token_styles(

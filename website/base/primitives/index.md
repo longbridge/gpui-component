@@ -26,6 +26,7 @@ GPUI Base primitives provide behavior without prescribing presentation. Each pag
 - [Textarea](./textarea.md) — A multi-line text field with fixed rows, wrapping, and auto-grow behavior.
 - [Editor](./editor.md) — A source-code editor foundation with highlighting, gutter, folding, decorations, and LSP hooks.
 - [Link](./link.md) — An accessible link-like control with application-defined styling.
+- [Nav Stack](./nav-stack.md) — A navigation stack of views with push, pop, forward, and replace, and an animatable transition lifecycle.
 - [Number Input](./number-input.md) — A numeric input with reusable increment, decrement, and step behavior.
 - [OTP Input](./otp-input.md) — A multi-cell one-time-code input driven by a shared text state.
 - [Pagination](./pagination.md) — A controlled page navigator with explicit current and total page state.
@@ -42,6 +43,7 @@ GPUI Base primitives provide behavior without prescribing presentation. Each pag
 - [Switch](./switch.md) — A controlled on/off control with separately styleable track and thumb.
 - [Table](./table.md) — Semantic table primitives for composing headers, bodies, rows, and cells.
 - [Tabs](./tabs.md) — A tab list and accessible tab controls with controlled selection.
+- [Time Field](./time-field.md) — A segmented time-of-day editor with a complete keyboard model and 24- or 12-hour clocks.
 - [Toast](./toast.md) — A managed, animated stack of temporary status messages.
 - [Toggle](./toggle.md) — A controlled two-state pressable for persistent choices such as formatting.
 - [Toggle Group](./toggle-group.md) — Coordinates a set of toggle controls as a single- or multiple-selection group.

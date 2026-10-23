@@ -1,14 +1,14 @@
-use gpui::{
+use gpui_kit::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ParentElement, Render, Styled, Window, div, px,
 };
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Icon, IconName, StyledExt, WindowExt as _,
     button::{Button, ButtonVariant, ButtonVariants},
     dialog::{
-        AlertDialog, DialogAction, DialogButtonProps, DialogClose, DialogDescription, DialogFooter,
-        DialogHeader, DialogTitle,
+        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
     },
     v_flex,
 };
@@ -46,7 +46,7 @@ impl AlertDialogStory {
 }
 
 impl Focusable for AlertDialogStory {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui_kit::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -100,8 +100,6 @@ impl Render for AlertDialogStory {
                 .child(section("Imperative API").description("Open an alert directly from the window.").child(
                     Button::new("confirm-alert").outline().label("Delete File").on_click(cx.listener(
                         |_, _, window, cx| {
-                            use gpui_component::dialog::DialogButtonProps;
-
                             window.open_alert_dialog(cx, |alert, _, cx| {
                                 alert
                                     .icon(Icon::new(IconName::Info).text_color(cx.theme().danger))
@@ -110,13 +108,9 @@ impl Render for AlertDialogStory {
                                         "Are you sure you want to delete this file? \
                                                 This action cannot be undone.",
                                     )
-                                    .button_props(
-                                        DialogButtonProps::default()
-                                            .ok_variant(ButtonVariant::Danger)
-                                            .ok_text("Delete")
-                                            .cancel_text("Cancel")
-                                            .show_cancel(true),
-                                    )
+                                    .confirm()
+                                    .ok_text("Delete")
+                                    .ok_variant(ButtonVariant::Danger)
                                     .on_ok(|_, window, cx| {
                                         window.push_notification("File deleted", cx);
                                         true
@@ -285,7 +279,7 @@ impl Render for AlertDialogStory {
                                         "Please read this important notice \
                                                 carefully before proceeding.",
                                     )
-                                    .button_props(DialogButtonProps::default().ok_text("Got It"))
+                                    .ok_text("Got It")
                                     .keyboard(false)
                             });
                         },
@@ -313,7 +307,9 @@ impl Render for AlertDialogStory {
                                     .description(
                                         "Your changes are still syncing. The dialog remains open until syncing finishes.",
                                     )
-                                    .button_props(DialogButtonProps::default().ok_text("Close").cancel_text("Wait").show_cancel(true))
+                                    .confirm()
+                                    .ok_text("Close")
+                                    .cancel_text("Wait")
                                     .on_ok(|_, window, cx| {
                                         // Return false to prevent closing
                                         window.push_notification("Cannot close: Process still running", cx);

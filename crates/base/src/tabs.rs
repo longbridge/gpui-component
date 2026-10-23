@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _};
+use crate::{StateStyle, StyledExt as _, TestSupportExt as _, a11y_disabled::A11yDisabledExt as _};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -153,6 +153,7 @@ impl RenderOnce for Tab {
 
         self.base
             .id(self.id)
+            .test_support()
             .role(Role::Tab)
             // Match Button's neutral control geometry: a fixed-size tab
             // centers ordinary content, while callers still own its size,
@@ -178,6 +179,7 @@ impl RenderOnce for Tab {
             )
             .children(self.children)
             .refine_style(&style)
+            .a11y_disabled(disabled)
     }
 }
 
@@ -325,7 +327,7 @@ mod tests {
         });
         context.update(|window, cx| window.draw(cx).clear(cx));
 
-        let (root, child) = captured.lock().unwrap().clone();
+        let (root, child) = *captured.lock().unwrap();
         assert_eq!(
             child.expect("child bounds").center(),
             root.expect("tab bounds").center()

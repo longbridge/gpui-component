@@ -2,17 +2,23 @@
 //!
 //! Privileged modules live behind Shell adapters; this module only registers
 //! implementations that cannot bypass the active [`crate::Policy`].
+//!
+//! So the upstream crates behind `fs`, `net`, `os`, `console` and `fetch` are
+//! not dependencies at all. Registering one directly would grant ambient
+//! filesystem, process or network authority — the thing [`crate::Capabilities`]
+//! exists to prevent — so Shell writes those five itself and depends only on
+//! the ones it actually serves: `buffer`, `crypto`, `path`, `url` and `zlib`.
 
 use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
 mod connect;
 mod console;
+mod encoding;
 mod fetch;
 mod fs;
 mod net;
 mod os;
 mod process;
-mod upstream;
 mod websocket;
 
 #[cfg(test)]
@@ -21,7 +27,11 @@ pub(super) fn direct_test_http_client()
     fetch::direct_test_client()
 }
 
-const NAMES: &[&str] = &[
+/// What `fetch` and the WebSocket handshake send when the script names no
+/// `User-Agent`. Some APIs — GitHub's among them — refuse a request without one.
+const USER_AGENT: &str = concat!("gpui-shell/", env!("CARGO_PKG_VERSION"));
+
+pub(super) const NAMES: &[&str] = &[
     "buffer",
     "console",
     "crypto",
@@ -45,27 +55,25 @@ pub(super) fn resolver() -> BuiltinResolver {
 
 pub(super) fn loader() -> ModuleLoader {
     ModuleLoader::default()
-        .with_module("buffer", llrt_buffer::BufferModule)
+        .with_module("buffer", quickjs_jit_stdlib::buffer::BufferModule)
         .with_module("console", console::ConsoleModule)
-        .with_module("crypto", llrt_crypto::CryptoModule)
+        .with_module("crypto", quickjs_jit_stdlib::crypto::CryptoModule)
         .with_module("fs/promises", fs::FsModule)
         .with_module("net", net::NetModule)
         .with_module("os", os::OsModule)
-        .with_module("path", llrt_path::PathModule)
+        .with_module("path", quickjs_jit_stdlib::path::PathModule)
         .with_module("process", process::ProcessModule)
-        .with_module("url", llrt_url::UrlModule)
+        .with_module("url", quickjs_jit_stdlib::url::UrlModule)
         .with_module("websocket", websocket::WebSocketModule)
-        .with_module("zlib", llrt_zlib::ZlibModule)
+        .with_module("zlib", quickjs_jit_stdlib::zlib::ZlibModule)
 }
 
 pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
-    upstream::assert_compatible();
     // Order is significant: URL and Crypto consume Buffer-compatible byte
     // classes installed by the first initializer.
-    llrt_buffer::init(ctx)?;
-    llrt_url::init(ctx)?;
-    llrt_crypto::init(ctx)?;
+    quickjs_jit_stdlib::init(ctx)?;
     console::install(ctx)?;
+    encoding::install(ctx)?;
     super::sandbox::install_process(ctx)?;
     fetch::install(ctx)?;
     Ok(())

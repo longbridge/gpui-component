@@ -8,6 +8,27 @@
 //! It is also the form in which the API can be handed to a model, which is an
 //! explicit audience here.
 //!
+//! # One module per crate
+//!
+//! The declarations include `"gpui-kit"` for GPUI's own
+//! elements and what this runtime adds, `"gpui-base"` for gpui-base's layout
+//! helpers, components and theme, and `"gpui-fps"` for its performance overlay.
+//! `"gpui"` is a compatibility alias for `"gpui-kit"`.
+//!
+//! That is a contract about provenance rather than a filing convenience. An
+//! import line says which layer a script depends on, so a script that never
+//! reaches for a component says so, and the next layer to arrive —
+//! `gpui-component`, whose components are the reason the seam exists — needs a
+//! list and a `declare module`, not a renaming of everything already here.
+//! Apart from the explicit `"gpui"` alias, names are not re-exported for
+//! convenience, preserving the layer named by each import.
+//!
+//! The dependency runs upward only. `"gpui-base"` names what it borrows from
+//! `"gpui-kit"` in an import at the top of its block; `"gpui-kit"` refers down to a
+//! component type only where one shared element prototype forces it — three
+//! builder methods and `cx.theme()` — and does it with an inline
+//! `import("gpui-base").X` rather than a top-level import.
+//!
 //! # Why these declarations can be trusted
 //!
 //! They are *generated from the tables the runtime dispatches through*, not
@@ -34,7 +55,7 @@
 //!
 //! # What they deliberately do not cover
 //!
-//! * **Capabilities.** Every `fs`, `store`, `clipboard` and `process` call
+//! * **Capabilities.** Every `fs`, storage, `clipboard` and `process` call
 //!   type-checks; whether it is *granted* is a manifest question answered at
 //!   run time (§19.2). Types cannot express a grant.
 //! * **Element lifetime.** An element is consumed when it is used and belongs
@@ -44,17 +65,23 @@
 //!   prototype, so `.checked(true)` is declared on all of them and is simply
 //!   inert on a `div`. Narrowing that would mean inventing a type hierarchy the
 //!   runtime does not have.
-//! * **Retained entities** ([`crate::entities`]) and anything else not exported
-//!   by the `gpui` module today.
+//! * **Retained entities** ([`crate::entities`]) and anything else no built-in
+//!   module exports today.
 //!
-//! # What an application adds
+//! # What the host adds
 //!
-//! Host-registered native modules cannot be generated here, because only the
-//! host knows what it registered. The declarations leave a `NativeModules`
-//! interface for an application to augment, which is what turns `native("...")`
-//! from `Record<string, (...args: any[]) => any>` into a checked name with
-//! completing functions. `crates/story/js/quotes/market.d.ts` is the worked
-//! example.
+//! Every module the host registered is emitted here too, one `declare module`
+//! per name, so `import { quotes } from "market"` is checked the same way
+//! `import { div } from "gpui-kit"` is. A module that described itself in
+//! TypeScript through [`crate::HostModule::declarations`] is emitted verbatim;
+//! one that did not gets `(...args: any[]) => any` signatures, which still
+//! check the module name and every export name.
+//!
+//! That is why the declarations live in Rust beside the registration rather
+//! than in a `.d.ts` beside the script: two files describing one boundary
+//! drift, and this one is checked against the registry before it is written.
+//! `install_host_modules` in `crates/story/src/stories/shell_story.rs` is the
+//! worked example.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -69,25 +96,103 @@ use crate::value::Bridged;
 
 /// The declaration filename. Fixed because an editor finds the declarations by
 /// having them in the project, not by being told where.
-pub const FILE_NAME: &str = "gpui.d.ts";
+pub const FILE_NAME: &str = "gpui-kit.d.ts";
+
+/// The editor configuration filename, in the spelling a JavaScript project uses.
+pub const CONFIG_FILE_NAME: &str = "jsconfig.json";
+
+/// The configuration this one is written beside, and defers to.
+const TYPESCRIPT_CONFIG_FILE_NAME: &str = "tsconfig.json";
+
+/// What an editor has to be told before `gpui-kit.d.ts` and the linked packages
+/// mean anything.
+///
+/// The settings match the ones the applications in this repository were
+/// written against — `examples/js_todolist/jsconfig.json` and its siblings —
+/// so a generated project and a hand-written one are checked the same way.
+/// The file explains each of them to whoever opens it, which is why it carries
+/// its own `"// why"`.
+///
+/// It is only ever written into a directory that has no configuration at all,
+/// so `checkJs` turns checking on for an application that had none rather than
+/// changing the terms under an application that already chose.
+const EDITOR_CONFIG: &str = r#"{
+  "// why": [
+    "Written once by gpui-shell, then yours: an existing jsconfig.json or",
+    "tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "`moduleResolution` is how a bare specifier is answered. Left to be",
+    "inferred it can still land on the resolution that never looks in",
+    "node_modules, and a Git dependency the runtime resolves fine is",
+    "underlined as a module the editor cannot find.",
+    "",
+    "`lib` decides which globals exist. The default hands a script the",
+    "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
+    "not have — and their declarations collide with the ones gpui-kit.d.ts makes,",
+    "so the file describing the API is itself reported as the error.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true
+  }
+}
+"#;
+
+/// Writes the editor configuration beside an application, once.
+///
+/// Only when the directory has neither configuration file: the first launch
+/// scaffolds one, and everything after that leaves the author's own settings
+/// alone. Returns the path only when it actually wrote.
+fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+    let path = directory.join(CONFIG_FILE_NAME);
+    if std::fs::symlink_metadata(&path).is_ok()
+        || std::fs::symlink_metadata(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).is_ok()
+    {
+        return Ok(None);
+    }
+    std::fs::write(&path, EDITOR_CONFIG)?;
+    Ok(Some(path))
+}
 
 /// Emits the TypeScript declarations for the script API.
 ///
 /// The output is deterministic — no timestamps, no reflection order — so
 /// regenerating it after a runtime upgrade produces a reviewable diff rather
 /// than a reshuffled file.
+#[cfg(test)]
 pub fn declarations() -> String {
+    declarations_with_components(&crate::FrozenComponentRegistry::default())
+}
+
+#[cfg(test)]
+fn base_declarations() -> String {
+    declarations()
+}
+
+pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRegistry) -> String {
     let (nullary, parametric) = style_methods();
+    let component_module = component_module(components);
 
     let mut out = String::with_capacity(160 * 1024);
     out.push_str(&PREAMBLE.replace("{version}", crate::plugin::SHELL_VERSION));
-    out.push_str("declare module \"gpui\" {\n");
+    out.push_str("declare module \"gpui-kit\" {\n");
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
     out.push_str(&role_type());
     out.push_str(&anchor_type());
     out.push_str(&view_types());
-    out.push_str(MOTION_TYPES);
     out.push_str("  /**\n");
     out.push_str("   * A description of one element, built by chaining.\n");
     out.push_str("   *\n");
@@ -96,22 +201,318 @@ pub fn declarations() -> String {
     out.push_str("   * belongs to the render pass that built it; storing one and using it\n");
     out.push_str("   * again throws, which no type can prevent.\n");
     out.push_str("   */\n");
-    out.push_str("  export interface Element {\n");
+    // Registered builders can override a native signature (for example size).
+    // A renderable union keeps those builders valid children without pretending
+    // that an adapter's semantic size accepts native lengths.
+    out.push_str("  export type Element = NativeElement");
+    for descriptor in components.descriptors() {
+        let _ = write!(
+            out,
+            " | import(\"{component_module}\").{}Element",
+            descriptor.name()
+        );
+    }
+    out.push_str(";\n\n");
+    out.push_str("  /** The fluent builder returned by native and Base element factories. */\n");
+    out.push_str("  export interface NativeElement {\n");
     out.push_str(ELEMENT_METHODS);
+    out.push_str("    token(render: (token: import(\"gpui-base\").InlineTokenContext, cx: Context) => Element | null): this;\n    on_token_click(listener: (event: import(\"gpui-base\").InlineTokenClickEvent, cx: Context) => void): this;\n    on_token_hover(listener: (event: import(\"gpui-base\").InlineTokenHoverEvent, cx: Context) => void): this;\n");
     out.push_str(&parametric_styles(&parametric));
     out.push_str(&nullary_styles(&nullary));
     out.push_str("  }\n");
-    out.push_str(CONSTRUCTORS);
+    out.push_str(ELEMENTS);
+    out.push_str(WINDOW);
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui\" {\n  export * from \"gpui-kit\";\n}\n\n");
+    out.push_str("declare module \"gpui-base\" {\n");
+    out.push_str(BASE_IMPORTS);
+    out.push_str(&base_color_token_type());
+    out.push_str(BASE_SHARED_TYPES);
+    out.push_str(INLINE_TOKEN_TYPES);
+    out.push_str(BASE);
+    out.push_str("}\n\n");
+    let _ = writeln!(out, "declare module \"{component_module}\" {{");
+    out.push_str("  import { ClickEvent, Context, Element, NativeElement } from \"gpui-kit\";\n");
+    if components.states().any(|state| state.has_input_events()) {
+        out.push_str("  import { InputEvent } from \"gpui-base\";\n");
+    }
+    out.push_str(INLINE_TOKEN_TYPES);
+    for state in components.states() {
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
+        out.push_str("  export interface ");
+        out.push_str(state.kind());
+        out.push_str(" { readonly __gpuiComponentState: unique symbol");
+        for method in state.methods() {
+            out.push_str(";\n    ");
+            out.push_str(method.name());
+            out.push_str(method.signature());
+        }
+        if state.has_input_events() {
+            out.push_str(";\n    /** `change`, `submit` (Enter), `focus` or `blur`, as on `gpui-base`'s `InputState`. */");
+            out.push_str("\n    on(event: \"change\" | \"submit\" | \"focus\" | \"blur\", handler: (event: InputEvent, cx: Context) => void): boolean");
+        }
+        out.push_str(";\n    /** Releases the state and its subscriptions now rather than with the application. Returns `false` when it was already released; a method called afterwards throws. Not allowed during render. */");
+        out.push_str("\n    release(): boolean");
+        out.push_str(" }\n");
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
+        // `State.new(...)` is the form `gpui-base` uses; the plain call is kept
+        // for scripts written before it existed.
+        let mut parameters = String::new();
+        push_arguments(&mut parameters, state.arguments());
+        out.push_str(&format!(
+            "  export const {export}: {{ ({parameters}): {kind}; new: ({parameters}) => {kind} }};\n",
+            export = state.export(),
+            kind = state.kind(),
+        ));
+    }
+    for descriptor in components.descriptors() {
+        push_jsdoc(&mut out, descriptor.documentation(), None, "  ");
+        out.push_str("  export type ");
+        out.push_str(descriptor.name());
+        out.push_str("Element = ");
+        // Two reasons a name leaves `Element`. A method the descriptor declares
+        // is re-declared below with the descriptor's own signature. And a common
+        // behavior the descriptor does *not* declare is refused at run time for
+        // a registered component — see the `registered_common_behavior` check in
+        // the engine — so leaving it inherited would have `gpui-kit.d.ts` promise a
+        // call that always throws.
+        let declared = descriptor
+            .methods()
+            .iter()
+            .map(|method| method.name())
+            .collect::<Vec<_>>();
+        let withheld = REGISTERED_COMMON_BEHAVIORS
+            .iter()
+            .copied()
+            // These native behaviors are not dispatched for registered
+            // components unless supplied by their own descriptor.
+            .chain(["role", "transition"])
+            .filter(|behavior| !declared.contains(behavior))
+            .collect::<Vec<_>>();
+        let removed = declared
+            .iter()
+            .copied()
+            .chain(withheld.iter().copied())
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            out.push_str("NativeElement & {\n");
+        } else {
+            out.push_str("Omit<NativeElement, ");
+            for (index, name) in removed.iter().enumerate() {
+                if index != 0 {
+                    out.push_str(" | ");
+                }
+                out.push('"');
+                out.push_str(name);
+                out.push('"');
+            }
+            out.push_str("> & {\n");
+        }
+        for method in descriptor.methods() {
+            push_jsdoc(&mut out, method.documentation(), None, "    ");
+            out.push_str("    ");
+            out.push_str(method.name());
+            out.push('(');
+            push_arguments(&mut out, &method.arguments());
+            out.push_str("): ");
+            out.push_str(descriptor.name());
+            out.push_str("Element;\n");
+        }
+        // Keep unavailable behaviors visible with their explanation while a
+        // `never` parameter refuses every call, including after fluent methods.
+        for behavior in &withheld {
+            out.push_str("    /**\n     * Not available on this component: `");
+            out.push_str(descriptor.name());
+            out.push_str("` does not declare `");
+            out.push_str(behavior);
+            out.push_str("`, and the runtime refuses it.\n     */\n    ");
+            out.push_str(behavior);
+            out.push_str("(unavailable: never): never;\n");
+        }
+        out.push_str("  }\n");
+        for constructor in descriptor.constructors() {
+            push_jsdoc(
+                &mut out,
+                descriptor.documentation(),
+                constructor
+                    .deprecation()
+                    .as_ref()
+                    .map(|entry| entry.message()),
+                "  ",
+            );
+            // `Type.new(...)` is the form `gpui-base` uses; `new Type(...)` is
+            // kept for scripts written before it existed.
+            let mut parameters = String::new();
+            push_arguments(&mut parameters, &constructor.arguments());
+            out.push_str(&format!(
+                "  export const {export}: {{ new({parameters}): {name}Element; new: ({parameters}) => {name}Element }};\n",
+                export = constructor.export(),
+                name = descriptor.name(),
+            ));
+        }
+    }
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-shell\" {\n");
+    out.push_str(&shell_types());
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-fps\" {\n");
+    out.push_str(FPS_IMPORTS);
+    out.push_str(FPS);
     out.push_str("}\n");
     out.push_str(STANDARD_RUNTIME);
+    out.push_str(&host_modules());
     out.push_str(WINDOW_GLOBAL);
     out
 }
 
+/// The behaviors a registered component answers only when its descriptor
+/// declares them. Mirrors the engine's `registered_common_behavior` list; a
+/// test asserts the two agree.
+pub(crate) const REGISTERED_COMMON_BEHAVIORS: [&str; 3] = ["disabled", "selected", "on_click"];
+
+fn push_arguments(out: &mut String, arguments: &[crate::ArgumentDescriptor]) {
+    for (index, argument) in arguments.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(argument.name());
+        if matches!(argument.schema(), crate::ArgumentSchema::Optional(_)) {
+            out.push('?');
+        }
+        out.push_str(": ");
+        out.push_str(&argument_type(&argument.schema()));
+    }
+}
+
+fn argument_type(schema: &crate::ArgumentSchema) -> String {
+    match schema {
+        crate::ArgumentSchema::String => "string".into(),
+        crate::ArgumentSchema::Number => "number".into(),
+        crate::ArgumentSchema::Boolean => "boolean".into(),
+        crate::ArgumentSchema::Element => "Element".into(),
+        crate::ArgumentSchema::Entity(kind) => (*kind).into(),
+        crate::ArgumentSchema::Callback(signature) => (*signature).into(),
+        crate::ArgumentSchema::Enum(values) => values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect::<Vec<_>>()
+            .join(" | "),
+        crate::ArgumentSchema::Array(item) => format!("Array<{}>", argument_type(item)),
+        crate::ArgumentSchema::Optional(item) => argument_type(item),
+    }
+}
+
+fn push_jsdoc(
+    out: &mut String,
+    documentation: Option<&str>,
+    deprecated: Option<&str>,
+    indent: &str,
+) {
+    if documentation.is_none() && deprecated.is_none() {
+        return;
+    }
+    out.push_str(indent);
+    out.push_str("/**\n");
+    if let Some(documentation) = documentation {
+        for line in documentation.lines() {
+            out.push_str(indent);
+            out.push_str(" * ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if let Some(message) = deprecated {
+        out.push_str(indent);
+        out.push_str(" * @deprecated ");
+        out.push_str(message);
+        out.push('\n');
+    }
+    out.push_str(indent);
+    out.push_str(" */\n");
+}
+
+/// The modules this host registered, as `declare module` blocks.
+///
+/// Generated from the registry rather than hand-written beside the script,
+/// which is the whole reason HostModule registrations became imports. A module that gave
+/// itself a TypeScript face through [`crate::HostModule::declarations`] is
+/// emitted verbatim — and [`crate::HostModule::validate`] has already checked
+/// that face against what was registered, so it cannot describe a function that
+/// is not there. One that did not is emitted with permissive signatures, which
+/// still check the module name and every export name.
+/// Re-indents a module's declarations to sit one level inside `declare module`.
+///
+/// A host writes them in a Rust raw string, so they arrive carrying whatever
+/// indentation that literal had. Stripping each line entirely would flatten a
+/// multi-line `interface` into something TypeScript still parses but nobody
+/// wants to read, so the common prefix goes and the shape inside it stays.
+fn reindented(declarations: &str) -> String {
+    let common = declarations
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0);
+
+    let mut out = String::new();
+    for line in declarations.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            out.push('\n');
+        } else {
+            let _ = writeln!(out, "  {}", &line[common..]);
+        }
+    }
+    out
+}
+
+fn host_modules() -> String {
+    let registry = crate::host_modules::modules();
+    let mut out = String::new();
+    for name in registry.module_names() {
+        let Ok(module) = registry.get(name) else {
+            continue;
+        };
+        let _ = writeln!(out, "\ndeclare module \"{name}\" {{");
+        match module.declared() {
+            Some(declarations) => out.push_str(&reindented(declarations)),
+            None => {
+                // `HostValue`, not `any`. The boundary carries exactly what the
+                // Rust type of that name carries, so `any` would be wider than
+                // the runtime: a script passing a function or a Symbol would
+                // type-check and then be refused at the call.
+                out.push_str("  import { NativeElement, HostValue } from \"gpui-kit\";\n\n");
+                for function in module.function_names() {
+                    // Permissive about shape, but not wrong about the one thing
+                    // the caller has to get right: an asynchronous export is
+                    // awaited.
+                    let returns = if module.is_async(function) {
+                        "Promise<HostValue>"
+                    } else {
+                        "HostValue"
+                    };
+                    let _ = writeln!(
+                        out,
+                        "  export function {function}(...args: HostValue[]): {returns};"
+                    );
+                }
+                for component in module.component_names() {
+                    let _ = writeln!(
+                        out,
+                        "  export const {component}: {{ new(id: string, props: HostValue): NativeElement }};"
+                    );
+                }
+            }
+        }
+        out.push_str("}\n");
+    }
+    out
+}
+
 /// Refreshes the declarations in every directory of an application that imports
-/// the `gpui` module.
+/// one of the built-in modules.
 ///
 /// One file at the root is enough for an editor that has the whole application
 /// open, and not enough for anything else: a subdirectory opened on its own, a
@@ -122,19 +523,32 @@ pub fn declarations() -> String {
 /// The explicit tooling API reports write failures. Ordinary application loads
 /// log them at debug level and continue, because an unwritable declaration is a
 /// worse editing experience, not a reason to refuse to run the application.
-pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+pub(crate) fn write_application_with_components(
+    root: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Vec<PathBuf>> {
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
-        directories_importing_gpui(root)
+        directories_importing_builtins(root, component_module(components))
             .into_iter()
             .filter(|directory| directory != root),
     );
 
     let mut written = Vec::new();
     let mut first_error = None;
+    // The application root only: one project, one configuration, and a nested
+    // directory that happens to import `gpui-kit` is part of it rather than a
+    // second project.
+    match write_editor_config(root) {
+        Ok(Some(path)) => written.push(path),
+        Ok(None) => {}
+        Err(error) => {
+            first_error.get_or_insert(error);
+        }
+    }
     for directory in directories {
-        match refresh(&directory) {
+        match refresh_with_components(&directory, components) {
             Ok(Some(path)) => written.push(path),
             Ok(None) => {}
             Err(error) => {
@@ -148,13 +562,13 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
 }
 
-/// Directories holding at least one script that imports `gpui`.
+/// Directories holding at least one script that imports a built-in module.
 ///
 /// Bounded the way the source watcher is bounded, and for the same reason: an
 /// application directory is whatever someone pointed the runtime at, and a
 /// symlink farm or a vendored tree must not turn a startup step into an
 /// unbounded walk.
-fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
+fn directories_importing_builtins(root: &Path, component_module: &str) -> Vec<PathBuf> {
     const MAX_DEPTH: usize = 8;
     const MAX_FILES: usize = 4_096;
     const SKIPPED: [&str; 2] = ["node_modules", "target"];
@@ -203,7 +617,8 @@ fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
                     path.extension().and_then(|extension| extension.to_str()),
                     Some("js" | "mjs")
                 )
-                && std::fs::read_to_string(&path).is_ok_and(|source| imports_gpui(&source))
+                && std::fs::read_to_string(&path)
+                    .is_ok_and(|source| imports_builtin(&source, component_module))
             {
                 imports = true;
             }
@@ -217,15 +632,37 @@ fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Whether a script imports the built-in module.
+/// The specifiers one `gpui-kit.d.ts` declares besides the component
+/// catalog's, which [`component_module`] names. A script importing any of them
+/// wants the file beside it.
+const BUILTIN_SPECIFIERS: [&str; 5] = ["gpui-kit", "gpui", "gpui-base", "gpui-shell", "gpui-fps"];
+
+/// The specifier the declarations give the component catalog.
+///
+/// The registry's own, so a host whose catalog scripts import from another
+/// name gets declarations for that name. The bare runtime's empty registry has
+/// none and keeps `gpui-component`, with an empty block.
+fn component_module(components: &crate::FrozenComponentRegistry) -> &'static str {
+    components
+        .module_specifier()
+        .unwrap_or(crate::DEFAULT_COMPONENT_MODULE)
+}
+
+/// Whether a script imports one of the built-in modules or the component
+/// catalog.
 ///
 /// Matching the quoted specifier rather than the bare word, so a file that only
 /// mentions gpui in a comment or a string does not collect a copy it has no use
 /// for.
-fn imports_gpui(source: &str) -> bool {
-    ["\"gpui\"", "'gpui'"]
+fn imports_builtin(source: &str, component_module: &str) -> bool {
+    BUILTIN_SPECIFIERS
         .iter()
-        .any(|specifier| source.contains(specifier))
+        .copied()
+        .chain([component_module])
+        .any(|specifier| {
+            source.contains(&format!("\"{specifier}\""))
+                || source.contains(&format!("'{specifier}'"))
+        })
 }
 
 /// Rewrites the declarations beside an application when they are not current.
@@ -238,7 +675,10 @@ fn imports_gpui(source: &str) -> bool {
 /// Nothing is written when the file already matches, so an editor watching the
 /// directory is not woken on every launch, and a read-only checkout is not an
 /// error worth reporting. Returns the path only when it actually wrote.
-pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+pub(crate) fn refresh_with_components(
+    directory: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Option<PathBuf>> {
     let path = directory.join(FILE_NAME);
     if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(std::io::Error::new(
@@ -246,7 +686,7 @@ pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
             format!("refusing to replace symlink {}", path.display()),
         ));
     }
-    let current = declarations();
+    let current = declarations_with_components(components);
 
     if std::fs::read_to_string(&path).is_ok_and(|committed| committed == current) {
         return Ok(None);
@@ -279,6 +719,10 @@ enum Argument {
     DefiniteLength,
     AbsoluteLength,
     Color,
+    /// A colour or a `Background` value, which only `bg` accepts.
+    Fill,
+    /// A list of `BoxShadowSpec` records, which only `shadow` accepts.
+    Shadows,
     Number,
     /// Nothing the probe recognizes. Emitted as `never` rather than `any` so a
     /// style method added to the runtime without a matching literal here fails
@@ -294,6 +738,8 @@ impl Argument {
             Argument::DefiniteLength => "DefiniteLength",
             Argument::AbsoluteLength => "AbsoluteLength",
             Argument::Color => "Color",
+            Argument::Fill => "Color | Background",
+            Argument::Shadows => "readonly BoxShadowSpec[]",
             Argument::Number => "number",
             Argument::Unrecognized => "never",
         }
@@ -319,8 +765,23 @@ fn argument_of(name: &str) -> Argument {
     }
     let accepts = |value: Bridged| style::apply_param(name, &[value], StyleRefinement::default());
 
+    let background = || {
+        Bridged::Background(Box::new(crate::spec::BackgroundSpec {
+            kind: crate::spec::BackgroundKind::Solid {
+                color: "#ff0000".into(),
+            },
+            opacity: 1.,
+        }))
+    };
+
     if accepts(Bridged::Str("#ff0000".into())).is_ok() {
-        Argument::Color
+        if accepts(background()).is_ok() {
+            Argument::Fill
+        } else {
+            Argument::Color
+        }
+    } else if accepts(Bridged::Shadows(Vec::new())).is_ok() {
+        Argument::Shadows
     } else if accepts(Bridged::Str("auto".into())).is_ok() {
         Argument::Length
     } else if accepts(Bridged::Str("50%".into())).is_ok() {
@@ -336,25 +797,23 @@ fn argument_of(name: &str) -> Argument {
 
 fn color_types() -> String {
     let mut out = String::new();
-    out.push_str("  /** Every semantic color token the installed palette defines. */\n");
+    out.push_str("  /**\n");
+    out.push_str("   * A concrete `#rgb`, `#rrggbb`, or `#rrggbbaa` color value.\n");
+    out.push_str("   * Read semantic colors from `cx.theme().colors`; bare token names are\n");
+    out.push_str("   * intentionally not accepted.\n");
+    out.push_str("   */\n");
+    out.push_str("  export type Color = `#${string}`;\n\n");
+    out
+}
+
+fn base_color_token_type() -> String {
+    let mut out = String::new();
+    out.push_str("  /** Every semantic color token the installed Base palette defines. */\n");
     out.push_str("  export type ColorToken =\n");
     for name in color_token_names() {
         let _ = writeln!(out, "    | \"{name}\"");
     }
     out.push_str("    ;\n\n");
-    out.push_str("  /**\n");
-    out.push_str("   * A color: a semantic token name, or a `#rgb`, `#rrggbb` or `#rrggbbaa`\n");
-    out.push_str("   * literal. Prefer a token; a literal bypasses the theme, and a theme\n");
-    out.push_str("   * switch will not reach it.\n");
-    out.push_str("   *\n");
-    out.push_str("   * The union is closed, so a mistyped token is a compile error. A token\n");
-    out.push_str("   * name that reaches a call through a variable widens to `string` and\n");
-    out.push_str("   * has to say what it is:\n");
-    out.push_str("   *\n");
-    out.push_str("   *     /** @type {{ bg: import(\"gpui\").Color }} *\\/\n");
-    out.push_str("   *     const palette = tone === \"blocking\" ? ... : ...;\n");
-    out.push_str("   */\n");
-    out.push_str("  export type Color = ColorToken | `#${string}`;\n\n");
     out
 }
 
@@ -397,20 +856,6 @@ fn anchor_type() -> String {
 
 fn view_types() -> String {
     let mut out = String::new();
-    out.push_str("  /** The phase a host call is in, as `cx.phase()` reports it. */\n");
-    out.push_str("  export type Phase =\n");
-    for phase in [
-        ScopePhase::Render,
-        ScopePhase::Event,
-        ScopePhase::Task,
-        ScopePhase::Layout,
-    ] {
-        let _ = writeln!(out, "    | \"{}\"", phase.as_str());
-    }
-    // Not a `ScopePhase`: `phase()` answers this outside any host call, where
-    // there is no frame to report.
-    out.push_str("    | \"none\"\n");
-    out.push_str("    ;\n\n");
     out.push_str(CONTEXT_AND_VIEW);
     out
 }
@@ -426,7 +871,7 @@ fn parametric_styles(names: &[&'static str]) -> String {
         out.push_str(&doc_comment(style::documentation(name), 4));
         let _ = writeln!(
             out,
-            "    {name}(value: {}): Element;",
+            "    {name}<Self extends Element>(this: Self, value: {}): Self;",
             argument_of(name).ts_type()
         );
     }
@@ -445,7 +890,7 @@ fn nullary_styles(names: &[&'static str]) -> String {
     );
     for name in names {
         out.push_str(&doc_comment(style::documentation(name), 4));
-        let _ = writeln!(out, "    {name}(): Element;");
+        let _ = writeln!(out, "    {name}<Self extends Element>(this: Self): Self;");
     }
     out
 }
@@ -490,12 +935,24 @@ fn doc_comment(documentation: Option<&str>, indent: usize) -> String {
 }
 
 const PREAMBLE: &str = "\
-// Auto-generated — add `gpui.d.ts` to your .gitignore.
+// Auto-generated — add `gpui-kit.d.ts` to your .gitignore.
 //
-// The built-in `gpui` module, as TypeScript declarations, for gpui-shell
-// {version}. Do not edit: gpui-shell rewrites this on every run, in every
-// directory that imports the module, from the runtime that is about to execute
-// the script. A committed copy could only ever be the stale one.
+// The built-in modules, as TypeScript declarations, for gpui-shell {version}.
+// Do not edit: gpui-shell rewrites this on every run, in every directory that
+// imports one of them, from the runtime that is about to execute the script. A
+// committed copy could only ever be the stale one.
+//
+// Each built-in module names the public Rust layer it exposes, so an import
+// says which layer a script depends on. \"gpui-kit\" also carries the shell bridge:
+//
+//   \"gpui-kit\"   GPUI's own elements, plus what this runtime adds: views,
+//                the style surface, the window, storage, scheduling.
+//   \"gpui\"       Compatibility alias for \"gpui-kit\".
+//   \"gpui-base\"  gpui-base's layout helpers, components and theme.
+//   \"gpui-fps\"   gpui-fps's performance overlay.
+//
+// Except for the explicit \"gpui\" compatibility alias, a name belongs to
+// exactly one module and is not re-exported for convenience.
 //
 // The style surface here is generated from the same tables the runtime
 // dispatches through, so a style method that type-checks exists at run time,
@@ -514,25 +971,32 @@ const VALUE_TYPES: &str = r#"  /**
    * `"auto"` is only accepted where the Rust signature takes `Length` — the
    * padding, gap, border and radius families take the narrower types below.
    */
-  export type Length = number | LengthString | "auto";
+  export type Length = number | import("gpui-shell").LengthString | "auto";
 
   /** A length that must resolve to a size: pixels, rems or a percentage. */
-  export type DefiniteLength = number | LengthString;
+  export type DefiniteLength = number | import("gpui-shell").LengthString;
 
   /** A length with no percentage and no `"auto"`: pixels or rems. */
   export type AbsoluteLength = number | `${number}px` | `${number}rem`;
 
-  /** The string forms of a length: `"12px"`, `"1.5rem"`, `"50%"`. */
-  export type LengthString = `${number}px` | `${number}rem` | `${number}%`;
+  /** A layout axis, mirroring `gpui::Axis`. */
+  export type Axis = "horizontal" | "vertical";
 
-  /** A JSON value — everything the store can persist, and nothing else. */
-  export type Json =
+  /**
+   * What a HostModule function takes and answers.
+   *
+   * Named after the Rust type it mirrors, `HostValue`, rather than after the
+   * shape it happens to have: `Json` would sit one capital letter away from the
+   * built-in `JSON` object and mean something entirely different — a value,
+   * not a parser.
+   */
+  export type HostValue =
     | null
     | boolean
     | number
     | string
-    | Json[]
-    | { [key: string]: Json };
+    | HostValue[]
+    | { [key: string]: HostValue };
 
 "#;
 
@@ -541,51 +1005,143 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    *
    * It is valid only for the call that produced it: an `await` returns to the
    * host and the frame it names goes away, so a `cx` kept across one reports a
-   * stale-context error. Ask for a fresh one with `with_cx` instead.
+   * stale-context error. Work that outlives the call takes an [`AsyncContext`]
+   * instead — `cx.spawn`, `cx.timer`, `init`.
    */
   export interface Context {
     /**
-     * Requests a re-render. Legal from an event handler or a task; calling it
-     * during `render` throws, because notifying yourself while rendering is a
-     * loop.
+     * Requests a re-render of the current view, or of one retained `Entity`.
+     *
+     * Pass a target after changing shared state that retained child reads. It
+     * invalidates that child's script description without invoking its
+     * `update(props)`; use `entity.set_props(props)` when the child must receive
+     * and process new props.
+     *
+     * Legal from an event handler or a task. Calling it during `render` throws,
+     * because notifying a view while rendering is a loop.
      */
-    notify(): void;
-    phase(): Phase;
+    notify(target?: Entity): void;
+    /**
+     * `App::bind_keys`. Installs key bindings and answers how many.
+     *
+     * The keymap is the application's, not a window's or a view's, so a chord
+     * bound here is live wherever its `context` predicate matches. The whole
+     * list is validated before any of it is installed: a keymap half applied
+     * because one entry had a typo is a worse state than one not applied, and
+     * the script cannot see which half made it.
+     *
+     * Illegal from `render`.
+     */
+    bind_keys(bindings: KeyBinding[]): number;
+    /**
+     * `App::stop_propagation`. Stops this event reaching the handlers above
+     * this element.
+     *
+     * GPUI delivers an event to every handler on the path, so a row inside a
+     * list with its own `on_click` fires both. Call this from the inner one to
+     * keep the event there.
+     */
+    stop_propagation(): void;
+    /**
+     * `App::propagate`. Undoes a `stop_propagation()` made earlier in the same
+     * dispatch, letting the event continue.
+     */
+    propagate(): void;
+    phase(): import("gpui-shell").ScopePhase;
     /** Reads the current `gpui_base::Theme` semantic token projection. */
-    theme(): Theme;
+    theme(): import("gpui-base").Theme;
 
-  }
-
-
-
-  /** Which edge the sheet is anchored to. */
-  export type SheetSide = "left" | "right" | "top" | "bottom";
-
-  export interface DialogOptions {
-    /** Whether Escape closes it. Default `true`. */
-    escape_dismissable?: boolean;
-    /** Whether pressing the backdrop closes it. Default `true`. */
-    backdrop_dismissable?: boolean;
-  }
-
-  export interface ToastOptions {
-    /** The sentence the user reads. */
-    title: string;
-    /** A second line. */
-    description?: string;
-    /** Default `info`. */
-    level?: "info" | "success" | "warning" | "error";
     /**
-     * Milliseconds, or `null` to stay until dismissed. Omitting it keeps the
-     * five-second default, which is why `null` and absent are not the same.
+     * Hands a URL to whatever the system opens URLs with. `App::open_url`.
+     *
+     * `Link`'s `href` without the element, for the case where the address is
+     * not known until something has already happened — the end of a device
+     * authorization, say, where waiting for a second click to open the page the
+     * first click just asked for is a step nobody wanted.
+     *
+     * It takes an absolute `http`/`https` URL with a host and refuses
+     * everything else. That guard is not about the address bar: without it this
+     * is a way to hand an arbitrary URI to whichever handler the desktop
+     * registered for its scheme.
      */
-    timeout?: number | null;
+    open_url(url: string): void;
     /**
-     * Identity, for replacing and dismissing. A repeated failure posted under
-     * one id is a standing message rather than a pile.
+     * Opens a file or directory with whatever the system opens it with —
+     * the user's default application for its type, or the file manager for
+     * a directory. `App::open_with_system`.
+     *
+     * The path must be inside a directory granted in `capabilities.fs.read`
+     * and must exist; anything else throws. Use this rather than running
+     * `xdg-open` or `open` through `process.run`, which starts commands
+     * without the desktop session's environment, so the opener cannot find
+     * the default application.
      */
-    id?: string;
+    open_path(path: string): void;
+
+    /** `App::read_from_clipboard`. `undefined` when it holds no text. */
+    read_from_clipboard(): string | undefined;
+    /** `App::write_to_clipboard`. */
+    write_to_clipboard(text: string): void;
+
+    /**
+     * A focus target the script owns, created once and kept on the view.
+     * `App::focus_handle` — GPUI has no `FocusHandle::new`, and neither does
+     * this.
+     *
+     * Focus is a fact about the window that outlives any one render, so an
+     * element rebuilt every frame cannot own it. Hand the handle to an element
+     * with `track_focus(...)`, and it is that element the keyboard means.
+     *
+     * It would produce a fresh handle on every frame, so it belongs in `init`
+     * or in an event handler — never in `render`.
+     */
+    focus_handle(): FocusHandle;
+
+    /**
+     * Creates a retained nested view and hands back the entity that owns it.
+     * `AppContext::new` — the only way GPUI makes one, and so the only way here.
+     *
+     * The entity is a child wherever a child is taken: `.child(entity)`, or
+     * returned from `render`. Updating its props runs the child's optional
+     * `update(props)` and rebuilds only that child.
+     *
+     * Legal from `init`, an event handler or a task; creating one during
+     * `render` or layout throws.
+     */
+    new(Class: ViewClass, props?: import("gpui-shell").Props): Entity;
+
+    /**
+     * Calls `body(cx)` and adopts the promise it returns, so a rejection is
+     * reported rather than swallowed. `App::spawn`.
+     *
+     * The `cx` the body receives is an [`AsyncContext`] — valid across `await`,
+     * the way GPUI's `AsyncApp` is — so the whole body can keep using it.
+     */
+    spawn(body: (cx: AsyncContext) => unknown, opts?: import("gpui-shell").TaskOptions): Task;
+
+    /** Resolves after `ms` on GPUI's foreground executor. */
+    sleep(ms?: number): Promise<void>;
+
+    /** One-shot and repeating callbacks on the foreground executor. */
+    readonly timer: Timer;
   }
+
+  /**
+   * A context that may be held across an `await`.
+   *
+   * The mirror of GPUI's `AsyncApp`. An ordinary [`Context`] speaks for one
+   * host call and reports clearly once that call has returned — which is what
+   * catches a `cx` stashed in a closure. This one names no call at all: it
+   * resolves whichever is running when a member is used, and refuses only when
+   * none is.
+   *
+   * It is what `init` receives, and what `cx.spawn` and `cx.timer` hand their
+   * callbacks — the three places whose whole job is to set up or continue work
+   * that outlives the call they were started from.
+   */
+  export interface AsyncContext extends Context {}
+
+
 
   /** The modifier keys held when a click was delivered. */
   export interface Modifiers {
@@ -594,6 +1150,19 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     alt: boolean;
     /** Command on macOS, Windows key elsewhere. */
     platform: boolean;
+    /** The Function key. */
+    function: boolean;
+  }
+
+  /** The Caps Lock state carried by GPUI modifier-change events. */
+  export interface Capslock {
+    on: boolean;
+  }
+
+  /** What an `on_modifiers_changed` handler receives. */
+  export interface ModifiersChangedEvent {
+    modifiers: Modifiers;
+    capslock: Capslock;
   }
 
   /** What an `on_click` handler receives. Keyboard activation counts as one. */
@@ -602,42 +1171,135 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     modifiers: Modifiers;
   }
 
+  /**
+   * What an `on_key_down` or `on_key_up` handler receives.
+   *
+   * `keystroke` is the whole chord in the spelling a key binding is written
+   * in — `"cmd-shift-s"`, `"escape"`, `"ctrl-alt-delete"` — and is what a
+   * comparison is normally written against. `key` and `modifiers` are the
+   * same thing taken apart, for when only one half matters.
+   *
+   * The platform modifier is spelled `cmd` on every platform, including Linux
+   * and Windows. GPUI spells it for the platform it was built for, which is
+   * right for a keymap a person reads and wrong for a string a program
+   * compares: one script runs on all three, and `event.keystroke === "cmd-s"`
+   * has to mean the same thing in all three. It is also the spelling
+   * `cx.bind_keys` accepts everywhere, so a binding and the event it produces
+   * agree by construction.
+   */
+  export interface KeyEvent {
+    /** The key printed on the key that was pressed, e.g. `"s"` or `"escape"`. */
+    key: string;
+    /** The full chord, as GPUI's `Keystroke::unparse` spells it. */
+    keystroke: string;
+    /** The character this keystroke would type, when it types one. */
+    key_char?: string;
+    modifiers: Modifiers;
+    /** Whether the key is being held down. Absent on `on_key_up`. */
+    is_held?: boolean;
+  }
+
   export interface Point { x: number; y: number; }
-  export interface ElementBounds extends Point { width: number; height: number; }
+  export interface Size { width: number; height: number; }
   /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
-    bounds: ElementBounds;
+    bounds: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
 
   /**
-   * Properties handed to `init`.
+   * What an `on_mouse_down`, `on_mouse_up` or `on_mouse_down_out` handler
+   * receives.
    *
-   * `any` rather than `unknown` because the values come from outside the type
-   * system and every use would otherwise need a cast. The host currently
-   * constructs a root view with no properties at all, so `init` should treat
-   * its argument as absent.
+   * `local_position` and `bounds` are absent when the element has not been
+   * painted yet, and on an `on_mouse_down_out` press they describe an element
+   * the pointer is outside of — so `local_position` there is negative, or past
+   * the far edge, which is exactly what says which way.
    */
-  export type Props = Record<string, any>;
+  export interface MouseButtonEvent {
+    button: MouseButton;
+    /** How many presses in the current sequence; `2` on a double-click. */
+    click_count: number;
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /** What an `on_action` handler receives. */
+  export interface ActionEvent {
+    /** The action's name, as the script bound and registered it. */
+    action: string;
+  }
+
+  /** One entry of `cx.bind_keys`. */
+  export interface KeyBinding {
+    /** The chord, e.g. `"cmd-s"`, or a sequence: `"ctrl-k ctrl-s"`. */
+    keystroke: string;
+    /** The action this chord dispatches. */
+    action: string;
+    /**
+     * Where it applies, as a key-context predicate matched against the
+     * `key_context(...)` an element declares — `"Editor"`, `"Pane && !modal"`.
+     * Omitted, the binding is global.
+     */
+    context?: string;
+  }
+
+  /** What an `on_scroll_wheel` handler receives. */
+  export interface ScrollWheelEvent {
+    /** The scroll distance in pixels, whichever unit the device reported. */
+    delta: Point;
+    /** The same distance in lines, when the device reported lines. */
+    delta_lines?: Point;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /** What an `on_pinch` handler receives. */
+  export interface PinchEvent {
+    /**
+     * The zoom change for this step: positive zooms in, negative zooms out,
+     * `0.1` is a 10% increase.
+     */
+    delta: number;
+    phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
 
   /**
    * The base class of every view: subclass it and default-export the subclass.
    *
-   * `init` runs once when the view is created. `render` returns exactly one
-   * element, and runs when the view is invalidated — by `cx.notify()`, a
-   * reload, or a theme change — not on every frame. Never store an element on
-   * the instance: it belongs to the render that built it.
+   * `init` runs once when the view is created. `render` returns one element,
+   * retained entity or string, and runs when the view is invalidated — by
+   * `cx.notify()`, a reload, or a theme change — not on every frame. Never
+   * store an element on the instance: it belongs to the render that built it.
    */
   export abstract class View {
-    constructor(props?: Props);
-    init?(props?: Props): void;
-    abstract render(cx: Context): Element;
+    constructor(props?: import("gpui-shell").Props);
+    /**
+     * Runs once when the view is created.
+     *
+     * `cx` is an [`AsyncContext`], because this is where retained things are
+     * made — tasks, timers, focus handles — and the context that starts a task
+     * is the one its body will still be using after an `await`.
+     */
+    init?(props: import("gpui-shell").Props | undefined, cx: AsyncContext): void;
+    /** Runs when a parent changes this retained nested view's properties. */
+    update?(props: import("gpui-shell").Props | undefined): void;
+    abstract render(cx: Context): Element | Entity | string;
   }
 
   /** A concrete script view class that can be retained as a nested view. */
-  export type ViewClass = new (props?: Props) => View;
+  export type ViewClass = new (props?: import("gpui-shell").Props) => View;
 
   /**
    * Retained ownership of one nested `View` entity.
@@ -656,19 +1318,11 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * newly added non-configurable properties; making an existing configurable property non-configurable;
    * and pre-existing native handles explicitly released by update.
    */
-  export interface ViewHandle {
-    set_props(props?: Props): void;
+  export interface Entity {
+    set_props(props?: import("gpui-shell").Props): void;
     release(): boolean;
   }
 
-  export interface ViewHandleType {
-    new: (Class: ViewClass, props?: Props) => ViewHandle;
-  }
-
-  export const ViewHandle: ViewHandleType;
-
-  /** Mounts one retained child. A handle may appear once per parent snapshot. */
-  export function child_view(handle: ViewHandle): Element;
 
 "#;
 
@@ -677,10 +1331,30 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 /// Hand-written because each has a signature of its own; the names match the
 /// behavior list the engine installs on the prototype, and
 /// [`tests::every_element_method_is_accounted_for`] fails if the two drift.
-const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; using it again throws. */
-    child(child: Element): Element;
+/// Explicit receiver generics survive `Omit` in registered builder types;
+/// polymorphic `this` alone would resolve to the original native interface.
+const ELEMENT_METHODS: &str = r#"    /**
+     * Passes this element to `transform` and returns exactly what it returns.
+     *
+     * This mirrors GPUI's `FluentBuilder.map`: it is useful for keeping an
+     * imperative or conditional transformation inside a fluent expression.
+     */
+    map<Self extends Element, T>(this: Self, transform: (element: Self) => T): T;
+    /**
+     * Adds one child. The child is consumed; using it again throws.
+     *
+     * A **string is an element**, exactly as `&str`, `String` and
+     * `SharedString` implement `IntoElement` in GPUI: `.child("hello")` is how
+     * text is written, and the style comes from the element holding it.
+     *
+     * An `Entity` from `cx.new(...)` is a child too, the way an `Entity<V>` is
+     * renderable in GPUI — that is how a retained nested view is mounted. One
+     * entity may appear once per parent snapshot; a second mount in the same
+     * description is refused before any of it is published.
+     */
+    child<Self extends Element>(this: Self, child: Element | Entity | string | number | boolean): Self;
     /** Adds several children, in order. */
-    children(children: Iterable<Element>): Element;
+    children<Self extends Element>(this: Self, children: Iterable<Element | Entity | string | number | boolean>): Self;
     /**
      * Fills the `content` slot of a `Collapsible`, a `Popover`, a `HoverCard`
      * or a `Popup`.
@@ -704,7 +1378,23 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * on the inner element; the region the pointer has to reach is the wrapper
      * around it.
      */
-    content(element: Element): Element;
+    content<Self extends Element>(this: Self, element: Element): Self;
+    /**
+     * Fills an `Avatar`'s `image` slot, which takes an `AvatarImage`.
+     *
+     * Consumed exactly as `content` is — a slot element is not also drawn as a
+     * child. Base renders this one when it is there and the `fallback` when it
+     * is not, so filling both is how a picture gets something to fall back to.
+     */
+    image<Self extends Element>(this: Self, element: Element): Self;
+    /** Fills an `Avatar`'s `fallback` slot, which takes an `AvatarFallback`. */
+    fallback<Self extends Element>(this: Self, element: Element): Self;
+    /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
+    header<Self extends Element>(this: Self, element: Element): Self;
+    /** Fills a component's named `footer` slot. */
+    footer<Self extends Element>(this: Self, element: Element): Self;
+    /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
+    panel<Self extends Element>(this: Self, element: Element): Self;
     /**
      * Fills the `trigger` slot of a `Popover` or a `HoverCard`: the element
      * that is on screen while the surface is closed, and that opens it.
@@ -714,7 +1404,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * instead, because its trigger's bounds are what the content is anchored
      * to.
      */
-    trigger(element: Element): Element;
+    trigger<Self extends Element>(this: Self, element: Element): Self;
     /**
      * Fills the editor slot of a `NumberInput`.
      *
@@ -724,7 +1414,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * editor, and a frame inside this frame draws two borders. Adornments
      * beside the editor are ordinary `child(...)` calls on the number input.
      */
-    input(element: Element): Element;
+    input<Self extends Element>(this: Self, element: Element): Self;
     /**
      * Supplies the look of a `NumberInput`'s decrement button.
      *
@@ -744,50 +1434,192 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * `disabled(...)` and `on_click(...)` written here are overwritten: the
      * number input owns whether stepping is allowed and what a press does.
      */
-    decrement_button(element: Element): Element;
+    decrement_button<Self extends Element>(this: Self, element: Element): Self;
     /** The increment button, replayed exactly as `decrement_button` is. */
-    increment_button(element: Element): Element;
+    increment_button<Self extends Element>(this: Self, element: Element): Self;
     /**
      * Stacks both of a `NumberInput`'s step buttons to the right of the text,
      * rather than putting one on each side of it.
      */
-    controls_right(): Element;
+    controls_right<Self extends Element>(this: Self): Self;
     /**
      * Applies `branch` only when `condition` is truthy, keeping the chain in
      * one piece. `branch` must return the element.
      */
-    when(condition: unknown, branch: (el: Element) => Element): Element;
+    when<Self extends Element>(this: Self, condition: unknown, branch: (el: Self) => Self): Self;
 
     /**
      * `handler(event, cx)` on activation. Keyboard activation is available
      * only on components whose Base primitive supports it; `Tab` is currently
      * pointer-only pending the compound keyboard behavior tracked in #2838.
      */
-    on_click(handler: (event: ClickEvent, cx: Context) => void): Element;
+    on_click<Self extends Element>(this: Self, handler: (event: ClickEvent, cx: Context) => void): Self;
     /** GPUI `InteractiveElement::on_mouse_move`, delivered while this element is hovered. */
-    on_mouse_move(handler: (event: MouseMoveEvent, cx: Context) => void): Element;
+    on_mouse_move<Self extends Element>(this: Self, handler: (event: MouseMoveEvent, cx: Context) => void): Self;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
-    on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
+    on_hover<Self extends Element>(this: Self, handler: (hovered: boolean, cx: Context) => void): Self;
     /**
-     * `handler(index, cx)` when a row of a virtual list is clicked, where
-     * `index` is the item's position in the whole collection.
+     * GPUI `InteractiveElement::on_key_down`, delivered while this element or
+     * something inside it holds the keyboard.
      *
-     * One handler for the list rather than one per row, and that is a limit
-     * rather than a shorthand: a handler registered inside the item renderer
-     * throws. Handlers belong to the render pass that registered them and are
-     * released with it; a row is rebuilt on every frame the list is scrolled,
-     * so a per-row handler would accumulate for as long as the view stood —
-     * twenty visible rows over a thousand frames is twenty thousand functions
-     * nothing can reach and nothing releases.
+     * A key event travels the focus path, so `track_focus(handle)` is half of
+     * this registration rather than a separate concern: without it the handler
+     * sits on an element the keyboard never reaches and nothing arrives. The
+     * event continues to the handlers above unless `cx.stop_propagation()`
+     * says otherwise.
      *
-     * The index is normally enough: the script already holds the data the row
-     * was built from. A row with several independently clickable parts needs a
-     * handler lifetime scoped to one batch of items, which this runtime does
-     * not have yet; when it does, this restriction lifts and `on_click` inside
-     * an item renderer starts working, with no change to anything written
-     * against `on_item_click`.
+     * Wired on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`,
+     * `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. On any other component it
+     * is recorded and never reaches GPUI, and the log says so — wrap it and
+     * write the handler on the wrapper. The same list applies to `on_key_up`,
+     * the four pointer handlers, `on_action` and `key_context`.
+     *
+     * Wired is not the same as reachable. A key travels the focus path, so a
+     * component that accepts no focus handle — `Tab` — hears presses and never
+     * hears keys, however well both are wired.
      */
-    on_item_click(handler: (index: number, cx: Context) => void): Element;
+    on_key_down<Self extends Element>(this: Self, handler: (event: KeyEvent, cx: Context) => void): Self;
+    /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */
+    on_key_up<Self extends Element>(this: Self, handler: (event: KeyEvent, cx: Context) => void): Self;
+    /** GPUI `InteractiveElement::on_modifiers_changed`, on the keyboard focus path. */
+    on_modifiers_changed<Self extends Element>(this: Self,
+      handler: (event: ModifiersChangedEvent, cx: Context) => void,
+    ): Self;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down`, for one button.
+     *
+     * Lower-level than `on_click`, and the reason to reach for it is that a
+     * press is not a click: it fires before the release, it reports which
+     * button, and `click_count` distinguishes a double-click. Registering it
+     * for two buttons on one element is fine — the two handlers are
+     * independent.
+     */
+    on_mouse_down<Self extends Element>(this: Self,
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Self;
+    /** GPUI `InteractiveElement::on_mouse_up`, for one button. */
+    on_mouse_up<Self extends Element>(this: Self,
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Self;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down_out`: a press anywhere *outside*
+     * this element, delivered during the capture phase.
+     *
+     * This is how a surface a script drew itself is dismissed by a press
+     * elsewhere — the same listener base's own components close on. It fires
+     * for any button.
+     */
+    on_mouse_down_out<Self extends Element>(this: Self, handler: (event: MouseButtonEvent, cx: Context) => void): Self;
+    /**
+     * GPUI `InteractiveElement::on_scroll_wheel`: wheel and trackpad scrolling
+     * over this element.
+     *
+     * For scrolling a region, `overflow_scroll()` is the answer and this is
+     * not: it hands GPUI's own retained scroll container the job. Use this when
+     * the gesture drives something else — a zoom, a value, a custom viewport.
+     */
+    on_scroll_wheel<Self extends Element>(this: Self, handler: (event: ScrollWheelEvent, cx: Context) => void): Self;
+    /**
+     * GPUI `InteractiveElement::on_pinch`: a trackpad or touch pinch over this
+     * element, delivered once per step of the gesture. Multiply a zoom level
+     * by `1 + event.delta` to follow it.
+     */
+    on_pinch<Self extends Element>(this: Self, handler: (event: PinchEvent, cx: Context) => void): Self;
+    /**
+     * `handler(event, cx)` when the named action is dispatched to this element
+     * or to something inside it.
+     *
+     * An action is the level above a keystroke: `cx.bind_keys` says which
+     * chord means `"save"`, in which context, and this says what `"save"`
+     * does. A menu item or a button dispatching the same name through
+     * `window.dispatch_action("save")` reaches the same handler without
+     * pretending to be a keyboard.
+     *
+     * Registering several on one element is fine and they are independent. An
+     * action none of them names carries on to an element further out.
+     */
+    on_action<Self extends Element>(this: Self, action: string, handler: (event: ActionEvent, cx: Context) => void): Self;
+    /**
+     * `InteractiveElement::key_context`: the key-binding context this element
+     * and its subtree sit in.
+     *
+     * What a binding's `context` predicate is matched against, so one chord can
+     * mean one thing in a list and another in an editor. The value is a name or
+     * a predicate expression, not free text; an unparsable one is reported and
+     * the context is left unset.
+     */
+    key_context<Self extends Element>(this: Self, context: string): Self;
+    /**
+     * An `AccordionHeader`'s announced heading level — "heading level 3" — as
+     * `aria-level` means it. Defaults to 3. It announces; it sizes nothing.
+     */
+    aria_level<Self extends Element>(this: Self, level: number): Self;
+    /**
+     * Whether an `AccordionPanel` stays in the tree while shut. Off by default;
+     * on, its content keeps a scroll position or a half-typed field across a
+     * close and reopen.
+     */
+    keep_mounted<Self extends Element>(this: Self, value?: boolean): Self;
+    /**
+     * `handler(key, cx)` when a row of a virtual list is clicked, where `key`
+     * is what the list's `get_key(index)` returned for that row.
+     *
+     * A key rather than an index, because the two stop agreeing exactly when it
+     * matters: the box was captured on the frame the row was drawn, and a
+     * filter or a sort can reorder the list before the click is delivered. The
+     * key names the item that was pressed; the index would name whatever slid
+     * into its place.
+     *
+     * A row may also register handlers of its own — `row.on_click(...)` inside
+     * the item renderer works, and a row with several clickable parts needs it.
+     * Those handlers belong to the batch of rows that registered them and are
+     * released when the next frame replaces it. `on_item_click` remains the
+     * cheaper choice for a whole-row click: one handler for the list, and the
+     * key it reports names the item even after a filter or a sort.
+     */
+    on_item_click<Self extends Element>(this: Self, handler: (key: string, cx: Context) => void): Self;
+    /**
+     * `handler(key, event, cx)` on a secondary press — the right button — over
+     * a row of a virtual list. `key` is what the list's `get_key(index)`
+     * returned for that row, and `event` is the press as `on_mouse_down`
+     * reports it: `position` in the window, `local_position` and `bounds`
+     * against the row's own box.
+     *
+     * A press rather than a click, because that is when a context menu opens:
+     * the row is still under the pointer, so the menu can name what it is for
+     * before it is drawn over it.
+     *
+     * It is delivered on the row, so a handler for the same button on an
+     * element around the list still fires after it, in the ordinary bubble
+     * order, with that element's own `local_position`. A menu drawn inside a
+     * pane learns which row was pressed from this handler and where in the
+     * pane to open from the pane's.
+     */
+    on_item_secondary_click<Self extends Element>(this: Self,
+      handler: (key: string, event: MouseButtonEvent, cx: Context) => void,
+    ): Self;
+    /**
+     * `handler(range, count, cx)` after a frame in which the items a `list`
+     * shows, or how many it has, changed. `range` is the visible items as a
+     * half-open `[start, end)`, and `count` is the list's `item_count`.
+     *
+     * It is called once the frame is done, as an event handler is, so it may
+     * change state and call `cx.notify()`: load the page above when
+     * `range.start` reaches 0, or the next one when `range.end` reaches
+     * `count`. The item renderer cannot do this, because it runs inside
+     * layout.
+     *
+     * What calls it is the range itself, not what moved it: the first frame,
+     * a wheel or trackpad scroll, a `Scrollbar` drag, a change of
+     * `item_count`, a change of the list's height. A frame that leaves both
+     * the same calls nothing. Only `list` reports it; on `uniform_list` and
+     * the virtual lists it is ignored.
+     */
+    on_visible_range_change<Self extends Element>(this: Self,
+      handler: (range: ItemRange, count: number, cx: Context) => void,
+    ): Self;
     /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
@@ -795,7 +1627,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * already checked — or disabled — radio reports nothing at all, and
      * clearing a group is the script's own business.
      */
-    on_change(handler: (checked: boolean, cx: Context) => void): Element;
+    on_change<Self extends Element>(this: Self, handler: (checked: boolean, cx: Context) => void): Self;
 
     /**
      * `handler(action, cx)` on a `NumberInput`, where `action` is
@@ -810,11 +1642,11 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      *
      * Both the step buttons and the Up and Down keys report through it.
      */
-    on_step(handler: (action: "increment" | "decrement", cx: Context) => void): Element;
+    on_step<Self extends Element>(this: Self, handler: (action: "increment" | "decrement", cx: Context) => void): Self;
     /**
      * `handler(open, cx)`, when something other than the script changed a
      * `Popover`'s open state: a press on the trigger, a press outside it, or
-     * Escape. Store the value and call `cx.notify()`, the way `on_change`
+     * Escape. Storage the value and call `cx.notify()`, the way `on_change`
      * stores a checkbox's.
      *
      * A `HoverCard` accepts this too, and today never calls it: the base layer
@@ -822,7 +1654,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * its open state cannot produce. A hover card's open state is its own, so
      * nothing is lost except the notification.
      */
-    on_open_change(handler: (open: boolean, cx: Context) => void): Element;
+    on_open_change<Self extends Element>(this: Self, handler: (open: boolean, cx: Context) => void): Self;
     /**
      * `handler(_, cx)` on Enter in an open `Select` or `Combobox`.
      *
@@ -831,13 +1663,13 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * the script is the only side that knows. Confirming a *closed* root opens
      * it instead, so this never runs for that case.
      */
-    on_confirm(handler: (event: {}, cx: Context) => void): Element;
+    on_confirm<Self extends Element>(this: Self, handler: (event: {}, cx: Context) => void): Self;
     /**
      * `handler(_, cx)` on Escape in an open `Select` or `Combobox`, before
      * `on_open_change(false)` — which is what lets a script commit a pending
      * value on the way out.
      */
-    on_dismiss(handler: (event: {}, cx: Context) => void): Element;
+    on_dismiss<Self extends Element>(this: Self, handler: (event: {}, cx: Context) => void): Self;
     /**
      * The label a hover shows over this element, once the pointer has rested
      * on it for half a second.
@@ -860,41 +1692,41 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * A tooltip is not a substitute for `accessibility_label`. A screen reader
      * announces the label; the tooltip is for the pointer.
      */
-    tooltip(text: string): Element;
+    tooltip<Self extends Element>(this: Self, text: string): Self;
     /** Blocks activation and reports the disabled state. Draw it yourself. */
-    disabled(value: boolean): Element;
+    disabled<Self extends Element>(this: Self, value: boolean): Self;
     /** Reports the selected state of a `Button`. */
-    selected(value: boolean): Element;
+    selected<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * This item's one-based position and its collection's total size, so a
      * screen reader can announce "tab 2 of 5" or "option 2 of 5". Announced,
      * never drawn: a tab list or radio group that omits it looks identical and
      * says nothing about where the reader is in the set.
      */
-    set_position(position: number, size: number): Element;
+    set_position<Self extends Element>(this: Self, position: number, size: number): Self;
     /** The controlled value of a `Checkbox`, `Switch` or `Radio`. */
-    checked(value: boolean): Element;
+    checked<Self extends Element>(this: Self, value: boolean): Self;
     /** The controlled state of a `Toggle`: a button that stays down. */
-    pressed(value: boolean): Element;
+    pressed<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * The announced progress percentage of a `Progress`, clamped to `0..=100`.
      *
      * It moves nothing on screen: size the `ProgressIndicator` from the same
      * number to draw the bar.
      */
-    value(percent: number): Element;
+    value<Self extends Element>(this: Self, percent: number): Self;
     /**
      * Withdraws a `Progress` value from the accessibility tree — "still
      * working, no idea how far". It does not animate anything; a barber-pole
      * or a sliding indicator is yours to draw, and `transition` on the
      * indicator is how it moves.
      */
-    indeterminate(value: boolean): Element;
+    indeterminate<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * What a screen reader announces. An icon-only control has no text of its
      * own and announces nothing without it.
      */
-    accessibility_label(description: string): Element;
+    accessibility_label<Self extends Element>(this: Self, description: string): Self;
     /**
      * What this element announces itself as.
      *
@@ -905,14 +1737,14 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * menu item). Every other component announces a role of its own, and a
      * `role` there is reported and dropped rather than silently overwritten.
      */
-    role(name: Role): Element;
+    role<Self extends Element>(this: Self, name: Role): Self;
     /**
      * The selected state of an option in a list the script built itself.
      *
      * Plain elements only. `Tab` and `Radio` announce their own selection from
      * `selected(...)` and `checked(...)`.
      */
-    aria_selected(value: boolean): Element;
+    aria_selected<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * Announces this element as the focused one while an ancestor actually
      * holds the keyboard — the highlighted option of a combobox whose input
@@ -922,7 +1754,20 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      *
      * Plain elements only.
      */
-    aria_active_descendant(): Element;
+    aria_active_descendant<Self extends Element>(this: Self): Self;
+    /**
+     * GPUI `InteractiveElement::window_control_area`: this element is the
+     * window's drag area, or its close, maximize or minimize button.
+     *
+     * The host draws no title bar of its own, so a script's title bar is the
+     * window's. `"drag"` makes it behave like one on every platform, as
+     * gpui-component's `TitleBar` does: pressing and dragging across it moves
+     * the window, and a double-click zooms it (or does what the user set
+     * double-clicking a title bar to do, on macOS).
+     *
+     * Plain elements only.
+     */
+    window_control_area<Self extends Element>(this: Self, area: "drag" | "close" | "max" | "min"): Self;
     /**
      * Tracks a `FocusHandle` the script owns, so `handle.is_focused()` answers
      * for this element and `handle.focus()` moves the keyboard onto it.
@@ -938,7 +1783,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * you drew as the trigger, or nothing focusable is on screen and Escape and
      * Enter reach nothing.
      */
-    track_focus(handle: FocusHandleHandle): Element;
+    track_focus<Self extends Element>(this: Self, handle: FocusHandle): Self;
     /**
      * Gives a virtual list the scroll position held by a
      * `VirtualListScrollHandle`, so the script can drive it with
@@ -948,7 +1793,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * the id it was built with — which is the same place a `Scrollbar` named
      * after that id looks, so the bar works either way.
      */
-    track_scroll(handle: VirtualListScrollHandleHandle): Element;
+    track_scroll<Self extends Element>(this: Self, handle: import("gpui-base").VirtualListScrollHandle): Self;
     /**
      * Which item a virtual list measures to infer its size across the axis it
      * scrolls: a vertical list takes its width from this item, a horizontal
@@ -956,7 +1801,20 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      *
      * The name is base's own builder, kept verbatim.
      */
-    with_item_to_measure_index(index: number): Element;
+    with_item_to_measure_index<Self extends Element>(this: Self, index: number): Self;
+    /**
+     * Whether a `list` follows its tail — GPUI's `FollowMode`. With `"tail"`
+     * the list opens at its end and stays there as items are added and as the
+     * last one grows, the way a transcript being written is read. Scrolling
+     * up stops it; scrolling back to the end, with the wheel or a
+     * `Scrollbar`, starts it again. `"normal"`, the default, never scrolls on
+     * its own.
+     *
+     * Switching to `"tail"` scrolls to the end once, on the frame it is
+     * switched on; keeping it on does not pull a reader who scrolled up back
+     * down. Only `list` has a follow mode; on other elements it is ignored.
+     */
+    with_follow_mode<Self extends Element>(this: Self, mode: "normal" | "tail"): Self;
     /**
      * The handle a `Select` or `Combobox` moves the keyboard to when it opens,
      * and away from when Escape closes it.
@@ -965,7 +1823,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * then style itself from `handle.is_focused()`. It does **not** give you
      * arrow-key navigation — see `Select` for what is and is not there.
      */
-    content_focus_handle(handle: FocusHandleHandle): Element;
+    content_focus_handle<Self extends Element>(this: Self, handle: FocusHandle): Self;
     /**
      * Where this element sits in the window's Tab order. A whole number;
      * setting it also makes the element a tab stop.
@@ -974,15 +1832,15 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * `Tabs` and the table, group and progress parts, which base leaves out of
      * keyboard focus entirely.
      */
-    tab_index(index: number): Element;
+    tab_index<Self extends Element>(this: Self, index: number): Self;
     /**
      * Whether Tab can land on this element. `false` keeps its place in the
      * order without making it reachable, which is what a container that
      * forwards focus to its first child wants.
      */
-    tab_stop(value: boolean): Element;
+    tab_stop<Self extends Element>(this: Self, value: boolean): Self;
     /** Sets the absolute HTTP(S) target opened by a `Link`. */
-    href(url: string): Element;
+    href<Self extends Element>(this: Self, url: string): Self;
     /**
      * A stable name for this element, used as its identity.
      *
@@ -994,36 +1852,36 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * Any component whose factory takes an id is already identified by that id
      * and ignores this.
      */
-    id(name: string): Element;
+    id<Self extends Element>(this: Self, name: string): Self;
     /** Owns wheel and touch scrolling on both axes for overflowing children. */
-    overflow_scroll(): Element;
+    overflow_scroll<Self extends Element>(this: Self): Self;
     /** Owns horizontal wheel and touch scrolling for overflowing children. */
-    overflow_x_scroll(): Element;
+    overflow_x_scroll<Self extends Element>(this: Self): Self;
     /** Owns vertical wheel and touch scrolling for overflowing children. */
-    overflow_y_scroll(): Element;
+    overflow_y_scroll<Self extends Element>(this: Self): Self;
     /** Scrolls both axes and paints base-layer scrollbars. */
-    overflow_scrollbar(): Element;
+    overflow_scrollbar<Self extends Element>(this: Self): Self;
     /** Scrolls horizontally and paints a base-layer scrollbar. */
-    overflow_x_scrollbar(): Element;
+    overflow_x_scrollbar<Self extends Element>(this: Self): Self;
     /** Scrolls vertically and paints a base-layer scrollbar. */
-    overflow_y_scrollbar(): Element;
+    overflow_y_scrollbar<Self extends Element>(this: Self): Self;
     /**
      * A `Scrollbar`'s visibility policy. Omitted, it follows the theme, which
      * is what every bar painted by `overflow_*_scrollbar` does.
      */
-    mode(value: ScrollbarMode): Element;
+    mode<Self extends Element>(this: Self, value: import("gpui-base").ScrollbarMode): Self;
     /**
      * The content size a `Scrollbar` measures its thumb against, in pixels,
      * for when the script knows it and the scroll area does not — a list that
      * paints a window of rows rather than all of them.
      */
-    scroll_size(width: number, height: number): Element;
+    scroll_size<Self extends Element>(this: Self, width: number, height: number): Self;
     /**
      * Makes a `Scrollbar` take its viewport from its own box rather than from
      * the scroll area it drives. The way to run a bar down the rows of a table
      * without it reaching up over the fixed header.
      */
-    viewport_from_layout(): Element;
+    viewport_from_layout<Self extends Element>(this: Self): Self;
     /**
      * How far a `resizable_panel()` may be dragged, in pixels.
      *
@@ -1032,7 +1890,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * while the maximum is optional and defaults to unbounded. Omit the call
      * entirely to keep both of base's defaults.
      */
-    size_range(min: number, max?: number): Element;
+    size_range<Self extends Element>(this: Self, min: number, max?: number): Self;
     /**
      * `handler(sizes, cx)` on an `h_resizable()` or `v_resizable()`, once a drag
      * of one of its handles has ended. `sizes` is the pixel size of every panel,
@@ -1043,7 +1901,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * wired: it is for persisting a layout or showing a width, not for making
      * the group resize.
      */
-    on_resize(handler: (sizes: number[], cx: Context) => void): Element;
+    on_resize<Self extends Element>(this: Self, handler: (sizes: number[], cx: Context) => void): Self;
     /**
      * The orientation a `RadioGroup` or `ToggleGroup` announces.
      *
@@ -1053,15 +1911,15 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * drawn. Omitted, each container keeps its own default: `RadioGroup` is
      * vertical, `ToggleGroup` horizontal.
      */
-    axis(value: GroupAxis): Element;
+    axis<Self extends Element>(this: Self, value: Axis): Self;
     /**
      * A `Table`'s total number of rows, including rows outside the range the
      * script rendered, so a screen reader can announce "row 5 of 200". A table
      * that draws every row it has does not need it.
      */
-    row_count(count: number): Element;
+    row_count<Self extends Element>(this: Self, count: number): Self;
     /** A `Table`'s total number of columns, including unrendered ones. */
-    column_count(count: number): Element;
+    column_count<Self extends Element>(this: Self, count: number): Self;
     /**
      * Whether a `Collapsible` renders the element in its `content` slot — its
      * ordinary children are rendered either way — or whether a `Popover`,
@@ -1077,16 +1935,16 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * A `Popup` has no open state to set. It shows whatever is in its `content`
      * slot, so `.when(open, el => el.content(...))` is how one is opened.
      */
-    open(value: boolean): Element;
+    open<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * Whether a `Popover` starts open. Read once, when the surface is first
      * described; a controlled popover ignores it from then on.
      */
-    default_open(value: boolean): Element;
+    default_open<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * Whether pressing outside an open `Popover` closes it. Default `true`.
      */
-    overlay_closable(value: boolean): Element;
+    overlay_closable<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, or
      * where an `fps_monitor()` is pinned inside its relative parent. Omitted,
@@ -1096,31 +1954,33 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * The surface is clamped into the window either way, so an anchor near an
      * edge is a preference rather than a promise.
      */
-    anchor(value: Anchor): Element;
+    anchor<Self extends Element>(this: Self, value: Anchor): Self;
+    /** Frame budget, in milliseconds, used by an fps_monitor's FRAME grading. */
+    frame_budget<Self extends Element>(this: Self, milliseconds: number): Self;
     /** Which pointer button opens a `Popover`. Default `left`. */
-    mouse_button(value: MouseButton): Element;
+    mouse_button<Self extends Element>(this: Self, value: MouseButton): Self;
     /**
      * How long, in milliseconds, the pointer must rest on a `HoverCard`'s
      * trigger before the card appears. Default 600.
      */
-    open_delay(ms: number): Element;
+    open_delay<Self extends Element>(this: Self, ms: number): Self;
     /**
      * How long, in milliseconds, a `HoverCard` waits after the pointer leaves
      * both the trigger and the card before closing. Default 300; it is what
      * lets the pointer cross the gap between the two.
      */
-    close_delay(ms: number): Element;
+    close_delay<Self extends Element>(this: Self, ms: number): Self;
     /** Animates later target changes entirely in native GPUI code. */
-    transition(property: MotionProperty, policy: number | TransitionPolicy): Element;
+    transition<Self extends Element>(this: Self, property: import("gpui-shell").MotionProperty, policy: number | import("gpui-shell").TransitionPolicy): Self;
     /** Springs later target changes entirely in native GPUI code. */
-    spring(property: MotionProperty, policy?: SpringPolicy): Element;
+    spring<Self extends Element>(this: Self, property: import("gpui-shell").MotionProperty, policy?: import("gpui-shell").SpringPolicy): Self;
 
     /**
      * Which thumb of a range slider a `SliderThumb` is: the one at the start
      * of the range, or the one at its end. Default `false`, the end — which
      * is the only thumb a single-value slider has.
      */
-    start(value: boolean): Element;
+    start<Self extends Element>(this: Self, value: boolean): Self;
     /**
      * How the filled part of a `SliderIndicator` looks. `declare` receives a
      * detached element that collects the styles, exactly as `hover` does; its
@@ -1133,7 +1993,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * with no `range_style` has no fill at all, which is a slider drawn as a
      * groove and a knob.
      */
-    range_style(declare: (el: Element) => Element | void): Element;
+    range_style<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /**
      * How every cell of an `OtpInput` looks. `declare` receives a detached
      * element that collects the styles, exactly as `hover` does; its return
@@ -1143,13 +2003,13 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * by the script, so an `OtpInput` without this one is a row of boxes with
      * no size, no border and no background — nothing on screen at all.
      */
-    cell_style(declare: (el: Element) => Element | void): Element;
+    cell_style<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /**
      * Layered on top of `cell_style` for the one cell the next digit lands in,
      * while the code holds the keyboard and is not disabled. A refinement
      * rather than a replacement, the way `hover` is: declare only what differs.
      */
-    cell_active_style(declare: (el: Element) => Element | void): Element;
+    cell_active_style<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /**
      * The blinking mark drawn in that cell while it is still empty. Give it a
      * width, a height and a background; with no `caret_style` there is no
@@ -1157,20 +2017,107 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      *
      * Not `cursor_style`: everywhere else in this API `cursor` is the pointer.
      */
-    caret_style(declare: (el: Element) => Element | void): Element;
+    caret_style<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /**
      * Styles applied while the pointer is over the element. `declare` receives
      * a detached element that collects the styles; its return value is
      * ignored, so a chain and a block body both work.
      */
-    hover(declare: (el: Element) => Element | void): Element;
+    hover<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /** Styles applied while the element is pressed. */
-    active(declare: (el: Element) => Element | void): Element;
+    active<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
     /** Styles applied while the element has focus. */
-    focus(declare: (el: Element) => Element | void): Element;
+    focus<Self extends Element>(this: Self, declare: (el: NativeElement) => NativeElement | void): Self;
+    /**
+     * Displays the tab at `index` in `group` when this element is clicked.
+     *
+     * One of the twelve **dock commands**, which are how an element a dock's
+     * chrome drew says what it does. A chrome handler runs once per container
+     * per frame for as long as the dock is on screen, so it may not register an
+     * event handler — one created there would pile up for as long as the dock
+     * stood. A command carries no script value: it names a container in the
+     * area and what to ask it, and base does the work.
+     *
+     * Every command takes the object its handler was given — the group or the
+     * dock — as its first argument. They belong on a `div`, an
+     * `h_flex` or a `v_flex`; a `Button` builds its own interior and has
+     * nowhere to put one.
+     */
+    select_tab<Self extends Element>(this: Self, group: import("gpui-base").DockGroup, index: number): Self;
+    /** Closes `panel` when this element is clicked, if its group allows it. */
+    close_panel<Self extends Element>(this: Self, group: import("gpui-base").DockGroup, panel: number): Self;
+    /** Zooms the group in, or back out. */
+    toggle_zoom<Self extends Element>(this: Self, group: import("gpui-base").DockGroup): Self;
+    /**
+     * Makes this element the drag source for the tab at `index`, carrying
+     * base's own panel payload — so dropping it on another group, or on the
+     * area itself, moves the panel there.
+     */
+    drag_tab<Self extends Element>(this: Self, group: import("gpui-base").DockGroup, index: number): Self;
+    /**
+     * Accepts a dragged panel here. `index` is the slot it lands in; leave it
+     * out to append, which is what a drop past the last tab means.
+     */
+    drop_tab<Self extends Element>(this: Self, group: import("gpui-base").DockGroup, index?: number): Self;
+    /** Opens or closes the dock when this element is clicked. */
+    toggle_dock<Self extends Element>(this: Self, dock: import("gpui-base").DockRegion): Self;
+    /**
+     * Drags the dock's edge. Base clamps every size it is given against the
+     * area and the opposite dock, so nothing here has to.
+     */
+    resize_dock<Self extends Element>(this: Self, dock: import("gpui-base").DockRegion): Self;
 "#;
 
-const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
+fn shell_types() -> String {
+    let mut out = String::new();
+    out.push_str("  /** The string forms accepted by gpui-shell's length bridge. */\n");
+    out.push_str("  export type LengthString = `${number}px` | `${number}rem` | `${number}%`;\n\n");
+    out.push_str("  /** The gpui-shell call scope reported by `cx.phase()`; unrelated to gpui::DispatchPhase. */\n");
+    out.push_str("  export type ScopePhase =\n");
+    for phase in [
+        ScopePhase::Render,
+        ScopePhase::Event,
+        ScopePhase::Task,
+        ScopePhase::Layout,
+    ] {
+        let _ = writeln!(out, "    | \"{}\"", phase.as_str());
+    }
+    out.push_str("    | \"none\"\n    ;\n\n");
+    out.push_str(SHELL_TYPES);
+    out
+}
+
+const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentage of the painted bounds. */
+  export type PathCoordinate = number | `${number}%`;
+
+  /** The property bag carried across the JavaScript view bridge. */
+  export type Props = Record<string, any>;
+
+  /** Element-local event bounds assembled by the shell. */
+  export interface ElementBounds extends import("gpui-kit").Point {
+    width: number;
+    height: number;
+  }
+
+  export interface DialogOptions {
+    escape_dismissable?: boolean;
+    backdrop_dismissable?: boolean;
+  }
+
+  export interface ToastOptions {
+    title: string;
+    description?: string;
+    level?: "info" | "success" | "warning" | "error";
+    timeout?: number | null;
+    id?: string;
+  }
+
+  export interface TaskOptions {
+    /** Defaults to the running view; `null` outlives every view. */
+    owner?: import("gpui-kit").View | null;
+  }
+
+  export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
   export type MotionEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
   export interface TransitionPolicy {
     /** Duration in milliseconds. */
@@ -1190,28 +2137,406 @@ const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width"
 
 "#;
 
-const CONSTRUCTORS: &str = r#"
+/// The elements GPUI itself draws, and the state handles this runtime keeps for
+/// them. `gpui-base`'s components are declared separately, in [`BASE`].
+const ELEMENTS: &str = r#"
   /** An element with no layout of its own. */
-  export function div(): Element;
-  /** A row. */
-  export function h_flex(): Element;
-  /** A column. */
-  export function v_flex(): Element;
-  /** A text element. The value is stringified. */
-  export function text(value: string | number | boolean): Element;
-  /**
-   * The native `gpui-fps` performance HUD, shared once per window and pinned
-   * to the top-right by default. Its parent must be `relative()`.
-   */
-  export function fps_monitor(): Element;
+  export function div(): NativeElement;
 
   /**
-   * A component type: a table with one factory, mirroring `Button::new(id)` on
-   * the Rust side. The id identifies the element across renders.
+   * A vector image from the application's own directory.
+   *
+   * The path resolves against the application root — the directory passed to
+   * gpui-shell — not against the file that asked for it, the way a web
+   * application's public directory works. It inherits the surrounding text
+   * color unless it sets its own.
    */
-  export interface ComponentType {
-    new: (id: string | number) => Element;
+  export function svg(path: string): NativeElement;
+
+  /**
+   * A full-color image from the application's own directory.
+   *
+   * Unlike `svg`, this preserves the source image's colors instead of using it
+   * as a theme-tinted icon mask. SVG, PNG, JPEG and other GPUI image formats
+   * are supported by the host image loader.
+   */
+  export function image(path: string): NativeElement;
+
+  /** The visible items, as a half-open `[start, end)` interval. */
+  export interface ItemRange {
+    start: number;
+    end: number;
   }
+
+  /**
+   * GPUI's own lazy list: rows of any height, measured as they are drawn.
+   *
+   * Where `v_virtual_list` places rows by the sizes the script states, `list`
+   * asks nothing about size. `render(index, cx)` is called for each item that
+   * is on screen, from inside layout as a virtual list's renderer is, and the
+   * element it returns is measured; the list keeps those measurements and
+   * estimates the rest, so a collection of panels that size to their own
+   * content scrolls as one and costs the script only what is visible. The
+   * rules of a virtual list's renderer apply unchanged: no handlers and no
+   * retained state inside it, and `cx.notify()` is refused there.
+   *
+   * The list scrolls itself and paints no scrollbar; pair one with it by name,
+   * as with a scroll area:
+   *
+   * ```js
+   * v_flex().relative().flex_1().min_h(0)
+   *   .child(list("panels", this.panels.length,
+   *     (index) => this.panels[index].id,
+   *     (index) => this.panel(this.panels[index])))
+   *   .child(Scrollbar.vertical("panels").absolute().inset_0());
+   * ```
+   *
+   * The measuring is what it costs: the host is entered once per visible item
+   * per frame, where `v_virtual_list` and `uniform_list` are entered once per
+   * frame however many rows are on screen. Reach for this when heights are
+   * genuinely unequal and unknown — a column of panels, a feed of mixed
+   * cards — and for a long run of same-height rows reach for one of the
+   * others.
+   *
+   * One consequence of the per-item call: `get_key`'s uniqueness is checked
+   * within a call, so a `list` cannot see that two items share a key, where
+   * the other two throw. A duplicate key there quietly gives both items one
+   * identity, and `on_item_click` reports it for either.
+   *
+   * When `item_count` changes, the reader stays on the item they were
+   * reading: the list remembers the key of the item at the top of the
+   * viewport and, after the change, finds that key again and scrolls back to
+   * it, the same distance into it. So a page of older items put above, or a
+   * new one added below, leaves the view where it was — also at the very top,
+   * where the new items stay above the fold. If that item is gone, the view
+   * stays at the same index. A list scrolled past its last item, or following
+   * its tail (`with_follow_mode("tail")`), stays at the end. To find the key,
+   * `get_key` is called near the item's old index from inside layout, so it
+   * must stay a plain lookup.
+   *
+   * To load more items as the reader nears either end, use
+   * `on_visible_range_change`: it reports which items are shown once the
+   * frame is done, where state may change. The item renderer cannot be used
+   * for that, because it runs inside layout.
+   *
+   * @param id      Identity, and the name a `Scrollbar` pairs with.
+   * @param item_count How many items the collection has, visible or not.
+   * @param get_key An item's stable domain key, from its current index; the
+   *   row's element identity and what `on_item_click` reports.
+   * @param render  Called with one index; returns that item's element.
+   */
+  export function list(
+    id: string | number,
+    item_count: number,
+    get_key: (index: number) => string,
+    render: (index: number, cx: Context) => Element,
+  ): NativeElement;
+
+  /**
+   * GPUI's own uniform list: one row is measured and every row takes its
+   * height.
+   *
+   * The same contract as `v_virtual_list` with a single size, without the
+   * size: the first row (or the one `with_item_to_measure_index` names) is
+   * measured and the rest are placed by it, so a row's height may come from
+   * its content rather than a number in the script. `render(range, cx)` is
+   * called with the visible interval and returns one element per item in it,
+   * so one frame is one call however many rows are on screen — the same
+   * bargain `v_virtual_list` makes, and the reason to prefer this over `list`
+   * whenever the rows really are the same height.
+   */
+  export function uniform_list(
+    id: string | number,
+    item_count: number,
+    get_key: (index: number) => string,
+    render: (range: ItemRange, cx: Context) => Element[],
+  ): NativeElement;
+
+  /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
+  export interface Path {}
+  export interface PathBuilder {
+    move_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    line_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    curve_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_x: import("gpui-shell").PathCoordinate, control_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    cubic_bezier_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_a_x: import("gpui-shell").PathCoordinate, control_a_y: import("gpui-shell").PathCoordinate, control_b_x: import("gpui-shell").PathCoordinate, control_b_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    arc_to(radius_x: import("gpui-shell").PathCoordinate, radius_y: import("gpui-shell").PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    add_polygon(points: ReadonlyArray<readonly [import("gpui-shell").PathCoordinate, import("gpui-shell").PathCoordinate]>, closed?: boolean): PathBuilder;
+    close(): PathBuilder;
+    dash_array(values: readonly number[]): PathBuilder;
+    build(): Path;
+  }
+  export const PathBuilder: {
+    fill(): PathBuilder;
+    stroke(width: number): PathBuilder;
+  };
+  /**
+   * One box shadow for `.shadow([...])`, written like a CSS `box-shadow`
+   * layer. Every length is in pixels and defaults to 0. As in CSS, the first
+   * shadow in the list paints on top of the ones after it.
+   *
+   * `blur` has CSS semantics — the blur radius, twice the gaussian's standard
+   * deviation — and is halved for GPUI, so a value copied from a stylesheet
+   * looks the same here. `spread` may be negative.
+   *
+   * An `inset` shadow is painted inside the element: above its fill, but
+   * beneath its children and its border. Outer shadows paint beneath the fill.
+   */
+  export interface BoxShadowSpec {
+    /** Horizontal offset in pixels. */
+    x?: number;
+    /** Vertical offset in pixels. */
+    y?: number;
+    /** CSS blur radius in pixels; non-negative. */
+    blur?: number;
+    /** Spread in pixels; negative shrinks the shadow. */
+    spread?: number;
+    /** The shadow colour, usually with alpha (`#00000066`). */
+    color: Color;
+    /** Paint inside the element instead of around it. */
+    inset?: boolean;
+  }
+  export interface BackgroundStop {}
+  /**
+   * A native GPUI background: what `window.paint_path` fills with, and what
+   * `.bg(...)` accepts besides a colour. A gradient set with `.bg` is drawn
+   * inside the element's rounded corners.
+   */
+  export interface Background {
+    opacity(factor: number): Background;
+    color_space(space: "srgb" | "oklab"): Background;
+  }
+  export const Background: {
+    solid(color: Color): Background;
+    /**
+     * A gradient stop. `percentage` is a fraction of the gradient line, from
+     * 0 (start) to 1 (end) — not 0 to 100.
+     */
+    stop(color: Color, percentage: number): BackgroundStop;
+    linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
+    pattern_slash(color: Color, width: number, interval: number): Background;
+    checkerboard(color: Color, size: number): Background;
+  };
+
+  /**
+   * A focus target the script owns, created once and kept on the view.
+   *
+   * Focus is a fact about the window that outlives any one render, so an
+   * element rebuilt every frame cannot own it. Hand the handle to an element
+   * with `track_focus(...)`, and it is that element the keyboard means.
+   *
+   * Built with `cx.focus_handle()`, mirroring `App::focus_handle`.
+   */
+  export interface FocusHandle {
+    /** Moves the keyboard onto the element tracking this handle. */
+    focus(): void;
+    /** Whether the element tracking this handle currently has the keyboard. */
+    is_focused(): boolean;
+    release(): boolean;
+  }
+
+"#;
+
+/// Shared gpui-base types used by its component constructors and Window extensions.
+const BASE_SHARED_TYPES: &str = r#"
+  /** One of the four edges used to place an element. Mirrors `gpui_base::Placement`. */
+  export type Placement = "top" | "bottom" | "left" | "right";
+
+  /** A component identified across renders by `new(id)`. */
+  export interface ComponentType {
+    new: (id: string | number) => NativeElement;
+  }
+
+  /** A sub-part with no identity of its own, constructed with `new()`. */
+  export interface PartType {
+    new: () => NativeElement;
+  }
+
+"#;
+
+/// The window the script draws into.
+const WINDOW: &str = r#"
+  export interface Window {
+    /**
+     * Opens a dialog on the window's root, and answers the stack's new depth.
+     *
+     * Takes a **function returning an element**, not an element: an element
+     * belongs to the render pass that built it, and a dialog outlives the call
+     * that opened it. The function runs when the dialog draws, and again
+     * whenever it redraws. Whatever it closes over is the dialog's state.
+     *
+     * Legal from an event handler or a task, not from `render`.
+     */
+    open_dialog(content: () => Element, options?: import("gpui-shell").DialogOptions): number;
+    /** Closes the topmost dialog, and answers whether it found one. */
+    close_dialog(): boolean;
+    /** Closes every dialog, and answers how many it closed. */
+    close_all_dialogs(): number;
+    /** Whether any dialog is open. Legal from `render`, unlike the rest. */
+    has_active_dialog(): boolean;
+
+    /**
+     * Opens the sheet on the right, replacing whatever was there. At most one is
+     * ever open.
+     */
+    open_sheet(content: () => Element): void;
+    /** The same, anchored at the `gpui-base` placement you name. */
+    open_sheet_at(placement: import("gpui-base").Placement, content: () => Element): void;
+    /** Closes the sheet, and answers whether one was open. */
+    close_sheet(): boolean;
+    /** Whether the sheet is open. Legal from `render`, unlike the rest. */
+    has_active_sheet(): boolean;
+
+    /** Posts a toast, and answers its id — the generated one when none was given. */
+    push_toast(options: import("gpui-shell").ToastOptions): string;
+    /** Retracts one toast by id, and answers whether it was still showing. */
+    remove_toast(id: string): boolean;
+    /** Retracts every toast, and answers how many it retracted. */
+    clear_toasts(): number;
+
+    /**
+     * Key-value storage that survives a restart, backed by a file the host
+     * placed. Needs the `storage` capability.
+     */
+    readonly localStorage: Storage;
+    /**
+     * Key-value storage for this run of the application, held in memory and
+     * gone when the process exits. Needs no capability: a script that runs may
+     * already hold its own memory.
+     */
+    readonly sessionStorage: Storage;
+
+    /**
+     * Paints immutable GPUI geometry with a reusable native `Background`.
+     * `Window::paint_path`.
+     *
+     * The one element constructor reached through an object rather than as a
+     * free function, and it is one because the thing it mirrors is a method on
+     * the window rather than on the app. Legal from `render`, unlike the
+     * overlays above — it builds a description like any other element.
+     */
+    paint_path(path: Path, background: Background | Color): NativeElement;
+
+    /**
+     * `Window::dispatch_action`. Dispatches an action down this window's focus
+     * path, reaching the same handlers a bound chord would.
+     *
+     * This is how a menu item or a toolbar button does what a keystroke does,
+     * without either of them knowing about the other. Illegal from `render`.
+     */
+    dispatch_action(action: string): void;
+
+    /**
+     * `Window::rem_size`. The pixel value one `rem` currently means.
+     *
+     * Legal from `render`, like every measurement below it: a view that sizes
+     * itself from the window has to ask during the pass that draws it.
+     */
+    rem_size(): number;
+    /** `Window::line_height`, in pixels. */
+    line_height(): number;
+    /** `Window::viewport_size`: the drawable area, in pixels. */
+    viewport_size(): Size;
+    /** `Window::bounds`: where the window is on screen, and how big. */
+    bounds(): import("gpui-shell").ElementBounds;
+    /** `Window::mouse_position`, in window coordinates. */
+    mouse_position(): Point;
+    /**
+     * `Window::appearance`, reduced to the two a script can draw for.
+     *
+     * GPUI reports four — each of light and dark has a vibrant variant — but
+     * the difference is in how the platform paints *behind* the window, which
+     * a script neither controls nor needs to branch on.
+     */
+    appearance(): "light" | "dark";
+    /** `Window::is_window_active`: whether this window has the platform's focus. */
+    is_window_active(): boolean;
+    /** `Window::is_fullscreen`. */
+    is_fullscreen(): boolean;
+    /** `Window::is_maximized`. */
+    is_maximized(): boolean;
+
+    /**
+     * `Window::set_rem_size`. Rescales everything expressed in rems.
+     *
+     * Illegal from `render`, as is everything below it: a frame that changes
+     * the window it is drawing into is a frame arguing with itself. Call it
+     * from an event handler or a task.
+     */
+    set_rem_size(size: number): void;
+    /**
+     * `Window::refresh`: redraw every view in this window, not just this one.
+     *
+     * The most expensive call on this object, and the one easiest to reach for.
+     * Every view rebuilds -- retained children, charts, virtualized lists, the
+     * lot -- so calling it where `cx.notify()` would do turns one view's update
+     * into all of them, and calling it per incoming message turns a data feed
+     * into a frame-rate problem. An application that pushed a quote through it
+     * for each tick of a live market watchlist measured seven frames a second.
+     *
+     * Reach for it only when there is genuinely no view to notify:
+     *
+     * - `cx.notify()` repaints the view that owns the state that changed, which
+     *   is almost always the right call.
+     * - `handle.set_props(...)` repaints a nested view from its parent.
+     * - A dock panel is the case that tempts you here, because a panel rebuilt
+     *   by `DockArea.load` is not the instance the script created and
+     *   `set_props` on the old handle reaches nothing. If you must refresh for
+     *   that reason, coalesce: let a timer collect a burst into one call rather
+     *   than making one per event.
+     */
+    refresh(): void;
+    /** `Window::focus_next`: move the keyboard to the next tab stop. */
+    focus_next(): void;
+    /** `Window::focus_prev`: move it to the previous one. */
+    focus_prev(): void;
+    /** `Window::activate_window`: bring this window to the front. */
+    activate_window(): void;
+    /** `Window::minimize_window`. */
+    minimize_window(): void;
+    /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
+    zoom_window(): void;
+    /**
+     * `Window::start_window_move`: hand the pointer to the platform, which
+     * moves the window until the button is released.
+     *
+     * The host opens its window with a title bar the application draws, so
+     * dragging that bar is the application's to do. Call it from the bar's
+     * `on_mouse_down`; anywhere but inside a press it does nothing.
+     */
+    start_window_move(): void;
+    /** `Window::toggle_fullscreen`. */
+    toggle_fullscreen(): void;
+  }
+
+"#;
+
+/// Everything `gpui-base` provides: its layout helpers, its components and its
+/// theme. Emitted into `declare module "gpui-base"`, so an import says which
+/// layer a script is reaching for.
+const INLINE_TOKEN_TYPES: &str = r#"
+  /** Half-open JavaScript UTF-16 string offsets, as used by slice(). */
+  export interface InputRange { start: number; end: number }
+  export interface InlineToken { id: string; text: string; label?: string }
+  export interface InlineTokenSpan { range: InputRange; token: InlineToken }
+  export interface InputContent { text: string; tokens: InlineTokenSpan[] }
+  export interface InlineTokenContext extends InlineTokenSpan {
+    selected: boolean; disabled: boolean; readonly: boolean;
+    line_height: number; available_width: number;
+  }
+  export interface InlineTokenClickEvent extends InlineTokenSpan {
+    bounds: { x: number; y: number; width: number; height: number };
+    modifiers: { shift: boolean; alt: boolean; control: boolean; platform: boolean };
+  }
+  export interface InlineTokenHoverEvent extends InlineTokenSpan {
+    hovered: boolean;
+    bounds: { x: number; y: number; width: number; height: number };
+  }
+"#;
+
+const BASE: &str = r#"  /** A row. */
+  export function h_flex(): NativeElement;
+  /** A column. */
+  export function v_flex(): NativeElement;
 
   /** Activation, focus, disabled and selected state. No styling. */
   export const Button: ComponentType;
@@ -1221,6 +2546,17 @@ const CONSTRUCTORS: &str = r#"
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /** Rich HTML or Markdown text. CSS in HTML is not supported. */
+  export interface TextViewElement extends NativeElement {
+    /** Overrides TextView's default URL opening and reports the resolved URL. */
+    on_link_click(handler: (url: string, cx: Context) => void): this;
+    selectable(value?: boolean): this;
+    scrollable(value?: boolean): this;
+  }
+  export const TextView: {
+    html(id: string, html: string): TextViewElement;
+    markdown(id: string, markdown: string): TextViewElement;
+  };
   /**
    * A tab list. It holds no selection of its own — each `Tab` is told whether
    * it is selected, and reports activation through `on_click`, so the script
@@ -1229,14 +2565,6 @@ const CONSTRUCTORS: &str = r#"
   export const Tabs: ComponentType;
   /** One tab. Controlled: `selected(...)` in, `on_click(...)` out. */
   export const Tab: ComponentType;
-  /**
-   * A sub-part with no identity of its own, mirroring `ProgressTrack::new()`
-   * on the Rust side.
-   */
-  export interface PartType {
-    new: () => Element;
-  }
-
   /**
    * The progress root: the announcement, not the bar.
    *
@@ -1259,6 +2587,203 @@ const CONSTRUCTORS: &str = r#"
    */
   export const ProgressIndicator: PartType;
   /**
+   * An avatar root. It renders its `image` slot, or its `fallback` slot when
+   * there is no image, and never both.
+   *
+   * That choice is the whole of what it does. It draws no circle, no size and
+   * no background, so the picture is yours: `w`, `h`, `rounded_full` and a
+   * background go on the root, and the fallback is styled where it is written.
+   *
+   * ```js
+   * Avatar.new().w(40).h(40).rounded_full().overflow_hidden()
+   *   .image(AvatarImage.new("avatars/ada.png").size_full())
+   *   .fallback(AvatarFallback.new().size_full().items_center().justify_center().child("AL"));
+   * ```
+   *
+   * Ordinary children are drawn beside whichever slot won, which is where a
+   * status dot or a badge goes.
+   */
+  export const Avatar: PartType;
+  /**
+   * The image slot: a picture from the application's own directory, at the
+   * same kind of path `image(...)` takes.
+   *
+   * It is a slot type, not an element — used as an ordinary child it draws
+   * nothing and says so in the log. Give it `size_full()` unless you want it at
+   * its natural size.
+   */
+  export const AvatarImage: { new(path: string): Element };
+  /**
+   * The fallback slot: an ordinary box holding whatever stands in for the
+   * image — initials, a shape, an `svg(...)`.
+   *
+   * A slot type like `AvatarImage`, and worth filling: an `Avatar` with an
+   * image path that does not resolve has nothing else to show.
+   */
+  export const AvatarFallback: PartType;
+  /**
+   * A pagination root: a navigation landmark carrying the announced label, and
+   * nothing on screen.
+   *
+   * The page buttons are yours. What base contributes that you cannot write
+   * for yourself is which page numbers to show — that is `pagination_items`
+   * below, a calculation rather than a component.
+   *
+   * ```js
+   * Pagination.new("results").accessibility_label("Results").h_flex().gap_1().children(
+   *   pagination_items(this.page, this.pages).map((item) =>
+   *     item.ellipsis
+   *       ? div().child("…")
+   *       : Button.new(`page-${item.page}`)
+   *           .selected(item.page === this.page)
+   *           .on_click((_, cx) => { this.page = item.page; cx.notify(); })
+   *           .child(String(item.page)),
+   *   ),
+   * );
+   * ```
+   */
+  export const Pagination: ComponentType;
+  /**
+   * An accordion root: a group holding items, and nothing on screen.
+   *
+   * None of the five parts draws anything — no chevron, no border, no
+   * animation, no layout. What they carry is what a screen reader reads: the
+   * group, the heading and its level, the button and its expanded state, and
+   * the region that button controls.
+   *
+   * The item owns `open` and passes it down to both the trigger and the panel,
+   * so it is set once rather than three times in agreement with itself.
+   *
+   * ```js
+   * Accordion.new("faq").child(
+   *   AccordionItem.new()
+   *     .open(this.open === "shipping")
+   *     .header(
+   *       AccordionHeader.new(
+   *         AccordionTrigger.new("shipping-trigger")
+   *           .on_change((open, cx) => { this.open = open ? "shipping" : null; cx.notify(); })
+   *           .child("Shipping"),
+   *       ).aria_level(3),
+   *     )
+   *     .panel(AccordionPanel.new().child("Two to five business days.")),
+   * );
+   * ```
+   */
+  export const Accordion: ComponentType;
+  /**
+   * One item. `open(...)` in, and the trigger's `on_change(...)` out.
+   *
+   * `disabled(true)` stops the trigger under it responding, whatever the
+   * trigger itself says.
+   */
+  export const AccordionItem: PartType;
+  /**
+   * The heading that owns one item's trigger, which it takes at construction
+   * for the same reason `Popup.new` takes its own: a heading whose button
+   * arrived a frame later would announce nothing in between.
+   *
+   * `aria_level(n)` is what a screen reader reads out — "heading level 3" —
+   * and defaults to 3. It announces; it does not size any text.
+   */
+  export const AccordionHeader: { new(trigger: Element): Element };
+  /**
+   * The region an item reveals. Left out of the tree entirely while shut,
+   * unless `keep_mounted(true)` — which is how its content keeps a scroll
+   * position or a half-typed field across a close and reopen.
+   */
+  export const AccordionPanel: PartType;
+  /**
+   * The button. It announces the item's expanded state and asks for the
+   * opposite: `on_change` receives `true` when a shut item was pressed.
+   *
+   * `open` and `disabled` come from the item, so setting them here is
+   * overwritten. Without an `on_change` nothing can open.
+   */
+  export const AccordionTrigger: ComponentType;
+  /**
+   * A calendar's month, and the date chosen in it. Retained: create it in
+   * `init`, never in `render`.
+   *
+   * `month_days()` is why this exists — which dates fall in which week, where
+   * the neighbouring months' days go, and how many weeks this month needs.
+   * You draw the cells: a button per day, styled how you like.
+   *
+   * Base's `Calendar` element is deliberately not bound. It walks the same
+   * grid calling a renderer once per cell — up to forty-two crossings into
+   * JavaScript per frame, from inside GPUI's layout pass, for cells that carry
+   * no behavior. Reading the grid here and drawing it yourself is the same
+   * work without them.
+   *
+   * ```js
+   * const grid = this.calendar.month_days()[0];
+   * v_flex().children(grid.map((week) =>
+   *   h_flex().children(week.map((day) =>
+   *     Button.new(day)
+   *       .selected(day === this.calendar.value())
+   *       .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+   *       .child(String(Number(day.slice(8)))),
+   *   )),
+   * ));
+   * ```
+   *
+   * Dates are `"YYYY-MM-DD"` — sortable as text, and readable by `new Date(s)`
+   * when you need a weekday name or a localized month label.
+   */
+  export const CalendarState: { new(): CalendarStateHandle };
+  /** A selected date: one day, a `[start, end]` range, or nothing. */
+  export type CalendarDate = string | [string | null, string | null] | null;
+  export interface CalendarStateHandle {
+    /**
+     * The grid, as months of weeks of days. One month unless base was asked
+     * for more; each week is always seven days, and the first and last carry
+     * the neighbouring months' days so the rows line up under their weekday
+     * headings.
+     */
+    month_days(): string[][][];
+    /** The year the grid is for. */
+    year(): number;
+    /** Its month, 1–12. */
+    month(): number;
+    /** Today, as the state read it when it was created. */
+    today(): string;
+    /** What is selected. */
+    value(): CalendarDate;
+    /** Selects a day, a range, or nothing. */
+    set_value(next: CalendarDate): void;
+    /** Moves the grid forward one month. Illegal from `render`. */
+    next_month(): void;
+    /** And back one. Illegal from `render`. */
+    prev_month(): void;
+    /**
+     * `"change"` is the only event, and reports a date being selected. As
+     * everywhere else, registering twice means the second handler.
+     */
+    on(event: "change", handler: (date: CalendarDate, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+  /**
+   * Which page numbers to draw, and where the gaps fall.
+   *
+   * Keeps the first page, the last page and a window around the current one,
+   * collapsing each broken run into an ellipsis. `visible_pages` defaults to
+   * seven and is clamped to a minimum of five; a total of one page or fewer
+   * answers an empty list, because a control for a single page is not one.
+   *
+   * An ellipsis names the pages it stands for, inclusive on both ends, so it
+   * can be a "jump to" control rather than inert text.
+   *
+   * Legal from `render` — it reads nothing and is where the buttons are built.
+   */
+  export function pagination_items(
+    current_page: number,
+    total_pages: number,
+    visible_pages?: number,
+  ): PaginationEntry[];
+  /** One entry of the page layout: a page, or a gap standing for a range. */
+  export type PaginationEntry =
+    | { page: number; ellipsis?: undefined }
+    | { ellipsis: [first: number, last: number]; page?: undefined };
+  /**
    * One option in a radio group. No styling: draw the dot yourself.
    *
    * Controlled: `checked(...)` in, `on_change(...)` out — but only ever `true`,
@@ -1276,9 +2801,6 @@ const CONSTRUCTORS: &str = r#"
    */
   export const Toggle: ComponentType;
 
-  /** The semantic orientation of a grouping container. Announced, not drawn. */
-  export type GroupAxis = "horizontal" | "vertical";
-
   /**
    * A set of radios, announced as one group. It holds no selection — each
    * radio is told whether it is checked and reports the change back, so the
@@ -1293,17 +2815,6 @@ const CONSTRUCTORS: &str = r#"
    * state of its own, and its `axis` is announced rather than drawn.
    */
   export const ToggleGroup: ComponentType;
-
-  /**
-   * A component type whose factory also takes a one-based accessibility index.
-   *
-   * The index is a constructor argument rather than a builder method because a
-   * row or cell that does not know where it sits announces itself in the wrong
-   * place. It must be a whole number of at least 1.
-   */
-  export interface IndexedComponentType {
-    new: (id: string | number, index: number) => Element;
-  }
 
   /**
    * A semantic table root, composed the way HTML composes one: no data source
@@ -1321,11 +2832,11 @@ const CONSTRUCTORS: &str = r#"
   /** The body row group of a `Table`. */
   export const TableBody: ComponentType;
   /** One row. `TableRow.new(id, row_index)`, one-based. */
-  export const TableRow: IndexedComponentType;
+  export const TableRow: { new: (id: string | number, row_index: number) => NativeElement };
   /** One column header. `TableHead.new(id, column_index)`, one-based. */
-  export const TableHead: IndexedComponentType;
+  export const TableHead: { new: (id: string | number, column_index: number) => NativeElement };
   /** One data cell. `TableCell.new(id, column_index)`, one-based. */
-  export const TableCell: IndexedComponentType;
+  export const TableCell: { new: (id: string | number, column_index: number) => NativeElement };
   /**
    * The visual slot a caption belongs in. It is an identified container and
    * nothing more: it carries no caption role, so assistive technology does not
@@ -1358,9 +2869,9 @@ const CONSTRUCTORS: &str = r#"
    *   .child(resizable_panel().child(editor));
    * ```
    */
-  export function h_resizable(id: string): Element;
+  export function h_resizable(id: string): NativeElement;
   /** A column of panes with draggable dividers. See `h_resizable`. */
-  export function v_resizable(id: string): Element;
+  export function v_resizable(id: string): NativeElement;
   /**
    * One pane of an `h_resizable()` or `v_resizable()`, and only there: a panel
    * anywhere else throws when it is added, because its size and its drag handle
@@ -1377,7 +2888,7 @@ const CONSTRUCTORS: &str = r#"
    *   `visibility` style. A hidden panel keeps its place in the group, so its
    *   siblings' sizes are undisturbed while it is away. Default `true`.
    */
-  export function resizable_panel(): Element;
+  export function resizable_panel(): NativeElement;
 
   /**
    * A region whose `content` is materialized and rendered only while `open` is
@@ -1441,11 +2952,9 @@ const CONSTRUCTORS: &str = r#"
    * A popup is a real element, unlike `Popover`: styles, state styles, `role`
    * and `track_focus` all land on it.
    */
-  export interface PopupType {
-    new: (id: string | number, trigger: Element) => Element;
-  }
-
-  export const Popup: PopupType;
+  export const Popup: {
+    new: (id: string | number, trigger: Element) => NativeElement;
+  };
 
   /**
    * A combobox root: the semantics and the keyboard, none of the picture.
@@ -1461,13 +2970,14 @@ const CONSTRUCTORS: &str = r#"
    * `content_focus_handle(...)` the list's; without the first, nothing on
    * screen has the keyboard and no key reaches the root at all.
    *
-   * **Arrow-key navigation of an open list is not there.** Base opens the list
-   * on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
+   * **Arrow-key navigation of an open list is yours to write.** Base opens the
+   * list on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
    * expects whatever is inside to run the highlight from its own key bindings.
-   * The shell has no key-binding layer, so nothing takes over: the pointer
-   * works, Escape closes, Enter and ↓ open, and moving the highlight with the
-   * keyboard once open does not. Say so in your UI rather than shipping a
-   * control that looks keyboard-operable and is not.
+   * Nothing does that for you — but the pieces are here: put `on_key_down` on
+   * the content element the keyboard was moved to and move your own highlight,
+   * or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box
+   * the pointer works, Escape closes, Enter and ↓ open, and the highlight does
+   * not move; a control shipped that way looks keyboard-operable and is not.
    *
    * **The highlighted option marks itself.** GPUI puts the active descendant on
    * the option element rather than on the container, so the root cannot mark
@@ -1513,30 +3023,9 @@ const CONSTRUCTORS: &str = r#"
    * have this problem; if you need the keyboard today, build the picker's
    * trigger and calendar inside one.
    */
-  export interface DatePickerType {
-    new: (id: string | number, focus_handle: FocusHandleHandle) => Element;
-  }
-
-  export const DatePicker: DatePickerType;
-
-  /**
-   * A vector image from the application's own directory.
-   *
-   * The path resolves against the application root — the directory passed to
-   * gpui-shell — not against the file that asked for it, the way a web
-   * application's public directory works. It inherits the surrounding text
-   * color unless it sets its own.
-   */
-  export function svg(path: string): Element;
-
-  /**
-   * A full-color image from the application's own directory.
-   *
-   * Unlike `svg`, this preserves the source image's colors instead of using it
-   * as a theme-tinted icon mask. SVG, PNG, JPEG and other GPUI image formats
-   * are supported by the host image loader.
-   */
-  export function image(path: string): Element;
+  export const DatePicker: {
+    new: (id: string | number, focus_handle: FocusHandle) => NativeElement;
+  };
 
   /** When a `Scrollbar` shows itself. */
   export type ScrollbarMode = "scrolling" | "hover" | "always";
@@ -1567,22 +3056,17 @@ const CONSTRUCTORS: &str = r#"
    * put in, so that element is the one you place — and its colors come from
    * the theme.
    */
-  export interface ScrollbarType {
+  export const Scrollbar: {
     /** Both axes. */
-    new: (id: string | number) => Element;
+    new: (id: string | number) => NativeElement;
     /** The horizontal bar alone. */
-    horizontal: (id: string | number) => Element;
+    horizontal: (id: string | number) => NativeElement;
     /** The vertical bar alone. */
-    vertical: (id: string | number) => Element;
-  }
-
-  export const Scrollbar: ScrollbarType;
+    vertical: (id: string | number) => NativeElement;
+  };
 
   /** The visible items, as a half-open `[start, end)` interval. */
-  export interface ItemRange {
-    start: number;
-    end: number;
-  }
+  export type ItemRange = import("gpui-kit").ItemRange;
 
   /**
    * A list that describes only what is on screen.
@@ -1598,19 +3082,27 @@ const CONSTRUCTORS: &str = r#"
    * Two consequences follow from that, and both are enforced rather than
    * documented away:
    *
-   * * **No handlers inside the renderer.** `on_click` and the rest throw if
-   *   called there. Use `on_item_click` on the list — see its note for why.
-   * * **No state inside the renderer.** `InputState.new()`, `FocusHandle.new()`
+   * * **Handlers inside the renderer last one frame.** `on_click` and the rest
+   *   work on a row, and are released when the next frame redraws it. For a
+   *   whole-row click, `on_item_click` on the list is cheaper — see its note.
+   * * **No state inside the renderer.** `InputState.new()`, `cx.focus_handle()`
    *   and the rest throw there as they do in `render()`, and `cx.notify()` is
    *   refused: asking for a re-render from inside layout is a loop.
+   *
+   * What the layout pass does *not* cost you is the `cx` you already had: the
+   * renderer is a closure inside `render(cx)`, so the row helpers written
+   * against that `cx` — `label(text, cx)`, `surface(cx)` — keep working
+   * unchanged. The `cx` the renderer is handed reaches the same window and app,
+   * and is there for a renderer written somewhere `render`'s is not in scope.
    *
    * The list paints no scrollbar of its own. Pair one with it by name, exactly
    * as with a scroll area:
    *
    * ```js
    * v_flex().relative().h(400)
-   *   .child(v_virtual_list("rows", this.rows.length, 28, (range) =>
-   *     this.rows.slice(range.start, range.end).map(row => text(row.name))))
+   *   .child(v_virtual_list("rows", this.rows.length, 28,
+   *     (index) => this.rows[index].id,
+   *     (range) => this.rows.slice(range.start, range.end).map(row => text(row.name))))
    *   .child(Scrollbar.vertical("rows").absolute().inset_0());
    * ```
    *
@@ -1623,6 +3115,11 @@ const CONSTRUCTORS: &str = r#"
    *   across the language boundary on every render, and a uniform hundred
    *   thousand rows is the case worth making cheap. An array must be exactly
    *   `item_count` long.
+   * @param get_key An item's stable domain key, from its current index. It is
+   *   the row's element identity, and it is what `on_item_click` reports — so a
+   *   click queued before a filter or a sort reordered the list still names the
+   *   item whose box was pressed rather than whatever slid into that index.
+   *   Required.
    * @param render  Called with the visible range; returns one element per item
    *   in it.
    */
@@ -1630,16 +3127,18 @@ const CONSTRUCTORS: &str = r#"
     id: string | number,
     item_count: number,
     item_sizes: number | number[],
+    get_key: (index: number) => string,
     render: (range: ItemRange, cx: Context) => Element[],
-  ): Element;
+  ): NativeElement;
 
   /** `v_virtual_list` along the other axis; `item_sizes` are widths. */
   export function h_virtual_list(
     id: string | number,
     item_count: number,
     item_sizes: number | number[],
+    get_key: (index: number) => string,
     render: (range: ItemRange, cx: Context) => Element[],
-  ): Element;
+  ): NativeElement;
 
   /**
    * A virtual list's scroll position, kept across frames so the script can move
@@ -1648,7 +3147,7 @@ const CONSTRUCTORS: &str = r#"
    * A list without one still scrolls, and a `Scrollbar` named after the list
    * still drives it; this is only needed to scroll it from code.
    */
-  export interface VirtualListScrollHandleHandle {
+  export interface VirtualListScrollHandle {
     /**
      * Puts the item at `index` on screen before the next frame. `"top"` (the
      * default) brings it to the near edge, `"center"` to the middle.
@@ -1659,45 +3158,18 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface VirtualListScrollHandleType {
-    new: () => VirtualListScrollHandleHandle;
+  export const VirtualListScrollHandle: {
+    new: () => VirtualListScrollHandle;
+  };
+
+  /** Payload emitted by retained text state. Submit events carry key modifiers. */
+  export interface InputEvent {
+    readonly secondary?: boolean;
+    readonly shift?: boolean;
   }
 
-  export const VirtualListScrollHandle: VirtualListScrollHandleType;
-
-  /** A coordinate in pixels or relative to the painted element's bounds. */
-  export type PathCoordinate = number | `${number}%`;
-  /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
-  export interface Path {}
-  export interface PathBuilderHandle {
-    move_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
-    line_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
-    curve_to(to_x: PathCoordinate, to_y: PathCoordinate, control_x: PathCoordinate, control_y: PathCoordinate): PathBuilderHandle;
-    cubic_bezier_to(to_x: PathCoordinate, to_y: PathCoordinate, control_a_x: PathCoordinate, control_a_y: PathCoordinate, control_b_x: PathCoordinate, control_b_y: PathCoordinate): PathBuilderHandle;
-    arc_to(radius_x: PathCoordinate, radius_y: PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: PathCoordinate, to_y: PathCoordinate): PathBuilderHandle;
-    add_polygon(points: ReadonlyArray<readonly [PathCoordinate, PathCoordinate]>, closed?: boolean): PathBuilderHandle;
-    close(): PathBuilderHandle;
-    dash_array(values: readonly number[]): PathBuilderHandle;
-    build(): Path;
-  }
-  export const PathBuilder: {
-    fill(): PathBuilderHandle;
-    stroke(width: number): PathBuilderHandle;
-  };
-  export interface BackgroundStop {}
-  export interface BackgroundValue {
-    opacity(factor: number): BackgroundValue;
-    color_space(space: "srgb" | "oklab"): BackgroundValue;
-  }
-  export const Background: {
-    solid(color: Color): BackgroundValue;
-    stop(color: Color, percentage: number): BackgroundStop;
-    linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): BackgroundValue;
-    pattern_slash(color: Color, width: number, interval: number): BackgroundValue;
-    checkerboard(color: Color, size: number): BackgroundValue;
-  };
-  /** Paints immutable GPUI geometry with a reusable native Background. */
-  export function paint_path(path: Path, background: BackgroundValue | Color): Element;
+  /** The OTP event payload is currently empty; read the value from the state. */
+  export interface OtpEvent {}
 
   /**
    * Retained text state, created once and kept on the view.
@@ -1705,11 +3177,18 @@ const CONSTRUCTORS: &str = r#"
    * `InputState.new(...)` needs a live host call, so it belongs in `init` or in
    * an event handler — never in `render`.
    */
-  export interface InputStateHandle {
+  export interface InputState {
+    content(): InputContent;
+    tokens(): InlineTokenSpan[];
+    replace_with_token(token: InlineToken): void;
+    replace_range_with_token(range: InputRange, token: InlineToken): void;
+    set_selected_range(range: InputRange): void;
+    replace(text: string): void;
     value(): string;
-    set_value(next: string): void;
+    /** Plain text, or a content snapshot to restore its tokens as well. */
+    set_value(next: string | InputContent): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /**
      * How much one step moves the value in a `NumberInput`. Default is 1;
      * `null` gives up stepping entirely.
@@ -1730,22 +3209,12 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface InputStateType {
-    new: (options?: { placeholder?: string; value?: string }) => InputStateHandle;
-  }
-
-  export const InputState: InputStateType;
-
-  export interface InputType {
-    new: (state: InputStateHandle) => Element;
-  }
+  export const InputState: {
+    new: (options?: { placeholder?: string; value?: string }) => InputState;
+  };
 
   /** The frame around retained text state. */
-  export const Input: InputType;
-
-  export interface NumberInputType {
-    new: (state: InputStateHandle) => Element;
-  }
+  export const Input: { new: (state: InputState) => NativeElement };
 
   /**
    * A spinbutton over the same `InputState` an `Input` holds.
@@ -1762,7 +3231,7 @@ const CONSTRUCTORS: &str = r#"
    * declares its own key context, which the two bindings are registered
    * against.
    */
-  export const NumberInput: NumberInputType;
+  export const NumberInput: { new: (state: InputState) => NativeElement };
 
   /**
    * Retained multi-line text state, created once and kept on the view.
@@ -1775,32 +3244,43 @@ const CONSTRUCTORS: &str = r#"
    * textarea that says nothing else is the height of an input. Pass `rows`,
    * call `set_auto_grow(...)`, or size the element with `.h(...)`.
    */
-  export interface TextareaStateHandle {
+  export interface TextareaState {
+    content(): InputContent;
+    tokens(): InlineTokenSpan[];
+    replace_with_token(token: InlineToken): void;
+    replace_range_with_token(range: InputRange, token: InlineToken): void;
+    set_selected_range(range: InputRange): void;
+    replace(text: string): void;
     value(): string;
-    set_value(next: string): void;
+    /** Plain text, or a content snapshot to restore its tokens as well. */
+    set_value(next: string | InputContent): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /** Shows this many rows. */
     set_rows(rows: number): void;
     /** Grows with the content, between the two row counts. */
     set_auto_grow(min_rows: number, max_rows: number): void;
     /** Wraps long lines instead of scrolling sideways. Default is on. */
     set_soft_wrap(wrap: boolean): void;
+    /**
+     * Makes Enter submit instead of starting a new line. Default is off.
+     *
+     * Off, Enter inserts a line break and then reports `submit`, so a handler
+     * that sends the text finds the break at its end. On, Enter leaves the text
+     * as it is and reports `submit` with `shift: false`. Shift+Enter inserts a
+     * line break either way, and also reports `submit`, with `shift: true` —
+     * a handler that sends should return when `event.shift` is set.
+     */
+    set_submit_on_enter(submit: boolean): void;
     release(): boolean;
   }
 
-  export interface TextareaStateType {
-    new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaStateHandle;
-  }
-
-  export const TextareaState: TextareaStateType;
-
-  export interface TextareaType {
-    new: (state: TextareaStateHandle) => Element;
-  }
+  export const TextareaState: {
+    new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaState;
+  };
 
   /** The frame around retained multi-line text state. */
-  export const Textarea: TextareaType;
+  export const Textarea: { new: (state: TextareaState) => NativeElement };
 
   /** One thumb, or the two ends of a range. */
   export type SliderValue = number | [number, number];
@@ -1817,7 +3297,7 @@ const CONSTRUCTORS: &str = r#"
    * rather than held beside it: a copy in the view would be a copy the drag
    * never updated.
    */
-  export interface SliderStateHandle {
+  export interface SliderState {
     /** The current value: a number, or `[start, end]` for a range slider. */
     value(): SliderValue;
     set_value(next: SliderValue): void;
@@ -1833,7 +3313,7 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface SliderStateType {
+  export const SliderState: {
     /**
      * Defaults are `0..100` in steps of 1, starting at `min`.
      *
@@ -1846,15 +3326,8 @@ const CONSTRUCTORS: &str = r#"
       step?: number;
       scale?: "linear" | "logarithmic";
       value?: SliderValue;
-    }) => SliderStateHandle;
-  }
-
-  export const SliderState: SliderStateType;
-
-  /** A component built from a slider's state rather than from an id. */
-  export interface SliderPartType {
-    new: (state: SliderStateHandle) => Element;
-  }
+    }) => SliderState;
+  };
 
   /**
    * A slider, in four parts, none of which draws anything on its own.
@@ -1863,9 +3336,9 @@ const CONSTRUCTORS: &str = r#"
    * Slider.new(this.volume).child(
    *   SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
    *     SliderIndicator.new(this.volume)
-   *       .relative().w_full().h(6).rounded(3).bg("secondary")
-   *       .range_style((fill) => fill.rounded(3).bg("primary"))
-   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg("primary").ml(-8)),
+   *       .relative().w_full().h(6).rounded(3).bg(`#e5e7eb`)
+   *       .range_style((fill) => fill.rounded(3).bg(`#2563eb`))
+   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg(`#2563eb`).ml(-8)),
    *   ),
    * );
    * ```
@@ -1886,16 +3359,16 @@ const CONSTRUCTORS: &str = r#"
    * `axis("vertical")` is announced *and* used to place both, and each part is
    * told separately, as in Rust. A vertical slider grows from the bottom.
    */
-  export const Slider: SliderPartType;
+  export const Slider: { new: (state: SliderState) => NativeElement };
   /** The press and drag surface. Give it the height a pointer can hit. */
-  export const SliderTrack: SliderPartType;
+  export const SliderTrack: { new: (state: SliderState) => NativeElement };
   /**
    * The groove, and the part that records the geometry. It must span the whole
    * travel of the slider: the box it records is what every pointer position is
    * divided by, so an indicator sized to the value would make the value its own
    * scale.
    */
-  export const SliderIndicator: SliderPartType;
+  export const SliderIndicator: { new: (state: SliderState) => NativeElement };
   /**
    * The knob. `start(true)` is the lower thumb of a range slider; the default
    * is the upper one, which is the only thumb a single-value slider has.
@@ -1904,7 +3377,7 @@ const CONSTRUCTORS: &str = r#"
    * state and a `transition("left", ...)` needs to know which of them it is
    * following.
    */
-  export const SliderThumb: SliderPartType;
+  export const SliderThumb: { new: (state: SliderState) => NativeElement };
 
   /**
    * Retained one-time-code state, created once and kept on the view.
@@ -1915,7 +3388,7 @@ const CONSTRUCTORS: &str = r#"
    * The length is fixed when the state is created, because it is what the
    * state is: the base layer has no setter for it.
    */
-  export interface OtpStateHandle {
+  export interface OtpState {
     /** The digits entered so far — shorter than `len()` until the code is complete. */
     value(): string;
     /**
@@ -1932,24 +3405,18 @@ const CONSTRUCTORS: &str = r#"
     /** Moves the keyboard onto the code. */
     focus(): void;
     /**
-     * `change` arrives **once**, when the last digit lands: it reports the
-     * completed code, not each keystroke. There is no `submit` — the base
-     * layer never emits one for a code — and there is no event for the blink.
+     * `change` arrives after each edit; `complete` arrives when the last digit
+     * lands. There is no `submit` — the base layer never emits one for a code
+     * — and there is no event for the blink.
      */
-    on(event: "change" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "complete" | "focus" | "blur", handler: (event: OtpEvent, cx: Context) => void): boolean;
     release(): boolean;
   }
 
-  export interface OtpStateType {
+  export const OtpState: {
     /** `length` is the number of cells: a whole number between 1 and 64. */
-    new: (length: number, options?: { value?: string; masked?: boolean }) => OtpStateHandle;
-  }
-
-  export const OtpState: OtpStateType;
-
-  export interface OtpInputType {
-    new: (state: OtpStateHandle) => Element;
-  }
+    new: (length: number, options?: { value?: string; masked?: boolean }) => OtpState;
+  };
 
   /**
    * A fixed-length code, drawn cell by cell **by the shell**.
@@ -1959,17 +3426,16 @@ const CONSTRUCTORS: &str = r#"
    *   .flex().gap(8)
    *   .cell_style((cell) =>
    *     cell.size(40).flex().items_center().justify_center()
-   *       .border_1().border_color("border").rounded("md"))
-   *   .cell_active_style((cell) => cell.border_color("ring"))
-   *   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+   *       .border_1().border_color(`#d1d5db`).rounded("md"))
+   *   .cell_active_style((cell) => cell.border_color(`#2563eb`))
+   *   .caret_style((caret) => caret.w(2).h(18).bg(`#111111`))
    * ```
    *
    * Alone among the bound components, its cells are not the script's to
    * describe — only to style. A described cell would be frozen into the
-   * snapshot the last render produced and nothing would ever thaw it: the
-   * state reports `change` only once the code is *complete*, so the first five
-   * digits of a six-digit code would leave the screen untouched, and the caret
-   * blinks on a timer that raises no script event at all.
+   * snapshot the last render produced and nothing would ever thaw it: even
+   * though edits emit `change`, the caret blinks on a native timer that raises
+   * no script event at all.
    *
    * So the shell reads the state every frame and decides what each cell holds
    * — a digit, a bullet while the state is masked, the caret, or nothing —
@@ -1981,32 +3447,230 @@ const CONSTRUCTORS: &str = r#"
    * Grouping ("123 456") is not offered: the groups would be boxes the shell
    * invents, with no template to say what they look like.
    */
-  export const OtpInput: OtpInputType;
+  export const OtpInput: { new: (state: OtpState) => NativeElement };
+
+  /** Where a region sits relative to the center of a dock area. */
+  export type DockPlacement = "center" | "left" | "right" | "bottom";
+
+  /** One panel, as `panels()` reports it. */
+  export interface DockPanel {
+    /** Stable for as long as the panel lives. Pass it to `remove_panel`. */
+    readonly id: number;
+    /** Namespaced: `shell:<application>/<name>`. */
+    readonly name: string;
+    readonly placement: DockPlacement;
+    /** The container holding it, which is also `group.node` in the chrome. */
+    readonly node: number;
+    /** Its position in that container. */
+    readonly index: number;
+    /** Whether it is the one its container is showing. */
+    readonly active: boolean;
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** One tab of a group, as a chrome handler is given it. */
+  export interface DockTab {
+    /** Its position in the group, which is what `select_tab` takes. */
+    readonly index: number;
+    readonly name: string;
+    readonly id: number;
+    readonly active: boolean;
+    /**
+     * Hidden panels are included, and keep their place in tab order — filter
+     * on this rather than re-deriving an index into an already filtered list.
+     */
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** A tab group, as `tab_bar` and `empty_group` are given it. */
+  export interface DockGroup {
+    readonly node: number;
+    readonly active_index: number;
+    readonly zoomed: boolean;
+    readonly collapsed: boolean;
+    readonly locked: boolean;
+    readonly draggable: boolean;
+    readonly droppable: boolean;
+    readonly closable: boolean;
+    readonly tabs: readonly DockTab[];
+  }
+
+  /** One dock, as the `dock` handler is given it. */
+  export interface DockRegion {
+    readonly placement: DockPlacement;
+    /** Its extent along its own axis: width for left and right, height for bottom. */
+    readonly size: number;
+    readonly open: boolean;
+    readonly collapsible: boolean;
+  }
+
+  /** Where a dragged panel would land, as the `drop_indicator` handler is given it. */
+  export interface DockDrop {
+    /** `null` means the drop merges into the group's tabs rather than splitting beside it. */
+    readonly placement: Placement | null;
+    /** The hovered group's content box, in window coordinates. */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    /** Where the placeholder starts, relative to `bounds`. */
+    readonly from: import("gpui-shell").ElementBounds;
+    /** Where it settles. */
+    readonly to: import("gpui-shell").ElementBounds;
+  }
+
+  /** What `add_panel` is told about the panel it is adding. */
+  export interface DockPanelOptions {
+    /**
+     * What the panel is filed under in a saved layout, and what
+     * `DockArea.register_panel` finds it again by. Required.
+     */
+    name: string;
+    /** Default `"center"`. */
+    placement?: DockPlacement;
+    /** Seeds the dock's extent when the panel is the first thing in it. */
+    size?: number;
+    /** Default `true`. */
+    closable?: boolean;
+    /** Default `true`. */
+    zoomable?: boolean;
+    /** Default `true`. */
+    visible?: boolean;
+  }
 
   /**
-   * A focus target the script owns, created once and kept on the view.
+   * A dockable layout: splits, tab groups and docks that the user can
+   * rearrange, and that survives a restart.
    *
-   * Focus is a fact about the window that outlives any one render, so an
-   * element rebuilt every frame cannot own it. Hand the handle to an element
-   * with `track_focus(...)`, and it is that element the keyboard means.
+   * Retained for a reason none of the other handles share. **The layout is what
+   * the user changed** — a drag, a resize, a closed tab and a collapsed dock all
+   * happen without the script rendering — so it lives here rather than in a
+   * description that would put every one of them back the way the last render
+   * described it.
    *
-   * `FocusHandle.new()` needs a live host call and would produce a fresh
-   * handle on every frame, so it belongs in `init` or in an event handler —
-   * never in `render`.
+   * `DockArea.new(id)` needs a live host call, so it belongs in `init` or an
+   * event handler, never in `render`.
+   *
+   * **Every edit takes effect once the call that made it has returned.**
+   * `add_panel` is handed a view from `cx.new(Class)`, which is itself still
+   * being constructed; `load` rebuilds panels, which constructs more. So
+   * `panels()` and `dump()` read the layout as it was before this turn's edits,
+   * and `on("layout_changed", …)` is where to read it after them.
+   *
+   * ```js
+   * init(_props, cx) {
+   *   DockArea.register_panel("inbox", Inbox);
+   *   this.dock = DockArea.new("workspace");
+   *   this.dock.add_panel(cx.new(Inbox), { name: "inbox", placement: "left", size: 240 });
+   *   this.dock.on("layout_changed", () => localStorage.setItem("layout", JSON.stringify(this.dock.dump())));
+   * }
+   * render() {
+   *   return dock_area(this.dock).size_full().tab_bar((group) => …);
+   * }
+   * ```
    */
-  export interface FocusHandleHandle {
-    /** Moves the keyboard onto the element tracking this handle. */
-    focus(): void;
-    /** Whether the element tracking this handle currently has the keyboard. */
-    is_focused(): boolean;
+  export interface DockArea {
+    /** Docks `view` — a view from `cx.new(Class)`, not an element. */
+    add_panel(view: import("gpui-kit").Entity, options: DockPanelOptions): void;
+    /** Removes the panel with this id, wherever it sits. */
+    remove_panel(id: number): void;
+    /** Every panel in the area, in tree order. */
+    panels(): DockPanel[];
+    /**
+     * The whole layout as plain data: the tree, the docks, and each panel's own
+     * `serialize()` payload. Hand it back to `load` after a restart.
+     */
+    dump(): any;
+    /**
+     * Restores a layout `dump()` wrote, rebuilding each panel through the class
+     * registered under its name.
+     *
+     * A panel whose name nothing registered is not dropped: it is carried
+     * forward — name, payload and position — so uninstalling an application and
+     * reinstalling it puts its panels back where they were.
+     */
+    load(state: any): void;
+    has_dock(placement: DockPlacement): boolean;
+    is_dock_open(placement: DockPlacement): boolean;
+    toggle_dock(placement: DockPlacement): void;
+    remove_dock(placement: DockPlacement): void;
+    dock_size(placement: DockPlacement): number | null;
+    set_dock_size(placement: DockPlacement, size: number): void;
+    set_dock_collapsible(placement: DockPlacement, collapsible: boolean): void;
+    /** A locked area cannot be rearranged or dropped into; dock resizing stays available. */
+    is_locked(): boolean;
+    set_locked(locked: boolean): void;
+    is_zoomed(): boolean;
+    /** Clears the zoom, whichever container holds it. */
+    zoom_out(): void;
+    /**
+     * Fires on every edit, so save on a timer rather than on every one.
+     */
+    on(event: "layout_changed", handler: (cx: Context) => void): boolean;
     release(): boolean;
   }
 
-  export interface FocusHandleType {
-    new: () => FocusHandleHandle;
+  export const DockArea: {
+    new: (id: string, options?: { version?: number }) => DockArea;
+    /**
+     * Teaches the runtime to rebuild `name`'s panel from `Class` when a saved
+     * layout mentions it, and answers with the namespaced name it registered
+     * under.
+     *
+     * The class is an ordinary view class. Two of its methods carry state
+     * across a restart, and both are optional:
+     *
+     * - `serialize()` returns plain data, and is read when the layout is saved.
+     *   It runs without a host call, so it must not touch entities, `cx`, or
+     *   anything else that needs one — return a value and nothing else.
+     * - `deserialize(data)` is handed back whatever `serialize()` wrote, right
+     *   after the view is built, with a real host call available.
+     *
+     * Registering the same name twice replaces the class, which is what a hot
+     * reload does.
+     */
+    register_panel: (name: string, Class: import("gpui-kit").ViewClass) => string;
+  };
+
+  /**
+   * Draws a dock area.
+   *
+   * Base draws **no chrome at all** — an area with none still docks, drags,
+   * resizes and persists, painting only the panels — so every tab bar, dock
+   * frame and drag bar is one of the six handlers below.
+   *
+   * Each handler is first called from inside GPUI's layout pass and is given
+   * base's own resolved state: never a drag event, a mouse position or a hit
+   * test. Its description is cached until that state or the handler changes,
+   * so unchanged frames do not enter JavaScript. It may not register event
+   * handlers — cached chrome has no script callback lifecycle of its own — so
+   * the elements it returns say what they do with a **command** instead:
+   * `select_tab(group, i)`, `close_panel(group, id)`, `toggle_dock(dock)` and
+   * the rest. A command carries no script value, and base does the work.
+   */
+  export function dock_area(area: DockArea): DockAreaElement;
+
+  export interface DockAreaElement extends NativeElement {
+    /** The tab bar above a group's displayed panel. */
+    tab_bar(handler: (group: DockGroup, cx: Context) => Element): DockAreaElement;
+    /** What a group with no displayed panel shows. */
+    empty_group(handler: (group: DockGroup, cx: Context) => Element | null): DockAreaElement;
+    /** The hint showing where a dragged panel would land. */
+    drop_indicator(handler: (drop: DockDrop, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * One dock's chrome around its content: title strip, collapse affordance,
+     * resize handle. Whatever this returns replaces the content, so put
+     * `dock_content()` where the panels belong.
+     */
+    dock(handler: (dock: DockRegion, cx: Context) => Element | null): DockAreaElement;
   }
 
-  export const FocusHandle: FocusHandleType;
+  /**
+   * Where a dock's own panels go inside the chrome the `dock` handler drew
+   * around them. Legal only inside that handler, and only once.
+   */
+  export function dock_content(): NativeElement;
 
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
@@ -2020,145 +3684,169 @@ const CONSTRUCTORS: &str = r#"
     readonly none: number; readonly sm: number; readonly md: number;
     readonly lg: number; readonly xl: number; readonly full: number;
   }
+  /** One entry in the type scale, aligned with `gpui_base::TextStyleToken`. */
+  export interface TextStyleToken {
+    readonly size: number;
+    readonly line_height: number;
+    /** The CSS range: 100 is thin, 400 regular, 700 bold. */
+    readonly weight: number;
+  }
+  /**
+   * Semantic type scale, aligned with `gpui_base::TypographyTokens`.
+   *
+   * `md` is the window's base text size: everything the shell draws for itself
+   * — toasts, sheets, dialog chrome — inherits it, so an application that
+   * draws densely says so here rather than restating a size per component.
+   */
+  export interface TypographyTokens {
+    /** The face the scale is set in, and the scale itself. */
+    readonly sans: string;
+    readonly xs: TextStyleToken; readonly sm: TextStyleToken; readonly md: TextStyleToken;
+    readonly lg: TextStyleToken; readonly xl: TextStyleToken;
+    /**
+     * Code: a face and one size, not a sixth step of the scale. `mono_md` is
+     * the size `mono` is set at, and the two are read together.
+     */
+    readonly mono: string;
+    readonly mono_md: TextStyleToken;
+  }
   export interface SemanticThemeTokens {
     readonly colors: ColorTokens;
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
+    readonly typography: TypographyTokens;
   }
+
+  /**
+   * Replaces gpui-base's active semantic tokens for the current application.
+   * Legal only from an event handler or task backed by a live host call.
+   *
+   * Colours, spacing and radius are stated in full: a palette with half its
+   * roles missing is a window drawn in two themes. Typography is an override —
+   * every entry is optional, and one left out keeps the value it has — so a
+   * theme that only wants a smaller base says `{ md: { size: 12 } }` rather
+   * than restating two font families and six line heights it has no opinion
+   * about. A theme that says nothing about type is drawn as it always was.
+   */
+  export function set_theme(theme: {
+    readonly appearance: "light" | "dark";
+    readonly tokens: Omit<SemanticThemeTokens, "typography"> & {
+      readonly typography?: {
+        readonly sans?: string;
+        readonly mono?: string;
+      } & {
+        readonly [Step in keyof Omit<TypographyTokens, "sans" | "mono">]?: {
+          readonly [Field in keyof TextStyleToken]?: number;
+        };
+      };
+    };
+  }): void;
   /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {
     readonly appearance: "light" | "dark";
     readonly is_dark: boolean;
   }
 
-  /** Compatibility accessor; prefer the call-scoped `cx.theme()`. */
-  export function theme(): Theme;
-  /** Replaces gpui-base's active semantic tokens with an application-owned theme. */
-  export function set_theme(theme: {
-    readonly appearance: "light" | "dark";
-    readonly tokens: SemanticThemeTokens;
-  }): void;
-  export interface Window {
-    /**
-     * Opens a dialog on the window's root, and answers the stack's new depth.
-     *
-     * Takes a **function returning an element**, not an element: an element
-     * belongs to the render pass that built it, and a dialog outlives the call
-     * that opened it. The function runs when the dialog draws, and again
-     * whenever it redraws. Whatever it closes over is the dialog's state.
-     *
-     * Legal from an event handler or a task, not from `render`.
-     */
-    open_dialog(content: () => Element, options?: DialogOptions): number;
-    /** Closes the topmost dialog, and answers whether it found one. */
-    close_dialog(): boolean;
-    /** Closes every dialog, and answers how many it closed. */
-    close_all_dialogs(): number;
-    /** Whether any dialog is open. Legal from `render`, unlike the rest. */
-    has_active_dialog(): boolean;
+"#;
 
-    /**
-     * Opens the sheet on the right, replacing whatever was there. At most one is
-     * ever open.
-     */
-    open_sheet(content: () => Element): void;
-    /** The same, anchored to the side you name. */
-    open_sheet_at(side: SheetSide, content: () => Element): void;
-    /** Closes the sheet, and answers whether one was open. */
-    close_sheet(): boolean;
-    /** Whether the sheet is open. Legal from `render`, unlike the rest. */
-    has_active_sheet(): boolean;
+/// What `gpui-base`'s declarations borrow from `"gpui-kit"`.
+///
+/// A component is built out of this runtime's vocabulary and returns an
+/// `Element`, so the dependency runs upward only.
+const BASE_IMPORTS: &str = r#"  import {
+    Color,
+    Context,
+    Element,
+    NativeElement,
+    FocusHandle,
+  } from "gpui-kit";
 
-    /** Posts a toast, and answers its id — the generated one when none was given. */
-    push_toast(options: ToastOptions): string;
-    /** Retracts one toast by id, and answers whether it was still showing. */
-    remove_toast(id: string): boolean;
-    /** Retracts every toast, and answers how many it retracted. */
-    clear_toasts(): number;
+"#;
+
+/// The `gpui-fps` performance overlay: the element form, and the HUD the
+/// window root draws on a script's behalf.
+const FPS: &str = r#"  /**
+   * The native `gpui-fps` performance HUD, shared once per window and pinned
+   * to the top-right by default. Its parent must be `relative()`.
+   *
+   * Prefer `show_fps_monitor()`: a HUD placed inside the script's own tree is
+   * rebuilt with it, and what the tree does then counts against the reading.
+   */
+  export function fps_monitor(): NativeElement;
+
+  /** Where the root-owned HUD sits and how it behaves. Every key is optional. */
+  export interface FpsMonitorOptions {
+    /** Corner or edge of the window. Default `top_right`. */
+    anchor?: Anchor;
+    /** Frame budget in milliseconds, for the FRAME grading and the chart's scale. */
+    frame_budget?: number;
   }
 
   /**
-   * The native modules this host registered, declared by the application.
-   *
-   * Empty here, because only the host knows what it granted. An application
-   * describes its own in a `.d.ts` beside its source, and from then on
-   * `native("...")` is typed — the module name is checked, and its functions
-   * complete:
-   *
-   * ```ts
-   * declare module "gpui" {
-   *   interface NativeModules {
-   *     market: {
-   *       quotes(): { symbol: string; last: string }[];
-   *       watch(symbol: string): boolean;
-   *     };
-   *   }
-   * }
-   * ```
-   *
-   * Declaring nothing costs nothing: with no entries the untyped overload
-   * below still applies, so an application that never writes one keeps working
-   * exactly as before.
+   * Draws the performance HUD over the whole window, above every overlay,
+   * until `hide_fps_monitor()`. The window root owns it: the script says
+   * whether and where, and nothing the script renders can move it, rebuild
+   * it, or count against it. Calling it again moves or reconfigures the HUD
+   * that is already up; the monitor behind it keeps its history across a hide
+   * and a show. Call it from an event handler or a task: `init()` runs before
+   * the window has its root, so it throws there.
    */
-  export interface NativeModules {}
+  export function show_fps_monitor(options?: FpsMonitorOptions): void;
+  /** Takes the HUD down. `true` if one was up. */
+  export function hide_fps_monitor(): boolean;
+  /** Whether the root-owned HUD is up. */
+  export function fps_monitor_visible(): boolean;
+"#;
 
-  /**
-   * A module the host registered in Rust. Throws when no such module exists,
-   * naming the ones that do.
-   */
-  export function native<Name extends keyof NativeModules & string>(
-    module: Name,
-  ): NativeModules[Name];
-  export function native(module: string): Record<string, (...args: any[]) => any>;
+/// What `gpui-fps`'s declarations borrow from `"gpui-kit"`.
+const FPS_IMPORTS: &str = r#"  import { Anchor, Element, NativeElement } from "gpui-kit";
+
 "#;
 
 const CAPABILITIES: &str = r#"
   /** Key-value storage that survives a restart. Persisted on every write. */
-  export interface Store {
-    /** `null` when the key is unset. */
-    get(key: string): Json;
-    set(key: string, value: Json): void;
-    remove(key: string): void;
-    keys(): string[];
-    /** Completes after the current value has been durably written. */
+  /**
+   * The Web Storage API, as a browser implements it.
+   *
+   * Two instances exist and differ only in how long they last, which is the
+   * same split Deno and Node arrived at when they needed persistent key-value
+   * storage without a browser: `window.localStorage` is a file and survives a
+   * restart, `window.sessionStorage` is memory and is gone when the process
+   * exits.
+   *
+   * **Values are strings.** `setItem` converts whatever it is handed, exactly
+   * as the browser does, so an object is stored as `"[object Object]"` unless
+   * you `JSON.stringify` it — and reading it back is `JSON.parse`. That is not
+   * an omission; it is the API this mirrors.
+   *
+   * Storage is per application. The host places the file, because an
+   * application that could name its own storage location could name another
+   * application's.
+   */
+  export interface Storage {
+    /** How many keys are set. */
+    readonly length: number;
+    /** The key at `index` in a consistent order, or `null` past the end. */
+    key(index: number): string | null;
+    /** The value, or `null` when the key is unset. */
+    getItem(key: string): string | null;
+    /** Sets it, converting `value` to a string. */
+    setItem(key: string, value: string): void;
+    /** Removes it. Removing a key that is not set does nothing. */
+    removeItem(key: string): void;
+    /** Removes every key. */
+    clear(): void;
+    /**
+     * Resolves once the pending write has reached disk.
+     *
+     * The one addition to the Web Storage surface, and only on
+     * `localStorage`. A browser's `setItem` is durable by the time it returns;
+     * this one hands the write to a background thread, so a script that must
+     * know the bytes landed — before asking the host to exit, say — has
+     * something to await. Ordinary code does not need it.
+     */
     flush(): Promise<void>;
   }
-
-  export interface Clipboard {
-    /** `undefined` when the clipboard holds no text. */
-    read_text(): string | undefined;
-    write_text(text: string): void;
-  }
-
-  /** Diagnostics. Needs no capability: a script that runs may say something. */
-  export interface Log {
-    debug(message: unknown, ...rest: unknown[]): void;
-    info(message: unknown, ...rest: unknown[]): void;
-    warn(message: unknown, ...rest: unknown[]): void;
-    error(message: unknown, ...rest: unknown[]): void;
-  }
-
-  export const store: Store;
-  export const clipboard: Clipboard;
-
-  /**
-   * Hands a URL to whatever the system opens URLs with.
-   *
-   * `Link`'s `href` without the element, for the case where the address is not
-   * known until something has already happened — the end of a device
-   * authorization, say, where waiting for a second click to open the page the
-   * first click just asked for is a step nobody wanted.
-   *
-   * It takes an absolute `http`/`https` URL with a host and refuses everything
-   * else. That guard is not about the address bar: without it this is a way to
-   * hand an arbitrary URI to whichever handler the desktop registered for its
-   * scheme.
-   *
-   * Needs a live host call, so it belongs in an event handler or a task —
-   * never in `render`.
-   */
-  export function open_url(url: string): void;
-  export const log: Log;
 "#;
 
 const STANDARD_RUNTIME: &str = r#"
@@ -2194,31 +3882,143 @@ declare module "zlib" {
   export function gzipSync(data: string | Uint8Array): import("buffer").Buffer;
   export function gunzipSync(data: Uint8Array): import("buffer").Buffer;
 }
+interface Console {
+  debug(...values: unknown[]): void;
+  log(...values: unknown[]): void;
+  info(...values: unknown[]): void;
+  warn(...values: unknown[]): void;
+  error(...values: unknown[]): void;
+}
+/**
+ * Diagnostics. A global, as it is in every other JavaScript runtime, and the
+ * only one: the shell used to export the same object a second time as
+ * `gpui.log`, which bought a name and nothing else.
+ *
+ * Needs no capability — a script that runs may say something — and output goes
+ * to `tracing` under the `gpui_shell::script` target.
+ */
+declare const console: Console;
 declare module "console" {
-  interface Console { debug(...values: unknown[]): void; log(...values: unknown[]): void; info(...values: unknown[]): void; warn(...values: unknown[]): void; error(...values: unknown[]): void; }
   const console: Console;
   export default console;
 }
 declare module "process" {
   export interface CommandOutput { code: number; stdout: string; stderr: string; }
-  export function run(command: string, args?: string[]): Promise<CommandOutput>;
+  export interface RunOptions {
+    /** Must be inside a directory granted in `capabilities.fs.read`. */
+    cwd?: string;
+    /** Defaults to 30 seconds. */
+    timeoutMs?: number;
+  }
+  /**
+   * Runs a command to completion and resolves with what it did. Bounded: 30
+   * seconds unless `timeoutMs` says otherwise, 8 MiB of each stream. For a
+   * command that runs longer, talks over stdin, or should be read as it
+   * works, use `spawn`.
+   */
+  export function run(command: string, args?: string[], options?: RunOptions): Promise<CommandOutput>;
+  export interface SpawnOptions {
+    /** Must be inside a directory granted in `capabilities.fs.read`, or this throws. */
+    cwd?: string;
+    /** `"pipe"` to `write()` to the child; defaults to `"null"`. */
+    stdin?: "pipe" | "null";
+    /** No limit by default. When given, the whole process group is killed at the deadline. */
+    timeoutMs?: number;
+    /**
+     * Deliver stdout and stderr a line at a time, without the line ending —
+     * joined across reads, with a last unterminated line delivered at the end.
+     * A single line over 8 MiB kills the process and is reported on `exit`.
+     */
+    lines?: boolean;
+  }
+  export interface ExitResult {
+    code: number | null;
+    signal: string | null;
+    /** Set when the runtime stopped the process: a timeout, or a line too long. */
+    error?: string;
+  }
+  /**
+   * A running child. Handlers run on the UI thread with an async `cx`, like a
+   * `cx.spawn` task's. `exit` fires once, after the last `stdout`/`stderr`.
+   * Releasing the view that spawned it, reloading the application or closing
+   * the window kills it and everything it started.
+   */
+  export interface ChildProcess {
+    readonly pid: number;
+    on(event: "stdout" | "stderr", handler: (text: string, cx: import("gpui-kit").AsyncContext) => void): ChildProcess;
+    on(event: "exit", handler: (result: ExitResult, cx: import("gpui-kit").AsyncContext) => void): ChildProcess;
+    /** Needs `stdin: "pipe"`; throws otherwise, or after `end()`. */
+    write(text: string): void;
+    /** Closes stdin. */
+    end(): void;
+    /** Kills the whole process group (a Job Object on Windows). `exit` still fires once. */
+    kill(): void;
+  }
+  /**
+   * Starts a command and streams what it does: output as it arrives, no
+   * deadline unless asked for, stdin on request. The same grant as `run`
+   * (`capabilities.fs.execute`), the same host-PATH resolution and the same
+   * empty environment. UTF-8 output is decoded whole even when a character
+   * spans two reads; there is no limit on total output.
+   */
+  export function spawn(command: string, args?: string[], options?: SpawnOptions): ChildProcess;
   export function exit(code?: number): void;
   export function nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void;
   export const platform: string;
   export const arch: string;
-  const process: { run: typeof run; exit: typeof exit; nextTick: typeof nextTick; platform: string; arch: string };
+  const process: {
+    run: typeof run;
+    spawn: typeof spawn;
+    exit: typeof exit;
+    nextTick: typeof nextTick;
+    platform: string;
+    arch: string;
+    /**
+     * Common variables (`HOME`, `USER`, `HOSTNAME`, `LANG`, `TZ`, `PATH`,
+     * `EDITOR`, `DISPLAY`, `HTTP_PROXY`, the XDG directories…), plus those
+     * `capabilities.process.env` names, when set; names match regardless of
+     * case. Every other variable is absent. A fresh copy on each read; assigning to
+     * it changes nothing.
+     */
+    readonly env: Record<string, string | undefined>;
+    /**
+     * This application's data directory, the one `${dataDir}` names in the
+     * manifest and `localStorage` lives in. `undefined` when the host placed
+     * none. A path, not a grant: reading it still needs `capabilities.fs`.
+     */
+    readonly dataDir: string | undefined;
+  };
   export default process;
 }
 declare module "os" {
   export function platform(): string;
   export function arch(): string;
   export const EOL: string;
-  const os: { platform: typeof platform; arch: typeof arch; EOL: string };
+  /**
+   * The user's home directory. Needs no capability; reading files there needs
+   * a `${homeDir}` root in `capabilities.fs`.
+   */
+  export function homedir(): string;
+  const os: { platform: typeof platform; arch: typeof arch; EOL: string; homedir: typeof homedir };
   export default os;
 }
 declare module "fs/promises" {
   export interface Dirent { name: string; isDirectory(): boolean; }
   export interface MakeDirectoryOptions { recursive?: boolean; }
+  /** Node's `Stats`, cut to what every platform can fill. An unrecorded time reads as the epoch. */
+  export interface Stats {
+    isFile(): boolean;
+    isDirectory(): boolean;
+    isSymbolicLink(): boolean;
+    size: number;
+    mode: number;
+    mtimeMs: number;
+    atimeMs: number;
+    birthtimeMs: number;
+    mtime: Date;
+    atime: Date;
+    birthtime: Date;
+  }
   export function readFile(path: string): Promise<Uint8Array>;
   export function readFile(path: string, encoding: "utf8" | { encoding: "utf8" }): Promise<string>;
   export function writeFile(path: string, contents: string | Uint8Array): Promise<void>;
@@ -2228,6 +4028,14 @@ declare module "fs/promises" {
   export function unlink(path: string): Promise<void>;
   export function rmdir(path: string): Promise<void>;
   export function mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
+  /** Follows a symlink; needs read access. */
+  export function stat(path: string): Promise<Stats>;
+  /** Describes a symlink itself; needs read access. */
+  export function lstat(path: string): Promise<Stats>;
+  /** Moves a file or directory, replacing a file at `to`; needs write access to both paths. */
+  export function rename(from: string, to: string): Promise<void>;
+  /** The target a symlink stores, as written; needs read access. */
+  export function readlink(path: string): Promise<string>;
 }
 declare module "net" {
   export interface Socket {
@@ -2265,25 +4073,56 @@ interface ShellFetchResponse {
   readonly url: string;
   text(): Promise<string>;
   json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  bytes(): Promise<Uint8Array>;
 }
 interface ShellFetchOptions {
-  /** GET by default; POST is available for OAuth-style form exchanges. */
-  method?: "GET" | "POST";
-  /** Client-managed framing headers such as Host and Content-Length are refused. */
+  /**
+   * GET by default. Any HTTP method may be named; which of them may reach a
+   * given host and path is the plugin's `capabilities.network` policy, not
+   * this field.
+   */
+  method?: string;
+  /**
+   * Client-managed framing headers such as Host and Content-Length are refused.
+   * `User-Agent` defaults to `gpui-shell/<version>`; a value set here replaces it.
+   */
   headers?: Record<string, string>;
   body?: string | Uint8Array;
 }
 declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellFetchResponse>;
+/** UTF-8 encoding, as in the WHATWG Encoding standard. */
+declare class TextEncoder {
+  constructor();
+  readonly encoding: "utf-8";
+  encode(input?: string): Uint8Array;
+  encodeInto(source: string, destination: Uint8Array): { read: number; written: number };
+}
+interface TextDecoderOptions { fatal?: boolean; ignoreBOM?: boolean; }
+interface TextDecodeOptions { stream?: boolean; }
+/** UTF-8 decoding, as in the WHATWG Encoding standard. Any other label throws a RangeError. */
+declare class TextDecoder {
+  constructor(label?: "utf-8" | "utf8" | "unicode-1-1-utf-8", options?: TextDecoderOptions);
+  readonly encoding: "utf-8";
+  readonly fatal: boolean;
+  readonly ignoreBOM: boolean;
+  decode(input?: ArrayBuffer | ArrayBufferView, options?: TextDecodeOptions): string;
+}
 declare const process: typeof import("process").default;
+interface ImportMeta {
+  /** The `file:` URL of this module. */
+  readonly url: string;
+}
 "#;
 
-/// `window` is a global, like `cx` — see the runtime's `overlay` module.
+/// `window` is a real global — see the runtime's `overlay` module.
 ///
 /// Outside the `declare module` block, which is what makes it global: this file
 /// has no top-level import or export, so TypeScript reads it in script mode.
 const WINDOW_GLOBAL: &str = r#"
 /**
- * The window the script is drawing into. A global, like `cx`; nothing to import.
+ * The window the script is drawing into. A global: nothing to import, and
+ * unlike `cx`, nothing hands it to you.
  *
  * Ambient: every call reads the host call that is running now, and throws
  * outside one. There is no handle to hold, so there is nothing to hold past the
@@ -2293,7 +4132,18 @@ const WINDOW_GLOBAL: &str = r#"
  * `cx.notify()` re-renders this view, `window.open_dialog()` changes what the
  * user is looking at — which is why these are here and not on `Context`.
  */
-declare const window: import("gpui").Window;
+type GpuiShellWindow = import("gpui-kit").Window;
+interface Window extends GpuiShellWindow {}
+declare var window: Window & typeof globalThis;
+
+/**
+ * `window.localStorage`, reachable bare as it is in a browser, where `window`
+ * *is* the global object. Here `window` is an ordinary object, so both
+ * spellings are installed rather than one falling out of the other.
+ */
+declare const localStorage: import("gpui-kit").Storage;
+/** `window.sessionStorage`, bare, for the same reason. */
+declare const sessionStorage: import("gpui-kit").Storage;
 "#;
 
 const SCHEDULING: &str = r#"
@@ -2303,57 +4153,136 @@ const SCHEDULING: &str = r#"
     is_done(): boolean;
   }
 
-  export interface TaskOptions {
-    /**
-     * The view the task belongs to: it is cancelled when that view goes away.
-     * Defaults to the view that is running. `null` outlives every view — and
-     * is the only value other than the current view the runtime accepts today.
-     */
-    owner?: View | null;
-  }
-
-  /** Resolves after `ms` on GPUI's foreground executor. */
-  export function sleep(ms?: number): Promise<void>;
-
-  /**
-   * Runs `body` with a context that belongs to the current host call.
-   *
-   * This is how code resumed after an `await` obtains a usable `cx`: the one
-   * its function was called with names a frame that has already returned.
-   */
-  export function with_cx<T>(body: (cx: Context) => T): T;
-
-  /**
-   * Calls `body(cx)` and adopts the promise it returns, so a rejection is
-   * reported rather than swallowed.
-   *
-   * `cx` is valid until the first `await`, and is absent when there is no host
-   * call in progress — at module top level, for instance, where it is
-   * `undefined` despite what this signature can say.
-   */
-  export function spawn(body: (cx: Context) => unknown, opts?: TaskOptions): Task;
-
   export interface Timer {
     /** Calls `handler(cx)` once, after `ms`. */
-    after(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    after(ms: number, handler: (cx: AsyncContext) => void, opts?: import("gpui-shell").TaskOptions): Task;
     /**
      * Calls `handler(cx)` every `ms`. The interval is measured from the end of
      * one call, so a slow handler delays the next tick instead of stacking.
      */
-    every(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    every(ms: number, handler: (cx: AsyncContext) => void, opts?: import("gpui-shell").TaskOptions): Task;
   }
-
-  export const timer: Timer;
 "#;
 
 #[cfg(test)]
 mod tests {
+    use gpui::IntoElement as _;
+
     use super::*;
+
+    #[test]
+    fn registered_state_factories_are_declared_from_the_runtime_catalog() {
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register_state(
+                crate::StateDescriptor::new(
+                    "InputState",
+                    "InputState",
+                    vec![crate::ArgumentDescriptor::new(
+                        "text",
+                        crate::ArgumentSchema::String,
+                    )],
+                    |_, _, _| Ok(Box::new(())),
+                )
+                .with_documentation("Retained input state."),
+            )
+            .unwrap();
+
+        let declarations = declarations_with_components(&registry.freeze().unwrap());
+
+        assert!(declarations.contains("export interface InputState"));
+        assert!(declarations.contains(
+            "export const InputState: { (text: string): InputState; new: (text: string) => InputState };"
+        ));
+        assert!(declarations.contains("Retained input state."));
+        assert!(declarations.contains("\n    release(): boolean }"));
+    }
+
+    /// A catalog that scripts import from `"host-native"`, with one component
+    /// and one state.
+    fn host_native_catalog() -> crate::FrozenComponentRegistry {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ConstructorDescriptor,
+            MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry =
+            crate::ComponentRegistry::new(crate::COMPONENT_REGISTRY_API_VERSION, "host-native")
+                .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Terminal", Arc::new(Empty)).with_constructors(vec![
+                    ConstructorDescriptor::new("Terminal", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                ]),
+            )
+            .unwrap();
+        registry
+            .register_state(crate::StateDescriptor::new(
+                "TerminalState",
+                "TerminalState",
+                Vec::new(),
+                |_, _, _| Ok(Box::new(())),
+            ))
+            .unwrap();
+        registry.freeze().unwrap()
+    }
+
+    /// A host's catalog may answer to a specifier other than
+    /// `gpui-component`; its declarations have to use the same one, or every
+    /// import from it is an unknown module to the editor.
+    #[test]
+    fn a_catalog_is_declared_under_its_own_module_specifier() {
+        let declarations = declarations_with_components(&host_native_catalog());
+
+        assert!(declarations.contains("declare module \"host-native\" {\n"));
+        assert!(declarations.contains(" | import(\"host-native\").TerminalElement"));
+        assert!(declarations.contains("export const TerminalState: "));
+        assert!(!declarations.contains("\"gpui-component\""));
+    }
+
+    /// A directory whose scripts import only that catalog still gets the file.
+    #[test]
+    fn a_directory_importing_only_the_catalog_gets_the_declarations() {
+        let root =
+            std::env::temp_dir().join(format!("gpui-shell-typings-catalog-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let panels = root.join("panels");
+        std::fs::create_dir_all(&panels).expect("nested directory");
+        std::fs::write(
+            panels.join("terminal.js"),
+            "import { Terminal } from \"host-native\";\n",
+        )
+        .expect("nested script");
+
+        let written = write_application_with_components(&root, &host_native_catalog())
+            .expect("declarations are writable");
+
+        assert!(written.contains(&panels.join(FILE_NAME)), "{written:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     /// The element methods that are not style methods, so a test can subtract
     /// them from the interface and compare what is left against the style
     /// table. Mirrors the names bound in the engine's `apply` and prelude.
     const NON_STYLE_METHODS: &[&str] = &[
+        "map",
         "child",
         "children",
         "content",
@@ -2364,9 +4293,31 @@ mod tests {
         "controls_right",
         "when",
         "on_click",
+        "token",
+        "on_token_click",
+        "on_token_hover",
         "on_mouse_move",
         "on_hover",
+        "on_key_down",
+        "on_key_up",
+        "on_modifiers_changed",
+        "on_mouse_down",
+        "on_mouse_up",
+        "on_mouse_down_out",
+        "on_scroll_wheel",
+        "on_pinch",
+        "on_action",
+        "key_context",
+        "image",
+        "fallback",
+        "header",
+        "footer",
+        "panel",
+        "aria_level",
+        "keep_mounted",
         "on_item_click",
+        "on_item_secondary_click",
+        "on_visible_range_change",
         "on_change",
         "on_step",
         "on_open_change",
@@ -2380,9 +4331,11 @@ mod tests {
         "role",
         "aria_selected",
         "aria_active_descendant",
+        "window_control_area",
         "track_focus",
         "track_scroll",
         "with_item_to_measure_index",
+        "with_follow_mode",
         "content_focus_handle",
         "tab_index",
         "tab_stop",
@@ -2406,6 +4359,16 @@ mod tests {
         "cell_style",
         "cell_active_style",
         "caret_style",
+        // The dock commands. Not behaviours in the reflected sense either: no
+        // handler crosses, only the container an element names and what it asks
+        // of it. See `crate::dock::DockCommand`.
+        "select_tab",
+        "close_panel",
+        "toggle_zoom",
+        "drag_tab",
+        "drop_tab",
+        "toggle_dock",
+        "resize_dock",
         "value",
         "indeterminate",
         "axis",
@@ -2415,6 +4378,7 @@ mod tests {
         "default_open",
         "overlay_closable",
         "anchor",
+        "frame_budget",
         "mouse_button",
         "open_delay",
         "close_delay",
@@ -2426,15 +4390,75 @@ mod tests {
     ];
 
     /// Every method name declared in the `Element` interface, in order.
+    /// A registered component answers `disabled`, `selected` and `on_click`
+    /// only when its descriptor declares them. The declarations have to say so,
+    /// or an editor green-lights a call that always throws — which is how
+    /// `Button.disabled(true)` reached a running application.
+    #[gpui::test]
+    fn withheld_common_behaviors_are_declared_uncallable_rather_than_removed() {
+        use crate::{
+            ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+            ConstructorDescriptor, MaterializeRequest,
+        };
+        use std::sync::Arc;
+
+        struct Empty;
+        impl ComponentMaterializer for Empty {
+            fn materialize(
+                &self,
+                request: MaterializeRequest<'_>,
+            ) -> anyhow::Result<gpui::AnyElement> {
+                request.finish(gpui::div())
+            }
+        }
+
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
+        registry
+            .register(
+                ComponentDescriptor::new("Plain", Arc::new(Empty))
+                    .with_constructors(vec![ConstructorDescriptor::new(
+                        "Plain",
+                        Vec::new(),
+                        |_| Ok(ComponentPayload::new(())),
+                    )])
+                    .with_documentation("A component declaring no common behavior."),
+            )
+            .unwrap();
+        let _ = &registry as &ComponentRegistry;
+        let declarations = super::declarations_with_components(&registry.freeze().unwrap());
+
+        for behavior in super::REGISTERED_COMMON_BEHAVIORS
+            .into_iter()
+            .chain(["role", "transition"])
+        {
+            assert!(
+                declarations.contains(&format!("{behavior}(unavailable: never): never;")),
+                "`{behavior}` must be declared uncallable on a component that does not declare it"
+            );
+        }
+        // The common native surface is retained, with unsupported behaviors
+        // explicitly redeclared as uncallable.
+        assert!(
+            declarations.contains(
+                "export type PlainElement = Omit<NativeElement, \"disabled\" | \"selected\" | \"on_click\" | \"role\" | \"transition\">"
+            ),
+            "{declarations}"
+        );
+    }
+
     fn element_methods(declarations: &str) -> Vec<String> {
         declarations
             .lines()
-            .skip_while(|line| !line.starts_with("  export interface Element {"))
+            .skip_while(|line| !line.starts_with("  export interface NativeElement {"))
             .skip(1)
             .take_while(|line| !line.starts_with("  }"))
             .filter_map(|line| {
                 let line = line.trim_start();
-                let name = line.split('(').next()?;
+                let name = line.split(['(', '<']).next()?;
                 (!name.is_empty()
                     && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
                     && line.len() > name.len())
@@ -2445,28 +4469,33 @@ mod tests {
 
     #[test]
     fn a_reflected_style_is_declared_with_no_arguments() {
-        let declarations = declarations();
-        assert!(declarations.contains("\n    items_center(): Element;\n"));
-        assert!(declarations.contains("\n    flex_col(): Element;\n"));
+        let declarations = base_declarations();
+        assert!(
+            declarations.contains("\n    items_center<Self extends Element>(this: Self): Self;\n")
+        );
+        assert!(declarations.contains("\n    flex_col<Self extends Element>(this: Self): Self;\n"));
         // Reflection misses the macro-generated font weights; the runtime adds
         // them back, and so must the declarations.
-        assert!(declarations.contains("\n    font_semibold(): Element;\n"));
+        assert!(
+            declarations.contains("\n    font_semibold<Self extends Element>(this: Self): Self;\n")
+        );
     }
 
     #[test]
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
-            "    bg(value: Color): Element;",
-            "    border_color(value: Color): Element;",
-            "    w(value: Length): Element;",
-            "    p(value: DefiniteLength): Element;",
-            "    gap(value: DefiniteLength): Element;",
-            "    rounded(value: AbsoluteLength): Element;",
-            "    text_size(value: AbsoluteLength): Element;",
-            "    font_weight(value: number): Element;",
-            "    opacity(value: number): Element;",
-            "    flex_grow(value: number): Element;",
+            "    bg<Self extends Element>(this: Self, value: Color | Background): Self;",
+            "    shadow<Self extends Element>(this: Self, value: readonly BoxShadowSpec[]): Self;",
+            "    border_color<Self extends Element>(this: Self, value: Color): Self;",
+            "    w<Self extends Element>(this: Self, value: Length): Self;",
+            "    p<Self extends Element>(this: Self, value: DefiniteLength): Self;",
+            "    gap<Self extends Element>(this: Self, value: DefiniteLength): Self;",
+            "    rounded<Self extends Element>(this: Self, value: AbsoluteLength): Self;",
+            "    text_size<Self extends Element>(this: Self, value: AbsoluteLength): Self;",
+            "    font_weight<Self extends Element>(this: Self, value: number): Self;",
+            "    opacity<Self extends Element>(this: Self, value: number): Self;",
+            "    flex_grow<Self extends Element>(this: Self, value: number): Self;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
@@ -2487,20 +4516,90 @@ mod tests {
     }
 
     #[test]
-    fn every_color_token_is_in_the_color_union() {
-        let declarations = declarations();
+    fn surface_paint_styles_take_their_structured_values() {
+        assert_eq!(argument_of("bg"), Argument::Fill);
+        assert_eq!(argument_of("border_color"), Argument::Color);
+        assert_eq!(argument_of("shadow"), Argument::Shadows);
+
+        assert!(base_declarations().contains("  export interface BoxShadowSpec {"));
+    }
+
+    #[test]
+    fn colors_require_concrete_values_from_the_theme_api() {
+        let declarations = base_declarations();
         for name in color_token_names() {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
                 "`{name}` is missing from ColorToken"
             );
         }
-        assert!(declarations.contains("export type Color = ColorToken | `#${string}`;"));
+        assert!(declarations.contains("export type Color = `#${string}`;"));
+        assert!(!declarations.contains("ColorToken | `#${string}`"));
+    }
+
+    #[test]
+    fn shared_types_are_declared_by_the_layer_that_owns_them() {
+        let declarations = base_declarations();
+        let module = |specifier: &str| {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = start
+                + declarations[start..]
+                    .find("\n}\n")
+                    .expect("unterminated module");
+            &declarations[start..end]
+        };
+        let gpui = module("gpui-kit");
+        let base = module("gpui-base");
+        let shell = module("gpui-shell");
+
+        assert!(base.contains("export type ColorToken"));
+        assert!(!gpui.contains("export type ColorToken"));
+        for name in [
+            "LengthString",
+            "PathCoordinate",
+            "Props",
+            "ElementBounds",
+            "ScopePhase",
+            "MotionProperty",
+            "DialogOptions",
+            "ToastOptions",
+            "TaskOptions",
+        ] {
+            assert!(
+                shell.contains(&format!("export type {name}"))
+                    || shell.contains(&format!("export interface {name}")),
+                "{name} is not owned by gpui-shell"
+            );
+            assert!(
+                !gpui.contains(&format!("export type {name}"))
+                    && !gpui.contains(&format!("export interface {name}")),
+                "{name} leaked into gpui"
+            );
+        }
+        for name in ["View", "Entity", "Context", "AsyncContext", "Task"] {
+            assert!(
+                gpui.contains(&format!("export abstract class {name}"))
+                    || gpui.contains(&format!("export interface {name}")),
+                "{name} must stay in gpui"
+            );
+        }
+        assert!(base.contains("export interface PartType"));
+        assert!(!gpui.contains("export interface PartType"));
+        assert!(base.contains("export interface ComponentType"));
+        assert!(!gpui.contains("export interface ComponentType"));
+        assert!(base.contains("export type Placement"));
+        assert!(!declarations.contains("SheetSide"));
+        assert!(gpui.contains("export type Axis"));
+        assert!(!declarations.contains("GroupAxis"));
+        assert!(gpui.contains("export interface PathBuilder"));
+        assert!(!shell.contains("export interface PathBuilder"));
     }
 
     #[test]
     fn no_internal_name_leaks_into_the_surface() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for internal in ["__id", "__apply", "__state", "__gpui", "__styleNames"] {
             assert!(
                 !declarations.contains(internal),
@@ -2512,17 +4611,16 @@ mod tests {
 
     #[test]
     fn compatibility_is_manifest_metadata_not_a_script_api() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(!declarations.contains("require_api"));
-        assert!(declarations.contains(&format!(
-            "for gpui-shell\n// {}",
-            crate::plugin::SHELL_VERSION
-        )));
+        assert!(
+            declarations.contains(&format!("for gpui-shell {}.", crate::plugin::SHELL_VERSION))
+        );
     }
 
     #[test]
     fn the_output_is_structurally_balanced() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let opened = declarations.matches('{').count();
         let closed = declarations.matches('}').count();
         assert_eq!(opened, closed, "unbalanced braces");
@@ -2530,18 +4628,212 @@ mod tests {
         for method in element_methods(&declarations) {
             assert!(!method.is_empty(), "a method line has no name");
         }
-        assert!(declarations.contains("declare module \"gpui\" {"));
-        // The global declaration follows the module block, and has to stay
+        assert!(declarations.contains("declare module \"gpui-kit\" {"));
+        assert!(
+            declarations.contains("declare module \"gpui\" {\n  export * from \"gpui-kit\";\n}")
+        );
+        // The global declaration follows the module blocks, and has to stay
         // outside it: a `declare module` body cannot introduce a global, and
         // this file is only in script mode because it has no top-level import
         // or export of its own.
-        assert!(declarations.contains("\ndeclare const window:"));
+        assert!(declarations.contains("\ninterface Window extends GpuiShellWindow {}"));
+        assert!(declarations.contains("\ndeclare var window: Window & typeof globalThis;"));
         assert!(declarations.ends_with(";\n"));
+    }
+
+    /// The reason HostModule registrations became imports: the declarations can now be
+    /// generated from the registry instead of hand-written beside the script.
+    #[test]
+    fn a_registered_host_module_is_declared_from_the_registry() {
+        crate::export_module(
+            crate::HostModule::new("market")
+                .function("quotes", |_| Ok(crate::HostValue::Null))
+                .declarations(
+                    "
+                    export interface Quote {
+                      symbol: string;
+                    }
+
+                    export function quotes(): Quote[];
+                    ",
+                ),
+        )
+        .expect("`market` is not reserved");
+        // No TypeScript face, so it gets permissive signatures — which still
+        // check the module name and the export name, and still say which
+        // exports have to be awaited.
+        crate::export_module(
+            crate::HostModule::new("audit")
+                .function("observe", |_| Ok(crate::HostValue::Null))
+                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) }))
+                .component("AuditPanel", |_, _, _| gpui::div().into_any_element()),
+        )
+        .expect("`audit` is not reserved");
+
+        let declarations = base_declarations();
+        // The point of the whole change: these names come from the registry,
+        // not from a file someone maintains beside the script.
+        assert!(
+            declarations.contains("declare module \"market\" {"),
+            "a registered module must be declared, or its import is untyped"
+        );
+        assert!(
+            declarations.contains("  export function quotes(): Quote[];"),
+            "a declared face must be emitted verbatim, not summarised"
+        );
+        // The indentation the host wrote inside a multi-line type survives; only
+        // the raw string's own leading margin is removed.
+        assert!(
+            declarations.contains("  export interface Quote {\n    symbol: string;\n  }"),
+            "a multi-line declaration was flattened:\n{}",
+            &declarations[declarations.find("declare module \"market\"").unwrap()..]
+        );
+        assert!(
+            declarations.contains("declare module \"audit\" {"),
+            "a module without a face is still declared, or its name goes unchecked"
+        );
+        // `HostValue` rather than `any`: the boundary is not wider than the
+        // Rust type of that name, and the declarations should not claim it is.
+        assert!(
+            declarations.contains("  import { NativeElement, HostValue } from \"gpui-kit\";"),
+            "the permissive signatures below need this import to resolve"
+        );
+        assert!(
+            declarations.contains("  export function observe(...args: HostValue[]): HostValue;")
+        );
+        assert!(
+            declarations
+                .contains("  export function drain(...args: HostValue[]): Promise<HostValue>;")
+        );
+        assert!(declarations.contains(
+            "  export const AuditPanel: { new(id: string, props: HostValue): NativeElement };"
+        ));
+
+        crate::clear_exported_modules();
+        assert!(
+            !super::base_declarations().contains("declare module \"market\""),
+            "declarations are read from the registry at write time, so a \
+             withdrawn module must stop being declared"
+        );
+    }
+
+    #[test]
+    fn each_built_in_module_declares_only_what_its_crate_provides() {
+        let declarations = base_declarations();
+        let module = |specifier: &str| {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = declarations[start..]
+                .find("\n}\n")
+                .expect("unterminated module");
+            &declarations[start..start + end]
+        };
+
+        // A component is declared where it is implemented. Reading a name out
+        // of the wrong module is the failure this guards: `Button` under
+        // `"gpui-kit"` would say the runtime draws it, and the whole point of the
+        // split is that `gpui-base` does.
+        let gpui = module("gpui-kit");
+        let base = module("gpui-base");
+        for name in [
+            "export const Button",
+            "export function v_flex",
+            "export function set_theme",
+        ] {
+            assert!(base.contains(name), "`{name}` is not declared in gpui-base");
+            assert!(!gpui.contains(name), "`{name}` is also declared in gpui");
+        }
+        for name in ["export function div", "export interface AsyncContext"] {
+            assert!(gpui.contains(name), "`{name}` is not declared in gpui");
+            assert!(
+                !base.contains(name),
+                "`{name}` is also declared in gpui-base"
+            );
+        }
+        assert!(module("gpui-fps").contains("export function fps_monitor(): NativeElement;"));
+
+        // The dependency runs upward only: a layer names what it borrows from
+        // `"gpui-kit"`, and `"gpui-kit"` imports nothing back.
+        assert!(base.contains("} from \"gpui-kit\";"));
+        assert!(!gpui.contains("} from \"gpui-base\";"));
+    }
+
+    /// Every name a built-in module exports is declared, in that same module.
+    ///
+    /// The two lists are written in different places for different reasons —
+    /// one wires up the JS module, the other describes it — and a name added to
+    /// one and not the other is invisible until an application reaches for it:
+    /// either an import that resolves to nothing the editor knows about, or a
+    /// declaration promising a binding that is not there.
+    #[cfg(feature = "quickjs")]
+    #[test]
+    fn the_declarations_name_exactly_what_the_runtime_exports() {
+        use crate::engine::quickjs::exports;
+
+        let declarations = base_declarations();
+        for (specifier, names) in [
+            ("gpui-kit", exports::GPUI),
+            ("gpui-base", exports::GPUI_BASE),
+            ("gpui-shell", exports::GPUI_SHELL),
+            ("gpui-fps", exports::GPUI_FPS),
+        ] {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = start
+                + declarations[start..]
+                    .find("\n}\n")
+                    .expect("unterminated module");
+            let body = &declarations[start..end];
+
+            for name in names {
+                // `View` is a class and the rest are functions, constants or
+                // interfaces, so match the name as a declared word rather than
+                // guessing which keyword introduces it.
+                assert!(
+                    body.contains(&format!("export function {name}"))
+                        || body.contains(&format!("export const {name}"))
+                        || body.contains(&format!("export class {name}"))
+                        || body.contains(&format!("export abstract class {name}")),
+                    "`{name}` is exported from \"{specifier}\" but declared nowhere in it"
+                );
+            }
+
+            let declared_values = body
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim_start();
+                    [
+                        "export function ",
+                        "export const ",
+                        "export class ",
+                        "export abstract class ",
+                    ]
+                    .into_iter()
+                    .find_map(|prefix| {
+                        line.strip_prefix(prefix).map(|rest| {
+                            rest.split(['(', ':', ' ', '{'])
+                                .next()
+                                .expect("an exported value has a name")
+                        })
+                    })
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            let runtime_values = names
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                declared_values, runtime_values,
+                "the values declared by \"{specifier}\" differ from its run-time exports"
+            );
+        }
     }
 
     #[test]
     fn standard_runtime_modules_are_declared_without_node_aliases() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in [
             "buffer",
             "path",
@@ -2559,15 +4851,23 @@ mod tests {
                 "missing Standard Runtime module {name}"
             );
         }
-        assert!(!declarations.contains("node:"));
+        // The alias, not the four letters: `node` is also an ordinary field
+        // name — a dock group carries the id of the layout node it mirrors.
+        assert!(!declarations.contains("declare module \"node:"));
+        assert!(!declarations.contains("from \"node:"));
         assert!(!declarations.contains("export const fs: FileSystem"));
         assert!(!declarations.contains("export const process: Process"));
         assert!(declarations.contains("declare function fetch"));
+        assert!(declarations.contains("declare class TextEncoder"));
+        assert!(declarations.contains("declare class TextDecoder"));
+        assert!(declarations.contains("arrayBuffer(): Promise<ArrayBuffer>;"));
+        assert!(declarations.contains("export function stat(path: string): Promise<Stats>;"));
+        assert!(declarations.contains("export function rename(from: string, to: string)"));
     }
 
     #[test]
     fn standard_names_only_claim_standard_compatible_contracts() {
-        let declarations = declarations();
+        let declarations = base_declarations();
 
         assert!(!declarations.contains("declare module \"fs\""));
         assert!(declarations.contains("readFile(path: string): Promise<Uint8Array>;"));
@@ -2592,10 +4892,13 @@ mod tests {
         assert!(declarations.contains("text(): Promise<string>;"));
         assert!(declarations.contains("json(): Promise<unknown>;"));
 
+        // `homedir` is real; `process.env` is a granted view on the default
+        // object only, never a named export.
+        assert!(declarations.contains("export function homedir(): string;"));
+        assert!(declarations.contains("readonly env: Record<string, string | undefined>;"));
         for fake_system_member in [
             "export const env:",
             "export function cwd()",
-            "export function homedir()",
             "export function tmpdir()",
         ] {
             assert!(
@@ -2603,12 +4906,17 @@ mod tests {
                 "fake system member remained declared: {fake_system_member}"
             );
         }
-        assert!(declarations.contains("declare const window:"));
+        // Outside every `declare module` block, which is what makes it global.
+        // `var` rather than `const` so it merges with the ambient `Window`.
+        assert!(
+            declarations.contains("declare var window:"),
+            "`window` must stay a top-level declaration, or it is not a global"
+        );
     }
 
     #[test]
     fn websocket_binary_and_text_messages_are_declared() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("export interface WebSocketSocket {"));
         assert!(declarations.contains("read(): Promise<string | Uint8Array>;"));
         assert!(declarations.contains("write(data: string | Uint8Array): Promise<void>;"));
@@ -2622,13 +4930,13 @@ mod tests {
 
     #[test]
     fn raw_tcp_reads_preserve_bytes_and_expose_eof() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("read(maxBytes?: number): Promise<Uint8Array | null>;"));
     }
 
     #[test]
     fn every_element_method_is_accounted_for() {
-        let declared = element_methods(&declarations());
+        let declared = element_methods(&base_declarations());
         let styles: Vec<&String> = declared
             .iter()
             .filter(|name| !NON_STYLE_METHODS.contains(&name.as_str()))
@@ -2660,18 +4968,24 @@ mod tests {
     /// out beside it.
     #[test]
     fn focus_and_accessibility_are_declared_from_the_runtime_tables() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
-            "    role(name: Role): Element;",
-            "    aria_selected(value: boolean): Element;",
-            "    aria_active_descendant(): Element;",
-            "    track_focus(handle: FocusHandleHandle): Element;",
-            "    tab_index(index: number): Element;",
-            "    tab_stop(value: boolean): Element;",
-            "  export const FocusHandle: FocusHandleType;",
+            "    role<Self extends Element>(this: Self, name: Role): Self;",
+            "    aria_selected<Self extends Element>(this: Self, value: boolean): Self;",
+            "    aria_active_descendant<Self extends Element>(this: Self): Self;",
+            "    window_control_area<Self extends Element>(this: Self, area: \"drag\" | \"close\" | \"max\" | \"min\"): Self;",
+            "    track_focus<Self extends Element>(this: Self, handle: FocusHandle): Self;",
+            "    tab_index<Self extends Element>(this: Self, index: number): Self;",
+            "    tab_stop<Self extends Element>(this: Self, value: boolean): Self;",
+            // `App::focus_handle` in GPUI, so `cx` here — there is no
+            // `FocusHandle::new` to mirror.
+            "    focus_handle(): FocusHandle;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
+
+        assert!(!declarations.contains("FocusHandleHandle"));
+        assert!(!declarations.contains("VirtualListScrollHandleHandle"));
 
         for name in a11y::role_names() {
             assert!(
@@ -2686,23 +5000,155 @@ mod tests {
     }
 
     #[test]
-    fn retained_nested_views_are_declared() {
+    fn render_accepts_every_runtime_renderable_shape() {
+        let declarations = base_declarations();
+        assert!(declarations.contains("abstract render(cx: Context): Element | Entity | string;"));
+    }
+
+    #[test]
+    fn text_view_behaviors_are_not_declared_on_every_element() {
         let declarations = declarations();
+        let element = declarations
+            .split_once("export interface NativeElement")
+            .expect("Element declaration")
+            .1
+            .split_once("\n  }")
+            .expect("end of Element declaration")
+            .0;
+        assert!(!element.contains("on_link_click("));
+        assert!(!element.contains("selectable("));
+        assert!(!element.contains("scrollable("));
+        assert!(declarations.contains("export interface TextViewElement extends NativeElement"));
+        assert!(declarations.contains("html(id: string, html: string): TextViewElement;"));
+    }
+
+    #[test]
+    fn view_lifecycle_declaration_matches_runtime_calls() {
+        let declarations = base_declarations();
+        assert!(declarations.contains(
+            "init?(props: import(\"gpui-shell\").Props | undefined, cx: AsyncContext): void;"
+        ));
+        assert!(
+            declarations
+                .contains("update?(props: import(\"gpui-shell\").Props | undefined): void;")
+        );
+        assert!(!declarations.contains("cx?: AsyncContext"));
+    }
+
+    #[test]
+    fn retained_state_event_names_and_payloads_match_the_runtime() {
+        let declarations = base_declarations();
+        let union = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: InputEvent, cx: Context)",
+            union(crate::entities::InputEventName::NAMES)
+        )));
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: OtpEvent, cx: Context)",
+            union(crate::entities::OtpEventName::NAMES)
+        )));
+        assert!(declarations.contains("export interface InputEvent"));
+        assert!(declarations.contains("export interface OtpEvent"));
+        assert!(!declarations.contains("handler: (event: any, cx: Context)"));
+    }
+
+    #[test]
+    fn component_constructor_shapes_name_only_reusable_public_concepts() {
+        let declarations = base_declarations();
+        let base = declarations
+            .split_once("declare module \"gpui-base\" {")
+            .expect("gpui-base declarations")
+            .1
+            .split_once("\n}\n")
+            .expect("end of gpui-base declarations")
+            .0;
+        assert!(base.contains("export interface ComponentType"));
+        assert!(base.contains("export interface PartType"));
+        assert!(!declarations.contains("IndexedComponentType"));
+        assert!(declarations.contains(
+            "export const TableRow: { new: (id: string | number, row_index: number) => NativeElement };"
+        ));
+        assert!(declarations.contains(
+            "export const TableCell: { new: (id: string | number, column_index: number) => NativeElement };"
+        ));
+    }
+
+    #[test]
+    fn public_types_name_script_concepts_not_declaration_scaffolding() {
+        let declarations = base_declarations();
+
+        for name in [
+            "PathBuilderHandle",
+            "BackgroundValue",
+            "VirtualListScrollHandleType",
+            "InputStateHandle",
+            "InputStateType",
+            "InputType",
+            "NumberInputType",
+            "TextareaStateHandle",
+            "TextareaStateType",
+            "TextareaType",
+            "SliderStateHandle",
+            "SliderStateType",
+            "SliderPartType",
+            "OtpStateHandle",
+            "OtpStateType",
+            "OtpInputType",
+            "PopupType",
+            "DatePickerType",
+            "ScrollbarType",
+        ] {
+            assert!(
+                !declarations.contains(&format!("export interface {name}")),
+                "declaration-only carrier `{name}` leaked into the public interface"
+            );
+        }
+
+        for name in [
+            "PathBuilder",
+            "Background",
+            "VirtualListScrollHandle",
+            "InputState",
+            "TextareaState",
+            "SliderState",
+            "OtpState",
+        ] {
+            assert!(
+                declarations.contains(&format!("export interface {name}")),
+                "the instance type `{name}` is not directly nameable"
+            );
+        }
+    }
+
+    #[test]
+    fn retained_nested_views_are_declared() {
+        let declarations = base_declarations();
         for expected in [
-            "  export interface ViewHandle {",
-            "    set_props(props?: Props): void;",
+            "  export interface Entity {",
+            "    set_props(props?: import(\"gpui-shell\").Props): void;",
             "    release(): boolean;",
-            "  export interface ViewHandleType {",
-            "  export const ViewHandle: ViewHandleType;",
-            "  export function child_view(handle: ViewHandle): Element;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
     }
 
     #[test]
+    fn targeted_notify_is_declared() {
+        assert!(
+            base_declarations().contains("    notify(target?: Entity): void;"),
+            "Context.notify must expose GPUI's targeted entity notification"
+        );
+    }
+
+    #[test]
     fn nested_update_rollback_contract_names_its_supported_boundary() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "post-update descriptors remain legally redefinable or deletable",
             "including callable objects",
@@ -2725,7 +5171,7 @@ mod tests {
     /// so a corner an editor accepts is one `anchor(...)` accepts.
     #[test]
     fn the_anchored_surfaces_are_declared_from_the_runtime_anchor_table() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in crate::materialize::ANCHOR_NAMES {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
@@ -2733,11 +5179,11 @@ mod tests {
             );
         }
         for expected in [
-            "    anchor(value: Anchor): Element;",
-            "    mouse_button(value: MouseButton): Element;",
-            "    trigger(element: Element): Element;",
-            "    open_delay(ms: number): Element;",
-            "    close_delay(ms: number): Element;",
+            "    anchor<Self extends Element>(this: Self, value: Anchor): Self;",
+            "    mouse_button<Self extends Element>(this: Self, value: MouseButton): Self;",
+            "    trigger<Self extends Element>(this: Self, element: Element): Self;",
+            "    open_delay<Self extends Element>(this: Self, ms: number): Self;",
+            "    close_delay<Self extends Element>(this: Self, ms: number): Self;",
             "  export const Popover: ComponentType;",
             "  export const HoverCard: ComponentType;",
         ] {
@@ -2747,13 +5193,14 @@ mod tests {
 
     #[test]
     fn motion_policies_are_declared_without_per_frame_callbacks() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains(
-            "transition(property: MotionProperty, policy: number | TransitionPolicy): Element;"
+            "transition<Self extends Element>(this: Self, property: import(\"gpui-shell\").MotionProperty, policy: number | import(\"gpui-shell\").TransitionPolicy): Self;"
         ));
         assert!(
-            declarations
-                .contains("spring(property: MotionProperty, policy?: SpringPolicy): Element;")
+            declarations.contains(
+                "spring<Self extends Element>(this: Self, property: import(\"gpui-shell\").MotionProperty, policy?: import(\"gpui-shell\").SpringPolicy): Self;"
+            )
         );
         assert!(declarations.contains(
             "type MotionProperty = \"opacity\" | \"width\" | \"height\" | \"left\" | \"top\";"
@@ -2799,18 +5246,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a temporary directory");
 
-        let written = refresh(&directory).expect("the first refresh");
+        let written =
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the first refresh");
         assert_eq!(
             written.as_deref(),
             Some(directory.join(FILE_NAME).as_path())
         );
         assert_eq!(
             std::fs::read_to_string(directory.join(FILE_NAME)).expect("the file"),
-            declarations()
+            base_declarations()
         );
 
         assert_eq!(
-            refresh(&directory).expect("the second refresh"),
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the second refresh"),
             None,
             "an up-to-date file must not be rewritten"
         );
@@ -2818,7 +5268,11 @@ mod tests {
         // A stale one is replaced, which is the case this exists for.
         std::fs::write(directory.join(FILE_NAME), "// from an older runtime\n")
             .expect("overwriting");
-        assert!(refresh(&directory).expect("the third refresh").is_some());
+        assert!(
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the third refresh")
+                .is_some()
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -2827,12 +5281,42 @@ mod tests {
     fn write_application_creates_the_file_beside_an_application() {
         let directory =
             std::env::temp_dir().join(format!("gpui-shell-typings-{}", std::process::id()));
-        let written = write_application(&directory).expect("declarations are writable");
+        let written = write_application_with_components(
+            &directory,
+            &crate::FrozenComponentRegistry::default(),
+        )
+        .expect("declarations are writable");
         let path = directory.join(FILE_NAME);
 
-        assert_eq!(written, vec![path.clone()]);
+        assert_eq!(
+            written,
+            vec![directory.join(CONFIG_FILE_NAME), path.clone()]
+        );
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), base_declarations());
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn an_existing_editor_configuration_is_never_replaced() {
+        let directory = std::env::temp_dir().join(format!(
+            "gpui-shell-typings-config-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("application root");
+        std::fs::write(directory.join(TYPESCRIPT_CONFIG_FILE_NAME), "{}").expect("a tsconfig");
+
+        write_application_with_components(&directory, &crate::FrozenComponentRegistry::default())
+            .expect("declarations are writable");
+
+        assert!(!directory.join(CONFIG_FILE_NAME).exists());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).unwrap(),
+            "{}"
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -2849,11 +5333,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&outside);
         std::fs::create_dir_all(&root).expect("application root");
         std::fs::create_dir_all(&outside).expect("outside directory");
-        std::fs::write(outside.join("escape.js"), "import { View } from 'gpui';")
-            .expect("outside script");
+        std::fs::write(
+            outside.join("escape.js"),
+            "import { View } from 'gpui-kit';",
+        )
+        .expect("outside script");
         symlink(&outside, root.join("escape")).expect("directory symlink");
 
-        write_application(&root).expect("root declarations");
+        write_application_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect("root declarations");
 
         assert!(root.join(FILE_NAME).is_file());
         assert!(
@@ -2880,7 +5368,8 @@ mod tests {
         std::fs::write(&outside, "do not replace").expect("outside target");
         symlink(&outside, root.join(FILE_NAME)).expect("declaration symlink");
 
-        let error = refresh(&root).expect_err("a declaration symlink must be refused");
+        let error = refresh_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect_err("a declaration symlink must be refused");
         assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         assert_eq!(
             std::fs::read_to_string(&outside).expect("outside target"),

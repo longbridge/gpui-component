@@ -2,6 +2,7 @@
 title: Overlays
 description: Dialogs, the sheet and toasts, their stacking and dismissal order, and why they may only be opened from an event.
 order: 7
+maturity: [preview]
 ---
 
 # Overlays
@@ -12,11 +13,11 @@ A dialog is not a floating `div`. It is a place in the window's stacking order, 
 
 So the script says **what** to put in front of the user, and the root says where it goes and how it leaves. What crosses the boundary is small: a function returning an element, a side to anchor to, a sentence to show.
 
-They are on `window` rather than on `cx` because a dialog belongs to the window, not to the view that opened it: `cx.notify()` re-renders one view, `window.open_dialog()` changes what the user is looking at. `gpui-component` draws the same line, so the two halves of an application read as one vocabulary — and `window` is somewhere to grow. Overlays are what it carries today; `Window` in Rust also answers focus, size and appearance, and those land in a namespace that already exists.
+They are on `window` rather than on `cx` because a dialog belongs to the window, not to the View that opened it: `cx.notify()` re-renders one View, `window.open_dialog()` changes what the user is looking at. `gpui-component` draws the same line, so the two halves of an application read as one vocabulary — and `window` is somewhere to grow. Overlays are what it carries today; `Window` in Rust also answers focus, size and appearance, and those land in a namespace that already exists.
 
 ## The surface
 
-`window` is a **global**, like `cx`. There is nothing to import.
+`window` is a **global**. There is nothing to import — and unlike `cx`, which every host call hands you as an argument, nothing hands you `window` either. It is simply in scope.
 
 A callback parameter named `window` shadows it, which is ordinary scoping and not an error — and if a future callback ever hands one in, it would be this same object, because `window` is ambient: it reads the call that is running. That is also why it is not a parameter today. In Rust it has to be one, since Rust has no ambient state to read; here the read is available, which is the same reason `fs` and `store` are not parameters either.
 
@@ -50,7 +51,7 @@ window.clear_toasts();
 
 ```text
 expected a function returning an element; open_dialog and open_sheet take
-a function, not an element and not a view class
+a function, not an element and not a View class
 ```
 
 The reason is lifetime, not taste. An element belongs to the arena of the render pass that built it, and a dialog outlives the call that opened it — so an element built at open time would belong to the wrong pass. The function runs when the dialog draws, and again whenever it redraws, which is the same contract `render` has.
@@ -59,15 +60,15 @@ The reason is lifetime, not taste. An element belongs to the arena of the render
 
 ```js
 // confirm.js
-import { v_flex, h_flex, text } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
 
 export default (count, onConfirm) => () =>
   v_flex()
     .w(360)
     .p(24)
     .gap(12)
-    .child(text(`Delete ${count} completed items?`))
-    .child(text("This cannot be undone."))
+    .child(`Delete ${count} completed items?`)
+    .child("This cannot be undone.")
     .child(
       h_flex()
         .justify_end()
@@ -116,12 +117,12 @@ window.open_sheet_at("left", () => navigation());
 At most one sheet is open at a time. `window.open_sheet` anchors it to the right; `window.open_sheet_at` takes `"left"`, `"right"`, `"top"` or `"bottom"`. It has no options at all, because there is only ever one and it is dismissed by Escape or by its overlay whenever no dialog is above it.
 
 ```text
-unknown sheet side `middle`; expected left, right, top or bottom
+unknown sheet placement `middle`; expected left, right, top or bottom
 ```
 
 ## Toasts
 
-A toast is the one overlay that is **data rather than a view** — no function, no instance, nothing for the script to render — which is why its whole content crosses the boundary as an options object.
+A toast is the one overlay that is **data rather than a View** — no function, no instance, nothing for the script to render — which is why its whole content crosses the boundary as an options object.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -133,7 +134,7 @@ A toast is the one overlay that is **data rather than a view** — no function, 
 
 An omitted `timeout` keeps the default and an explicit `null` makes the toast sticky, so the two cannot be collapsed into one option.
 
-The `id` is what turns a repeated failure into one standing message instead of a pile. The `--watch` loop uses exactly this: a failed reload posts a sticky error toast with a fixed id, so saving a broken file five times replaces the message rather than stacking five of them, and the next successful reload retracts it with `remove_toast`.
+The `id` is what turns a repeated failure into one standing message instead of a pile. The reload loop of `gpui-shell dev` uses exactly this: a failed reload posts a sticky error toast with a fixed id, so saving a broken file five times replaces the message rather than stacking five of them, and the next successful reload retracts it with `remove_toast`.
 
 ```text
 unknown toast level `fatal`; expected info, success, warning or error
@@ -141,11 +142,47 @@ unknown toast level `fatal`; expected info, success, warning or error
 
 Three toasts are mounted at once. Older ones stay in the manager and reappear as newer ones leave, so a burst is throttled rather than lost.
 
+## The window itself
+
+The same `window` global answers questions about the window, not only about what is floating over it.
+
+```js
+render(cx) {
+  const { width, height } = window.viewport_size();
+  return v_flex()
+    .when(width < 600, (el) => el.flex_col())
+    .text_size(window.rem_size() * 0.875);
+}
+```
+
+**Measurements are legal from `render`**, and that is the point of them: a View that lays itself out from the window's size has to ask during the pass that draws it.
+
+| Member | What it answers |
+| --- | --- |
+| `rem_size()` / `line_height()` | The window's type metrics, in pixels |
+| `viewport_size()` | The drawable area |
+| `bounds()` | Where the window sits on screen and how big it is — larger than the viewport by its title bar |
+| `mouse_position()` | Where the pointer is, in window coordinates |
+| `appearance()` | `"light"` or `"dark"` |
+| `is_window_active()` / `is_fullscreen()` / `is_maximized()` | The platform window's state |
+
+**Calls that change the window are refused from `render`**, for the reason `cx.notify()` is: a frame that changes the window it is drawing into is a frame arguing with itself.
+
+| Member | What it does |
+| --- | --- |
+| `set_rem_size(size)` | Rescales everything expressed in rems |
+| `refresh()` | Redraws every View in the window |
+| `focus_next()` / `focus_prev()` | Moves the keyboard one tab stop |
+| `dispatch_action(action)` | Dispatches an action down this window's focus path |
+| `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | Platform window controls |
+
+`zoom_window()` is the platform's own zoom, not a scale factor — `set_rem_size` is the one that rescales.
+
 ## Stacking and dismissal
 
 Painted back to front:
 
-1. **Content** — the script's root view.
+1. **Content** — the script's root View.
 2. **Sheet** — at most one, anchored to an edge. A sheet is a *place* in the window, so it sits below the dialog stack: a dialog raised from inside a sheet must be readable, and a sheet raised under a dialog must not cover it.
 3. **Dialog stack** — in open order, oldest at the bottom.
 4. **Toasts** — above everything. A toast reports the outcome of the action the user just took, and an open dialog is exactly the situation where that outcome matters most, so it is the one layer that is never occluded.
@@ -163,7 +200,7 @@ Dismissal is always **one layer, never a cascade**:
 
 **Focus** is restored through the stack's own history. Opening an overlay records what was focused and focuses the overlay; closing it restores that handle. Closing the second dialog returns focus to the first, and closing the first returns it to whatever the window was on before either opened. Tab and Shift-Tab honour the focus trap, so tabbing inside an overlay cycles within it rather than walking into the content behind it.
 
-## The phase rule
+## The `ScopePhase` rule
 
 **An overlay may only be opened or closed from an event handler or a task.**
 
@@ -172,22 +209,25 @@ window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
-Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [phase](./state.md#phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
+Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [`ScopePhase`](./state.md#scope-phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
 
 The refusal names the phase it came from, because that is the only clue the author has.
 
-`window.has_active_dialog()` and `window.has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a view that draws itself differently while a dialog is up has to ask during the pass that draws it.
+`window.has_active_dialog()` and `window.has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a View that draws itself differently while a dialog is up has to ask during the pass that draws it.
 
 ## Overlays need a `ShellRoot`
 
-Every one of these calls reaches the window's root view. A window whose first view is not a `ShellRoot` refuses them, and says which mistake it was — a host wiring problem, not a script one:
+Every one of these calls reaches the window's `ShellRoot`: its first View, or the View directly inside the `gpui-component` `Root` that the `gpui-shell` command opens its windows with. A window with neither refuses them:
 
 ```text
-window.open_dialog(content, options) needs a ShellRoot as the window's first view;
-this window was opened with another view
+window.open_dialog(content, options) found no ShellRoot in this window. A view's
+init() runs before its window has one, so open overlays from an event handler or
+a task; otherwise the host opened the window with another root view
 ```
 
-See [Getting started](./getting-started.md#add-the-runtime-to-a-rust-application).
+The first case is a script one: `init` runs while the window is still being built, before it has a root to hold an overlay, so open it from an event handler or from a task the View spawns. The second is a host wiring problem.
+
+See [Getting started](./getting-started.md#build-the-runtime-yourself).
 
 ## Not there yet
 

@@ -1,6 +1,4 @@
-use gpui::{
-    InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, relative, rgb,
-};
+use gpui::{InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, relative};
 use gpui_base::{Button, Popover};
 
 use super::super::BaseShowcase;
@@ -30,14 +28,14 @@ impl BaseShowcase {
                     .flex_col()
                     .gap_2()
                     .text_xs()
-                    .bg(rgb(0xffffff))
+                    .bg(super::example_rgb(0xffffff))
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(super::example_rgb(0xd4d4d4))
                     .child("Workspace access")
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("Anyone with the link can view."),
                     )
                     .child(

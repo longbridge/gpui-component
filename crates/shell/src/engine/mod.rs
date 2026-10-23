@@ -37,8 +37,12 @@
 //! ShellRuntime::dispatch_signal(&Rc<Self>, CallbackId, &mut Window, &mut App)
 //! ShellRuntime::render_virtual_items(&Rc<Self>, CallbackId, Range<usize>,
 //!     &mut Window, &mut App) -> Option<ItemSpecs>
+//! ShellRuntime::item_keys(&Rc<Self>, CallbackId, &mut Window, &mut App,
+//!     FnOnce(&mut dyn FnMut(usize) -> Option<String>) -> R) -> Option<R>
+//! ShellRuntime::dispatch_visible_range(&Rc<Self>, CallbackId, Range<usize>,
+//!     usize, &mut Window, &mut App)
 //!
-//! set_store_path(PathBuf)
+//! set_storage_path(PathBuf)
 //! set_development_mode(bool)
 //! ```
 //!
@@ -79,7 +83,10 @@
 //! which is the trade virtualization is; it never enters the script's
 //! `render`, so the counter above still means what it says; and it runs under
 //! `ScopePhase::Layout`, which forbids `notify`, forbids creating retained
-//! state, and refuses to register a handler. See `crate::materialize`.
+//! state, and refuses to register a handler. `item_keys` is part of the same
+//! exception: it is how a `list` asks its `get_key`, under the same scope,
+//! which item is at the top before and after its item count changes. See
+//! `crate::materialize`.
 //!
 //! # What this seam is, and what it is not
 //!
@@ -98,7 +105,7 @@
 //!   the capability model, the dock, or hot reload. A change to the engine has a
 //!   blast radius you can see from the directory listing.
 //! * **Host configuration cannot be quietly dropped.** Capabilities live above
-//!   the seam entirely, and `set_store_path` and `set_development_mode` are
+//!   the seam entirely, and `set_storage_path` and `set_development_mode` are
 //!   entries here with no fallback compiled in — an engine either provides them
 //!   or does not build. An earlier arrangement had silent no-ops, which meant a
 //!   second engine could ignore the security configuration without a word.
@@ -128,7 +135,7 @@ pub(crate) mod quickjs;
 #[cfg(test)]
 pub(crate) use quickjs::ViewType;
 #[cfg(feature = "quickjs")]
-pub use quickjs::{ShellRuntime, ViewObject};
+pub use quickjs::{LoadedApplication, ShellRuntime, ViewObject};
 
 /// Points the script-visible store at its backing file.
 ///
@@ -137,8 +144,8 @@ pub use quickjs::{ShellRuntime, ViewObject};
 /// this does not compile, because the alternative — the one this replaced — was
 /// a build that quietly accepted the call and did nothing with it.
 #[cfg(feature = "quickjs")]
-pub fn set_store_path(path: std::path::PathBuf) {
-    quickjs::host::set_store_path(path);
+pub fn set_storage_path(path: std::path::PathBuf) {
+    quickjs::host::set_storage_path(path);
 }
 
 /// Relaxes the sandbox for a development session.

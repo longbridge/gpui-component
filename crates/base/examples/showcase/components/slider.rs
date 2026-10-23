@@ -29,7 +29,7 @@ impl BaseShowcase {
                                 .left_0()
                                 .w_full()
                                 .h(px(2.))
-                                .bg(rgb(0xd4d4d4)),
+                                .bg(super::example_rgb(0xd4d4d4)),
                         )
                         .child(
                             SliderIndicator::new(&self.slider)
@@ -45,7 +45,7 @@ impl BaseShowcase {
                                         .bottom_0()
                                         .left_0()
                                         .right(relative(1. - percentage))
-                                        .bg(rgb(0x171717)),
+                                        .bg(super::example_rgb(0x171717)),
                                 ),
                         )
                         .child(
@@ -55,9 +55,9 @@ impl BaseShowcase {
                                 .left(relative(percentage))
                                 .ml(px(-thumb_size / 2.))
                                 .size(px(thumb_size))
-                                .bg(rgb(0xffffff))
+                                .bg(super::example_rgb(0xffffff))
                                 .border_1()
-                                .border_color(rgb(0x171717)),
+                                .border_color(super::example_rgb(0x171717)),
                         ),
                 ),
             )

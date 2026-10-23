@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
-use gpui::{Context, HighlightStyle, SharedString, Window, rgb};
+use gpui::{Context, HighlightStyle, SharedString, Window};
 use gpui_base::input::{
     EditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter, Rope,
 };
@@ -240,7 +240,7 @@ impl HighlightStyleResolver for ShowcaseHighlightStyles {
             _ => return None,
         };
         Some(HighlightStyle {
-            color: Some(rgb(color).into()),
+            color: Some(super::example_rgb(color).into()),
             ..Default::default()
         })
     }

@@ -5,10 +5,12 @@
 // storage, and a filter that has to survive every mutation. If something in
 // gpui-shell is broken, this is where it shows.
 //
-//   cargo run -p gpui-shell -- examples/js_todolist
+//   cargo run -p gpui-shell -- run examples/js_todolist
 
-import { View, v_flex, h_flex, InputState } from "gpui";
-/** @import { Context, InputStateHandle } from "gpui" */
+import { View, div } from "gpui-kit";
+import { v_flex, h_flex, InputState } from "gpui-base";
+import { TitleBar } from "gpui-component";
+/** @import { AsyncContext, Context } from "gpui-kit" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
 import {
@@ -35,12 +37,13 @@ const FILTERS = [
 ];
 
 export default class TodoList extends View {
-  init() {
+  /** @param {unknown} _props @param {AsyncContext} cx */
+  init(_props, cx) {
     // Annotated where they are assigned rather than declared as class fields.
     // `View`'s constructor calls `init` from inside `super()`, so a field
     // declaration — even one with no initializer — would run afterwards and
     // write `undefined` over everything set here.
-    /** @type {InputStateHandle} */
+    /** @type {InputState} */
     this.draft = InputState.new({ placeholder: "What needs doing?" });
     // Enter is how a list like this is actually used; the Add button is for
     // the pointer, not the primary path.
@@ -128,21 +131,37 @@ export default class TodoList extends View {
     return v_flex()
       .size_full()
       .bg(cx.theme().colors.background)
-      .p(SPACE.xl)
-      .gap(SPACE.lg)
-      .child(this.header(cx))
-      .child(this.composer(cx))
+      // The window draws no title bar of its own; this one drags it, and
+      // sheets and notifications open below it.
       .child(
-        surface(cx)
-          .child(this.toolbar(cx))
-          .child(rule(cx))
-          .child(
-            visible.length === 0
-              ? emptyState(...this.emptyCopy(), cx)
-              : v_flex().flex_1().py(SPACE.xs).children(visible.map((item) => this.row(item, cx))),
-          ),
+        new TitleBar().child(
+          div()
+            .text_size(13)
+            .font_medium()
+            .text_color(cx.theme().colors.foreground)
+            .child("Todo"),
+        ),
       )
-      .child(this.footer(cx));
+      .child(
+        v_flex()
+          .flex_1()
+          .min_h_0()
+          .p(SPACE.xl)
+          .gap(SPACE.lg)
+          .child(this.header(cx))
+          .child(this.composer(cx))
+          .child(
+            surface(cx)
+              .child(this.toolbar(cx))
+              .child(rule(cx))
+              .child(
+                visible.length === 0
+                  ? emptyState(...this.emptyCopy(), cx)
+                  : v_flex().flex_1().py(SPACE.xs).children(visible.map((item) => this.row(item, cx))),
+              ),
+          )
+          .child(this.footer(cx)),
+      );
   }
 
   /** @param {Context} cx */

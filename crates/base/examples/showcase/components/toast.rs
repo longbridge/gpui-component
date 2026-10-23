@@ -20,8 +20,8 @@ impl BaseShowcase {
                     .items_center()
                     .justify_center()
                     .border_1()
-                    .border_color(rgb(0x171717))
-                    .bg(rgb(0xffffff))
+                    .border_color(super::example_rgb(0x171717))
+                    .bg(super::example_rgb(0xffffff))
                     .child("Save changes")
                     .on_click({
                         let show_entity = entity.clone();
@@ -43,8 +43,8 @@ impl BaseShowcase {
                         .w_64()
                         .p_2()
                         .border_1()
-                        .border_color(rgb(0x171717))
-                        .bg(rgb(0xffffff))
+                        .border_color(super::example_rgb(0x171717))
+                        .bg(super::example_rgb(0xffffff))
                         .child(
                             div()
                                 .flex()
@@ -75,7 +75,7 @@ impl BaseShowcase {
                         .child(
                             div()
                                 .mt_1()
-                                .text_color(rgb(0x737373))
+                                .text_color(super::example_rgb(0x737373))
                                 .child("Your preferences are now up to date."),
                         ),
                 )

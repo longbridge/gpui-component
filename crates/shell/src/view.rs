@@ -1,13 +1,14 @@
 //! The single bridge between a script view and GPUI's render loop.
 //!
 //! Every script-defined view, panel, or dialog body is carried by a `ScriptView`
-//! entity. GPUI calls `render` whenever the view is notified — and it is
-//! notified for reasons the script never hears about, from a hover to a cursor
-//! blink to an animation frame. So `render` here is deliberately *not* a script
-//! call:
+//! entity. [`ShellRoot`](crate::root::ShellRoot) mounts the entity through
+//! GPUI's cached-view path, so a clean window frame reuses its rendered subtree
+//! without calling this `render` at all. When the entity or one of its retained
+//! descendants is dirty, `render` remains deliberately *not* necessarily a
+//! script call:
 //!
 //! ```text
-//! GPUI render ──▶ snapshot still valid? ──yes──▶ materialize   (no VM)
+//! dirty view render ─▶ snapshot still valid? ──yes──▶ materialize   (no VM)
 //!                          │
 //!                          no
 //!                          ▼
@@ -16,8 +17,10 @@
 //!
 //! The script runs only when something invalidated its snapshot: `cx.notify()`
 //! from an event or a task, a hot reload, or a palette change. Everything else
-//! replays the description the script already produced. That is what keeps
-//! script cost proportional to application activity rather than to frame rate.
+//! replays the description the script already produced. Clean frames skip both
+//! operations through GPUI's subtree cache. That is what keeps script and
+//! materialization cost proportional to application activity rather than frame
+//! rate.
 
 use std::rc::Rc;
 
@@ -27,7 +30,7 @@ use crate::{
     engine::{ShellRuntime, ViewObject},
     materialize::materialize,
     policy::Policy,
-    runtime::{error_banner, error_overlay},
+    runtime::{ViewFailure, error_banner, error_overlay},
     snapshot::RenderSnapshot,
 };
 
@@ -57,14 +60,21 @@ pub struct ScriptView {
     /// Set when the script-visible handle has been released. GPUI may retain
     /// the entity for an older frame, but it must never rebuild after release.
     retired: bool,
-    /// The palette the current snapshot resolved its colors against.
-    theme_tokens: Option<gpui_base::SemanticThemeTokens>,
+    /// The tokens and appearance the current snapshot resolved against.
+    theme: Option<crate::theme_tokens::ThemeSnapshotKey>,
     /// The failure of the most recent build, if it failed.
     ///
     /// Held rather than re-derived so a script that throws is not re-run on
     /// every frame: a broken render is exactly as frame-coupled as a working one
     /// if the failure re-triggers the build.
     error: Option<String>,
+    /// Why the most recent source reload failed, if it did.
+    ///
+    /// Reported here rather than in a toast of its own: the view keeps running
+    /// its previous code, so this is a failure *of this view*, and it belongs on
+    /// the same surface as a render failure. Takes precedence over `error`,
+    /// which describes code the author has already edited away.
+    reload_error: Option<String>,
     /// Whose authority this view's script runs under.
     ///
     /// Captured when the view is constructed rather than read when it is used:
@@ -121,8 +131,9 @@ impl ScriptView {
             dirty: true,
             retired: false,
             policy,
-            theme_tokens: None,
+            theme: None,
             error: None,
+            reload_error: None,
             ownership,
             runtime,
         }
@@ -164,6 +175,14 @@ impl ScriptView {
     /// the element identities — and swaps only what the script produced. The
     /// description that the old instance built is now meaningless, so the view
     /// is invalidated with it.
+    /// Records, or clears, why the latest reload of this view's source failed.
+    pub(crate) fn set_reload_error(&mut self, message: Option<String>, cx: &mut Context<Self>) {
+        if self.reload_error != message {
+            self.reload_error = message;
+            cx.notify();
+        }
+    }
+
     pub(crate) fn replace_object(&mut self, object: ViewObject) {
         self.object = object;
         self.dirty = true;
@@ -181,8 +200,7 @@ impl ScriptView {
     /// it means the script threw and the failure was recorded here. A test that
     /// finds `snapshot()` empty should report this rather than the absence,
     /// because the absence is the symptom and this is the cause.
-    #[cfg(test)]
-    pub(crate) fn build_error(&self) -> Option<&str> {
+    pub fn build_error(&self) -> Option<&str> {
         self.error.as_deref()
     }
 
@@ -216,6 +234,7 @@ impl ScriptView {
         self.retired = true;
         self.dirty = false;
         self.error = None;
+        self.reload_error = None;
         self.previous = None;
         self.current = None;
     }
@@ -240,6 +259,19 @@ impl ScriptView {
 
         match runtime.build_snapshot(&object, Some(entity), policy, window, cx) {
             Ok(snapshot) => {
+                // Measured here rather than anywhere else because this is the
+                // only place two consecutive descriptions of one view exist at
+                // the same time. Nothing acts on the answer: it counts how often
+                // a rebuild produced the shape it replaced, which is what a
+                // template cache would have to be able to fill instead of
+                // rebuild (§20.7 of `docs/gpui-shell.md`). A first build has no
+                // predecessor and is not a data point either way.
+                if let Some(current) = self.current.as_ref() {
+                    runtime
+                        .metrics()
+                        .record_structure(current.structure() == snapshot.structure());
+                }
+
                 // Assigning through `previous` is what retires the snapshot
                 // before last: dropping it releases its callbacks.
                 self.previous = self.current.replace(snapshot);
@@ -274,29 +306,34 @@ impl Render for ScriptView {
         if self.retired {
             return div().into_any_element();
         }
-        let tokens = crate::theme_tokens::sync(cx);
-        if self.theme_tokens.as_ref() != Some(&tokens) {
-            self.theme_tokens = Some(tokens);
+        let theme = crate::theme_tokens::sync(cx);
+        if self.theme.as_ref() != Some(&theme) {
+            self.theme = Some(theme);
             self.dirty = true;
         }
         if self.is_dirty() {
             self.rebuild(window, cx);
         }
 
-        match (self.error.as_deref(), self.current.as_ref()) {
+        let failure = match (self.reload_error.as_deref(), self.error.as_deref()) {
+            (Some(message), _) => Some((ViewFailure::Reload, message)),
+            (None, Some(message)) => Some((ViewFailure::Render, message)),
+            (None, None) => None,
+        };
+        match (failure, self.current.as_ref()) {
             (None, Some(snapshot)) => materialize(&self.runtime, snapshot, window, cx),
             // A build that failed left the last good snapshot in place, so the
             // interface is still there to show. Reporting over it beats
             // replacing it: the reader keeps their scroll, their focus and
             // whatever they were reading, and still learns what broke.
-            (Some(message), Some(snapshot)) => div()
+            (Some((failure, message)), Some(snapshot)) => div()
                 .relative()
                 .size_full()
                 .child(materialize(&self.runtime, snapshot, window, cx))
-                .child(error_banner(message, window, cx))
+                .child(error_banner(failure, message, window, cx))
                 .into_any_element(),
             // Nothing to keep: this view has never rendered successfully.
-            (Some(message), None) => error_overlay(message, window, cx),
+            (Some((failure, message)), None) => error_overlay(failure, message, window, cx),
             // Unreachable in practice: a build either publishes a snapshot or
             // records an error. An empty element is the honest answer if it ever
             // is reached, rather than a panic in a render.

@@ -1,16 +1,17 @@
 # gpui-fps
 
-A realtime performance HUD for [GPUI](https://gpui.rs) applications: frames per
+A realtime performance HUD for GPUI applications: frames per
 second, frame time, dropped frame rate, and this process' GPU, CPU and memory
 usage.
 
 ```
 ┌──────────────────────────┐
-│  ﹋﹏  118 FPS  ﹋︿﹏﹋   │  ← the trace runs behind the headline
-│ FRAME             8.4 ms │
-│ DROP                0.0% │
+│ ﹋﹏ MAX 118 FPS ﹋︿﹏﹋  │  ← the trace runs behind the headline
+│ FRAME             8.4 ms │  ← what a typical frame cost
+│ P95              14.1 ms │  ← what its slow tail cost
+│ DROP 0.0%       INV  1.0 │
 │ GPU                31.0% │
-│ CPU 12.4%      MEM 84 MB │
+│ CPU 142%       MEM 84 MB │
 └──────────────────────────┘
 ```
 
@@ -20,7 +21,16 @@ an estimate measured from the outside. Both the trace and the `FRAME` reading
 are colored against the frame budget — green within budget, amber up to twice
 the budget, red beyond.
 
+The headline is `MAX FPS`: the rate a full redraw of this window could sustain,
+which is `1 / FRAME` capped by the display's refresh rate. It is derived rather
+than counted, because the only way to *count* it is to keep the window drawing
+back to back — a full layout and paint per frame, charged to the application.
+Right-click switches it to `FPS`, frames actually presented per second; click
+collapses the HUD to a tag. The reasoning is in the [FPS Monitor docs].
+
 It does not depend on `gpui-component`, so it works in any GPUI application.
+
+[FPS Monitor docs]: https://gpui-kit.com/docs/fps
 
 ## Usage
 
@@ -28,13 +38,13 @@ It does not depend on `gpui-component`, so it works in any GPUI application.
 
 ```toml
 [dependencies]
-gpui-fps = { git = "https://github.com/longbridge/gpui-component" }
+gpui-fps = { git = "https://github.com/longbridge/gpui-kit" }
 ```
 
-It must resolve to the same `gpui` as your application. Both being git
-dependencies on `zed-industries/zed` is enough — Cargo unifies them — but a
-`[patch]` or a second checkout that pins a different revision will produce two
-incompatible `gpui` crates, and the error will be about mismatched `Window`
+It must resolve to the same `gpui` as your application. Both depending on the
+same `gpui-pre` version is enough — Cargo unifies them — but a `[patch]`, a
+different `gpui-pre` version, or a checkout of the Zed repository will produce
+two incompatible `gpui` crates, and the error will be about mismatched `Window`
 types rather than about versions.
 
 ### 2. Render it
@@ -96,6 +106,9 @@ settings menu, and persisted to `target/state.json` through an
 Click the HUD to collapse it to a small tag showing just the frame rate, and
 click again to expand.
 
+While the flag is off the HUD costs nothing: a second unrendered and its clock
+stops and it releases GPUI's frame trace, until it is shown again.
+
 ## Customization
 
 The call takes no options. For a different corner or frame budget, compose the
@@ -108,8 +121,7 @@ use gpui_fps::{FpsMonitor, FpsOverlay};
 let monitor = cx.new(|cx| {
     FpsMonitor::new(window, cx)
         .capacity(240)                                  // frames kept in the trace (default 120)
-        .frame_budget(Duration::from_micros(6_944))     // 144Hz (default is 60Hz)
-        .continuous(true)                               // default true, see below
+        .frame_budget(Duration::from_micros(6_944))     // pins 144Hz; unset, it follows the display
         .show_resources(true)                           // GPU, CPU and memory (default true)
         .resource_interval(Duration::from_millis(500))  // default 500ms
 });
@@ -124,16 +136,16 @@ The palette is not configurable. Its contrast is load bearing — see the note
 below — and an application that could override it could just as easily make the
 HUD unreadable.
 
-### `continuous`
+### Why there is no `continuous` option
 
-On by default, this requests a frame on every render so the window keeps drawing
-back to back. That is what makes the reading behave like an in-game FPS counter,
-and it carries the same caveat: **the window never idles, so the number is the
-frame rate the application can sustain, not the rate it happens to be drawing
-at**, and the HUD itself keeps the CPU and GPU busy.
-
-Turn it off to measure the real workload. The HUD then only updates when the
-window redraws for its own reasons, and reads zero while the window is idle.
+Earlier versions could keep the window drawing back to back so the counter read
+like a game's. That is gone: marking any view dirty schedules a *window* draw,
+and GPUI re-renders every view outside an `Entity::cached` boundary, so a HUD
+driving the frame loop was paying a full layout and paint per frame — around
+60% of a core on an idle window — and reporting that cost as the application's.
+`MAX FPS` answers the same question from `FRAME` without drawing anything; the
+HUD itself only asks for one frame every 500ms, to move its digits, and leaves
+that frame out of the readings.
 
 ## Notes
 
@@ -141,10 +153,6 @@ window redraws for its own reasons, and reads zero while the window is idle.
   Recomputed per frame they flicker through digits too fast to read. `FRAME` is
   the mean over that interval rather than the latest frame, which at this cadence
   would be an arbitrary sample.
-- The frame rate is graded against the target _rate_ with a 5% tolerance, not by
-  comparing `1/fps` against the budget. Under vsync a healthy 60Hz display reads
-  58 to 60 and never exactly 60.00, so an exact comparison would paint a
-  perfectly healthy application as over budget.
 - The backdrop is nearly opaque (alpha 0.92) on purpose. GPUI cannot read the
   pixels under an element, so the HUD has no way to adapt to what it covers; the
   only way to stay readable over any window background is to keep that
@@ -156,14 +164,55 @@ window redraws for its own reasons, and reads zero while the window is idle.
 - Frame tracing is a global switch that clears its buffer when disabled, so
   monitors reference count it and never turn it off while another monitor — or
   the host application's own profiling — still needs it.
-- The headline is graded on the frame *rate* and `FRAME` on the frame *time*,
-  which is why they can disagree. A window that is idle draws a handful of
-  frames a second, so the headline goes red while every one of those frames was
-  in fact drawn well inside the budget — `FRAME` staying green is what says the
-  application is fine and simply has nothing to redraw.
-- CPU and memory are sampled with `sysinfo` on a background thread; the values
-  are for this process, and CPU is normalized so 100 means every logical core is
-  saturated. Resource sampling is unavailable on the web.
+- The headline is not graded; `FRAME`, `P95` and `DROP` are, against
+  `frame_budget()`. A rate falls for reasons that are not the application being
+  slow — the window was idle or occluded, the display asked for fewer frames —
+  and colouring it would turn each of those into an alarm that the rows
+  underneath contradict. What costs too much is a question about frames, and
+  the frame rows answer it in colour already.
+- `FRAME` is the mean draw time and `P95` the time 95% of the retained frames
+  came in under. A run of quick frames pulls a mean down over a spike, so the
+  mean alone reads comfortable through jank the user can see; the two together
+  say both what a frame usually costs and what its slow tail costs. `P95` is
+  robust to a single outlier by construction — the chart and its axis are what
+  show that one.
+- `INV` is the mean number of invalidations coalesced into one frame. One means
+  every redraw the window was asked for became a frame; well above one means it
+  was asked far more often than it could answer, and the excess is work being
+  thrown away. It does not show up in the frame times at all, since each frame
+  that _is_ drawn may be perfectly quick. It is the one reading the HUD does not
+  grade: the baseline depends on how the application drives its own redraws — an
+  animation asking for a frame per tick and a data stream invalidating on every
+  message both legitimately read above one — which is not something the HUD can
+  judge against.
+- CPU, memory and GPU are sampled on a background thread, and each reading is
+  the mean over a trailing three second window — they are coarse samples of
+  quantities that move between one sample and the next, and published raw they
+  churn too fast to read. Resource sampling is unavailable on the web.
+- `CPU` is on the single-core scale that `top`, Activity Monitor and Task
+  Manager's per-process column all use: **100 is one saturated logical core**, so
+  a process spread over a core and a half reads 140. It is deliberately not
+  divided by the core count — normalizing so that 100 is the whole machine makes
+  the same work read 12% on a four core laptop and 2% on a twenty-four core
+  desktop, and pushes every interesting value into the bottom of the range,
+  where a UI thread pinning a core looks idle.
+- `MEM` is the memory this process is _responsible for_, not its resident set.
+  RSS counts the read-only pages of every shared library the process maps, which
+  on a windowed application is a graphics stack running to hundreds of megabytes
+  of code it neither allocated nor can release — and which every other window on
+  the machine is mapping at the same time, so the number moves when a different
+  program starts. Each platform reads the counter its own activity monitor
+  shows, and falls back to RSS where there is none:
+  - **macOS** — `ri_phys_footprint` from `proc_pid_rusage`, the counter behind
+    Activity Monitor's Memory column and the one jetsam judges a process on.
+  - **Windows** — `PrivateUsage` from `GetProcessMemoryInfo`, this process'
+    private commit, which Task Manager shows as its commit size.
+  - **Linux** — `RssAnon` from `/proc/self/status`: resident anonymous memory,
+    the heap and stacks and private mappings, and none of the files it maps.
+    `Private_Dirty` from `smaps_rollup` is the closer analogue of the other two,
+    but it is computed by walking every mapping under the address space lock —
+    ~425µs a read against ~5µs — and a HUD should not perturb what it measures
+    to account for a few megabytes of relocations.
 - `GPU` is this process' own share, like the CPU beside it and unlike a
   device-wide reading, which would move for work the application cannot act on.
   Each platform is read where it attributes GPU time per process, and none of
@@ -178,6 +227,7 @@ window redraws for its own reasons, and reads zero while the window is idle.
   Where several engines can run at once — Windows and Linux — the reading is the
   busiest engine type rather than their sum, so it stays inside 100% while the
   GPU still has headroom.
+
 - **The GPU row is left out entirely where no per-process counter is reachable**,
   rather than reading a flat zero: the web, an Intel Mac, whose accelerator
   clients do not publish `AppUsage`, and a Linux driver such as nvidia's

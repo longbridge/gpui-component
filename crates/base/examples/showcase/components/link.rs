@@ -1,4 +1,4 @@
-use gpui::{IntoElement, ParentElement as _, Styled as _, div, rgb};
+use gpui::{IntoElement, ParentElement as _, Styled as _, div};
 use gpui_base::Link;
 
 use super::super::BaseShowcase;
@@ -22,7 +22,7 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_1()
-                    .border_color(rgb(0x171717))
+                    .border_color(super::example_rgb(0x171717))
                     .child("Open Link documentation  →"),
             )
             .child(
@@ -35,8 +35,8 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
-                    .text_color(rgb(0x737373))
+                    .border_color(super::example_rgb(0xd4d4d4))
+                    .text_color(super::example_rgb(0x737373))
                     .child("Disabled destination"),
             )
     }

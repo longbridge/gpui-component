@@ -1,23 +1,21 @@
 [package]
 name = "gpui-component-story"
-version = "0.5.1"
+version = "0.8.0"
 publish = false
 edition.workspace = true
 
 [features]
-inspector = ["gpui-component/inspector"]
-tree-sitter = ["gpui-component/tree-sitter-languages"]
-test-support = ["gpui/test-support"]
+gpui-fast = ["gpui-kit/gpui-fast", "gpui-fps/gpui-fast", "gpui-shell/gpui-fast"]
+inspector = ["gpui-kit/inspector"]
+tree-sitter = ["gpui-kit/tree-sitter-languages"]
+test-support = ["gpui-kit/test-support"]
 default = ["tree-sitter"]
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
-gpui-base.workspace = true
-gpui_platform.workspace = true
-gpui-component = { workspace = true }
-gpui-component-assets.workspace = true
+gpui-kit = { workspace = true, features = ["speech"] }
 gpui-fps.workspace = true
+lsp-types.workspace = true
 
 async-channel = "2.3.1"
 autocorrect = "2.14.2"
@@ -25,7 +23,6 @@ chrono = "0.4"
 csv = "1.4"
 fake = { version = "2.10.0", features = ["dummy"] }
 itertools = "0.14.0"
-lsp-types.workspace = true
 rand = "0.8"
 regex = "1"
 serde = "1"
@@ -42,14 +39,13 @@ dirs = "6.0.0"
 
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-gpui-shell.workspace = true
+# Without `webview`: that feature enables GPUI Fast, which feature
+# unification would spread to every workspace member built with the Story.
+gpui-shell = { path = "../shell", default-features = false, features = ["quickjs", "components"] }
 reqwest_client.workspace = true
 smol.workspace = true
-tree-sitter-navi = "0.2.3"
-color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gpui_web.workspace = true
 # WASM has no tree-sitter grammars, so the Editor story highlights with
 # `syntect` there. Native uses the built-in tree-sitter highlighter.
 syntect.workspace = true
@@ -61,7 +57,7 @@ getrandom = { version = "0.2", features = ["js"] }
 gtk = { version = "0.18" }
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

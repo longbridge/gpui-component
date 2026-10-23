@@ -6,8 +6,10 @@
 // read from the render's call-scoped `cx.theme()`, so changing the shell theme
 // moves this half too.
 
-import { div, h_flex, v_flex, text, Button } from "gpui";
-/** @import { AbsoluteLength, ClickEvent, Context } from "gpui" */
+import { div } from "gpui-kit";
+import { h_flex, v_flex, Button } from "gpui-base";
+/** @import { AbsoluteLength, ClickEvent, Context } from "gpui-kit" */
+/** @import { Quote } from "market" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's
 /// text size instead of pinning itself to a pixel grid that only exists at the
@@ -47,11 +49,21 @@ export const ROW = {
 /** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
 export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
-/// Up is `accent`, down is `destructive`, flat is ordinary text — the same question
-/// the Rust panel asks of the same theme.
+/// Down is `destructive`, flat is ordinary text — both semantic roles. Up is a
+/// literal, and deliberately: the semantic set is shadcn's, which has a
+/// `destructive` and no counterpart for it, so there is no token that means
+/// "gain". `accent` is the near-white hover surface, and reading it as one is
+/// how this column came out white on a light theme.
+///
+/// A gain/loss pair is a domain color anyway, the way a chart series is — it
+/// belongs to the market, not to the interface — so it picks its own value per
+/// appearance rather than borrowing a role that means something else.
+/** @param {Context} cx */
+const gain = (cx) => (cx.theme().is_dark ? "#4ade80" : "#16a34a");
+
 /** @param {number} direction @param {Context} cx */
 export const directionColor = (direction, cx) => {
-  if (direction > 0) return cx.theme().colors.accent;
+  if (direction > 0) return gain(cx);
   if (direction < 0) return cx.theme().colors.destructive;
   return cx.theme().colors.foreground;
 };
@@ -60,25 +72,28 @@ export const directionColor = (direction, cx) => {
 
 /** @param {string} value @param {Context} cx */
 export const title = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.title)
     .line_height(1.3)
     .font_semibold()
-    .text_color(cx.theme().colors.foreground);
+    .text_color(cx.theme().colors.foreground)
+    .child(value);
 
 /** @param {string} value @param {Context} cx */
 export const label = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.body)
     .line_height(TYPE.lineHeight)
-    .text_color(cx.theme().colors.foreground);
+    .text_color(cx.theme().colors.foreground)
+    .child(value);
 
 /** @param {string} value @param {Context} cx */
 export const muted = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.body)
     .line_height(TYPE.lineHeight)
-    .text_color(cx.theme().colors.muted_foreground);
+    .text_color(cx.theme().colors.muted_foreground)
+    .child(value);
 
 // -- Surfaces ---------------------------------------------------------------
 
@@ -167,10 +182,10 @@ export const watchMarker = (watched, cx) =>
  * @param {string} caption
  * @param {(event: ClickEvent, cx: Context) => void} onClick
  * @param {Context} cx
- * @param {{ primary?: boolean, disabled?: boolean }} [options]
+ * @param {{ disabled?: boolean }} [options]
  */
 export const action = (id, caption, onClick, cx, options = {}) => {
-  const { primary = false, disabled = false } = options;
+  const { disabled = false } = options;
 
   return Button.new(id)
     .disabled(disabled)
@@ -181,24 +196,17 @@ export const action = (id, caption, onClick, cx, options = {}) => {
     .px(SPACE.sm)
     .rounded(cx.theme().radius.md)
     .border(1)
-    .border_color(primary ? cx.theme().colors.primary : cx.theme().colors.border)
-    .bg(primary ? cx.theme().colors.primary : cx.theme().colors.background)
+    .border_color(cx.theme().colors.border)
+    .bg(cx.theme().colors.background)
     .when(disabled, (el) => el.opacity(0.5))
     .when(!disabled, (el) =>
-      el
-        .hover((style) =>
-          style.bg(primary ? cx.theme().colors.accent : cx.theme().colors.muted),
-        )
-        .on_click(onClick),
+      el.hover((style) => style.bg(cx.theme().colors.muted)).on_click(onClick),
     )
     .child(
-      text(caption)
+      div()
         .text_size(TYPE.body)
         .line_height(1)
-        .text_color(
-          primary
-            ? cx.theme().colors.primary_foreground
-            : cx.theme().colors.foreground,
-        ),
+        .text_color(cx.theme().colors.foreground)
+        .child(caption),
     );
 };

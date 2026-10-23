@@ -1,9 +1,9 @@
-use gpui::{
+use gpui_kit::{
     Anchor, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
     IntoElement, ParentElement, Render, Styled, Window,
 };
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Theme, WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
@@ -19,7 +19,7 @@ const NOTIFICATION_MARKDOWN: &str = r#"
 This is a custom notification.
 - List item 1
 - List item 2
-- [Click here](https://github.com/longbridge/gpui-component)
+- [Click here](https://github.com/longbridge/gpui-kit)
 "#;
 
 pub struct NotificationStory {
@@ -53,7 +53,7 @@ impl NotificationStory {
 }
 
 impl Focusable for NotificationStory {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui_kit::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -95,9 +95,9 @@ impl Render for NotificationStory {
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |_, _, _, cx| {
-                                                    Theme::global_mut(cx).notification.placement =
-                                                        placement;
-                                                    cx.notify();
+                                                    Theme::update(cx, |theme| {
+                                                        theme.notification.placement = placement
+                                                    });
                                                 },
                                             )),
                                     )
@@ -118,9 +118,9 @@ impl Render for NotificationStory {
                                         .on_click(window.listener_for(
                                             &view,
                                             move |_, _, _, cx| {
-                                                Theme::global_mut(cx).notification.max_items =
-                                                    max_items;
-                                                cx.notify();
+                                                Theme::update(cx, |theme| {
+                                                    theme.notification.max_items = max_items
+                                                });
                                             },
                                         )),
                                 )

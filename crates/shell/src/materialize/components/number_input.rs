@@ -52,6 +52,7 @@ use crate::{
         materialize_node, resolve_ops, warn_ignored_key, warn_unhonoured_a11y,
         with_active_and_focus, with_hover,
     },
+    snapshot::RenderSnapshot,
     spec::{Component, SpecArena, SpecId},
 };
 
@@ -61,6 +62,7 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 pub(in crate::materialize) fn number_input(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     handle: EntityHandle,
     inherited: gpui::Hsla,
@@ -106,7 +108,7 @@ pub(in crate::materialize) fn number_input(
     }
 
     let editor = match editor {
-        Some(slot) => materialize_node(runtime, arena, slot, inherited, window, cx),
+        Some(slot) => materialize_node(runtime, snapshot, arena, slot, inherited, window, cx),
         // Base supplies no editor of its own, so an unfilled slot would leave a
         // frame with nothing to type into. The bare editor for the state the
         // control already holds is the only thing it could mean — and it is the
@@ -117,6 +119,7 @@ pub(in crate::materialize) fn number_input(
     let decrement = decrement.map(|slot| {
         Decoration::resolve(
             runtime,
+            snapshot,
             arena,
             slot,
             "decrement_button",
@@ -128,6 +131,7 @@ pub(in crate::materialize) fn number_input(
     let increment = increment.map(|slot| {
         Decoration::resolve(
             runtime,
+            snapshot,
             arena,
             slot,
             "increment_button",
@@ -205,6 +209,7 @@ impl Decoration {
     #[allow(clippy::too_many_arguments)]
     fn resolve(
         runtime: &Rc<ShellRuntime>,
+        snapshot: Option<&RenderSnapshot>,
         arena: &SpecArena,
         slot: SpecId,
         name: &str,
@@ -283,7 +288,9 @@ impl Decoration {
             children: node
                 .children()
                 .iter()
-                .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+                .map(|child| {
+                    materialize_node(runtime, snapshot, arena, *child, inherited, window, cx)
+                })
                 .collect(),
         }
     }

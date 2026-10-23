@@ -2,7 +2,7 @@
 //!
 //! This module decides *where* a drop would land and what shape a hovering
 //! drag session occupies. It draws nothing: the styled drag preview and the
-//! rendered drop indicator are appearance and live in `crates/ui`.
+//! rendered drop indicator are appearance and live in `crates/component`.
 
 use std::{
     any::Any,
@@ -98,7 +98,7 @@ impl DragPanel {
 
 impl Render for DragPanel {
     /// Base draws nothing: the styled drag preview is appearance and belongs
-    /// to `crates/ui`, which reintroduces it as a separate render type.
+    /// to `crates/component`, which reintroduces it as a separate render type.
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         Empty
     }
@@ -122,21 +122,29 @@ impl AnyDrag {
     }
 }
 
-/// Where a host-owned drag landed.
-#[derive(Clone, Debug)]
-pub enum DropTarget {
-    /// A tiles canvas, where the cursor position is the landing position and
-    /// the host can read it directly.
-    Canvas,
-    /// A tab group in a split layout. A split layout has no free coordinates,
-    /// so the container reports the group and the edge it resolved instead.
-    ///
-    /// `placement` is `None` for the centre zone, meaning merge into the group
-    /// rather than split.
-    Group {
-        node: NodeId,
-        placement: Option<Placement>,
-    },
+/// Where a host-owned drag landed: a tab group, and the edge it resolved.
+///
+/// A split layout has no free coordinates, so the container reports the group
+/// and the placement instead of a position. `placement` is `None` for the
+/// centre zone, meaning merge into the group rather than split.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DropTarget {
+    node: NodeId,
+    placement: Option<Placement>,
+}
+
+impl DropTarget {
+    pub(crate) fn new(node: NodeId, placement: Option<Placement>) -> Self {
+        Self { node, placement }
+    }
+
+    pub fn node(&self) -> NodeId {
+        self.node
+    }
+
+    pub fn placement(&self) -> Option<Placement> {
+        self.placement
+    }
 }
 
 /// What the skin should draw while a drag hovers a group.

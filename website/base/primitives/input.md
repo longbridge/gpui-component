@@ -16,7 +16,7 @@ Use [Textarea](./textarea.md) for ordinary multi-line text and
 ## Import
 
 ```rust
-use gpui_base::input::{Input, InputEvent, InputState};
+use gpui_kit::base::input::{Input, InputEvent, InputState};
 ```
 
 ## Basic usage
@@ -76,13 +76,43 @@ cx.subscribe(&input, |this, state, event: &InputEvent, cx| {
 `gpui-base` does not install product styling. Supply `InputEditorStyle` to the
 state and compose the control inside your own frame. If you want the ready-made
 theme, sizing, borders, prefix/suffix slots, and clear button, use the styled
-[`gpui-component` Input](../../docs/components/input.md).
+[`gpui-component` Input](../../component/input.md).
 
 ## Runnable example
 
 ```bash
-cargo run -p gpui-base --example components -- input
+cargo run -p gpui-base-examples -- input
 ```
 
 The implementation is in
-[`crates/base/examples/showcase/components/input.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/input.rs).
+[`crates/base/examples/showcase/components/input.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/input.rs).
+
+## Atomic inline tokens
+
+Use tokens for mentions or references that users select and delete as a whole.
+Insert one through the InputState you already use for this control:
+
+```rust
+use gpui_kit::base::input::InlineToken;
+
+input.update(cx, |state, cx| {
+    state.replace_with_token(
+        InlineToken::new("person-1", "@alice").with_label("Alice"),
+        window,
+        cx,
+    ).expect("valid reference");
+});
+```
+
+Tokens display as unstyled labels. Use the `token` slot to supply your own single-row
+element and `on_token_click` to open a reference. Use `on_token_hover` to report
+pointer entry and exit (`InlineTokenHoverEvent::is_hovered`) without selecting or
+editing, for tooltips or previews; disabled tokens never report hover entry, but
+disabling a hovered token sends its exit. Copy and `value()` return the
+real text, such as `@alice`. Save drafts with `content()` and restore them with
+`set_value(content)` to keep their references.
+
+See [Input's token examples](../../component/input.md#atomic-inline-tokens) for
+custom rendering, draft restoration and range units. Import the data types from
+`gpui_kit::base::input`. In JavaScript, use `InputState.new()` from `gpui-base`;
+it provides the same token methods.

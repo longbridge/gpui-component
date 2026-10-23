@@ -1,9 +1,9 @@
-use gpui::*;
-use gpui_component::{
+use gpui_kit::assets::Assets;
+use gpui_kit::component::{
     input::{Input, InputEvent, InputState},
     *,
 };
-use gpui_component_assets::Assets;
+use gpui_kit::*;
 
 pub struct Example {
     input_state: Entity<InputState>,
@@ -54,25 +54,20 @@ impl Render for Example {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_kit::application().with_assets(Assets);
 
     app.run(move |cx| {
         // This must be called before using any GPUI Component features.
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         let window_options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(800.), px(600.)), cx)),
             ..Default::default()
         };
 
-        cx.spawn(async move |cx| {
-            cx.open_window(window_options, |window, cx| {
-                let view = cx.new(|cx| Example::new(window, cx));
-                // This first level on the window, should be a Root.
-                cx.new(|cx| Root::new(view, window, cx))
-            })
-            .expect("Failed to open window");
+        gpui_kit::open_window(window_options, cx, |window, cx| {
+            cx.new(|cx| Example::new(window, cx))
         })
-        .detach();
+        .expect("Failed to open window");
     });
 }

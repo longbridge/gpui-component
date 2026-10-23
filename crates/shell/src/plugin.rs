@@ -8,8 +8,9 @@
 //! answerable **before** the plugin's code runs.
 //!
 //! That is the whole reason a manifest exists, and it is why the manifest has
-//! six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
-//! and `capabilities`. `version`, `shell-version`, and `capabilities` are
+//! seven recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+//! `dependencies`, and `capabilities`. `version`, `shell-version`,
+//! `dependencies`, and `capabilities` are
 //! optional. Commands, panels, keybindings, settings and themes are
 //! registered from script instead of being declared here a second time —
 //! *capabilities are permission, contributions are behavior*. A permission has
@@ -63,7 +64,7 @@ pub const MANIFEST_FILE: &str = "gpui-shell.json";
 /// The JSON Schema for a manifest, for editor validation.
 ///
 /// §18.1 keeps the schema worth generating but small enough to read: six
-/// fields, one nested permission object. `crates/ui/src/theme/schema.rs` is the
+/// fields, one nested permission object. `crates/component/src/theme/schema.rs` is the
 /// precedent for generating rather than hand-writing it — the schema and the
 /// parser then cannot disagree, because both come from the same type.
 pub fn manifest_schema() -> serde_json::Value {
@@ -82,7 +83,201 @@ pub struct PluginManifest {
     version: String,
     shell_version: String,
     entry: String,
+    dependencies: BTreeMap<String, GitDependency>,
     capabilities: CapabilitiesFile,
+    window: Option<WindowSize>,
+}
+
+/// The size an application's window opens at, in logical pixels.
+///
+/// Only the opening size: the person using the application can still resize
+/// the window, and the host keeps its own default when the manifest is silent.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WindowSize {
+    /// Width in logical pixels.
+    width: f32,
+    /// Height in logical pixels.
+    height: f32,
+}
+
+impl WindowSize {
+    /// Width in logical pixels.
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+
+    /// Height in logical pixels.
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+
+    fn validate(&self) -> Result<(), ManifestProblem> {
+        for (name, value) in [("width", self.width), ("height", self.height)] {
+            if !value.is_finite() || value <= 0. {
+                return Err(ManifestProblem::Window(format!(
+                    "`{name}` must be a positive number of logical pixels, found {value}"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One JavaScript package fetched from Git before an application starts.
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
+#[serde(try_from = "GitDependencyFile")]
+#[schemars(with = "GitDependencyFile")]
+pub struct GitDependency {
+    git: String,
+    branch: Option<String>,
+    tag: Option<String>,
+    entry: String,
+    reference: Option<String>,
+    package_entry: bool,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(untagged)]
+enum GitDependencyFile {
+    Shorthand(String),
+    Object(GitDependencyObject),
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GitDependencyObject {
+    git: String,
+    #[serde(default)]
+    branch: Option<String>,
+    #[serde(default)]
+    tag: Option<String>,
+    #[serde(default = "default_dependency_entry")]
+    entry: String,
+}
+
+fn default_dependency_entry() -> String {
+    "index.js".to_owned()
+}
+
+impl TryFrom<GitDependencyFile> for GitDependency {
+    type Error = String;
+
+    fn try_from(value: GitDependencyFile) -> Result<Self, Self::Error> {
+        match value {
+            GitDependencyFile::Object(object) => Ok(Self {
+                git: object.git,
+                branch: object.branch,
+                tag: object.tag,
+                entry: object.entry,
+                reference: None,
+                package_entry: false,
+            }),
+            GitDependencyFile::Shorthand(source) => {
+                let (git, reference) = parse_git_dependency_string(&source)?;
+                Ok(Self {
+                    git,
+                    branch: None,
+                    tag: None,
+                    entry: default_dependency_entry(),
+                    reference,
+                    package_entry: true,
+                })
+            }
+        }
+    }
+}
+
+fn parse_git_dependency_string(source: &str) -> Result<(String, Option<String>), String> {
+    if source.trim() != source || source.is_empty() || source.matches('#').count() > 1 {
+        return Err(
+            "a string dependency must be a Git URL or GitHub owner/repository with one optional #Git ref"
+                .to_owned(),
+        );
+    }
+    let (remote, fragment) = match source.split_once('#') {
+        Some((_remote, "")) => {
+            return Err("a string dependency #Git ref must not be empty".to_owned());
+        }
+        Some((remote, reference)) => (remote, Some(reference)),
+        None => (source, None),
+    };
+    if let Some(reference) = fragment
+        && !valid_git_ref_name(reference)
+    {
+        return Err(format!(
+            "string dependency selector `{reference}` is not a valid Git ref"
+        ));
+    }
+
+    if remote.contains("://") || looks_like_scp_git_url(remote) {
+        if remote.chars().any(char::is_whitespace)
+            || remote.ends_with("://")
+            || remote.starts_with("://")
+        {
+            return Err("a string dependency must contain a valid Git URL".to_owned());
+        }
+        return Ok((remote.to_owned(), fragment.map(str::to_owned)));
+    }
+
+    let mut components = remote.split('/');
+    let owner = components.next().unwrap_or_default();
+    let repository = components.next().unwrap_or_default();
+    if components.next().is_some()
+        || !valid_github_component(owner)
+        || !valid_github_component(repository)
+    {
+        return Err(
+            "GitHub shorthand must contain exactly owner/repository plus an optional #Git ref"
+                .to_owned(),
+        );
+    }
+    Ok((
+        format!("https://github.com/{owner}/{repository}"),
+        Some(fragment.unwrap_or("main").to_owned()),
+    ))
+}
+
+fn looks_like_scp_git_url(remote: &str) -> bool {
+    let Some((authority, path)) = remote.split_once(':') else {
+        return false;
+    };
+    authority.contains('@') && !authority.contains('/') && path.contains('/') && !path.is_empty()
+}
+
+fn valid_github_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && component
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+}
+
+impl GitDependency {
+    pub fn git(&self) -> &str {
+        &self.git
+    }
+
+    pub fn branch(&self) -> Option<&str> {
+        self.branch.as_deref()
+    }
+
+    pub fn tag(&self) -> Option<&str> {
+        self.tag.as_deref()
+    }
+
+    pub fn entry(&self) -> &str {
+        &self.entry
+    }
+
+    pub(crate) fn reference(&self) -> Option<&str> {
+        self.reference.as_deref()
+    }
+
+    pub(crate) fn uses_package_entry(&self) -> bool {
+        self.package_entry
+    }
 }
 
 impl PluginManifest {
@@ -156,6 +351,12 @@ impl PluginManifest {
         };
         let entry = string_field(&fields, "entry")?;
         validate_entry(&entry)?;
+        let dependencies = match fields.get("dependencies") {
+            None | Some(serde_json::Value::Null) => BTreeMap::new(),
+            Some(value) => serde_json::from_value::<BTreeMap<String, GitDependency>>(value.clone())
+                .map_err(|error| ManifestProblem::Dependencies(error.to_string()))?,
+        };
+        validate_dependencies(&dependencies)?;
 
         // An omitted `capabilities` has the one permission default that cannot
         // be an accident: absent means the empty grant
@@ -169,6 +370,17 @@ impl PluginManifest {
         };
         capabilities.validate_placeholders()?;
         capabilities.validate_network()?;
+        capabilities.validate_env()?;
+
+        let window = match fields.get("window") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => {
+                let size: WindowSize = serde_json::from_value(value.clone())
+                    .map_err(|error| ManifestProblem::Window(error.to_string()))?;
+                size.validate()?;
+                Some(size)
+            }
+        };
 
         Ok(Self {
             id,
@@ -176,7 +388,9 @@ impl PluginManifest {
             version,
             shell_version,
             entry,
+            dependencies,
             capabilities,
+            window,
         })
     }
 
@@ -209,6 +423,16 @@ impl PluginManifest {
         &self.entry
     }
 
+    /// Git-backed packages available to JavaScript as bare module imports.
+    pub fn dependencies(&self) -> &BTreeMap<String, GitDependency> {
+        &self.dependencies
+    }
+
+    /// The size the window opens at, when the manifest names one.
+    pub fn window(&self) -> Option<WindowSize> {
+        self.window
+    }
+
     /// The grant this manifest asks for, resolved against the two directories
     /// only the host knows.
     ///
@@ -220,19 +444,109 @@ impl PluginManifest {
     /// host and nowhere else. A relative path is anchored to the plugin
     /// directory; an absolute path is taken as written, and is the case a host
     /// policy or an approval prompt (§19.2) exists to gate.
+    ///
+    /// `${homeDir}` is the user's home directory, read from the environment,
+    /// so that a grant on the user's own files — `${homeDir}/.config/app` —
+    /// does not have to hard-code a user name. A path under it is dropped from
+    /// the grant when the home directory is unknown, rather than anchored
+    /// somewhere it was not meant to be.
     pub fn capabilities(&self, plugin_dir: &Path, data_dir: &Path) -> Capabilities {
-        self.capabilities.grant(plugin_dir, data_dir)
+        self.capabilities.grant(&Anchors {
+            plugin_dir,
+            data_dir,
+            home_dir: crate::runtime::home_dir().as_deref(),
+        })
     }
 }
 
-const FIELDS: [&str; 6] = [
+const FIELDS: [&str; 8] = [
     "id",
     "name",
     "version",
     "shell-version",
     "entry",
+    "dependencies",
     "capabilities",
+    "window",
 ];
+
+fn validate_dependencies(
+    dependencies: &BTreeMap<String, GitDependency>,
+) -> Result<(), ManifestProblem> {
+    for (name, dependency) in dependencies {
+        if name.is_empty()
+            || name.starts_with(['.', '/'])
+            || name.contains(['\\', ':'])
+            || name.split('/').any(|part| part.is_empty() || part == "..")
+        {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` is not a valid bare module name"
+            )));
+        }
+        if crate::host_modules::RESERVED_SPECIFIERS.contains(&name.as_str()) {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` is reserved by gpui-shell and cannot name a Git dependency"
+            )));
+        }
+        if dependency.git.trim().is_empty() {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}.git` must not be empty"
+            )));
+        }
+        if dependency.uses_package_entry() {
+            if let Some(reference) = dependency.reference()
+                && !valid_git_ref_name(reference)
+            {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` selector `{reference}` is not a valid Git ref"
+                )));
+            }
+            continue;
+        }
+        let reference = match (&dependency.branch, &dependency.tag) {
+            (Some(branch), None) if !branch.trim().is_empty() => branch,
+            (None, Some(tag)) if !tag.trim().is_empty() => tag,
+            (Some(_), Some(_)) => {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` must select either `branch` or `tag`, not both"
+                )));
+            }
+            _ => {
+                return Err(ManifestProblem::Dependencies(format!(
+                    "`{name}` must select one non-empty `branch` or `tag`"
+                )));
+            }
+        };
+        if !valid_git_ref_name(reference) {
+            return Err(ManifestProblem::Dependencies(format!(
+                "`{name}` selector `{reference}` is not a valid Git ref name"
+            )));
+        }
+        validate_entry(&dependency.entry).map_err(|_| {
+            ManifestProblem::Dependencies(format!(
+                "`{name}.entry` must be a path inside the Git repository"
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn valid_git_ref_name(reference: &str) -> bool {
+    reference != "@"
+        && !reference.starts_with(['.', '/'])
+        && !reference.ends_with(['.', '/'])
+        && !reference.contains("..")
+        && !reference.contains("@{")
+        && !reference.contains("//")
+        && !reference.chars().any(|character| {
+            character.is_control()
+                || character.is_whitespace()
+                || matches!(character, '~' | '^' | ':' | '?' | '*' | '[' | '\\')
+        })
+        && reference.split('/').all(|component| {
+            !component.is_empty() && !component.starts_with('.') && !component.ends_with(".lock")
+        })
+}
 
 fn string_field(
     fields: &serde_json::Map<String, serde_json::Value>,
@@ -295,13 +609,8 @@ fn validate_shell_version(version: &str) -> Result<(), ManifestProblem> {
     let required = Version::parse(version)
         .map_err(|_| ManifestProblem::InvalidShellVersion(version.to_owned()))?;
     let runtime = Version::parse(SHELL_VERSION).expect("the crate version is semantic");
-    let compatible_line = if required.major == 0 {
-        runtime.major == 0 && runtime.minor == required.minor
-    } else {
-        runtime.major == required.major
-    };
 
-    if compatible_line && runtime >= required {
+    if runtime >= required {
         Ok(())
     } else {
         Err(ManifestProblem::IncompatibleShellVersion {
@@ -403,13 +712,21 @@ struct ManifestFile {
     shell_version: Option<String>,
     /// The module evaluated at load, relative to the plugin directory.
     entry: String,
-    /// What the plugin is allowed to do. Absent means nothing.
+    /// Git-backed packages imported by their map key from JavaScript.
+    #[serde(default)]
+    dependencies: BTreeMap<String, GitDependency>,
+    /// What the plugin is allowed to do. Absent means nothing but its own
+    /// storage — see [`CapabilitiesFile::storage`].
     #[serde(default)]
     capabilities: CapabilitiesFile,
+    /// The size the window opens at, e.g. `{"width": 360, "height": 520}`.
+    /// Absent means the host's default.
+    #[serde(default)]
+    window: Option<WindowSize>,
 }
 
 /// The `capabilities` block, before it is anchored to real directories.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct CapabilitiesFile {
     /// Filesystem and subprocess access.
@@ -418,9 +735,21 @@ struct CapabilitiesFile {
     /// Outbound network access, by host.
     #[serde(default)]
     network: Option<NetworkGrantFile>,
-    /// Whether `gpui.store` is available.
-    #[serde(default)]
-    store: bool,
+    /// Whether `localStorage` is available.
+    ///
+    /// The one grant that defaults to *given*, and it follows the web: a
+    /// browser hands every origin a `localStorage` unconditionally, because
+    /// what it reaches is that origin's own data and nothing else. The same
+    /// holds here — storage is keyed by bundle id, cannot name its own file,
+    /// and is bounded — so there is nothing for an author to ask permission
+    /// for. Defaulting it to `false` also had a trap: an application that
+    /// added a manifest to declare a network host silently lost its settings.
+    ///
+    /// A host that runs code it does not trust can still say `false`, which is
+    /// why this stays a capability rather than becoming ambient like
+    /// `sessionStorage`.
+    #[serde(default = "granted")]
+    storage: bool,
     /// Clipboard access.
     #[serde(default)]
     clipboard: Option<ClipboardGrantFile>,
@@ -432,11 +761,13 @@ struct CapabilitiesFile {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct FsGrantFile {
-    /// Directories that may be read. `${pluginDir}` and `${dataDir}` expand to
-    /// the plugin's own directory and its storage directory.
+    /// Directories that may be read. `${pluginDir}`, `${dataDir}` and
+    /// `${homeDir}` expand to the plugin's own directory, its storage directory
+    /// and the user's home directory; a relative path is anchored to the plugin
+    /// directory, and an absolute one is taken as written.
     #[serde(default)]
     read: Vec<String>,
-    /// Directories that may be written.
+    /// Directories that may be written, with the same placeholders as `read`.
     #[serde(default)]
     write: Vec<String>,
     /// Commands `process.run` may start.
@@ -499,15 +830,50 @@ struct ClipboardGrantFile {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ProcessGrantFile {
+    /// Whether `process.exit()` may ask the host to exit.
     #[serde(default)]
     exit: bool,
+    /// Environment variables `process.env` shows, by name. Every other
+    /// variable is absent, because the environment routinely holds tokens and
+    /// keys meant for the host rather than for every script it runs.
+    #[serde(default)]
+    env: Vec<String>,
 }
 
 const PLUGIN_DIR_PLACEHOLDER: &str = "${pluginDir}";
 const DATA_DIR_PLACEHOLDER: &str = "${dataDir}";
+const HOME_DIR_PLACEHOLDER: &str = "${homeDir}";
+
+/// The directories a manifest's placeholders expand to.
+struct Anchors<'a> {
+    plugin_dir: &'a Path,
+    data_dir: &'a Path,
+    home_dir: Option<&'a Path>,
+}
+
+fn granted() -> bool {
+    true
+}
+
+/// Written out rather than derived, because a derived `Default` would ignore
+/// the `serde` field defaults above — and then an absent `capabilities` block
+/// and a block that merely omits `storage` would disagree about storage. They
+/// have to be the same answer, or "does declaring a network host cost me my
+/// settings?" depends on whether the block exists at all.
+impl Default for CapabilitiesFile {
+    fn default() -> Self {
+        Self {
+            fs: None,
+            network: None,
+            storage: granted(),
+            clipboard: None,
+            process: None,
+        }
+    }
+}
 
 impl CapabilitiesFile {
-    fn grant(&self, plugin_dir: &Path, data_dir: &Path) -> Capabilities {
+    fn grant(&self, anchors: &Anchors) -> Capabilities {
         let fs = self.fs.clone().unwrap_or_default();
         let clipboard = self.clipboard.clone().unwrap_or_default();
         let process = self.process.clone().unwrap_or_default();
@@ -519,8 +885,8 @@ impl CapabilitiesFile {
 
         let network = self.network.clone().unwrap_or_default();
         Capabilities::new()
-            .read_roots(expand_all(&fs.read, plugin_dir, data_dir))
-            .write_roots(expand_all(&fs.write, plugin_dir, data_dir))
+            .read_roots(expand_all(&fs.read, anchors))
+            .write_roots(expand_all(&fs.write, anchors))
             .execute(execute)
             .network_hosts(network.hosts.into_iter().map(|host| host.to_lowercase()))
             .http_requests(network.http.into_iter().map(|request| {
@@ -536,10 +902,11 @@ impl CapabilitiesFile {
                 }
                 grant
             }))
-            .store(self.store)
+            .storage(self.storage)
             .clipboard_read(clipboard.read)
             .clipboard_write(clipboard.write)
             .exit(process.exit)
+            .env_variables(process.env)
     }
 
     /// A placeholder the host does not expand would otherwise reach
@@ -553,6 +920,13 @@ impl CapabilitiesFile {
 
         for (field, paths) in [("read", &fs.read), ("write", &fs.write)] {
             for path in paths {
+                if let Some(problem) = unexpanded_home(path) {
+                    return Err(ManifestProblem::UnexpandedPath {
+                        field: format!("capabilities.fs.{field}"),
+                        path: path.clone(),
+                        suggestion: problem,
+                    });
+                }
                 if let Some(placeholder) = unknown_placeholder(path) {
                     return Err(ManifestProblem::UnknownPlaceholder {
                         field: format!("capabilities.fs.{field}"),
@@ -562,6 +936,20 @@ impl CapabilitiesFile {
             }
         }
 
+        Ok(())
+    }
+
+    fn validate_env(&self) -> Result<(), ManifestProblem> {
+        let Some(process) = &self.process else {
+            return Ok(());
+        };
+        for name in &process.env {
+            if name.is_empty() || name.contains(['=', '\0']) {
+                return Err(ManifestProblem::Capabilities(format!(
+                    "process.env entry `{name}` must be an environment variable name"
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -615,13 +1003,46 @@ impl CapabilitiesFile {
     }
 }
 
+/// Spellings of the home directory a shell or an environment would expand,
+/// which a manifest does not.
+///
+/// The manifest's own spelling is `${homeDir}`, but `$HOME`, `${HOME}` and `~`
+/// are what an author types from habit. `${HOME}` would at least be refused as
+/// an unknown placeholder; the other two are not placeholders at all, so they
+/// would quietly become a relative directory such as `<app>/$HOME/.claude`
+/// and grant nothing. Each one is caught here with the path rewritten.
+const HOME_SPELLINGS: [&str; 6] = [
+    "${HOME}",
+    "$HOME",
+    "${USERPROFILE}",
+    "$USERPROFILE",
+    "%USERPROFILE%",
+    "~",
+];
+
+/// The path rewritten with `${homeDir}` when it starts with a home spelling
+/// the manifest does not expand, and `None` otherwise.
+fn unexpanded_home(path: &str) -> Option<String> {
+    HOME_SPELLINGS.iter().find_map(|spelling| {
+        let rest = path.strip_prefix(spelling)?;
+        (rest.is_empty() || rest.starts_with(['/', '\\']))
+            .then(|| format!("{HOME_DIR_PLACEHOLDER}{rest}"))
+    })
+}
+
 fn unknown_placeholder(value: &str) -> Option<String> {
     let mut rest = value;
     while let Some(start) = rest.find("${") {
         let tail = &rest[start..];
         let end = tail.find('}')? + 1;
         let placeholder = &tail[..end];
-        if placeholder != PLUGIN_DIR_PLACEHOLDER && placeholder != DATA_DIR_PLACEHOLDER {
+        if ![
+            PLUGIN_DIR_PLACEHOLDER,
+            DATA_DIR_PLACEHOLDER,
+            HOME_DIR_PLACEHOLDER,
+        ]
+        .contains(&placeholder)
+        {
             return Some(placeholder.to_owned());
         }
         rest = &tail[end..];
@@ -629,27 +1050,38 @@ fn unknown_placeholder(value: &str) -> Option<String> {
     None
 }
 
-fn expand_all(paths: &[String], plugin_dir: &Path, data_dir: &Path) -> Vec<PathBuf> {
+fn expand_all(paths: &[String], anchors: &Anchors) -> Vec<PathBuf> {
     paths
         .iter()
-        .map(|path| expand(path, plugin_dir, data_dir))
+        .filter_map(|path| expand(path, anchors))
         .collect()
 }
 
-fn expand(raw: &str, plugin_dir: &Path, data_dir: &Path) -> PathBuf {
-    let expanded = raw
+/// `None` for a path under `${homeDir}` when there is no home directory: left
+/// in, the placeholder would become a relative directory inside the plugin.
+fn expand(raw: &str, anchors: &Anchors) -> Option<PathBuf> {
+    let mut expanded = raw
         .replace(
             PLUGIN_DIR_PLACEHOLDER,
-            plugin_dir.to_string_lossy().as_ref(),
+            anchors.plugin_dir.to_string_lossy().as_ref(),
         )
-        .replace(DATA_DIR_PLACEHOLDER, data_dir.to_string_lossy().as_ref());
+        .replace(
+            DATA_DIR_PLACEHOLDER,
+            anchors.data_dir.to_string_lossy().as_ref(),
+        );
+    if expanded.contains(HOME_DIR_PLACEHOLDER) {
+        expanded = expanded.replace(
+            HOME_DIR_PLACEHOLDER,
+            anchors.home_dir?.to_string_lossy().as_ref(),
+        );
+    }
 
     let path = PathBuf::from(expanded);
-    if path.is_absolute() {
+    Some(if path.is_absolute() {
         path
     } else {
-        plugin_dir.join(path)
-    }
+        anchors.plugin_dir.join(path)
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -738,7 +1170,16 @@ pub enum ManifestProblem {
         field: String,
         placeholder: String,
     },
+    /// A path that starts with a shell's spelling of the home directory, with
+    /// the same path written the way the manifest expands it.
+    UnexpandedPath {
+        field: String,
+        path: String,
+        suggestion: String,
+    },
     Capabilities(String),
+    Dependencies(String),
+    Window(String),
 }
 
 /// What each field is for, in one line, appended to the error that reports it
@@ -828,11 +1269,27 @@ impl std::fmt::Display for ManifestProblem {
             ),
             ManifestProblem::UnknownPlaceholder { field, placeholder } => write!(
                 f,
-                "unknown placeholder `{placeholder}` in {field}: the manifest may use {PLUGIN_DIR_PLACEHOLDER} and {DATA_DIR_PLACEHOLDER}"
+                "unknown placeholder `{placeholder}` in {field}: the manifest may use {PLUGIN_DIR_PLACEHOLDER}, {DATA_DIR_PLACEHOLDER} and {HOME_DIR_PLACEHOLDER}"
+            ),
+            ManifestProblem::UnexpandedPath {
+                field,
+                path,
+                suggestion,
+            } => write!(
+                f,
+                "\"{path}\" in {field} is not expanded: the manifest does not read environment variables or `~`; write \"{suggestion}\""
             ),
             ManifestProblem::Capabilities(error) => write!(
                 f,
-                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), store, clipboard (read, write) and process (exit)"
+                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), storage, clipboard (read, write) and process (exit)"
+            ),
+            ManifestProblem::Dependencies(error) => write!(
+                f,
+                "invalid `dependencies`: {error}. Use a GitHub owner/repository shorthand or full Git URL with an optional #ref, or an object with a Git URL, exactly one non-empty `branch` or `tag`, and an optional repository-relative `entry`"
+            ),
+            ManifestProblem::Window(error) => write!(
+                f,
+                "invalid `window`: {error}. Expected an object such as {{\"width\": 360, \"height\": 520}}, in logical pixels"
             ),
         }
     }
@@ -878,7 +1335,7 @@ impl Plugin {
         &self.data_dir
     }
 
-    /// The file behind `gpui.store`.
+    /// The file behind `localStorage`.
     pub fn store_path(&self) -> &Path {
         &self.store_path
     }
@@ -922,8 +1379,13 @@ fn load_plugin(
 
     let policy = Rc::new(
         Policy::default()
+            // The manifest id is already unique among loaded plugins, which is
+            // exactly what a dock layout needs to keep two plugins' panels of
+            // the same name apart.
+            .with_application(&id)
             .with_capabilities(manifest.capabilities(&root, &data_dir))
-            .with_store_path(store_path.clone()),
+            .with_data_dir(data_dir.clone())
+            .with_storage_path(store_path.clone()),
     );
 
     let view = load_view_with_policy(runtime, &root, manifest.entry(), policy.clone(), window, cx)
@@ -1023,11 +1485,14 @@ impl ShellRuntime {
         Ok(cx.new(|cx| ShellRoot::with_application(view, root, entry, policy, window, cx)))
     }
 
-    /// Loads and renders an application once, returning its description.
+    /// Loads an application, builds its description, and materializes its
+    /// eager native elements once, returning the checked description.
     ///
-    /// This is the headless host path used by source checks. It keeps engine
+    /// Source checks use this with a hidden window. It keeps engine
     /// handles and the `ScriptView` construction protocol inside the shell
-    /// facade while preserving structured load and render errors.
+    /// facade while preserving structured load, render, and registered-component
+    /// materialization errors. It does not run layout, paint, deferred slots,
+    /// nested view renders, or later interaction and asynchronous states.
     pub fn check(
         self: &Rc<Self>,
         root: impl AsRef<Path>,
@@ -1042,7 +1507,57 @@ impl ShellRuntime {
             .view
             .clone();
         let object = view.read(cx).object().clone();
-        self.render_to_spec(&object, Some(view), window, cx)
+        let policy = view.read(cx).policy();
+        let snapshot = self.build_snapshot(&object, Some(view), policy, window, cx)?;
+        let tree = snapshot.debug_tree();
+
+        // Materialized during a real frame, as every frame is: native element
+        // state — a scroll position, retained component state — belongs to the
+        // view being drawn, and GPUI only has one while it draws. The probe
+        // becomes the hidden window's root for this one frame and holds the
+        // application's callback-owning snapshot until the native elements
+        // have been built and dropped.
+        let outcome = Rc::new(std::cell::RefCell::new(None));
+        let runtime = self.clone();
+        let sink = outcome.clone();
+        window.replace_root(cx, move |_, _| MaterializeProbe {
+            runtime,
+            snapshot,
+            outcome: sink,
+            materialized: false,
+        });
+        window.draw(cx).clear(cx);
+
+        outcome
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("the application was never materialized")))?;
+        Ok(tree)
+    }
+}
+
+/// Materializes one snapshot from inside its own render, for [`ShellRuntime::check`].
+struct MaterializeProbe {
+    runtime: Rc<ShellRuntime>,
+    snapshot: crate::snapshot::RenderSnapshot,
+    outcome: Rc<std::cell::RefCell<Option<Result<()>>>>,
+    materialized: bool,
+}
+
+impl Render for MaterializeProbe {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The window may draw again after the check has read its outcome;
+        // the check is one materialization, as it was before it ran inside a
+        // frame.
+        if self.materialized {
+            return gpui::Empty;
+        }
+        self.materialized = true;
+        let materialized =
+            crate::materialize::try_materialize(&self.runtime, &self.snapshot, window, cx)
+                .map(drop);
+        *self.outcome.borrow_mut() = Some(materialized);
+        gpui::Empty
     }
 }
 
@@ -1054,8 +1569,8 @@ fn load_failure_root(message: String, window: &mut Window, cx: &mut App) -> Enti
 
 /// Discovers, loads and unloads plugins.
 ///
-/// Every loaded plugin holds its own [`Policy`] — its grant, its store, its
-/// native modules — and every call into its code runs under that policy because
+/// Every loaded plugin holds its own [`Policy`] — its grant, its storage, its
+/// host modules — and every call into its code runs under that policy because
 /// the policy travels on the call frame rather than in a process-wide slot. Two
 /// plugins loaded at once hold two different grants at the same time, and
 /// neither can see the other's files.
@@ -1324,11 +1839,18 @@ mod tests {
     use std::ops::Deref as _;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    const VALID: &str = r#"{
+    /// A complete manifest, requiring the runtime this test binary is. The
+    /// crate version moves with every release and a `0.x` line accepts only
+    /// its own minor, so a fixture that spelled a version out would expire at
+    /// the next bump.
+    const VALID: &str = concat!(
+        r#"{
         "id": "com.example.inbox",
         "name": "Inbox",
         "version": "1.2.0",
-        "shell-version": "0.1.0",
+        "shell-version": ""#,
+        env!("CARGO_PKG_VERSION"),
+        r#"",
         "entry": "main.js",
         "capabilities": {
             "fs": {
@@ -1345,11 +1867,12 @@ mod tests {
                     "path_prefixes": ["/v1/quotes/"]
                 }]
             },
-            "store": true,
+            "storage": true,
             "clipboard": { "write": true },
             "process": { "exit": true }
         }
-    }"#;
+    }"#
+    );
 
     /// A directory that removes itself. `tempfile` is not a dependency of this
     /// crate and one test module is not a reason to add one.
@@ -1418,9 +1941,9 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui-kit";
                 export default class App extends View {
-                  render() { return text("loaded"); }
+                  render(cx) { return "loaded"; }
                 }
             "#,
         )
@@ -1493,9 +2016,12 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui-kit";
+                import { Button } from "gpui-base";
                 export default class App extends View {
-                  render() { return text("checked through the facade"); }
+                  render(cx) {
+                    return Button.new("checked").child("checked through the facade");
+                  }
                 }
             "#,
         )
@@ -1509,6 +2035,39 @@ mod tests {
             .expect("check application through the high-level facade");
 
         assert!(description.contains("checked through the facade"));
+        let metrics = runtime.metrics().read();
+        assert_eq!(metrics.script_renders(), 1);
+        assert_eq!(metrics.materializations(), 1);
+    }
+
+    #[gpui::test]
+    fn runtime_check_materializes_text_views_without_drawing(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let application = TempTree::new("check-text-views");
+        std::fs::write(
+            application.path().join("main.js"),
+            r##"
+                import { div, View } from "gpui-kit";
+                import { TextView } from "gpui-base";
+                export default class App extends View {
+                  render() {
+                    return div()
+                      .child(TextView.markdown("markdown", "# Markdown"))
+                      .child(TextView.html("html", "<p>HTML</p>"));
+                  }
+                }
+            "##,
+        )
+        .expect("application source");
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        // CLI check only constructs elements; no layout or drawing is active.
+        let description = context
+            .update(|window, cx| runtime.check(application.path(), window, cx))
+            .expect("check TextViews outside the drawing lifecycle");
+        assert!(description.contains("# Markdown"));
+        assert!(description.contains("<p>HTML</p>"));
     }
 
     #[gpui::test]
@@ -1533,9 +2092,9 @@ mod tests {
         std::fs::write(
             application.path().join("application.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui-kit";
                 export default class App extends View {
-                  render() { return text("manifest entry loaded"); }
+                  render() { return "manifest entry loaded"; }
                 }
             "#,
         )
@@ -1577,13 +2136,13 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, timer } from "gpui";
+                import { div, View } from "gpui-kit";
                 export default class Broken extends View {
-                  init() {
-                    timer.every(1_000, () => {});
+                  init(_props, cx) {
+                    cx.timer.every(1_000, () => {});
                     throw new Error("initialization failed");
                   }
-                  render() { throw new Error("unreachable"); }
+                  render(cx) { throw new Error("unreachable"); }
                 }
             "#,
         )
@@ -1622,7 +2181,6 @@ mod tests {
             "id": "com.example.async-init",
             "name": "Async Init",
             "version": "1.0.0",
-            "shell-version": "0.1.0",
             "entry": "main.js",
             "capabilities": {
                 "fs": { "read": ["${pluginDir}"] }
@@ -1634,17 +2192,18 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, v_flex, text, spawn, with_cx } from "gpui";
+                import { div, View } from "gpui-kit";
+                import { v_flex } from "gpui-base";
                 import * as fs from "fs/promises";
                 export default class Panel extends View {
-                  init() {
+                  init(_props, cx) {
                     this.message = "pending";
-                    spawn(async (cx) => {
+                    cx.spawn(async (cx) => {
                       this.message = await fs.readFile("message.txt", "utf8");
-                      with_cx((cx) => cx.notify());
+                      cx.notify();
                     });
                   }
-                  render() { return v_flex().child(text(this.message)); }
+                  render(cx) { return v_flex().child(this.message); }
                 }
             "#,
         )
@@ -1716,13 +2275,14 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, Input, InputState } from "gpui";
+                import { div, View } from "gpui-kit";
+                import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
                   init() {
                     this.field = InputState.new({ value: "owned by plugin" });
                     this.field.on("change", () => {});
                   }
-                  render() { return Input.new(this.field); }
+                  render(cx) { return Input.new(this.field); }
                 }
             "#,
         )
@@ -1764,13 +2324,14 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, Input, InputState, timer } from "gpui";
+                import { div, View } from "gpui-kit";
+                import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
-                  init() {
+                  init(_props, cx) {
                     this.field = InputState.new({ value: "owned by plugin" });
-                    timer.every(60_000, () => {});
+                    cx.timer.every(60_000, () => {});
                   }
-                  render() { return Input.new(this.field); }
+                  render(cx) { return Input.new(this.field); }
                 }
             "#,
         )
@@ -1855,10 +2416,252 @@ mod tests {
 
         let capabilities =
             manifest.capabilities(Path::new("/plugins/inbox"), Path::new("/data/inbox"));
-        assert!(capabilities.has_store());
+        assert!(capabilities.has_storage());
         assert!(capabilities.is_clipboard_writable());
         assert!(!capabilities.is_clipboard_readable());
         assert!(capabilities.may_exit());
+    }
+
+    #[test]
+    fn a_manifest_accepts_the_omarchy_ui_https_remote_without_dot_git() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/huacnlee/omarchy-ui",
+                    "branch": "main"
+                }
+            }
+        }"#;
+
+        let manifest =
+            PluginManifest::parse(source).expect("a branch-pinned Git dependency should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+        assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
+        assert_eq!(dependency.branch(), Some("main"));
+        assert_eq!(dependency.tag(), None);
+        assert_eq!(dependency.entry(), "index.js");
+    }
+
+    #[test]
+    fn a_manifest_accepts_git_dependency_strings() {
+        for (source, expected_git, expected_reference) in [
+            (
+                "https://github.com/huacnlee/omarchy-ui#main",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("main"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#v1.2.0",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("v1.2.0"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui#0123456789abcdef0123456789abcdef01234567",
+                "https://github.com/huacnlee/omarchy-ui",
+                Some("0123456789abcdef0123456789abcdef01234567"),
+            ),
+            (
+                "https://github.com/huacnlee/omarchy-ui",
+                "https://github.com/huacnlee/omarchy-ui",
+                None,
+            ),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("a Git dependency string should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), expected_git);
+            assert_eq!(dependency.reference(), expected_reference);
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn github_shorthand_expands_to_an_https_remote_and_defaults_to_main() {
+        for (source, expected_reference) in [
+            ("huacnlee/omarchy-ui", "main"),
+            ("huacnlee/omarchy-ui#stable", "stable"),
+        ] {
+            let manifest = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect("strict GitHub shorthand should parse");
+            let dependency = &manifest.dependencies()["omarchy-ui"];
+
+            assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
+            assert_eq!(dependency.reference(), Some(expected_reference));
+            assert!(dependency.uses_package_entry());
+        }
+    }
+
+    #[test]
+    fn malformed_or_ambiguous_git_dependency_strings_are_rejected() {
+        for source in [
+            "huacnlee",
+            "/omarchy-ui",
+            "huacnlee/",
+            "huacnlee/omarchy-ui/extra",
+            "huacnlee//omarchy-ui",
+            "huacnlee/omarchy-ui#",
+            "https://github.com/huacnlee/omarchy-ui#",
+            "not a git dependency",
+        ] {
+            let error = PluginManifest::parse(&format!(
+                r#"{{
+                    "id": "com.example.third-party-ui",
+                    "name": "Third-party UI",
+                    "entry": "main.js",
+                    "dependencies": {{ "omarchy-ui": {} }}
+                }}"#,
+                serde_json::to_string(source).expect("dependency as JSON")
+            ))
+            .expect_err("malformed string syntax must not select an unintended repository");
+
+            assert!(
+                error.to_string().contains("Git URL")
+                    || error.to_string().contains("owner/repository")
+                    || error.to_string().contains("Git ref"),
+                "`{source}` produced an unclear error: {error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn object_git_dependencies_keep_their_explicit_selector_and_entry_contract() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/huacnlee/omarchy-ui",
+                    "tag": "v1.2.0",
+                    "entry": "src/public.js"
+                }
+            }
+        }"#;
+
+        let manifest = PluginManifest::parse(source).expect("the legacy object form should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+
+        assert_eq!(dependency.branch(), None);
+        assert_eq!(dependency.tag(), Some("v1.2.0"));
+        assert_eq!(dependency.entry(), "src/public.js");
+        assert!(!dependency.uses_package_entry());
+    }
+
+    #[test]
+    fn a_manifest_accepts_a_git_dependency_pinned_to_a_tag() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "ssh://git@example.com/omarchy-ui.git",
+                    "tag": "v1.2.0",
+                    "entry": "src/public.js"
+                }
+            }
+        }"#;
+
+        let manifest =
+            PluginManifest::parse(source).expect("a tag-pinned Git dependency should parse");
+        let dependency = &manifest.dependencies()["omarchy-ui"];
+        assert_eq!(dependency.branch(), None);
+        assert_eq!(dependency.tag(), Some("v1.2.0"));
+        assert_eq!(dependency.entry(), "src/public.js");
+    }
+
+    #[test]
+    fn a_git_dependency_cannot_select_a_branch_and_a_tag() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "branch": "main",
+                    "tag": "v1.2.0"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the ref is ambiguous");
+        assert!(error.to_string().contains("either `branch` or `tag`"));
+    }
+
+    #[test]
+    fn a_git_dependency_entry_cannot_escape_its_checkout() {
+        let source = r#"{
+            "id": "com.example.third-party-ui",
+            "name": "Third-party UI",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "tag": "v1.2.0",
+                    "entry": "../private.js"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the entry escapes the checkout");
+        assert!(error.to_string().contains("path inside the Git repository"));
+    }
+
+    #[test]
+    fn a_git_dependency_cannot_use_a_runtime_module_name() {
+        let source = r#"{
+            "id": "com.example.shadow",
+            "name": "Shadow",
+            "entry": "main.js",
+            "dependencies": {
+                "gpui-kit": {
+                    "git": "https://github.com/example/not-gpui.git",
+                    "branch": "main"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("the dependency is unreachable");
+        assert!(error.to_string().contains("reserved by gpui-shell"));
+    }
+
+    #[test]
+    fn a_git_dependency_rejects_refspec_syntax_in_a_branch() {
+        let source = r#"{
+            "id": "com.example.refspec",
+            "name": "Refspec",
+            "entry": "main.js",
+            "dependencies": {
+                "omarchy-ui": {
+                    "git": "https://github.com/example/omarchy-ui.git",
+                    "branch": "main:refs/heads/injected"
+                }
+            }
+        }"#;
+
+        let error = PluginManifest::parse(source).expect_err("a selector is not a refspec");
+        assert!(error.to_string().contains("valid Git ref name"));
     }
 
     #[test]
@@ -1870,10 +2673,50 @@ mod tests {
 
     #[test]
     fn an_omitted_shell_version_accepts_the_current_runtime() {
-        let source = VALID.replace("        \"shell-version\": \"0.1.0\",\n", "");
+        let source = VALID.replace(
+            &format!("        \"shell-version\": \"{SHELL_VERSION}\",\n"),
+            "",
+        );
         let manifest = PluginManifest::parse(&source)
             .expect("omitting shell-version supports the runtime loading the application");
         assert_eq!(manifest.shell_version(), SHELL_VERSION);
+    }
+
+    #[test]
+    fn the_window_size_is_read_from_the_manifest() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "com.example.calc", "name": "Calc", "entry": "main.js",
+                "window": {"width": 360, "height": 520}}"#,
+        )
+        .expect("a window size is a valid manifest field");
+        let window = manifest.window().expect("the size is kept");
+        assert_eq!((window.width(), window.height()), (360., 520.));
+
+        let manifest = PluginManifest::parse(
+            r#"{"id": "com.example.calc", "name": "Calc", "entry": "main.js"}"#,
+        )
+        .expect("the window is optional");
+        assert_eq!(manifest.window(), None);
+    }
+
+    #[test]
+    fn invalid_window_sizes_are_rejected() {
+        for window in [
+            r#"{"width": 0, "height": 520}"#,
+            r#"{"width": 360, "height": -1}"#,
+            r#"{"width": 360}"#,
+            r#"{"width": 360, "height": 520, "x": 0}"#,
+            r#""360x520""#,
+        ] {
+            let source = format!(
+                r#"{{"id": "com.example.calc", "name": "Calc", "entry": "main.js", "window": {window}}}"#
+            );
+            let error = PluginManifest::parse(&source).expect_err(window);
+            assert!(
+                error.to_string().contains("invalid `window`"),
+                "{window}: {error}"
+            );
+        }
     }
 
     #[test]
@@ -1954,18 +2797,56 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    /// Everything that reaches outside the application is denied; its own
+    /// storage is not, on the same reasoning a browser gives every origin a
+    /// `localStorage` without asking.
     #[test]
-    fn an_absent_capabilities_block_grants_nothing() {
+    fn an_absent_capabilities_block_grants_nothing_but_storage() {
         let manifest = PluginManifest::parse(
-            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "shell-version": "0.1.0", "entry": "main.js"}"#,
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "entry": "main.js"}"#,
         )
         .expect("capabilities may be omitted");
 
         let capabilities = manifest.capabilities(Path::new("/plugins/b"), Path::new("/data/b"));
-        assert!(!capabilities.has_store());
+        assert!(capabilities.has_storage());
         assert!(!capabilities.has_read_access());
         assert!(!capabilities.has_write_access());
         assert_eq!(capabilities.execute_grant(), &ExecuteGrant::Denied);
+    }
+
+    /// The point of keeping storage a capability rather than making it ambient
+    /// like `sessionStorage`: a host running code it does not trust can still
+    /// refuse, and refusing has to actually work.
+    #[test]
+    fn a_manifest_may_still_refuse_storage() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0",
+                "entry": "main.js", "capabilities": {"storage": false}}"#,
+        )
+        .expect("storage may be declined");
+
+        assert!(
+            !manifest
+                .capabilities(Path::new("/plugins/b"), Path::new("/data/b"))
+                .has_storage()
+        );
+    }
+
+    /// The trap this default exists to close: declaring one unrelated grant
+    /// must not silently cost an application its settings.
+    #[test]
+    fn declaring_another_grant_does_not_cost_an_application_its_storage() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0",
+                "entry": "main.js", "capabilities": {"network": {"hosts": ["example.com"]}}}"#,
+        )
+        .expect("a network grant is legal on its own");
+
+        assert!(
+            manifest
+                .capabilities(Path::new("/plugins/b"), Path::new("/data/b"))
+                .has_storage()
+        );
     }
 
     #[test]
@@ -1994,7 +2875,7 @@ mod tests {
     #[test]
     fn a_field_of_the_wrong_type_says_which_and_what() {
         let error = PluginManifest::parse(
-            r#"{"id": "a.b", "name": 7, "version": "0.1.0", "shell-version": "0.1.0", "entry": "main.js"}"#,
+            r#"{"id": "a.b", "name": 7, "version": "0.1.0", "entry": "main.js"}"#,
         )
         .expect_err("a numeric name is not a name");
 
@@ -2125,15 +3006,95 @@ mod tests {
 
     #[test]
     fn an_unexpanded_placeholder_is_caught_before_it_becomes_a_directory() {
-        let source = VALID.replacen("${dataDir}", "${homeDir}", 1);
-        let error = PluginManifest::parse(&source).expect_err("`${homeDir}` does not exist");
+        let source = VALID.replacen("${dataDir}", "${desktopDir}", 1);
+        let error = PluginManifest::parse(&source).expect_err("`${desktopDir}` does not exist");
         assert_eq!(
             error.problem(),
             &ManifestProblem::UnknownPlaceholder {
                 field: "capabilities.fs.read".to_owned(),
-                placeholder: "${homeDir}".to_owned(),
+                placeholder: "${desktopDir}".to_owned(),
             }
         );
+    }
+
+    #[test]
+    fn a_shell_spelling_of_home_is_refused_with_the_manifest_spelling() {
+        for (written, suggestion) in [
+            ("$HOME/.claude", "${homeDir}/.claude"),
+            ("${HOME}/.claude", "${homeDir}/.claude"),
+            ("~/.claude", "${homeDir}/.claude"),
+            ("~", "${homeDir}"),
+            ("%USERPROFILE%\\\\.claude", "${homeDir}\\\\.claude"),
+        ] {
+            let source = VALID.replacen("${dataDir}", written, 1);
+            let error = PluginManifest::parse(&source)
+                .expect_err("a shell spelling of home must not become a relative directory");
+            assert_eq!(
+                error.problem(),
+                &ManifestProblem::UnexpandedPath {
+                    field: "capabilities.fs.read".to_owned(),
+                    path: written.replace("\\\\", "\\"),
+                    suggestion: suggestion.replace("\\\\", "\\"),
+                },
+            );
+        }
+
+        // A directory that merely starts with the same letters is a real name.
+        let source = VALID.replacen("${dataDir}", "~notes", 1);
+        assert!(PluginManifest::parse(&source).is_ok());
+    }
+
+    #[test]
+    fn the_home_directory_placeholder_names_the_users_own_files() {
+        let source = VALID.replacen(
+            "\"read\": [\"${pluginDir}\", \"${dataDir}\"]",
+            "\"read\": [\"${pluginDir}\", \"${homeDir}/.claude/skills\"]",
+            1,
+        );
+        let manifest = PluginManifest::parse(&source).expect("`${homeDir}` is a placeholder");
+        let fs = manifest.capabilities.fs.as_ref().expect("an fs grant");
+        let home = Path::new("/home/example");
+        let anchors = Anchors {
+            plugin_dir: Path::new("/plugins/a"),
+            data_dir: Path::new("/data/a"),
+            home_dir: Some(home),
+        };
+        assert_eq!(
+            expand_all(&fs.read, &anchors),
+            [PathBuf::from("/plugins/a"), home.join(".claude/skills")]
+        );
+
+        // Without a home directory the grant shrinks rather than landing in
+        // a directory named `${homeDir}` inside the plugin.
+        let homeless = Anchors {
+            home_dir: None,
+            ..anchors
+        };
+        assert_eq!(
+            expand_all(&fs.read, &homeless),
+            [PathBuf::from("/plugins/a")]
+        );
+    }
+
+    #[test]
+    fn environment_variables_are_granted_by_name() {
+        let source = VALID.replacen(
+            "\"process\": { \"exit\": true }",
+            "\"process\": { \"exit\": true, \"env\": [\"EDITOR\"] }",
+            1,
+        );
+        let manifest = PluginManifest::parse(&source).expect("`env` is a process grant");
+        let capabilities = manifest.capabilities(Path::new("/plugins/a"), Path::new("/data/a"));
+        assert_eq!(capabilities.granted_env_variables(), ["EDITOR"]);
+        assert!(capabilities.summary().contains(&"env: EDITOR".to_owned()));
+
+        let source = VALID.replacen(
+            "\"process\": { \"exit\": true }",
+            "\"process\": { \"env\": [\"A=B\"] }",
+            1,
+        );
+        let error = PluginManifest::parse(&source).expect_err("`A=B` is not a name");
+        assert!(matches!(error.problem(), ManifestProblem::Capabilities(_)));
     }
 
     #[test]
@@ -2254,7 +3215,9 @@ mod tests {
             parsed.shell_version
         );
         assert_eq!(described.entry, parsed.entry);
+        assert_eq!(described.dependencies, parsed.dependencies);
         assert_eq!(described.capabilities, parsed.capabilities);
+        assert_eq!(described.window, parsed.window);
     }
 
     #[test]
@@ -2276,10 +3239,11 @@ mod tests {
             "methods",
             "paths",
             "path_prefixes",
-            "store",
+            "storage",
             "clipboard",
             "process",
             "exit",
+            "env",
         ] {
             assert!(
                 schema.contains(grant),
@@ -2295,8 +3259,15 @@ mod tests {
 
     #[test]
     fn incompatible_shell_versions_are_rejected_before_discovery() {
-        for required in ["0.2.0", "1.0.0"] {
-            let source = VALID.replacen("\"0.1.0\"", &format!("\"{required}\""), 1);
+        let runtime = Version::parse(SHELL_VERSION).expect("the crate version is semantic");
+        let next_minor = Version::new(runtime.major, runtime.minor + 1, 0);
+        let next_major = Version::new(runtime.major + 1, 0, 0);
+        for required in [next_minor, next_major] {
+            let source = VALID.replacen(
+                &format!("\"{SHELL_VERSION}\""),
+                &format!("\"{required}\""),
+                1,
+            );
             let error = PluginManifest::parse(&source).expect_err("incompatible shell version");
             assert!(
                 matches!(
@@ -2309,9 +3280,20 @@ mod tests {
     }
 
     #[test]
+    fn older_shell_minor_versions_remain_compatible() {
+        let source = VALID.replacen("\"0.1.0\"", "\"0.0.0\"", 1);
+        PluginManifest::parse(&source)
+            .expect("a manifest's shell-version is its minimum runtime version");
+    }
+
+    #[test]
     fn malformed_shell_versions_are_errors_not_panics() {
         for required in ["0.1.0-", "00.1.0", "0.1.184467440737095516160", "latest"] {
-            let source = VALID.replacen("\"0.1.0\"", &format!("\"{required}\""), 1);
+            let source = VALID.replacen(
+                &format!("\"{SHELL_VERSION}\""),
+                &format!("\"{required}\""),
+                1,
+            );
             let error = PluginManifest::parse(&source).expect_err("invalid semantic version");
             assert_eq!(
                 error.problem(),

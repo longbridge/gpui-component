@@ -1,0 +1,3159 @@
+// These exports are public constructors from the inventory of gpui-shell's
+// `components` catalog. Constructor calls intentionally use `new`, matching the
+// generated gpui-component declarations.
+import { div } from "gpui-kit";
+import { h_flex, v_flex } from "gpui-base";
+import {
+  Accordion,
+  AccordionItem,
+  Alert,
+  AlertDialog,
+  Attachment,
+  ErrorAlert,
+  Avatar,
+  AreaChart,
+  BarChart,
+  Badge,
+  Breadcrumb,
+  Bubble,
+  Button,
+  Calendar,
+  CalendarState,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPagination,
+  CarouselPaginationItem,
+  CarouselPrevious,
+  CarouselState,
+  Checkbox,
+  Clipboard,
+  Collapsible,
+  ColorPicker,
+  ColorPickerState,
+  Combobox,
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandState,
+  DatePicker,
+  DatePickerState,
+  DataTable,
+  DataTableState,
+  DescriptionItem,
+  DescriptionList,
+  Dialog,
+  Diff,
+  DiffState,
+  DropdownButton,
+  DropdownMenu,
+  Editor,
+  EditorState,
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  Field,
+  Form,
+  GroupBox,
+  HoverCard,
+  Icon,
+  Image,
+  InfoAlert,
+  Input,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+  InputGroupTextarea,
+  InputState,
+  Kbd,
+  Label,
+  LineChart,
+  Link,
+  List,
+  Menu,
+  MenuBar,
+  MenuItem,
+  MenuSeparator,
+  Marker,
+  Message,
+  MessageScroller,
+  MessageScrollerState,
+  NumberInput,
+  NativeMenuItem,
+  NativeMenuSeparator,
+  NativeMenuTrigger,
+  Notification,
+  OtpInput,
+  OtpState,
+  Pagination,
+  PieChart,
+  Popover,
+  Progress,
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireInput,
+  QuestionnaireItem,
+  RadarChart,
+  Radio,
+  RadioGroup,
+  Rating,
+  Resizable,
+  ResizablePanel,
+  Scroll,
+  Scrollbar,
+  ScrollbarHandle,
+  Separator,
+  VerticalSeparator,
+  Select,
+  Sheet,
+  ShimmerText,
+  SettingGroup,
+  SettingItem,
+  SettingPage,
+  Settings,
+  Sidebar,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarToggleButton,
+  Skeleton,
+  Slider,
+  SliderState,
+  Spinner,
+  StatusBar,
+  Switch,
+  Tag,
+  Tab,
+  TabBar,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Text,
+  Textarea,
+  TextareaState,
+  TimeField,
+  TimeFieldState,
+  TitleBar,
+  Stepper,
+  StepperItem,
+  SuccessAlert,
+  Toggle,
+  Toolbar,
+  Tooltip,
+  Tree,
+  WarningAlert,
+  TreeItem,
+} from "gpui-component";
+
+/**
+ * Registered component elements are runtime Elements. Some generated fluent
+ * method names shadow base Element methods, so bridge that structural typing
+ * ambiguity only where a typed child is passed to another component.
+ * @param {unknown} value
+ * @returns {import("gpui-kit").Element}
+ */
+const REVIEW_PATCH = [
+  "diff --git a/src/retry.rs b/src/retry.rs",
+  "--- a/src/retry.rs",
+  "+++ b/src/retry.rs",
+  "@@ -1,3 +1,3 @@",
+  " fn retry_delay(attempt: u32) -> u64 {",
+  "-    100 * attempt as u64",
+  "+    100 * 2_u64.pow(attempt.min(6))",
+  " }",
+  "",
+].join("\n");
+
+const asElement = (value) =>
+  /** @type {import("gpui-kit").Element} */ (/** @type {unknown} */ (value));
+
+/**
+ * Per-case demo state.
+ *
+ * A registered control is controlled: the script owns `checked`, and the
+ * component reports a click through `onChange`. Without somewhere to put the
+ * reported value the gallery would render controls that never move, which
+ * would say something false about the components.
+ *
+ * @type {Map<string, unknown>}
+ */
+const demo = new Map();
+
+const inputGroupFields = [
+  ["align-start", "Search…", ""], ["align-end", "Enter password", ""],
+  ["align-top", "Enter your full name", ""], ["align-bottom", "0.00", ""],
+  ["icon-email", "Enter your email", ""], ["icon-verified", "Username", "ada"],
+  ["icon-multiple", "Website", "gpui-kit.com"], ["domain", "example", ""],
+  ["username", "Enter your username", ""], ["amount", "0.00", ""],
+  ["tooltip-password", "Enter password", ""], ["tooltip-email", "Your email address", ""],
+  ["dropdown-file", "Enter file name", "notes.txt"], ["dropdown-search", "Enter search query", ""],
+  ["phone", "Phone number", ""], ["popover-url", "example.com", "gpui-kit.com"],
+  ["label-username", "username", ""], ["label-email", "you@example.com", ""],
+  ["button-actions", "Enter a project name", "Input Group"],
+  ["loading-end", "Searching…", ""], ["loading-start", "Processing…", ""],
+  ["loading-text", "Saving changes…", ""], ["profile-name", "Your name", "Ada Lovelace"],
+  ["profile-email", "you@example.com", "ada@example.com"],
+];
+const inputGroupTextareas = [
+  ["textarea-plain", "Enter your text here…", ""],
+  ["textarea-header", "Write your question…", ""],
+  ["textarea-footer", "Enter your message", ""],
+  ["textarea-disabled", "", "This textarea is disabled."],
+  ["textarea-invalid", "Write a short summary…", ""],
+  ["comment", "Share your thoughts…", ""], ["custom", "An automatically growing textarea…", ""],
+];
+
+/** @param {string} key @param {unknown} fallback */
+const state = (key, fallback) => (demo.has(key) ? demo.get(key) : fallback);
+
+/** Test and diagnostic projection of the same controlled state the examples read. */
+export const demoValue = state;
+
+/** @param {string} key @param {unknown} value @param {import("gpui-kit").Context} cx */
+const setState = (key, value, cx) => {
+  demo.set(key, value);
+  cx.notify();
+};
+
+/**
+ * Retained component state must survive Story re-renders. Creating these
+ * descriptor objects inside `registeredExamples` would replace the backing
+ * GPUI entity after every interaction and make editable controls appear inert.
+ *
+ * @template T
+ * @param {string} key
+ * @param {() => T} create
+ * @returns {T}
+ */
+const retained = (key, create) => {
+  if (!demo.has(key)) demo.set(key, create());
+  return /** @type {T} */ (demo.get(key));
+};
+
+/**
+ * Create state-backed Story models during the owning View's init phase.
+ * GPUI input state cannot be created from render, and every descriptor here
+ * needs a stable identity so interaction survives subsequent frames.
+ */
+/** @type {import("gpui-component").InputContent} */
+const tokenDraft = {
+  text: "🙂 Ask @alice@bob to review",
+  tokens: [
+    { range: { start: 7, end: 13 }, token: { id: "alice", text: "@alice", label: "Alice" } },
+    { range: { start: 13, end: 17 }, token: { id: "bob", text: "@bob", label: "Bob" } },
+  ],
+};
+
+export function initializeRegisteredExamples() {
+  retained("token-input", () => { const input = InputState(); input.set_value(tokenDraft); return input; });
+  retained("questionnaire-direction", () => InputState("Type another direction…"));
+  retained("token-textarea", () => { const input = TextareaState(); input.set_value(tokenDraft); return input; });
+  for (const [id, placeholder, value] of inputGroupFields) {
+    retained(`input-group-extra:${id}`, () => InputState(placeholder, value));
+  }
+  for (const [id, _placeholder, value] of inputGroupTextareas) {
+    retained(`input-group-extra:${id}`, () => TextareaState(value));
+  }
+  retained("input-group-search", () => InputState("Search components…"));
+  retained("input-group-url", () => InputState("Website", "gpui-kit.com"));
+  retained("input-group-email", () => InputState("you@example.com"));
+  retained("input-group-disabled", () => InputState("Unavailable"));
+  retained("input-group-disabled-invalid", () => InputState("", "Invalid saved value"));
+  retained("input-group-readonly", () => InputState("Documentation", "https://gpui-kit.com"));
+  retained("input-group-notes", () => TextareaState("One shared frame.\nThe native textarea owns editing."));
+  retained("input-group-message", () => TextareaState());
+  retained("input-project-name", () => InputState("Enter a project name"));
+  retained("empty-search", () => InputState("Search pages"));
+  retained("input-locked", () => InputState("Managed by your organization"));
+  retained("number-input", () => InputState("Quantity", "12"));
+  retained("otp-six", () => OtpState(6));
+  retained("otp-four", () => OtpState(4));
+  retained("textarea-notes", () =>
+    TextareaState("Ship the component gallery with verified interactive examples."),
+  );
+  retained("slider-default", () => SliderState(36));
+  retained("slider-reverse", () => SliderState(68));
+  retained("slider-vertical", () => SliderState(54));
+  retained("slider-disabled", () => SliderState(24));
+  retained("color-picker", () => ColorPickerState());
+  retained("date-picker", () => DatePickerState());
+  retained("time-field", () => TimeFieldState());
+  retained("time-field-disabled", () => TimeFieldState());
+  retained("calendar-one", () => CalendarState());
+  retained("calendar-two", () => CalendarState());
+  retained("carousel-basic", () => CarouselState(3));
+  retained("message-scroller", () => MessageScrollerState(3));
+  retained("form-account", () => InputState("Acme Cloud"));
+  retained("form-region", () => InputState("us-east-1"));
+  retained("form-endpoint", () => InputState("https://api.example.com"));
+  retained("form-token", () => InputState("Paste an access token"));
+  retained("data-table-default", () => DataTableState(["name", "status"]));
+  retained("data-table-striped", () => DataTableState(["name", "status"]));
+  retained("command-default", () => CommandState());
+  retained("command-filter", () => CommandState());
+  retained("scroll-handle", () => ScrollbarHandle());
+  retained("scrollbar-handle", () => ScrollbarHandle());
+  retained("scrollbar-horizontal-handle", () => ScrollbarHandle());
+  retained("editor-rust", () =>
+    EditorState("fn main() {\n    println!(\"hello\");\n}", "rust"),
+  );
+  retained("editor-readonly", () => EditorState("// generated, do not edit", "rust"));
+  retained("diff-review", () => DiffState(REVIEW_PATCH));
+}
+
+/**
+ * Whether an accordion section is open.
+ *
+ * `Accordion.on_toggle` reports the whole open set, and each `AccordionItem`
+ * asks about itself.
+ *
+ * @param {string} key @param {number[]} fallback @param {number} index
+ */
+const accordionOpen = (key, fallback, index) =>
+  /** @type {number[]} */ (state(key, fallback)).includes(index);
+
+/** @param {import("gpui-kit").Context} cx */
+function expandedInputGroupExamples(cx) {
+  const colors = cx.theme().colors;
+  const key = id => `input-group-extra:${id}`;
+  const spec = id => [...inputGroupFields, ...inputGroupTextareas].find(row => row[0] === id);
+  const value = id => String(state(`${key(id)}:value`, spec(id)?.[2] ?? ""));
+  const update = (id, value, cx) => setState(`${key(id)}:value`, value, cx);
+  const column = () => v_flex().w_full().max_w(384).gap_4();
+  const icon = name => new Icon(`icons/${name}.svg`).size("small");
+  const text = label => new InputGroupText().child(label);
+  const field = (label, description, control) => new Field().label(label).description(description).child(control);
+  const input = (id, label) => new InputGroup(`ig-extra-${id}`)
+    .input(new InputGroupInput(retained(key(id), () => InputState(spec(id)?.[1] ?? "")))
+      .aria_label(label).value(value(id)).masked(id === "align-end" || id === "tooltip-password")
+      .when(id === "align-end" || id === "tooltip-password", input => input.content_type("password"))
+      .on_change((value, cx) => update(id, value, cx)));
+  const textarea = (id, label) => new InputGroup(`ig-extra-${id}`)
+    .input(new InputGroupTextarea(retained(key(id), () => TextareaState()))
+      .aria_label(label).placeholder(spec(id)?.[1] ?? "").rows(3).value(value(id))
+      .on_change((value, cx) => update(id, value, cx)));
+  /** @param {string} id @param {"inline-start" | "inline-end" | "block-start" | "block-end"} [align] */
+  const addon = (id, align = "inline-start") => new InputGroupAddon(`ig-extra-addon-${id}`).align(align);
+  const menu = (id, label) => new DropdownMenu(`ig-extra-menu-${id}`, label)
+    .h(24).px(6).border_0().shadow_none().bg(colors.background).text_color(colors.foreground);
+  const scope = String(state("ig-extra-scope", "Documentation"));
+  const country = String(state("ig-extra-country", "+1"));
+  const remaining = 120 - Array.from(value("textarea-footer")).length;
+  const comment = value("comment");
+  const summary = value("textarea-invalid");
+  const result = [
+    {
+      label: "Alignment",
+      description: "Each side is explicit; the single-line input can also have a header or footer.",
+      element: column()
+        .child(field("Inline start", "A leading search icon.", input("align-start", "Leading icon search")
+          .addon(addon("align-start").child(icon("search")))))
+        .child(field("Inline end", "A trailing icon with a masked input.", input("align-end", "Trailing icon password")
+          .addon(addon("align-end", "inline-end").child(icon("eye-off")))))
+        .child(field("Block start", "The header is inside the shared frame.", input("align-top", "Full name")
+          .addon(addon("align-top", "block-start").child(text("Full Name")))))
+        .child(field("Block end", "The unit sits below the input.", input("align-bottom", "Amount with footer")
+          .addon(addon("align-bottom", "block-end").child(text("USD"))))),
+    },
+    {
+      label: "Icons",
+      description: "Leading, paired, and multiple trailing icons.",
+      element: column()
+        .child(input("icon-email", "Email with icon").addon(addon("icon-email").child(icon("inbox"))))
+        .child(input("icon-verified", "Verified username")
+          .addon(addon("icon-user").child(icon("user")))
+          .addon(addon("icon-check", "inline-end").child(icon("check"))))
+        .child(input("icon-multiple", "Website with multiple icons")
+          .addon(addon("icon-multiple", "inline-end").child(icon("star")).child(icon("info")))),
+    },
+    {
+      label: "Text addons",
+      element: column()
+        .child(input("amount", "Amount").addon(addon("amount-symbol").child(text("$")))
+          .addon(addon("amount-code", "inline-end").child(text("USD"))))
+        .child(input("domain", "Domain").addon(addon("domain-prefix").child(text("https://")))
+          .addon(addon("domain-suffix", "inline-end").child(text(".com"))))
+        .child(input("username", "Work username")
+          .addon(addon("username-domain", "inline-end").child(text("@company.com")))),
+    },
+    {
+      label: "Tooltips",
+      element: column().children([
+        ["tooltip-password", "Password help", "Use at least 8 characters."],
+        ["tooltip-email", "Email help", "Used for notifications about this workspace."],
+      ].map(([id, label, help]) => input(id, label)
+        .addon(addon(id, "inline-end").child(new InputGroupButton(`ig-extra-${id}-help`)
+          .aria_label(label).tooltip(help).child(icon("info")))))),
+    },
+    {
+      label: "Dropdown menus",
+      description: "Choose a filename action, search scope, or phone country code.",
+      element: column()
+        .child(input("dropdown-file", "File name").addon(addon("dropdown-file", "inline-end")
+          .child(menu("file", "More")
+            .item("Use README.md", cx => update("dropdown-file", "README.md", cx))
+            .item("Reset filename", cx => update("dropdown-file", "notes.txt", cx))
+            .item("Clear filename", cx => update("dropdown-file", "", cx)))))
+        .child(input("dropdown-search", "Scoped search").addon(addon("dropdown-search", "inline-end")
+          .child(menu("scope", scope)
+            .item("Documentation", cx => setState("ig-extra-scope", "Documentation", cx))
+            .item("Blog posts", cx => setState("ig-extra-scope", "Blog posts", cx))
+            .item("Changelog", cx => setState("ig-extra-scope", "Changelog", cx)))))
+        .child(input("phone", "Phone number").addon(addon("phone")
+          .child(menu("country", country)
+            .item("+1", cx => setState("ig-extra-country", "+1", cx))
+            .item("+44", cx => setState("ig-extra-country", "+44", cx))
+            .item("+46", cx => setState("ig-extra-country", "+46", cx))))),
+    },
+    {
+      label: "Popover",
+      description: "A labeled native trigger opens contextual details and restores focus on dismissal.",
+      element: column().child(input("popover-url", "Website with details")
+        .addon(addon("address-details", "block-start")
+          .child(text("Address"))
+          .child(div().ml_auto().child(new Popover("ig-extra-address-details", "Details")
+            .content(v_flex().w(280).gap_2()
+              .child(div().font_semibold().child("Address details"))
+              .child(div().child(`https://${value("popover-url")}`))
+              .child(div().text_sm().child("The protocol prefix stays separate from the editable hostname."))))))
+        .addon(addon("address-prefix").child(text("https://")))),
+    },
+    {
+      label: "Labels and descriptions",
+      element: column()
+        .child(field("Username", "Clicking the @ addon focuses the input.", input("label-username", "Username with label")
+          .addon(addon("label-username").child(new Label("@")))))
+        .child(input("label-email", "Notification email")
+          .addon(addon("label-email", "block-start").child(new Label("Email").text_color(colors.foreground))
+            .child(new InputGroupButton("ig-extra-label-email-help").ml_auto()
+              .aria_label("Notification email help").tooltip("We'll use this address for workspace notifications.")
+              .child(icon("info"))))),
+    },
+    {
+      label: "Text and icon actions",
+      description: "Larger text actions and a compact copy action share the footer.",
+      element: column().child(input("button-actions", "Project name")
+        .addon(addon("project-actions", "block-end")
+          .child(new Clipboard("ig-extra-project-copy").value(value("button-actions")).tooltip("Copy project name"))
+          .child(new InputGroupButton("ig-extra-project-clear").ml_auto().size("small").label("Clear")
+            .on_click((_event, cx) => update("button-actions", "", cx)))
+          .child(new InputGroupButton("ig-extra-project-reset").size("small").variant("secondary").label("Reset")
+            .on_click((_event, cx) => update("button-actions", "Input Group", cx))))),
+    },
+    {
+      label: "Spinner placement",
+      description: "Progress can lead, trail, or sit next to status text.",
+      element: column()
+        .child(input("loading-end", "Search loading state").readonly(true)
+          .addon(addon("spinner-end", "inline-end").child(new Spinner().size("small"))))
+        .child(input("loading-start", "Processing loading state").readonly(true)
+          .addon(addon("spinner-start").child(new Spinner().size("small"))))
+        .child(input("loading-text", "Saving loading state").readonly(true)
+          .addon(addon("spinner-text", "inline-end").child(text("Saving…")).child(new Spinner().size("small")))),
+    },
+    {
+      label: "Textarea variants",
+      element: column()
+        .child(field("Without addons", "The text viewport owns wrapping and scrolling.", textarea("textarea-plain", "Plain grouped textarea")))
+        .child(textarea("textarea-header", "Textarea with header")
+          .addon(addon("textarea-header", "block-start").child(text("Ask, search, or chat…"))))
+        .child(textarea("textarea-footer", "Textarea with remaining count").invalid(remaining < 0)
+          .addon(addon("textarea-footer", "block-end").child(text(`${remaining} characters left`))))
+        .child(field("Invalid", "Enter a summary to clear the error.", textarea("textarea-invalid", "Required summary")
+          .invalid(summary.trim().length === 0)))
+        .child(field("Disabled", "Text and addon actions are unavailable.", textarea("textarea-disabled", "Disabled textarea")
+          .disabled(true).addon(addon("textarea-disabled", "block-end")
+            .child(new InputGroupButton("ig-extra-disabled-post").label("Post"))))),
+    },
+    {
+      label: "Comment composer",
+      description: "Cancel clears the draft; Post keeps the submitted text below the composer.",
+      element: column()
+        .child(textarea("comment", "Comment draft").addon(addon("comment", "block-end")
+          .child(text(`${Array.from(comment).length} characters`))
+          .child(new InputGroupButton("ig-extra-comment-cancel").ml_auto().size("small").label("Cancel")
+            .disabled(comment.length === 0).on_click((_event, cx) => update("comment", "", cx)))
+          .child(new InputGroupButton("ig-extra-comment-post").size("small").variant("primary").label("Post")
+            .disabled(comment.trim().length === 0).on_click((_event, cx) => {
+              setState("ig-extra-comment-posted", comment, cx);
+              update("comment", "", cx);
+            }))))
+        .child(div().text_sm().child(`Posted: ${state("ig-extra-comment-posted", "—")}`)),
+    },
+    {
+      label: "Auto-growing textarea",
+      description: "The textarea keeps its own typography; the footer holds a primary submit action.",
+      element: column()
+        .child(new InputGroup("ig-extra-custom")
+          .input(new InputGroupTextarea(retained(key("custom"), () => TextareaState()))
+            .aria_label("Auto-growing draft").placeholder(spec("custom")?.[1] ?? "")
+            .auto_grow(1, 8).value(value("custom")).text_base()
+            .on_change((value, cx) => update("custom", value, cx)))
+          .addon(addon("custom", "block-end").child(text("Plain text"))
+            .child(new InputGroupButton("ig-extra-custom-submit").ml_auto().variant("primary").label("Submit")
+              .icon("icons/arrow-up.svg")
+              .disabled(value("custom").trim().length === 0).on_click((_event, cx) => {
+                setState("ig-extra-custom-submitted", value("custom"), cx);
+                update("custom", "", cx);
+              }))))
+        .child(div().text_sm().child(`Submitted: ${state("ig-extra-custom-submitted", "—")}`)),
+    },
+    {
+      label: "Form composition",
+      description: "Field and GroupBox keep labels, descriptions, and the save action together.",
+      element: column()
+        .child(new GroupBox().title("Contact details")
+          .child(new Form()
+            .child(new Field().label("Display name").child(input("profile-name", "Profile display name")))
+            .child(new Field().label("Email").description("Shown in this example only.")
+              .child(input("profile-email", "Profile email").addon(addon("profile-email").child(icon("inbox"))))))
+          .child(h_flex().justify_end().child(new Button("ig-extra-profile-save").primary().label("Save contact")
+            .on_click((_event, cx) => setState("ig-extra-profile-saved", `${value("profile-name")} — ${value("profile-email")}`, cx)))))
+        .child(div().text_sm().child(`Saved: ${state("ig-extra-profile-saved", "—")}`)),
+    },
+  ];
+  return result;
+}
+
+
+/** @param {boolean} multiline @param {import("gpui-kit").Context} cx */
+function tokenExample(multiline, cx) {
+  const key = multiline ? "token-textarea" : "token-input";
+  const input = /** @type {import("gpui-component").InputState | import("gpui-component").TextareaState} */ (demo.get(key));
+  const content = input.content();
+  const control = multiline
+    ? new Textarea(/** @type {import("gpui-component").TextareaState} */ (input)).w_full().h(100)
+        .token(token => h_flex().gap(4).px(4).h(token.line_height)
+          .child("◆").child(token.token.label ?? token.token.text))
+    : new Input(/** @type {import("gpui-component").InputState} */ (input)).w_full();
+  return {
+    label: "Atomic inline references",
+    description: "Delete a reference and undo. Drafts preserve identity; copied text stays plain.",
+    element: v_flex().w(520).max_w_full().gap(8)
+      .child(control.on_token_click((event, cx) => setState(`${key}-status`, `Opened ${event.token.label}`, cx))
+        .on_change((_text, cx) => cx.notify()))
+      .child(h_flex().gap(8)
+        .child(new Button(`${key}-insert`).label("Insert reference").on_click((_event, cx) => {
+          // The ID names the resource, so inserting it twice reuses it.
+          input.replace_with_token({ id: "reference", text: "@reference", label: "Reference" });
+          cx.notify();
+        }))
+        .child(new Button(`${key}-save`).label("Save draft").on_click((_event, cx) => {
+          setState(`${key}-saved`, input.content(), cx);
+        }))
+        .child(new Button(`${key}-restore`).label("Restore draft").on_click((_event, cx) => {
+          input.set_value(/** @type {import("gpui-component").InputContent} */ (state(`${key}-saved`, tokenDraft)));
+          cx.notify();
+        }))
+        .child(new Button(`${key}-submit`).label("Submit").on_click((_event, cx) => {
+          const current = input.content();
+          setState(`${key}-status`, `Submitted ${current.tokens.length} references: ${current.text}`, cx);
+        })))
+      .child(div().text_sm().child(`Text: ${content.text}`))
+      .child(div().text_sm().child(`Tokens: ${content.tokens.map(span => `${span.token.id} [${span.range.start}, ${span.range.end})`).join(", ")}`))
+      .child(div().text_sm().child(String(state(`${key}-status`, "")))),
+  };
+}
+
+/**
+ * The cases shown for one registered surface.
+ *
+ * Cases cover each component's useful compositions and interaction states.
+ *
+ * @param {string} surface
+ * @param {import("gpui-kit").Context} cx
+ * @returns {Array<{ label: string, description?: string, element: unknown }>}
+ */
+export function registeredExamples(surface, cx) {
+  switch (surface) {
+    case "Empty": {
+      const created = Boolean(state("empty-project-created", false));
+      return [
+        {
+          label: "Minimal",
+          element: new Empty().header(
+            new EmptyHeader().title(new EmptyTitle().child("No results")),
+          ),
+        },
+        {
+          label: "Icon and action",
+          description: "The application owns the project state and the action callback.",
+          element: new Empty()
+            .header(
+              new EmptyHeader()
+                .media(new EmptyMedia().variant("icon").child(new Icon("folder")))
+                .title(new EmptyTitle().child(created ? "Untitled project" : "No projects yet"))
+                .description(new EmptyDescription().child(
+                  created ? "Your sample project is ready." : "Create a project to get started.",
+                )),
+            )
+            .content(new EmptyContent().child(
+              new Button("empty-create-project")
+                .primary()
+                .label(created ? "Reset example" : "Create project")
+                .on_click((_event, cx) => setState("empty-project-created", !created, cx)),
+            )),
+        },
+        {
+          label: "Avatar and custom content",
+          description: "Each part is independently styled; the input retains its own state.",
+          element: new Empty()
+            .max_w(320)
+            .items_start()
+            .text_left()
+            .p(16)
+            .border(1)
+            .border_color(cx.theme().colors.border)
+            .header(
+              new EmptyHeader()
+                .items_start()
+                .media(new EmptyMedia().child(new Avatar().name("Ada Lovelace").size("large")))
+                .title(new EmptyTitle().child("Find a shared page"))
+                .description(new EmptyDescription().child(
+                  "Search your workspace for a page to share with Ada. Longer descriptions wrap within this narrow panel.",
+                )),
+            )
+            .content(new EmptyContent().items_start().child(
+              new Input(retained("empty-search", () => InputState("Search pages"))).w_full(),
+            ))
+            .child(div().text_size(12).child("Search input is provided by the application.")),
+        },
+      ];
+    }
+    case "Attachment":
+      return [
+        {
+          label: "File metadata",
+          description: "A compact file row combines identity, type, size, and a direct action.",
+          element: asElement(
+            new Attachment("story-attachment")
+              .w(520)
+              .max_w_full()
+              .child(
+                h_flex()
+                  .w_full()
+                  .items_center()
+                  .gap(12)
+                  .child(asElement(new Icon("icons/file.svg").size("medium")))
+                  .child(
+                    v_flex()
+                      .flex_1()
+                      .gap(2)
+                      .child(div().text_size(12).font_semibold().child("quarterly-report.pdf"))
+                      .child(div().text_size(11).child("PDF · 2.4 MB")),
+                  )
+                  .child(
+                    asElement(
+                      new Button("remove-report")
+                        .ghost()
+                        .size("xsmall")
+                        .label("Remove"),
+                    ),
+                  ),
+              ),
+          ),
+        },
+        {
+          label: "Upload states",
+          description: "Lifecycle styling remains attached to the same file composition.",
+          element: asElement(
+            new Attachment("story-attachment-failed")
+              .w(520)
+              .max_w_full()
+              .status("failed")
+              .child(
+                h_flex()
+                  .w_full()
+                  .items_center()
+                  .gap(12)
+                  .child(asElement(new Icon("icons/file.svg").size("medium")))
+                  .child(
+                    v_flex()
+                      .flex_1()
+                      .gap(2)
+                      .child(div().text_size(12).font_semibold().child("screenshot.png"))
+                      .child(div().text_size(11).child("Upload failed · 1.8 MB")),
+                  )
+                  .child(
+                    asElement(
+                      new Button("retry-screenshot")
+                        .outline()
+                        .size("xsmall")
+                        .label("Retry"),
+                    ),
+                  ),
+              ),
+          ),
+        },
+      ];
+    case "Bubble":
+      return [
+        {
+          label: "Alignment",
+          description: "Use the same alignment value as the containing Message row.",
+          element: v_flex()
+            .w(600)
+            .max_w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("secondary")
+                  .child("Can you review the latest draft?"),
+              ),
+            )
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("end")
+                  .variant("filled")
+                  .child("Yes — I’ll annotate it now."),
+              ),
+            ),
+        },
+        {
+          label: "Variants",
+          description: "Semantic treatments preserve a consistent readable measure.",
+          element: v_flex()
+            .w(600)
+            .max_w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("outline")
+                  .child("A bordered bubble for rich content."),
+              ),
+            )
+            .child(
+              asElement(
+                new Bubble()
+                  .w_full()
+                  .alignment("start")
+                  .variant("ghost")
+                  .child("Ghost content can use the full conversation width."),
+              ),
+            ),
+        },
+      ];
+    case "Marker":
+      return [
+        {
+          label: "Streaming status",
+          element: asElement(
+            new Marker("story-marker")
+              .variant("separator")
+              .loading(true)
+              .loading_style("shimmer")
+              .child("Generating response"),
+          ),
+        },
+      ];
+    case "Message":
+      return [
+        {
+          label: "Incoming message content",
+          element: asElement(
+            new Message().alignment("start").child("The build completed successfully."),
+          ),
+        },
+        {
+          label: "Outgoing message content",
+          element: asElement(
+            new Message().alignment("end").child("Ship it."),
+          ),
+        },
+      ];
+    case "MessageScroller": {
+      /** @type {{ alignment: "start" | "end", variant: "filled" | "secondary", body: string }[]} */
+      const messages = [
+        {
+          alignment: "end",
+          variant: "filled",
+          body: "Can you review the component gallery before we merge?",
+        },
+        {
+          alignment: "start",
+          variant: "secondary",
+          body: "Yes. I’m checking the interactive states and making sure longer messages wrap naturally inside the transcript.",
+        },
+        {
+          alignment: "end",
+          variant: "filled",
+          body: "Perfect — I’ll wait for your notes.",
+        },
+      ];
+      return [
+        {
+          label: "Conversation",
+          description:
+            "Virtualized Message rows follow the live edge until the reader scrolls away.",
+          element: asElement(
+            new MessageScroller(
+              "story-message-scroller",
+              retained("message-scroller", () => MessageScrollerState(messages.length)),
+              (index) => {
+                const message = messages[index];
+                return div()
+                  .w_full()
+                  .py(6)
+                  .child(
+                    asElement(
+                      new Message().alignment(message.alignment).child(
+                        asElement(
+                          new Bubble()
+                            .alignment(message.alignment)
+                            .variant(message.variant)
+                            .child(message.body),
+                        ),
+                      ),
+                    ),
+                  );
+              },
+            )
+              .jump_button_label("Jump to latest")
+              .h(260),
+          ),
+        },
+      ];
+    }
+    case "ShimmerText":
+      return [
+        {
+          label: "Looping theme-aware shimmer",
+          element: asElement(
+            new ShimmerText("Thinking…")
+              .id("story-shimmer")
+              .duration_ms(1600)
+              .spread(0.35),
+          ),
+        },
+        {
+          label: "Reverse one-shot shimmer",
+          element: asElement(
+            new ShimmerText("Loading context")
+              .id("story-shimmer-reverse")
+              .reverse(true)
+              .once(true),
+          ),
+        },
+      ];
+    // ---------------------------------------------------------------- actions
+    case "Button":
+      return [
+        {
+          label: "Variants",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Button("btn-primary").primary().label("Primary")))
+            .child(asElement(new Button("btn-outline").outline().label("Outline")))
+            .child(asElement(new Button("btn-danger").danger().label("Danger")))
+            .child(asElement(new Button("btn-ghost").ghost().label("Ghost"))),
+        },
+        {
+          label: "Sizes",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Button("btn-xs").size("xsmall").label("XSmall")))
+            .child(asElement(new Button("btn-sm").size("small").label("Small")))
+            .child(asElement(new Button("btn-md").size("medium").label("Medium")))
+            .child(asElement(new Button("btn-lg").size("large").label("Large"))),
+        },
+        {
+          label: "States",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Button("btn-loading").primary().label("Saving").loading(true)))
+            .child(asElement(new Button("btn-compact").label("Compact").compact()))
+            .child(asElement(new Button("btn-link").label("Link").link())),
+        },
+      ];
+    case "DropdownButton":
+      return [
+        {
+          label: "Split button with a menu",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new DropdownButton("dd-actions", "Actions")
+                  .variant("primary")
+                  .menu_item("Open", (_cx) => {})
+                  .menu_item("Duplicate", (_cx) => {}),
+              ),
+            ),
+        },
+        {
+          label: "Variants and sizes",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new DropdownButton("dd-secondary", "Secondary")
+                  .variant("secondary")
+                  .size("small")
+                  .menu_item("Rename", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-danger", "Delete")
+                  .variant("danger")
+                  .menu_item("Delete forever", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-outline", "More")
+                  .outline()
+                  .menu_anchor("bottom_right")
+                  .menu_item("Export", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-disabled", "Unavailable")
+                  .disabled(true)
+                  .menu_item("Nothing", (_cx) => {}),
+              ),
+            ),
+        },
+        {
+          label: "Menu-only trigger",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new DropdownMenu("dd-more", "More")
+                  .item("Rename", (_cx) => {})
+                  .item("Archive", (_cx) => {}),
+              ),
+            ),
+        },
+      ];
+    case "Toggle":
+      return [
+        {
+          label: "Default",
+          description: "Text and compact actions show an unmistakable pressed state.",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(
+              asElement(
+                new Toggle("toggle-off")
+                  .label(
+                    state("toggle-preview", false)
+                      ? "Preview on"
+                      : "Preview off",
+                  )
+                  .checked(/** @type {boolean} */ (state("toggle-preview", false)))
+                  .on_change((checked, cx) => setState("toggle-preview", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Toggle("toggle-on")
+                  .label(state("toggle-favorite", true) ? "★ Starred" : "☆ Star")
+                  .checked(/** @type {boolean} */ (state("toggle-favorite", true)))
+                  .on_change((checked, cx) =>
+                    setState("toggle-favorite", checked, cx),
+                  ),
+              ),
+            ),
+        },
+        {
+          label: "Variants",
+          description: "Ghost and outline treatments suit different surfaces.",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(
+              asElement(
+                new Toggle("toggle-ghost")
+                  .label("Preview")
+                  .checked(/** @type {boolean} */ (state("toggle-ghost", false)))
+                  .on_change((checked, cx) => setState("toggle-ghost", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Toggle("toggle-outline")
+                  .label("Pin toolbar")
+                  .outline()
+                  .checked(/** @type {boolean} */ (state("toggle-outline", true)))
+                  .on_change((checked, cx) =>
+                    setState("toggle-outline", checked, cx),
+                  ),
+              ),
+            ),
+        },
+        {
+          label: "Sizes",
+          description: "The same action at small, medium, and large density.",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(asElement(new Toggle("toggle-sm").label("Small").size("small")))
+            .child(asElement(new Toggle("toggle-md").label("Medium")))
+            .child(asElement(new Toggle("toggle-lg").label("Large").size("large"))),
+        },
+      ];
+    case "Link":
+      return [
+        {
+          label: "External link",
+          element: asElement(
+            new Link("link-docs").href("https://gpui.rs").child("gpui.rs documentation"),
+          ),
+        },
+      ];
+
+    // ----------------------------------------------------------- disclosure
+    case "Accordion":
+      return [
+        {
+          label: "Click a header — one section open at a time",
+          element: asElement(
+            new Accordion("acc-single")
+              .bordered(true)
+              .multiple(false)
+              .on_toggle((indices, cx) => setState("acc-single", indices, cx))
+              .child(
+                new AccordionItem()
+                  .title(new Label("Appearance"))
+                  .open(accordionOpen("acc-single", [0], 0))
+                  .child("Theme, density and font size."),
+              )
+              .child(
+                new AccordionItem()
+                  .title(new Label("Notifications"))
+                  .open(accordionOpen("acc-single", [0], 1))
+                  .child("Email and desktop notification preferences."),
+              ),
+          ),
+        },
+        {
+          label: "Several sections open at once",
+          element: asElement(
+            new Accordion("acc-multiple")
+              .multiple(true)
+              .on_toggle((indices, cx) => setState("acc-multiple", indices, cx))
+              .child(
+                new AccordionItem()
+                  .title(new Label("Shipping"))
+                  .open(accordionOpen("acc-multiple", [0, 1], 0))
+                  .child("Ships in 2 days."),
+              )
+              .child(
+                new AccordionItem()
+                  .title(new Label("Returns"))
+                  .open(accordionOpen("acc-multiple", [0, 1], 1))
+                  .child("Free within 30 days."),
+              ),
+          ),
+        },
+      ];
+    case "Collapsible":
+      return [
+        {
+          label: "Basic",
+          description: "A trigger beside the title, with a summary that stays visible.",
+          element: asElement(
+            v_flex()
+              .w(360)
+              .border(1)
+              .rounded(6)
+              .child(
+                new Collapsible()
+                  .w_full()
+                  .open(/** @type {boolean} */ (state("collapsible-order", true)))
+                  .motion_id("story-collapsible-order")
+                  .child(
+                    h_flex()
+                      .w_full()
+                      .px(12)
+                      .py(10)
+                      .justify_between()
+                      .items_center()
+                      .gap(16)
+                      .child(div().text_size(13).font_semibold().child("Order #4189"))
+                      .child(
+                        asElement(
+                          new Button("collapsible-order-trigger")
+                            .label(state("collapsible-order", true) ? "Hide details" : "Show details")
+                            .ghost()
+                            .size("xsmall")
+                            .on_click((_event, cx) =>
+                              setState("collapsible-order", !state("collapsible-order", true), cx),
+                            ),
+                        ),
+                      ),
+                  )
+                  .child(
+                    h_flex()
+                      .w_full()
+                      .justify_between()
+                      .items_center()
+                      .px(12)
+                      .py(10)
+                      .border_t(1)
+                      .child(div().text_size(12).child("Status"))
+                      .child(asElement(new Tag().variant("success").size("small").child("Shipped"))),
+                  )
+                  .content(
+                    v_flex()
+                      .border_t(1)
+                      .children(
+                        [
+                          ["Tracking", "1Z999AA1"],
+                          ["Carrier", "UPS Ground"],
+                          ["Delivery", "Thursday, September 3"],
+                        ].map(([title, value], index) =>
+                          h_flex()
+                            .w_full()
+                            .justify_between()
+                            .px(12)
+                            .py(9)
+                            .when(index > 0, (row) => row.border_t(1))
+                            .child(div().text_size(12).child(title))
+                            .child(div().text_size(12).font_semibold().child(value)),
+                        ),
+                      ),
+                  ),
+              ),
+          ),
+        },
+        {
+          label: "Row trigger",
+          description: "The whole question row is the trigger, as used by FAQ entries.",
+          element: v_flex()
+            .w(360)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Collapsible()
+                  .w_full()
+                  .open(/** @type {boolean} */ (state("collapsible-faq", false)))
+                  .motion_id("story-collapsible-faq")
+                  .child(
+                    h_flex()
+                      .id("collapsible-faq-trigger")
+                      .w_full()
+                      .justify_between()
+                      .items_center()
+                      .gap(8)
+                      .px(12)
+                      .py(10)
+                      .on_click((_event, cx) =>
+                        setState("collapsible-faq", !state("collapsible-faq", false), cx),
+                      )
+                      .child(div().text_size(12).child("How do I reset my password?"))
+                      .child(
+                        asElement(
+                          new Icon(
+                            state("collapsible-faq", false)
+                              ? "icons/chevron-down.svg"
+                              : "icons/chevron-right.svg",
+                          ).size("xsmall"),
+                        ),
+                      ),
+                  )
+                  .content(
+                    div()
+                      .w_full()
+                      .border_t(1)
+                      .px(12)
+                      .py(10)
+                      .text_size(12)
+                      .child("Open Settings, choose Security, then select Reset password."),
+                  ),
+              ),
+            ),
+        },
+      ];
+
+    // --------------------------------------------------------------- inputs
+    case "InputGroup": {
+      const query = String(state("input-group-query", ""));
+      const url = String(state("input-group-url-value", "gpui-kit.com"));
+      const email = String(state("input-group-email-value", ""));
+      const message = String(state("input-group-message-value", ""));
+      const count = ["Button", "Input", "Textarea", "Input Group", "Select", "Combobox"]
+        .filter(name => name.toLowerCase().includes(query.toLowerCase())).length;
+      const invalidEmail = email.length > 0 && (!email.includes("@") || !email.includes("."));
+      const characters = Array.from(message).length;
+      return [
+        {
+          label: "Search with addons",
+          description: "Typing filters the result count and preserves the native editing state.",
+          element: v_flex().w_full().max_w(384).gap_2()
+            .child(new InputGroup("ig-search")
+              .input(new InputGroupInput(retained("input-group-search", () => InputState("Search components…")))
+                .aria_label("Search components").value(query)
+                .on_change((value, cx) => setState("input-group-query", value, cx)))
+              .addon(new InputGroupAddon("ig-search-icon").child(new Icon("icons/search.svg")))
+              .addon(new InputGroupAddon("ig-search-count").align("inline-end")
+                .child(new InputGroupText().child(`${count} results`))))
+            .child(div().text_sm().child(`Query: ${query || "—"}`)),
+        },
+        {
+          label: "URL and multiple actions",
+          element: new InputGroup("ig-url").max_w(384)
+            .input(new InputGroupInput(retained("input-group-url", () => InputState("Website", "gpui-kit.com")))
+              .aria_label("Website").content_type("url").value(url)
+              .on_change((value, cx) => setState("input-group-url-value", value, cx)))
+            .addon(new InputGroupAddon("ig-scheme").child(new InputGroupText().child("https://")))
+            .addon(new InputGroupAddon("ig-url-actions").align("inline-end")
+              .child(new InputGroupButton("ig-favorite")
+                .aria_label("Favorite website").tooltip("Favorite website")
+                .variant(state("input-group-starred", false) ? "secondary" : "ghost")
+                .icon("icons/star.svg")
+                .on_click((_event, cx) => setState("input-group-starred", !state("input-group-starred", false), cx)))
+              .child(new InputGroupButton("ig-reset-url").label("Reset")
+                .on_click((_event, cx) => setState("input-group-url-value", "gpui-kit.com", cx)))),
+        },
+        {
+          label: "Validation, disabled, and read-only",
+          element: v_flex().w_full().max_w(384).gap_4()
+            .child(new InputGroup("ig-email").invalid(invalidEmail)
+              .input(new InputGroupInput(retained("input-group-email", () => InputState("you@example.com")))
+                .aria_label("Email").content_type("email_address").value(email)
+                .on_change((value, cx) => setState("input-group-email-value", value, cx)))
+              .addon(new InputGroupAddon("ig-email-icon").child(new Icon("icons/info.svg"))))
+            .child(div().text_sm().child(invalidEmail ? "Enter a complete email address." : "Type an email to validate it."))
+            .child(new InputGroup("ig-disabled").disabled(true)
+              .input(new InputGroupInput(retained("input-group-disabled", () => InputState("Unavailable"))).aria_label("Unavailable"))
+              .addon(new InputGroupAddon("ig-disabled-actions").align("inline-end")
+                .child(new InputGroupButton("ig-disabled-send").label("Send"))))
+            .child(new InputGroup("ig-disabled-invalid").disabled(true).invalid(true)
+              .input(new InputGroupInput(retained("input-group-disabled-invalid", () => InputState("", "Invalid saved value")))
+                .aria_label("Disabled invalid input")))
+            .child(div().text_sm().child("The error remains visible while editing is unavailable."))
+            .child(new InputGroup("ig-readonly").readonly(true)
+              .input(new InputGroupInput(retained("input-group-readonly", () => InputState("Documentation", "https://gpui-kit.com")))
+                .aria_label("Read-only documentation URL"))
+              .addon(new InputGroupAddon("ig-readonly-text").align("inline-end").child(new InputGroupText().child("Read-only")))),
+        },
+        {
+          label: "Textarea with header and footer",
+          element: new InputGroup("ig-notes").max_w(448)
+            .input(new InputGroupTextarea(retained("input-group-notes", () => TextareaState("One shared frame.")))
+              .aria_label("Notes").rows(4))
+            .addon(new InputGroupAddon("ig-notes-header").align("block-start")
+              .child(new InputGroupText().child(new Icon("icons/file.svg")).child("notes.txt")))
+            .addon(new InputGroupAddon("ig-notes-footer").align("block-end")
+              .child(new InputGroupText().child("Text and toolbar share one frame"))),
+        },
+        {
+          label: "Chat textarea",
+          description: "Send clears the controlled textarea without echoing a change callback.",
+          element: v_flex().w_full().max_w(448).gap_2()
+            .child(new InputGroup("ig-message").invalid(characters > 280)
+              .input(new InputGroupTextarea(retained("input-group-message", () => TextareaState()))
+                .aria_label("Message").placeholder("Write a message…").auto_grow(2, 6).value(message)
+                .on_change((value, cx) => setState("input-group-message-value", value, cx)))
+              .addon(new InputGroupAddon("ig-message-footer").align("block-end")
+                .child(new InputGroupText().child(`${characters}/280`))
+                .child(new InputGroupButton("ig-send").ml_auto().variant("primary").label("Send")
+                  .disabled(message.trim().length === 0 || characters > 280)
+                  .on_click((_event, cx) => {
+                    setState("input-group-last-message", message, cx);
+                    setState("input-group-message-value", "", cx);
+                  }))))
+            .child(div().text_sm().child(`Sent: ${state("input-group-last-message", "—")}`)),
+        },
+        ...expandedInputGroupExamples(cx),
+      ];
+    }
+    case "Input":
+      return [
+        {
+          label: "Text fields",
+          description: "Click the first field and type; its retained state survives redraws.",
+          element: v_flex()
+            .w(420)
+            .max_w_full()
+            .gap(8)
+            .child(
+              asElement(
+                new Input(
+                  retained("input-project-name", () => InputState("Enter a project name")),
+                ).w_full(),
+              ),
+            )
+            .child(
+              asElement(
+                new Input(
+                  retained("input-locked", () => InputState("Managed by your organization")),
+                )
+                  .disabled(true)
+                  .w_full(),
+              ),
+            ),
+        },
+        tokenExample(false, cx),
+      ];
+    case "NumberInput":
+      return [
+        {
+          label: "Stepper buttons on both ends",
+          element: asElement(
+            new NumberInput(retained("number-input", () => InputState("Quantity", "12")))
+              .w(240)
+              .max_w_full(),
+          ),
+        },
+      ];
+    case "OtpInput":
+      return [
+        {
+          label: "Six digits in two groups",
+          element: asElement(
+            new OtpInput(retained("otp-six", () => OtpState(6))).groups(2),
+          ),
+        },
+        {
+          label: "Four digits, ungrouped",
+          element: asElement(new OtpInput(retained("otp-four", () => OtpState(4)))),
+        },
+      ];
+    case "TimeField":
+      return [
+        {
+          label: "Hours and minutes",
+          element: asElement(new TimeField(retained("time-field", () => TimeFieldState()))),
+        },
+        {
+          label: "Disabled",
+          element: asElement(
+            new TimeField(retained("time-field-disabled", () => TimeFieldState())).disabled(true),
+          ),
+        },
+      ];
+    case "Textarea":
+      return [
+        {
+          label: "Bordered, fixed height",
+          element: asElement(
+            new Textarea(
+              retained("textarea-notes", () =>
+                TextareaState("Ship the component gallery with verified interactive examples."),
+              ),
+            )
+              .aria_label("Notes")
+              .bordered(true)
+              .w(520)
+              .max_w_full()
+              .h(120),
+          ),
+        },
+        tokenExample(true, cx),
+      ];
+    case "Checkbox":
+      return [
+        {
+          label: "Click any of them — each reports its new state",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(
+              asElement(
+                new Checkbox("cb-off")
+                  .label("Remember me")
+                  .checked(/** @type {boolean} */ (state("cb-off", false)))
+                  .on_change((checked, cx) => setState("cb-off", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Checkbox("cb-on")
+                  .label("Sync devices")
+                  .checked(/** @type {boolean} */ (state("cb-on", true)))
+                  .on_change((checked, cx) => setState("cb-on", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Checkbox("cb-tip").label("Disabled").tooltip("Not available here"),
+              ),
+            ),
+        },
+      ];
+    case "Switch":
+      return [
+        {
+          label: "Default",
+          description: "Settings remain controlled by the application owner.",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(
+              asElement(
+                new Switch("sw-off")
+                  .label("Notifications")
+                  .checked(/** @type {boolean} */ (state("sw-off", false)))
+                  .on_change((checked, cx) => setState("sw-off", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Switch("sw-on")
+                  .label("Auto-update")
+                  .checked(/** @type {boolean} */ (state("sw-on", true)))
+                  .on_change((checked, cx) => setState("sw-on", checked, cx)),
+              ),
+            ),
+        },
+        {
+          label: "Compact",
+          description: "A small switch for dense preference rows.",
+          element: asElement(
+            new Switch("sw-compact")
+              .label(
+                state("sw-compact", false)
+                  ? "Compact controls enabled"
+                  : "Compact controls disabled",
+              )
+              .size("small")
+              .checked(/** @type {boolean} */ (state("sw-compact", false)))
+              .on_change((checked, cx) => setState("sw-compact", checked, cx)),
+          ),
+        },
+        {
+          label: "Disabled",
+          description: "Unavailable settings keep their current value visible.",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(asElement(new Switch("sw-disabled-off").label("Managed off").disabled(true)))
+            .child(
+              asElement(
+                new Switch("sw-disabled-on")
+                  .label("Managed on")
+                  .checked(true)
+                  .disabled(true),
+              ),
+            ),
+        },
+      ];
+    case "Radio":
+      return [
+        {
+          label: "Pick one — the group reports the new index",
+          element: asElement(
+            new RadioGroup("layout-density")
+              .selected_index(/** @type {number} */ (state("radio-group", 1)))
+              .on_change((index, cx) => setState("radio-group", index, cx))
+              .child(asElement(new Radio("comfortable").label("Comfortable")))
+              .child(asElement(new Radio("compact").label("Compact")))
+              .child(asElement(new Radio("dense").label("Dense"))),
+          ),
+        },
+        {
+          label: "On its own, reporting its own click",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(
+              asElement(
+                new Radio("radio-standalone")
+                  .label("Subscribe")
+                  .size("small")
+                  .checked(/** @type {boolean} */ (state("radio-standalone", false)))
+                  .on_change((checked, cx) => setState("radio-standalone", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Radio("radio-skipped")
+                  .label("Skipped by Tab")
+                  .accessibility_label("Not a tab stop")
+                  .tab_stop(false),
+              ),
+            ),
+        },
+      ];
+    case "Slider":
+      return [
+        {
+          label: "Horizontal, and reversed",
+          element: v_flex()
+            .w_full()
+            .gap(16)
+            .child(asElement(new Slider(retained("slider-default", () => SliderState(36)))))
+            .child(
+              asElement(new Slider(retained("slider-reverse", () => SliderState(68))).reverse()),
+            ),
+        },
+        {
+          label: "Vertical",
+          element: asElement(
+            new Slider(retained("slider-vertical", () => SliderState(54))).vertical().h(120),
+          ),
+        },
+        {
+          label: "Disabled",
+          element: asElement(
+            new Slider(retained("slider-disabled", () => SliderState(24))).disabled(true),
+          ),
+        },
+      ];
+    case "ColorPicker":
+      return [
+        {
+          label: "Labelled trigger",
+          element: asElement(
+            new ColorPicker(retained("color-picker", () => ColorPickerState()))
+              .label("Accent color")
+              .accessibility_label("Choose an accent color"),
+          ),
+        },
+      ];
+    case "DatePicker":
+      return [
+        {
+          label: "Empty, with a placeholder",
+          element: asElement(
+            new DatePicker(retained("date-picker", () => DatePickerState())).placeholder(
+              "Select a date",
+            ),
+          ),
+        },
+      ];
+    case "Calendar":
+      return [
+        {
+          label: "One month",
+          element: asElement(new Calendar(retained("calendar-one", () => CalendarState()))),
+        },
+        {
+          label: "Two months side by side",
+          element: asElement(
+            new Calendar(retained("calendar-two", () => CalendarState())).number_of_months(2),
+          ),
+        },
+      ];
+
+    // -------------------------------------------------------------- display
+    case "Text":
+      return [
+        {
+          label: "A paragraph of text",
+          element: asElement(
+            new Text("Text renders a string with the active theme's body style."),
+          ),
+        },
+      ];
+    case "Label":
+      return [
+        {
+          label: "Plain, with a secondary value, and masked",
+          element: v_flex()
+            .gap(8)
+            .child(asElement(new Label("Account")))
+            .child(asElement(new Label("Account").secondary("Connected")))
+            .child(asElement(new Label("API key").masked(true))),
+        },
+      ];
+    case "Icon":
+      return [
+        {
+          label: "Sizes",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(asElement(new Icon("icons/check.svg").size("xsmall")))
+            .child(asElement(new Icon("icons/check.svg").size("small")))
+            .child(asElement(new Icon("icons/check.svg").size("medium")))
+            .child(asElement(new Icon("icons/check.svg").size("large"))),
+        },
+        {
+          label: "Coloured, and rotated a quarter turn",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(asElement(new Icon("icons/check.svg").color("blue-600")))
+            .child(asElement(new Icon("icons/check.svg").rotate(Math.PI / 2))),
+        },
+      ];
+    case "Image":
+      return [
+        {
+          label: "An asset from the application directory",
+          element: asElement(new Image("assets/pixel.svg").w(64).h(64)),
+        },
+      ];
+    case "Kbd":
+      return [
+        {
+          label: "Default, and outlined",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Kbd("cmd-s")))
+            .child(asElement(new Kbd("cmd-shift-p").outline())),
+        },
+      ];
+    case "Separator":
+      return [
+        {
+          label: "Plain, labelled, and dashed",
+          element: v_flex()
+            .w_full()
+            .gap(16)
+            .child(asElement(new Separator()))
+            .child(asElement(new Separator().label("Account")))
+            .child(asElement(new Separator().dashed())),
+        },
+      ];
+    case "Skeleton":
+      return [
+        {
+          label: "A loading placeholder",
+          element: v_flex()
+            .gap(8)
+            .child(asElement(new Skeleton().w(220).h(14)))
+            .child(asElement(new Skeleton().secondary().w(160).h(14))),
+        },
+      ];
+    case "Spinner":
+      return [
+        {
+          label: "Sizes",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(asElement(new Spinner().size("small")))
+            .child(asElement(new Spinner().size("medium")))
+            .child(asElement(new Spinner().size("large"))),
+        },
+        {
+          label: "Alternate icon and easing",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(asElement(new Spinner().icon("loader_circle").color("blue-600")))
+            .child(asElement(new Spinner().ease("linear"))),
+        },
+      ];
+    case "Badge":
+      return [
+        {
+          label: "Decorating an icon: a count, a capped count, and a bare dot",
+          element: h_flex()
+            .gap(24)
+            .items_center()
+            .child(
+              asElement(
+                new Badge()
+                  .count(3)
+                  .child(asElement(new Icon("icons/bell.svg").size("medium"))),
+              ),
+            )
+            .child(
+              asElement(
+                new Badge()
+                  .count(120)
+                  .max(99)
+                  .child(asElement(new Icon("icons/inbox.svg").size("medium"))),
+              ),
+            )
+            .child(
+              asElement(
+                new Badge()
+                  .dot()
+                  .color("red-500")
+                  .child(asElement(new Icon("icons/user.svg").size("medium"))),
+              ),
+            ),
+        },
+      ];
+    case "Tag":
+      return [
+        {
+          label: "Variants",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Tag().variant("primary").child("Primary")))
+            .child(asElement(new Tag().variant("success").child("Active")))
+            .child(asElement(new Tag().variant("warning").child("Pending")))
+            .child(asElement(new Tag().variant("danger").child("Failed"))),
+        },
+        {
+          label: "Outlined, and fully rounded",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(asElement(new Tag().variant("info").outline().child("Draft")))
+            .child(asElement(new Tag().variant("secondary").rounded_full().child("Beta"))),
+        },
+      ];
+    case "Avatar":
+      return [
+        {
+          label: "Initials, at three sizes",
+          element: h_flex()
+            .gap(12)
+            .items_center()
+            .child(asElement(new Avatar().name("Ada Lovelace").size("small")))
+            .child(asElement(new Avatar().name("Ada Lovelace").size("medium")))
+            .child(asElement(new Avatar().name("Grace Hopper").size("large"))),
+        },
+      ];
+    case "Alert":
+      return [
+        {
+          label: "Severities",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(asElement(new InfoAlert("alert-info", "A new version is available.").title("Update")))
+            .child(asElement(new SuccessAlert("alert-success", "Your changes have been saved.").title("Saved")))
+            .child(asElement(new WarningAlert("alert-warning", "Your trial ends in three days.").title("Expiring")))
+            .child(asElement(new ErrorAlert("alert-error", "The connection was reset.").title("Upload failed"))),
+        },
+        {
+          label: "Untitled, and as a full-width banner",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(asElement(new Alert("alert-plain", "A neutral message with no title.")))
+            .child(
+              asElement(
+                new WarningAlert("alert-banner", "Scheduled maintenance begins at 02:00 UTC.")
+                  .title("Maintenance")
+                  .banner(),
+              ),
+            ),
+        },
+      ];
+    case "Questionnaire":
+      return [
+        {
+          label: "Guided setup",
+          description:
+            "One question at a time, with letter shortcuts, a freeform answer, and validation on Next.",
+          element: asElement(
+            new Questionnaire("registered-questionnaire")
+              .shortcuts("letters")
+              .child(
+                new QuestionnaireItem("direction", "What should we prototype next?")
+                  .required(true)
+                  .description("Choose a direction or write your own.")
+                  .child(new QuestionnaireChoice("delegation", "Delegation"))
+                  .child(new QuestionnaireChoice("questions", "Question prompts"))
+                  .child(
+                    new QuestionnaireInput(
+                      retained("questionnaire-direction", () =>
+                        InputState("Type another direction…"),
+                      ),
+                      "Another direction",
+                    ),
+                  ),
+              )
+              .child(
+                new QuestionnaireItem("tone", "What tone should the interface use?")
+                  .description("This optional question can be skipped.")
+                  .child(new QuestionnaireChoice("direct", "Direct"))
+                  .child(new QuestionnaireChoice("warm", "Warm")),
+              ),
+          ),
+        },
+      ];
+    case "Progress":
+      return [
+        {
+          label: "Determinate",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(asElement(new Progress("p-25").value(25).accessibility_label("25 percent")))
+            .child(asElement(new Progress("p-64").value(64).accessibility_label("64 percent")))
+            .child(asElement(new Progress("p-100").value(100).accessibility_label("Complete"))),
+        },
+        {
+          label: "Indeterminate, while work is in flight",
+          element: asElement(
+            new Progress("p-loading").loading(true).accessibility_label("Uploading"),
+          ),
+        },
+      ];
+    case "Rating":
+      return [
+        {
+          label: "Click a star",
+          element: v_flex()
+            .gap(12)
+            .child(
+              asElement(
+                new Rating("rating-5")
+                  .value(/** @type {number} */ (state("rating-5", 4)))
+                  .max(5)
+                  .color("amber-500")
+                  .on_change((value, cx) => setState("rating-5", value, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Rating("rating-10")
+                  .value(/** @type {number} */ (state("rating-10", 7)))
+                  .max(10)
+                  .on_change((value, cx) => setState("rating-10", value, cx)),
+              ),
+            ),
+        },
+      ];
+    case "Clipboard":
+      return [
+        {
+          label: "Copies its value, with hover help",
+          element: asElement(
+            new Clipboard("copy-link").value("https://gpui.rs").tooltip("Copy link"),
+          ),
+        },
+      ];
+    case "GroupBox":
+      return [
+        {
+          label: "Variants",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new GroupBox().title("Normal").child(asElement(new Text("Grouped content."))),
+              ),
+            )
+            .child(
+              asElement(
+                new GroupBox()
+                  .title("Outline")
+                  .variant("outline")
+                  .child(asElement(new Text("Grouped content."))),
+              ),
+            )
+            .child(
+              asElement(
+                new GroupBox()
+                  .title("Fill")
+                  .variant("fill")
+                  .child(asElement(new Text("Grouped content."))),
+              ),
+            ),
+        },
+      ];
+    case "StatusBar":
+      return [
+        {
+          label: "Editor status",
+          description: "Repository state leads, document state trails, and sync status stays centered.",
+          element: asElement(
+            new StatusBar()
+              .w_full()
+              .left_content(asElement(new Button("status-branch").ghost().size("xsmall").label("main")))
+              .left_content(asElement(new VerticalSeparator().h(14)))
+              .left_content(asElement(new Text("0 errors · 2 warnings")))
+              .child(asElement(new Text("All changes saved")))
+              .right_content(asElement(new Button("status-position").ghost().size("xsmall").label("Ln 12, Col 34")))
+              .right_content(asElement(new VerticalSeparator().h(14)))
+              .right_content(asElement(new Button("status-language").ghost().size("xsmall").label("JavaScript"))),
+          ),
+        },
+      ];
+    case "TitleBar":
+      return [
+        {
+          label: "Window title bar",
+          description:
+            "The bar above this gallery is the same component. Pressing an empty part of it moves the window; the trailing buttons stop that press so they stay clickable.",
+          element: asElement(
+            div()
+              .w_full()
+              .border(1)
+              .child(
+                asElement(
+                  new TitleBar()
+                    .child(asElement(new Text("Untitled document")))
+                    .child(
+                      h_flex()
+                        .px(8)
+                        .gap(4)
+                        .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+                        .child(asElement(new Button("title-bar-share").ghost().size("small").label("Share"))),
+                    ),
+                ),
+              ),
+          ),
+        },
+      ];
+    case "Toolbar":
+      return [
+        {
+          label: "Document toolbar",
+          description: "Leading file and history commands, a centered document name, and trailing utilities.",
+          element: asElement(
+            div()
+              .w_full()
+              .border(1)
+              .child(
+                asElement(
+                  new Toolbar("document-toolbar")
+                    .w_full()
+                    .child(asElement(new Button("toolbar-new").ghost().compact().size("small").label("New")))
+                    .child(asElement(new Button("toolbar-open").ghost().compact().size("small").label("Open")))
+                    .child(asElement(new VerticalSeparator().h(20)))
+                    .child(asElement(new Button("toolbar-undo").ghost().compact().size("small").label("Undo")))
+                    .child(asElement(new Button("toolbar-redo").ghost().compact().size("small").label("Redo")))
+                    .child(asElement(div().flex_1()))
+                    .child(asElement(new Text("Quarterly report")))
+                    .child(asElement(div().flex_1()))
+                    .child(asElement(new Button("toolbar-find").ghost().compact().size("small").label("Find")))
+                    .child(asElement(new Button("toolbar-more").ghost().compact().size("small").label("More"))),
+                ),
+              ),
+          ),
+        },
+        {
+          label: "Table toolbar",
+          description: "A compact table header with status content and trailing data commands.",
+          element: asElement(
+            div()
+              .w_full()
+              .border(1)
+              .child(
+                asElement(
+                  new Toolbar("table-toolbar")
+                    .w_full()
+                    .child(asElement(new Text("Open orders · 24")))
+                    .child(asElement(div().flex_1()))
+                    .child(asElement(new Button("toolbar-export-orders").ghost().compact().size("small").label("Export…")))
+                    .child(asElement(new Button("toolbar-refresh-orders").ghost().compact().size("small").label("Refresh")))
+                    .child(asElement(new Button("toolbar-columns").ghost().compact().size("small").label("Columns"))),
+                ),
+              ),
+          ),
+        },
+      ];
+
+    // ------------------------------------------------------------ structure
+    case "Breadcrumb":
+      return [
+        {
+          label: "A path of three segments",
+          element: asElement(new Breadcrumb(["Home", "Settings", "Profile"])),
+        },
+      ];
+    case "Carousel": {
+      const carouselState = retained("carousel-basic", () => CarouselState(3));
+      const slide = (index) =>
+        div()
+          .w_full()
+          .h(224)
+          .flex()
+          .items_center()
+          .justify_center()
+          .border(1)
+          .border_color(cx.theme().colors.border)
+          .rounded(8)
+          .bg(cx.theme().colors.background)
+          .text_size(28)
+          .font_semibold()
+          .child(String(index + 1));
+      return [
+        {
+          label: "Basic",
+          description: "Use the controls, pagination, keyboard, pointer, or trackpad to select a slide.",
+          element: asElement(
+            new Carousel("story-carousel", carouselState)
+              .w(384)
+              .max_w_full()
+              .selected_index(/** @type {number} */ (state("carousel-index", 0)))
+              .on_change((index, cx) => setState("carousel-index", index, cx))
+              .child(
+                new CarouselContent(carouselState)
+                  .child(new CarouselItem("story-slide-1", 0, carouselState).child(slide(0)))
+                  .child(new CarouselItem("story-slide-2", 1, carouselState).child(slide(1)))
+                  .child(new CarouselItem("story-slide-3", 2, carouselState).child(slide(2))),
+              )
+              .child(new CarouselPrevious(carouselState).accessibility_label("Previous slide"))
+              .child(new CarouselNext(carouselState).accessibility_label("Next slide"))
+              .child(
+                new CarouselPagination()
+                  .child(new CarouselPaginationItem("story-page-1", 0, carouselState).child("1"))
+                  .child(new CarouselPaginationItem("story-page-2", 1, carouselState).child("2"))
+                  .child(new CarouselPaginationItem("story-page-3", 2, carouselState).child("3")),
+              ),
+          ),
+        },
+      ];
+    }
+    case "Pagination":
+      return [
+        {
+          label: "Page 2 of 5",
+          element: asElement(
+            new Pagination("pages")
+              .current_page(/** @type {number} */ (state("pages", 2)))
+              .on_change((page, cx) => setState("pages", page, cx))
+              .total_pages(5)
+              .visible_pages(5),
+          ),
+        },
+        {
+          label: "Compact, for a narrow toolbar",
+          element: asElement(
+            new Pagination("pages-compact")
+              .current_page(/** @type {number} */ (state("pages-compact", 4)))
+              .on_change((page, cx) => setState("pages-compact", page, cx))
+              .total_pages(20)
+              .compact(),
+          ),
+        },
+      ];
+    case "Stepper":
+      return [
+        {
+          label: "Horizontal, on the second step",
+          element: asElement(
+            new Stepper("onboarding")
+              .selected_index(/** @type {number} */ (state("stepper-h", 1)))
+              .on_change((index, cx) => setState("stepper-h", index, cx))
+              .text_center(true)
+              .child(new StepperItem().child("Account"))
+              .child(new StepperItem().child("Profile"))
+              .child(new StepperItem().child("Finish")),
+          ),
+        },
+        {
+          label: "Vertical",
+          element: asElement(
+            new Stepper("onboarding-vertical")
+              .selected_index(/** @type {number} */ (state("stepper-v", 0)))
+              .on_change((index, cx) => setState("stepper-v", index, cx))
+              .vertical(true)
+              .children(
+                [
+                  ["Account", "Name, email and password."],
+                  ["Profile", "Avatar and display name."],
+                  ["Review", "Check everything over."],
+                  ["Finish", "Nothing left to do."],
+                ].map(([title, description], index, all) =>
+                  new StepperItem()
+                    .pb(index === all.length - 1 ? 0 : 32)
+                    .child(
+                      v_flex()
+                        .gap(2)
+                        .child(div().child(title))
+                        .child(div().text_size(12).child(description)),
+                    ),
+                ),
+              ),
+          ),
+        },
+      ];
+    case "Tab":
+      return [];
+    case "TabBar":
+      return [
+        {
+          label: "Underline",
+          description: "A familiar document-settings navigation pattern.",
+          element: asElement(
+            new TabBar("profile-tabs")
+              .variant("underline")
+              .selected_index(/** @type {number} */ (state("tabs-underline", 0)))
+              .on_change((index, cx) => setState("tabs-underline", index, cx))
+              .child(new Tab().label("Profile"))
+              .child(new Tab().label("Security"))
+              .child(new Tab().label("Billing")),
+          ),
+        },
+        {
+          label: "Segmented",
+          description: "A compact view-mode switch for closely related content.",
+          element: asElement(
+            new TabBar("view-tabs")
+              .variant("segmented")
+              .selected_index(/** @type {number} */ (state("tabs-segmented", 1)))
+              .on_change((index, cx) => setState("tabs-segmented", index, cx))
+              .child(new Tab().label("List"))
+              .child(new Tab().label("Board")),
+          ),
+        },
+      ];
+    case "DescriptionList":
+      return [
+        {
+          label: "Two columns, bordered",
+          element: asElement(
+            new DescriptionList()
+              .columns(2)
+              .bordered(true)
+              .child(asElement(new DescriptionItem("Owner").value("Ada Lovelace")))
+              .child(asElement(new DescriptionItem("Status").value("Active")))
+              .child(asElement(new DescriptionItem("Created").value("2026-01-14")))
+              .child(asElement(new DescriptionItem("Region").value("eu-west-1"))),
+          ),
+        },
+        {
+          label: "Stacked, one field per row",
+          element: asElement(
+            new DescriptionList()
+              .vertical()
+              .child(asElement(new DescriptionItem("Owner").value("Ada Lovelace")))
+              .child(asElement(new DescriptionItem("Status").value("Active"))),
+          ),
+        },
+      ];
+    case "Table":
+      return [
+        {
+          label: "Header, body, footer and caption",
+          element: asElement(
+            new Table()
+              .accessibility_label("Team members")
+              .child(new TableCaption().child("Current project members"))
+              .child(
+                new TableHeader().child(
+                  new TableRow()
+                    .child(new TableHead().child("Name"))
+                    .child(new TableHead().text_right().child("Role")),
+                ),
+              )
+              .child(
+                new TableBody()
+                  .child(
+                    new TableRow()
+                      .child(new TableCell().child("Ada Lovelace"))
+                      .child(new TableCell().text_right().child("Owner")),
+                  )
+                  .child(
+                    new TableRow()
+                      .child(new TableCell().child("Grace Hopper"))
+                      .child(new TableCell().text_right().child("Maintainer")),
+                  ),
+              )
+              .child(
+                new TableFooter().child(
+                  new TableRow().child(new TableCell().col_span(2).child("2 members")),
+                ),
+              ),
+          ),
+        },
+      ];
+    case "Form":
+      return [
+        {
+          label: "Two columns, one field required",
+          element: asElement(
+            new Form()
+              .columns(2)
+              .child(
+                new Field()
+                  .label("Account name")
+                  .required(true)
+                  .child(
+                    asElement(
+                      new Input(retained("form-account", () => InputState("Acme Cloud"))).w_full(),
+                    ),
+                  ),
+              )
+              .child(
+                new Field()
+                  .label("Region")
+                  .child(
+                    asElement(
+                      new Input(retained("form-region", () => InputState("us-east-1"))).w_full(),
+                    ),
+                  ),
+              ),
+          ),
+        },
+        {
+          label: "One column, a fixed label width, and a small size",
+          element: asElement(
+            new Form()
+              .columns(1)
+              .label_width(120)
+              .size("small")
+              .child(
+                new Field()
+                  .label("Endpoint")
+                  .description("Where requests are sent.")
+                  .child(
+                    asElement(
+                      new Input(
+                        retained("form-endpoint", () => InputState("https://api.example.com")),
+                      ).w_full(),
+                    ),
+                  ),
+              )
+              .child(
+                new Field()
+                  .label("Token")
+                  .required(true)
+                  .child(
+                    asElement(
+                      new Input(
+                        retained("form-token", () => InputState("Paste an access token")),
+                      ).w_full(),
+                    ),
+                  ),
+              ),
+          ),
+        },
+      ];
+
+    // -------------------------------------------------------------- overlays
+    case "Popover":
+      return [
+        {
+          label: "Opens below the trigger",
+          element: asElement(
+            new Popover("popover-account", "Account details")
+              .content(asElement(new Text("Signed in as ada@example.com"))),
+          ),
+        },
+        {
+          label: "Open on first render",
+          element: asElement(
+            new Popover("popover-open", "Already open")
+              .default_open(true)
+              .content(asElement(new Text("Shown without a click."))),
+          ),
+        },
+        {
+          label: "Anchored, kept open by the script, and not closed by the overlay",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new Popover("popover-controlled", "Controlled")
+                  .card_anchor("top_left")
+                  .appearance(true)
+                  .overlay_closable(false)
+                  .open(/** @type {boolean} */ (state("popover-open", false)))
+                  .on_open_change((open, cx) => setState("popover-open", open, cx))
+                  .content(asElement(new Text("The script owns this one."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`open: ${String(state("popover-open", false))}`),
+            ),
+        },
+      ];
+    case "HoverCard":
+      return [
+        {
+          label: "Reveals detail after a short hover",
+          element: asElement(
+            new HoverCard("hover-account")
+              .trigger_element(asElement(new Button("hover-trigger").label("Account help")))
+              .open_delay(250)
+              .content(asElement(new Text("Your account name is visible to collaborators."))),
+          ),
+        },
+        {
+          label: "Anchored above, slower to dismiss, and reporting its state",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new HoverCard("hover-anchored")
+                  .trigger_element(
+                    asElement(new Button("hover-anchored-trigger").label("Storage")),
+                  )
+                  .card_anchor("top_left")
+                  .open_delay(120)
+                  .close_delay(600)
+                  .appearance(true)
+                  .on_open_change((open, cx) => setState("hover-open", open, cx))
+                  .content(asElement(new Text("42 GB of 100 GB used."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`open: ${String(state("hover-open", false))}`),
+            ),
+        },
+      ];
+    case "Tooltip":
+      return [
+        {
+          label: "Hover help on a control",
+          element: asElement(new Tooltip("tooltip-save", "Save", "Writes changes to disk")),
+        },
+      ];
+    case "Dialog":
+      return [
+        {
+          label: "A modal with a title and body",
+          element: asElement(
+            new Dialog("dialog-project", "Open dialog", (_message, _cx) => {})
+              .title("Project details")
+              .content(asElement(new Text("Everything about this project."))),
+          ),
+        },
+        {
+          label: "Reports which button closed it",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new Dialog("dialog-confirm", "Confirm something", (_message, _cx) => {})
+                  .title("Confirm")
+                  .on_ok((cx) => setState("dialog-outcome", "ok", cx))
+                  .on_cancel((cx) => setState("dialog-outcome", "cancel", cx))
+                  .on_close((cx) => setState("dialog-outcome", "closed", cx))
+                  .content(asElement(new Text("Press a button and watch the line below."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`last outcome: ${String(state("dialog-outcome", "none"))}`),
+            ),
+        },
+      ];
+    case "AlertDialog":
+      return [
+        {
+          label: "Destructive confirmation",
+          element: asElement(
+            new AlertDialog("alert-discard", "Discard changes", (_message, _cx) => {})
+              .title("Discard changes?")
+              .description("Unsaved changes will be lost.")
+              .show_cancel(true),
+          ),
+        },
+      ];
+    case "Sheet":
+      return [
+        {
+          label: "Slides in from the right, and from the bottom",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new Sheet("sheet-right", "Open inspector", (_message, _cx) => {})
+                  .title("Inspector")
+                  .placement("right")
+                  .content(asElement(new Text("Inspector content"))),
+              ),
+            )
+            .child(
+              asElement(
+                new Sheet("sheet-bottom", "Open drawer", (_message, _cx) => {})
+                  .title("Drawer")
+                  .placement("bottom")
+                  .content(asElement(new Text("Drawer content"))),
+              ),
+            ),
+        },
+      ];
+    case "Notification":
+      return [
+        {
+          label: "By type",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new Notification("notify-success", "Success", (_message, _cx) => {})
+                  .title("Saved")
+                  .message("Your changes were saved.")
+                  .type("success"),
+              ),
+            )
+            .child(
+              asElement(
+                new Notification("notify-error", "Error", (_message, _cx) => {})
+                  .title("Upload failed")
+                  .message("The connection was reset.")
+                  .type("error")
+                  .autohide(false),
+              ),
+            ),
+        },
+      ];
+
+    // ----------------------------------------------------------- collections
+    case "List":
+      return [
+        {
+          label: "Rows built from a data callback",
+          element: asElement(
+            new List(
+              "story-list",
+              () => [
+                { id: "alpha", label: "Alpha" },
+                { id: "beta", label: "Beta" },
+                { id: "gamma", label: "Gamma" },
+              ],
+              (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
+            )
+              .w(420)
+              .max_w_full()
+              .h(180)
+              .border(1)
+              .border_color(cx.theme().colors.border)
+              .rounded(6)
+              .overflow_hidden(),
+          ),
+        },
+      ];
+    case "Select":
+      return [
+        {
+          label: "Region",
+          description: "Choose one deployment region.",
+          element: asElement(
+            new Select(
+              "select-region",
+              () => [
+                { id: "eu", label: "eu-west-1" },
+                { id: "us", label: "us-east-1" },
+              ],
+              (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
+              (_value, _cx) => {},
+            )
+              .placeholder("Choose a region")
+              .menu_width(320)
+              .w(320)
+              .max_w_full(),
+          ),
+        },
+        {
+          label: "Disabled",
+          description: "A configured value that cannot be changed.",
+          element: asElement(
+            new Select(
+              "select-disabled-static",
+              () => [{ id: "managed", label: "Managed by your organization" }],
+              (row) => asElement(new Text(/** @type {{label: string}} */ (row).label)),
+              (_value, _cx) => {},
+            )
+              .placeholder("Managed by your organization")
+              .menu_width(320)
+              .w(320)
+              .max_w_full()
+              .disabled(true),
+          ),
+        },
+      ];
+    case "Combobox":
+      return [
+        {
+          label: "Searchable",
+          element: asElement(
+            new Combobox(
+              "combobox-searchable",
+              () => [
+                { id: "alpha", label: "Alpha" },
+                { id: "beta", label: "Beta" },
+                { id: "gamma", label: "Gamma" },
+              ],
+              (_value, _cx) => {},
+              (_value, _cx) => {},
+            )
+              .placeholder("Choose an option")
+              .menu_width(320)
+              .w(320)
+              .max_w_full()
+              .searchable(true)
+              .search_placeholder("Filter options"),
+          ),
+        },
+        {
+          label: "Without the search field",
+          element: asElement(
+            new Combobox(
+              "combobox-plain",
+              () => [{ id: "alpha", label: "Alpha" }],
+              (_value, _cx) => {},
+              (_value, _cx) => {},
+            )
+              .placeholder("Choose an option")
+              .menu_width(320)
+              .w(320)
+              .max_w_full()
+              .searchable(false),
+          ),
+        },
+      ];
+    case "Tree":
+      return [
+        {
+          label: "An expanded folder with two files",
+          element: asElement(
+            new Tree("project-tree")
+              .w(420)
+              .max_w_full()
+              .h(180)
+              .border(1)
+              .border_color(cx.theme().colors.border)
+              .rounded(6)
+              .overflow_hidden()
+              .child(
+                asElement(
+                  new TreeItem("src", "src")
+                    .expanded(true)
+                    .child(asElement(new TreeItem("main", "main.rs")))
+                    .child(asElement(new TreeItem("lib", "lib.rs"))),
+                ),
+              ),
+          ),
+        },
+      ];
+    case "DataTable":
+      return [
+        {
+          label: "Striped rows, sortable and resizable columns",
+          element: asElement(
+            new DataTable(
+              retained("data-table-default", () => DataTableState(["name", "status"])),
+              () => [
+                { name: "Alpha", status: "Ready" },
+                { name: "Beta", status: "Building" },
+                { name: "Gamma", status: "Failed" },
+              ],
+              (row, column) =>
+                asElement(
+                  new Text(String(/** @type {Record<string, string>} */ (row)[column])),
+                ),
+            )
+              .stripe(true)
+              .sortable(true)
+              .column_resizable(true)
+              .h(180),
+          ),
+        },
+        {
+          label: "Bordered, with a row header and selectable rows",
+          element: asElement(
+            new DataTable(
+              retained("data-table-striped", () => DataTableState(["name", "status"])),
+              () => [
+                { name: "Alpha", status: "Ready" },
+                { name: "Beta", status: "Building" },
+              ],
+              (row, column) =>
+                asElement(
+                  new Text(String(/** @type {Record<string, string>} */ (row)[column])),
+                ),
+            )
+              .bordered(true)
+              .row_header(true)
+              .row_selectable(true)
+              .column_movable(true)
+              .scrollbar_visible(true, false)
+              .h(150),
+          ),
+        },
+      ];
+    case "Command":
+      return [
+        {
+          label: "A filterable command palette",
+          element: asElement(
+            new Command(retained("command-default", () => CommandState()))
+              .placeholder("Type a command")
+              .bordered(true)
+              .max_height(200)
+              .child(
+                asElement(
+                  new CommandGroup("Files")
+                    .child(asElement(new CommandItem("Open file").keyword("file").action("open")))
+                    .child(asElement(new CommandItem("Save file").keyword("save").action("save"))),
+                ),
+              )
+              .child(
+                asElement(
+                  new CommandGroup("View").child(
+                    asElement(new CommandItem("Toggle sidebar").action("sidebar")),
+                  ),
+                ),
+              ),
+          ),
+        },
+        {
+          label: "Reports typing, selection and dismissal",
+          element: v_flex()
+            .w_full()
+            .gap(8)
+            .child(
+              asElement(
+                new Command(retained("command-filter", () => CommandState()))
+                  .placeholder("Type to filter")
+                  .searchable(true)
+                  .filterable(true)
+                  .max_height(140)
+                  .on_query((query, cx) => setState("command-query", query, cx))
+                  .on_select((section, row, cx) =>
+                    setState("command-at", `${section}:${row}`, cx),
+                  )
+                  .on_confirm((section, row, cx) =>
+                    setState("command-ran", `${section}:${row}`, cx),
+                  )
+                  .on_cancel((cx) => setState("command-ran", "cancelled", cx))
+                  .child(
+                    asElement(
+                      new CommandGroup("Files")
+                        .child(asElement(new CommandItem("Open file").action("open")))
+                        .child(asElement(new CommandItem("Save file").action("save"))),
+                    ),
+                  ),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(
+                  `query ${String(state("command-query", ""))} · highlighted ${String(state("command-at", "none"))} · ran ${String(state("command-ran", "none"))}`,
+                ),
+            ),
+        },
+      ];
+
+    // -------------------------------------------------------- layout & panels
+    case "Sidebar": {
+      const collapsed = /** @type {boolean} */ (state("sidebar-collapsed", false));
+      return [
+        {
+          label: "Application navigation",
+          description:
+            "A complete workspace sidebar with real destinations, selection, disabled state, account footer, and icon collapse.",
+          element: h_flex()
+            .w_full()
+            .h(340)
+            .border(1)
+            .rounded(8)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Sidebar("story-sidebar")
+                  .side("left")
+                  .collapsible("icon")
+                  .collapsed(collapsed)
+                  .h_full()
+                  .header(
+                    asElement(
+                      new SidebarHeader().child(
+                        collapsed
+                          ? asElement(new Icon("icons/github.svg").size("small"))
+                          : h_flex()
+                              .gap(8)
+                              .items_center()
+                              .child(asElement(new Icon("icons/github.svg").size("small")))
+                              .child(
+                                v_flex()
+                                  .gap(2)
+                                  .child(div().font_semibold().child("Acme Studio"))
+                                  .child(div().text_size(11).child("Design workspace")),
+                              ),
+                      ),
+                    ),
+                  )
+                  .footer(
+                    asElement(
+                      new SidebarFooter().child(
+                        collapsed
+                          ? asElement(new Icon("icons/user.svg").size("small"))
+                          : h_flex()
+                              .gap(8)
+                              .items_center()
+                              .child(asElement(new Icon("icons/user.svg").size("small")))
+                              .child(
+                                v_flex()
+                                  .gap(2)
+                                  .child(div().font_semibold().child("Alex Morgan"))
+                                  .child(div().text_size(11).child("alex@acme.test")),
+                              ),
+                      ),
+                    ),
+                  )
+                  .child(
+                    asElement(
+                      new SidebarMenu()
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Overview")
+                              .icon("home")
+                              .selected(true),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Components").icon("components"),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Settings").icon("settings"),
+                          ),
+                        )
+                        .child(
+                          asElement(
+                            new SidebarMenuItem("Archive")
+                              .icon("archive")
+                              .disabled(true),
+                          ),
+                        ),
+                    ),
+                  ),
+              ),
+            )
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .child(
+                  h_flex()
+                    .h(44)
+                    .px(12)
+                    .gap(10)
+                    .items_center()
+                    .border_b(1)
+                    .child(
+                      asElement(
+                        new SidebarToggleButton()
+                          .collapsed(collapsed)
+                          .on_click((_event, cx) =>
+                            setState("sidebar-collapsed", !collapsed, cx),
+                          ),
+                      ),
+                    )
+                    .child(div().text_size(12).font_semibold().child("Components")),
+                )
+                .child(
+                  v_flex()
+                    .flex_1()
+                    .p(20)
+                    .gap(8)
+                    .child(div().text_size(16).font_semibold().child("Component workspace"))
+                    .child(
+                      div()
+                        .text_size(12)
+                        .child("Select a destination from the sidebar. Collapse it to keep an icon rail."),
+                    ),
+                ),
+            ),
+        },
+      ];
+    }
+    case "Resizable":
+      return [
+        {
+          label: "Two panels with a draggable divider",
+          element: v_flex()
+            .w_full()
+            .border(1)
+            .rounded(8)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Resizable("story-split")
+                  .axis("horizontal")
+                  .cross_size(220)
+                  .child(
+                    asElement(
+                      new ResizablePanel()
+                        .size(220)
+                        .child(
+                          v_flex()
+                            .size_full()
+                            .p(16)
+                            .gap(12)
+                            .child(div().text_size(12).font_semibold().child("PROJECT"))
+                            .child(div().text_size(12).child("src"))
+                            .child(div().pl(16).text_size(12).child("main.rs"))
+                            .child(div().pl(16).text_size(12).child("app.rs")),
+                        ),
+                    ),
+                  )
+                  .child(
+                    asElement(
+                      new ResizablePanel().child(
+                        v_flex()
+                          .size_full()
+                          .p(20)
+                          .gap(8)
+                          .child(div().text_size(15).font_semibold().child("main.rs"))
+                          .child(
+                            div()
+                              .text_size(12)
+                              .child("Drag the divider to resize the project tree."),
+                          ),
+                      ),
+                    ),
+                  ),
+              ),
+            ),
+        },
+      ];
+    case "Scroll":
+      return [
+        {
+          label: "A vertical scroll region",
+          element: asElement(
+            new Scroll(retained("scroll-handle", () => ScrollbarHandle()))
+              .scroll_axis("vertical")
+              .h(140)
+              .child(
+                v_flex()
+                  .gap(8)
+                  .children(
+                    Array.from({ length: 12 }, (_unused, index) =>
+                      asElement(new Text(`Row ${index + 1}`)),
+                    ),
+                  ),
+              ),
+          ),
+        },
+      ];
+    case "Scrollbar": {
+      const handle = retained("scrollbar-handle", () => ScrollbarHandle());
+      const horizontalHandle = retained("scrollbar-horizontal-handle", () => ScrollbarHandle());
+      return [
+        {
+          label: "An always-visible scrollbar beside its region",
+          element: h_flex()
+            .w_full()
+            .h(160)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Scroll(handle)
+                  .scroll_axis("vertical")
+                  .flex_1()
+                  .min_w_0()
+                  .h_full()
+                  .p(12)
+                  .child(
+                    v_flex()
+                      .gap(8)
+                      .children(
+                        Array.from({ length: 16 }, (_unused, index) =>
+                          asElement(new Text(`Activity row ${index + 1}`)),
+                        ),
+                      ),
+                  ),
+              ),
+            )
+            .child(
+              asElement(
+                new Scrollbar("story-scrollbar", handle)
+                  .scroll_axis("vertical")
+                  .mode("always"),
+              ),
+            ),
+        },
+        {
+          label: "An always-visible horizontal scrollbar",
+          element: v_flex()
+            .w_full()
+            .h(110)
+            .border(1)
+            .rounded(6)
+            .overflow_hidden()
+            .child(
+              asElement(
+                new Scroll(horizontalHandle)
+                  .scroll_axis("horizontal")
+                  .w_full()
+                  .flex_1()
+                  .min_h(0)
+                  .p(12)
+                  .child(
+                    h_flex()
+                      .w(1280)
+                      .gap(12)
+                      .children(
+                        Array.from({ length: 10 }, (_unused, index) =>
+                          div()
+                            .w(112)
+                            .flex_shrink_0()
+                            .p(10)
+                            .border(1)
+                            .rounded(5)
+                            .text_size(12)
+                            .child(`Column ${index + 1}`),
+                        ),
+                      ),
+                  ),
+              ),
+            )
+            .child(
+              asElement(
+                new Scrollbar("story-scrollbar-horizontal", horizontalHandle)
+                  .scroll_axis("horizontal")
+                  .mode("always"),
+              ),
+            ),
+        },
+      ];
+    }
+    case "Settings":
+      return [
+        {
+          label: "A page of grouped settings",
+          element: v_flex()
+            .w_full()
+            .h(420)
+            .child(
+              asElement(
+                new Settings("story-settings")
+                  .size("medium")
+                  .sidebar_width(220)
+                  .default_selected_page(0)
+                  .child(
+                asElement(
+                  new SettingPage("General")
+                    .default_open(true)
+                    .child(
+                      asElement(
+                        new SettingGroup()
+                          .title("Appearance")
+                          .child(
+                            asElement(
+                              new SettingItem("Theme")
+                                .description("Choose the application color scheme.")
+                                .content(
+                                  asElement(
+                                    new Button("settings-theme")
+                                      .outline()
+                                      .size("small")
+                                      .label("System"),
+                                  ),
+                                ),
+                          ),
+                          )
+                          .child(
+                            asElement(
+                              new SettingItem("Compact layout")
+                                .description("Reduce spacing in navigation and lists.")
+                                .content(
+                                  asElement(
+                                    new Switch("settings-compact")
+                                      .checked(false)
+                                      .on_change((_checked, _cx) => {}),
+                                  ),
+                                ),
+                            ),
+                          ),
+                      ),
+                    )
+                    .child(
+                      asElement(
+                        new SettingGroup()
+                          .title("Updates")
+                          .child(
+                            asElement(
+                              new SettingItem("Automatic updates")
+                                .description("Download stable releases in the background.")
+                                .content(
+                                  asElement(
+                                    new Switch("settings-updates")
+                                      .checked(true)
+                                      .on_change((_checked, _cx) => {}),
+                                  ),
+                                ),
+                            ),
+                          ),
+                      ),
+                    ),
+                ),
+                  ),
+              ),
+            ),
+        },
+      ];
+    case "Diff":
+      return [
+        {
+          label: "Unified patch",
+          element: asElement(
+            new Diff(retained("diff-review", () => DiffState(REVIEW_PATCH)))
+              .w_full()
+              .h(220),
+          ),
+        },
+      ];
+    case "Editor":
+      return [
+        {
+          label: "Editable, and read-only",
+          element: v_flex()
+            .w_full()
+            .gap(12)
+            .child(
+              asElement(
+                new Editor(
+                  retained("editor-rust", () =>
+                    EditorState("fn main() {\n    println!(\"hello\");\n}", "rust"),
+                  ),
+                )
+                  .aria_label("Source editor")
+                  .bordered(true)
+                  .w_full()
+                  .h(120),
+              ),
+            )
+            .child(
+              asElement(
+                new Editor(
+                  retained("editor-readonly", () =>
+                    EditorState("// generated, do not edit", "rust"),
+                  ),
+                )
+                  .aria_label("Generated source")
+                  .bordered(true)
+                  .readonly(true)
+                  .w_full()
+                  .h(80),
+              ),
+            ),
+        },
+      ];
+
+    // ---------------------------------------------------------------- charts
+    case "BarChart":
+      return [
+        {
+          label: "With grid lines and both axes",
+          element: asElement(
+            new BarChart(() => [
+              { label: "Mon", value: 42 },
+              { label: "Tue", value: 68 },
+              { label: "Wed", value: 31 },
+              { label: "Thu", value: 75 },
+              { label: "Fri", value: 54 },
+            ])
+              .grid(true)
+              .label_axis(true)
+              .value_axis(true)
+              .h(200),
+          ),
+        },
+        {
+          label: "The other four kinds the catalog registers",
+          element: v_flex()
+            .w_full()
+            .gap(16)
+            .child(
+              asElement(
+                new LineChart(() => [
+                  { label: "Mon", value: 42 },
+                  { label: "Tue", value: 68 },
+                  { label: "Wed", value: 31 },
+                  { label: "Thu", value: 75 },
+                ])
+                  .grid(true)
+                  .h(140),
+              ),
+            )
+            .child(
+              asElement(
+                new AreaChart(() => [
+                  { label: "Mon", value: 42 },
+                  { label: "Tue", value: 68 },
+                  { label: "Wed", value: 31 },
+                  { label: "Thu", value: 75 },
+                ])
+                  .grid(true)
+                  .h(140),
+              ),
+            )
+            .child(
+              asElement(
+                new PieChart(() => [
+                  { label: "Rust", value: 62 },
+                  { label: "JavaScript", value: 28 },
+                  { label: "Other", value: 10 },
+                ]).h(160),
+              ),
+            )
+            .child(
+              asElement(
+                new RadarChart(() => [
+                  { label: "Speed", value: 80 },
+                  { label: "Memory", value: 55 },
+                  { label: "Startup", value: 70 },
+                ]).h(160),
+              ),
+            ),
+        },
+      ];
+
+    // ------------------------------------------------- platform integration
+    case "MenuBar":
+      return [
+        {
+          label: "An application menu installed for this window",
+          element: asElement(
+            new MenuBar("story-menu-bar").child(
+              asElement(
+                new Menu("File")
+                  .child(asElement(new MenuItem("Open", "open")))
+                  .child(asElement(new MenuSeparator()))
+                  .child(asElement(new MenuItem("Close", "close").disabled(true))),
+              ),
+            ),
+          ),
+        },
+      ];
+    case "NativeMenuTrigger":
+      return [
+        {
+          label: "Opens the platform's own menu",
+          element: asElement(
+            new NativeMenuTrigger("native-menu", "Native menu")
+              .on_effect_error((_message, _cx) => {})
+              .child(asElement(new NativeMenuItem("Open", "open")))
+              .child(asElement(new NativeMenuSeparator()))
+              .child(asElement(new NativeMenuItem("Close", "close").disabled(true))),
+          ),
+        },
+      ];
+
+    default:
+      throw new Error(
+        `No JavaScript Story example is defined for registered ${surface}`,
+      );
+  }
+}

@@ -175,9 +175,9 @@ where a component needs a tighter or looser curve than the base.
 
 The Base layer keeps its own copy of the theme, because it paints the scrollbar
 and the resize handles without going through `gpui-component`. `Theme::change`
-refreshes that copy; writing to the theme's public fields does not. After
-mutating the theme directly, call `Theme::sync_base(cx)` or the scrollbar thumb
-keeps the radius it was last given.
+and `Theme::update` refresh that copy; writing to the theme's public fields
+through `Theme::global_mut` does not, and the scrollbar thumb keeps the radius
+it was last given until `Theme::sync_base` runs. Prefer `update`.
 
 Two deliberate exceptions:
 
@@ -211,7 +211,8 @@ The transition owns lifecycle mechanics only:
 - easing;
 - animation-frame requests;
 - smooth reversal from the currently sampled value;
-- reduced-motion handling.
+- reduced-motion handling, against the operating system's preference that
+  `gpui_base::init` reads into `App::set_reduce_motion` (see `reduce_motion`).
 
 The caller chooses what the value means and applies it to opacity, color,
 geometry, or another interpolatable property.
@@ -294,6 +295,15 @@ through `ScrollbarTheme::motion`. A zero duration always means "adopt the
 target now", which is also how reduced motion and always-visible scrollbars
 reach the same code path.
 
+`TextView` follows it through `TextViewMotion`. Streamed text is painted glyph
+by glyph inside the view, so only the view can fade the words an update
+appended. Base tracks which rendered text is new and samples the fade, but
+`TextViewMotion::default()` has zero `stream_fade` and `stream_fade_stagger`
+durations; the styled `TextView::stream_fade(true)` projects its own timing
+(350 ms per chunk, measured from claude.ai) the way `ScrollbarTheme` carries
+the scrollbar's, because a reveal that must overlap a model's chunk cadence
+is not one of the four UI transition tiers.
+
 ## Transition Identity
 
 A transition ID identifies one independently animated value. Use a stable
@@ -331,12 +341,125 @@ Reduced motion snaps to the target and clears the stored velocity.
 Applications may implement `Interpolate` for their own value types when the
 interpolation is meaningful and deterministic.
 
+Base also implements composite interpolation for `Size<Pixels>`,
+`Bounds<Pixels>`, and `MotionTransform`. The transform bundle coordinates
+translation, scale, rotation, and opacity while leaving the actual paint
+strategy to its caller.
+
 `spring` accepts values implementing GPUI's `SpringTarget`, which projects a
 value onto the single scalar coordinate the spring integrates and back again.
 GPUI implements it for `f32`, `Pixels`, `Rems`, and `bool`, the last resolving
 to an `AnimationPhase` that interpolates between two endpoint values. A value
 that needs more than one coordinate — a position, a pair of bounds — uses one
 spring per channel rather than one spring over the composite.
+
+## CSS-Aligned Timing and Keyframes
+
+`Easing` provides the CSS keyword curves, typed cubic Bézier curves, all CSS
+step positions, and piecewise-linear stops. `Timing` adds signed delay,
+finite/infinite iteration counts, and normal, reverse, alternate, and
+alternate-reverse playback directions. Both are pure samplers.
+
+`Keyframes<T>` validates endpoint and ordering invariants once, stores its
+track behind shared ownership, and binary-searches the active segment when
+sampled. Each segment may carry its own easing. `animate_keyframes` combines a
+track with `Timing` and keyed GPUI lifecycle state. `Discrete<T>` explicitly
+models values that switch rather than interpolate, and `Stagger` calculates
+per-item delay without allocating a schedule.
+
+All timing is derived from absolute elapsed time. Frame rate affects how many
+samples are painted, not the value reached at a particular time.
+
+## Presence and Measured Reveal
+
+`Presence` retains the enter/present/exit/absent lifecycle independently from
+the caller's logical boolean. Its sample reports progress and whether content
+must remain mounted. Reentry during exit reverses from the current sample.
+
+`MotionReveal` is a lower-level custom element for vertical measured reveals.
+It lays its child out at natural height, reports the progress-scaled height to
+its parent, and clips paint and hit testing to the visible region. The styled
+`Collapsible::motion_id` facade combines it with the theme's control spring.
+The opt-in ID preserves the legacy immediate mount/unmount contract for callers
+that do not request motion.
+
+## Sequencing
+
+`Sequence` chains value transitions so that each step starts when the previous
+one ends. It is the mechanism for "run B when A completes" — a toast that fades
+in, holds, then fades out; a control that overshoots and settles — without a
+timer or a second keyed state per step:
+
+```rust,ignore
+let opacity = gpui_base::Sequence::new(("toast", "opacity"), 0.0)
+    .with_step(1.0, Transition::new(Duration::from_millis(160)))
+    .with_step(0.0, Transition::new(Duration::from_millis(200)).delay(Duration::from_secs(3)))
+    .sample(window, cx);
+
+if opacity.is_finished() {
+    // dismiss
+}
+```
+
+A sequence carries the lifecycle the single transition has and nothing a
+transition does not decide:
+
+- it begins at `from` on the frame it is first sampled and plays once per key;
+  to replay it, put an application-owned generation in the ID;
+- a step ends at an absolute instant, its start plus its delay and duration, and
+  the next step starts at that instant rather than on the frame that noticed
+  it, so frame rate changes how many samples are painted, not where a step is
+  at a given time. Zero-duration steps complete within the frame that reaches
+  them;
+- the sample reports the value, the index of the step being played, and a
+  `MotionStatus`. `Finished` is reported only once the last step completes; a
+  frame that crosses a boundary reports the next step's `Delayed` or `Running`;
+- frames are requested only while a step is delayed or running;
+- under reduced motion the last target is adopted at once, retained state is
+  synchronized with it, and no frame is requested.
+
+A step's target and transition are captured when the step starts. Handing the
+step being played a different target — or fewer steps than the one it is on —
+restarts the sequence from its first step, from the value sampled at that
+instant, which is how a retargeted transition continues from its current value.
+Steps the sequence has not reached are read when it reaches them; a change to
+an earlier step alone has no effect. A sequence does not reverse: play a
+second sequence back to the start under its own key when that is wanted.
+
+`Stagger` composes with it as a delay on the first step, because a stagger is
+nothing more than a per-index delay:
+
+```rust,ignore
+let stagger = Stagger::new(Duration::from_millis(40), StaggerOrigin::First);
+let offset = Sequence::new(("row", index), px(12.))
+    .with_step(px(-2.), Transition::new(Duration::from_millis(120)).delay(stagger.delay(index, count)))
+    .with_step(px(0.), Transition::new(Duration::from_millis(80)))
+    .sample(window, cx);
+```
+
+## Product Motion Tokens
+
+`gpui-component::MotionTokens` centralizes styled policy. It contains four
+semantic duration tiers, enter/exit/move easing, control/movement springs,
+short/medium travel distances, and the scrollbar's idle hold and fade-out. Styled controls read these tokens instead of
+defining local constants. Base remains presentation-neutral and can be used by
+another design system with different policy.
+
+## Sampling Budget
+
+The steady timing/easing/keyframe sampling paths allocate nothing. The release
+benchmark samples batches of 1,000 values and enforces a `0.10 ms` median
+ceiling for scalar timing/easing on the reference machine. It is run with:
+
+```bash
+cargo bench -p gpui-base --bench motion
+```
+
+At 120 Hz the full application has about 8.33 ms per frame. Motion sampling is
+kept well below one tenth of a millisecond so layout, paint, text, and
+application work retain nearly the whole budget. This does not make arbitrary
+layout animation free: prefer opacity and paint transforms when they express
+the same relationship.
 
 ## Legacy Element Animation
 
@@ -359,5 +482,7 @@ may continue to use its module-qualified API.
 6. Disabled is the last semantic layer.
 7. Part styling is explicit and typed; base does not traverse arbitrary child
    trees to apply styles.
-8. Reduced-motion preferences are honored by generic transitions and springs.
+8. Reduced-motion preferences are honored by generic transitions and springs,
+   and the operating system's preference is read into GPUI's flag at `init`;
+   an application that sets the flag itself is never overridden.
 9. Corner radius is derived from the theme, never written as a literal.

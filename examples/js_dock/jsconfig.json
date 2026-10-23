@@ -1,0 +1,31 @@
+{
+  "// why": [
+    "This file exists so an editor resolves `from \"gpui\"` and `from",
+    "\"gpui-base\"` and knows what each module holds. Without it the imports",
+    "are opaque and the 700-odd style methods are invisible.",
+    "",
+    "`noImplicitAny` is on: every parameter and every piece of state carries a",
+    "type, written as JSDoc rather than TypeScript. That gives the compiler the",
+    "same information without a build step — editing a file still changes the",
+    "window with no compile in between, which is the whole argument for a",
+    "script layer. `types.d.ts` holds the shapes, so the annotations at the",
+    "call sites are one word each.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true
+  },
+  "include": ["*.js", "*.d.ts"]
+}

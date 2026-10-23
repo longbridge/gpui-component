@@ -1,11 +1,8 @@
-use gpui::{
-    Action, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Render, SharedString, Styled, Subscription, Window, div, px, rems,
-};
+use gpui_kit::*;
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, IconName, StyledExt,
-    button::{Button, ButtonVariants as _},
+    button::{Button, ButtonVariants as _, Toggle},
     h_flex,
     input::{Input, InputEvent, InputState},
     label::{HighlightsMatch, Label},
@@ -20,7 +17,7 @@ use crate::{section, story_toolbar_group};
 struct TogglePrefix;
 
 pub struct LabelStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     masked: bool,
     highlights_text: SharedString,
     highlights_input: Entity<InputState>,
@@ -88,7 +85,7 @@ impl LabelStory {
     }
 }
 impl Focusable for LabelStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &gpui_kit::App) -> gpui_kit::FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -140,7 +137,21 @@ impl Render for LabelStory {
                         v_flex()
                             .w(px(320.))
                             .gap_4()
-                            .child(Input::new(&self.highlights_input))
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .gap_2()
+                                    .child(div().flex_1().child(Input::new(&self.highlights_input)))
+                                    .child(
+                                        Toggle::new("highlight-mask")
+                                            .label("Mask")
+                                            .checked(self.masked)
+                                            .on_click(cx.listener(|this, checked, _, cx| {
+                                                this.masked = *checked;
+                                                cx.notify();
+                                            })),
+                                    ),
+                            )
                             .child(
                                 v_flex()
                                     .w_full()
@@ -151,10 +162,15 @@ impl Render for LabelStory {
                                     .border_color(cx.theme().border)
                                     .child(
                                         Label::new("Design system documentation")
-                                            .highlights(ht.clone()),
+                                            .highlights(ht.clone())
+                                            .masked(self.masked),
                                     )
                                     // Keeps the mixed ASCII/CJK matching regression visible.
-                                    .child(Label::new("AAA中文BB").highlights(ht.clone())),
+                                    .child(
+                                        Label::new("AAA中文BB")
+                                            .highlights(ht.clone())
+                                            .masked(self.masked),
+                                    ),
                             ),
                     ),
             )

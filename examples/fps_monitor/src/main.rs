@@ -5,13 +5,13 @@
 //! The number of curves is adjustable, which makes it a load knob for watching
 //! the frame time trace react.
 //!
-//! The example deliberately depends only on `gpui` and `gpui-fps`, not on
-//! `gpui-component`, to show that the HUD stands on its own.
+//! The example uses `gpui-kit` without its component feature and `gpui-fps`,
+//! so the HUD stands on its own without the styled component layer.
 
 use std::time::Instant;
 
-use gpui::*;
 use gpui_fps::fps_monitor;
+use gpui_kit::*;
 
 /// Matches the original demo: a one-iteration Hilbert curve of 64 control
 /// points, resampled at six points each.
@@ -394,7 +394,8 @@ fn lerp3(a: Vec3, b: Vec3, t: f32) -> Vec3 {
 actions!(fps_monitor, [Quit]);
 
 fn main() {
-    gpui_platform::application().run(move |cx: &mut App| {
+    gpui_kit::application().run(move |cx: &mut App| {
+        gpui_kit::init(cx);
         cx.bind_keys([
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-q", Quit, None),
@@ -414,14 +415,11 @@ fn main() {
 
         cx.activate(true);
 
-        cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
-                window.activate_window();
-                window.set_window_title("FPS Monitor");
-                cx.new(|cx| Example::new(window, cx))
-            })
-            .expect("failed to open window");
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+            window.activate_window();
+            window.set_window_title("FPS Monitor");
+            cx.new(|cx| Example::new(window, cx))
         })
-        .detach();
+        .expect("failed to open window");
     });
 }

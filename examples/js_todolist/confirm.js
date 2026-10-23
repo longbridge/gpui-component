@@ -5,13 +5,13 @@
 // outlives the call that opened it — so everything it shows comes from what the
 // caller closed over rather than from a `props` object handed across.
 
-import { v_flex, h_flex } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
 import { SPACE, button, label, muted } from "./ui.js";
 
 /**
  * @param {number} count
- * @param {import("gpui").Context} cx
- * @param {(cx: import("gpui").Context) => void} onConfirm
+ * @param {import("gpui-kit").Context} cx
+ * @param {(cx: import("gpui-kit").Context) => void} onConfirm
  */
 export default (count, cx, onConfirm) => () =>
   v_flex()

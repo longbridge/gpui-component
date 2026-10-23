@@ -44,12 +44,14 @@
 //!
 //! # The script surface
 //!
-//! `window` is a global, like `cx`. There is nothing to import.
+//! `window` is a global. There is nothing to import, and unlike `cx`, nothing
+//! hands it to you either.
 //!
 //! ```js
-//! import { v_flex, text } from "gpui";
 //!
-//! const depth = window.open_dialog(() => v_flex().child(text("Delete?")), {
+//! import { v_flex } from "gpui-base";
+//!
+//! const depth = window.open_dialog(() => v_flex().child("Delete?"), {
 //!   escape_dismissable: false,
 //!   backdrop_dismissable: false,
 //! });
@@ -57,7 +59,7 @@
 //! window.close_all_dialogs();  // -> how many closed
 //! window.has_active_dialog();
 //!
-//! window.open_sheet(() => filters());          // right, the default side
+//! window.open_sheet(() => filters());          // right, the default placement
 //! window.open_sheet_at("left", () => nav());
 //! window.close_sheet();        // -> did anything close?
 //! window.has_active_sheet();
@@ -76,17 +78,26 @@
 //! belong to the wrong pass. The function is called when the dialog renders, and
 //! again whenever it re-renders, which is the same contract a view's `render`
 //! has. Whatever it closes over is the dialog's state.
+//!
+//! What it closes over is usually another view's state, and this call answers a
+//! depth rather than a handle — so there is nothing for a script to notify when
+//! that state moves. `window.refresh()` is the call for it: the root redraws,
+//! and an overlay built from a script rebuilds with it rather than
+//! re-materializing the description it was opened with.
 
+use crate::engine::quickjs::js_error;
 use std::time::Duration;
 
 use gpui::{AnyView, App, AppContext as _, Context, Window};
+use gpui_base::Placement;
 use rquickjs::{
-    Ctx, Exception, FromJs, Object, Persistent, Result as JsResult, Value,
+    Ctx, FromJs, Object, Persistent, Result as JsResult, Value,
     function::{Func, Opt},
 };
 
 use crate::{
-    root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest},
+    materialize::{ANCHOR_NAMES, anchor_from_name},
+    root::{DialogOptions, FpsHudRequest, ShellRoot, ToastLevel, ToastRequest},
     scope::{self, ScopePhase},
     view::ScriptView,
 };
@@ -99,11 +110,14 @@ const OPEN_DIALOG: &str = "window.open_dialog(content, options)";
 const CLOSE_DIALOG: &str = "window.close_dialog()";
 const CLOSE_ALL_DIALOGS: &str = "window.close_all_dialogs()";
 const OPEN_SHEET: &str = "window.open_sheet(content)";
-const OPEN_SHEET_AT: &str = "window.open_sheet_at(side, content)";
+const OPEN_SHEET_AT: &str = "window.open_sheet_at(placement, content)";
 const CLOSE_SHEET: &str = "window.close_sheet()";
 const PUSH_TOAST: &str = "window.push_toast(options)";
 const REMOVE_TOAST: &str = "window.remove_toast(id)";
 const CLEAR_TOASTS: &str = "window.clear_toasts()";
+const SHOW_FPS_MONITOR: &str = "show_fps_monitor(options)";
+const HIDE_FPS_MONITOR: &str = "hide_fps_monitor()";
+const FPS_MONITOR_VISIBLE: &str = "fps_monitor_visible()";
 
 /// Installs the host half of the script-side `window`.
 ///
@@ -178,21 +192,21 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
     globals.set(
         "__open_sheet",
         Func::from(
-            |ctx: Ctx<'_>, side: Opt<String>, content: ViewInstance| -> JsResult<()> {
-                let api = if side.0.is_some() {
+            |ctx: Ctx<'_>, placement: Opt<String>, content: ViewInstance| -> JsResult<()> {
+                let api = if placement.0.is_some() {
                     OPEN_SHEET_AT
                 } else {
                     OPEN_SHEET
                 };
                 guard(&ctx, api)?;
-                let side = match side.0 {
-                    Some(name) => parse_side(&ctx, &name)?,
-                    None => SheetSide::default(),
+                let placement = match placement.0 {
+                    Some(name) => parse_placement(&ctx, &name)?,
+                    None => Placement::Right,
                 };
 
                 with_root(&ctx, api, |root, window, cx| {
                     let view = mount(&ctx, content.0, cx)?;
-                    root.open_sheet(side, view, window, cx);
+                    root.open_sheet(placement, view, window, cx);
                     Ok(())
                 })
             },
@@ -251,6 +265,42 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
                 Ok(())
             })
         }),
+    )?;
+
+    // The performance HUD is the root's, not the script's: the script says
+    // whether and where, the host draws it above everything and keeps its
+    // history across a hide and a show. Nothing crosses back but a flag.
+    globals.set(
+        "__show_fps_monitor",
+        Func::from(
+            |ctx: Ctx<'_>, options: Opt<FpsHudArgument>| -> JsResult<()> {
+                guard(&ctx, SHOW_FPS_MONITOR)?;
+                let request = options.0.map(|argument| argument.0).unwrap_or_default();
+                with_root(&ctx, SHOW_FPS_MONITOR, |root, _, cx| {
+                    root.show_fps_monitor(request, cx);
+                    Ok(())
+                })
+            },
+        ),
+    )?;
+
+    globals.set(
+        "__hide_fps_monitor",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            guard(&ctx, HIDE_FPS_MONITOR)?;
+            with_root(&ctx, HIDE_FPS_MONITOR, |root, _, cx| {
+                Ok(root.hide_fps_monitor(cx))
+            })
+        }),
+    )?;
+
+    globals.set(
+        "__fps_monitor_visible",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            with_root(&ctx, FPS_MONITOR_VISIBLE, |root, _, _| {
+                Ok(root.fps_monitor_visible())
+            })
+        }),
     )
 }
 
@@ -264,7 +314,7 @@ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
         return Ok(());
     }
 
-    Err(Exception::throw_type(
+    Err(js_error::type_error(
         ctx,
         &format!(
             "{api} is not allowed during the `{}` phase; overlays may only be opened or \
@@ -284,9 +334,11 @@ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
 ///
 /// Two ways this fails, and they are different mistakes. Outside any host call
 /// there is no window to reach, which is the script calling from somewhere it
-/// cannot. A window whose root view is not a [`ShellRoot`] is the *host's*
-/// mistake — it opened the window with something else — and the message says so
-/// rather than blaming the script.
+/// cannot. A window with no [`ShellRoot`] is either one still being opened —
+/// the application's own view is constructed, and its `init` run, before the
+/// root that will hold it — or the *host's* mistake of opening it with
+/// something else, and the message names both rather than only blaming the
+/// host.
 fn with_root<R>(
     ctx: &Ctx<'_>,
     api: &str,
@@ -294,7 +346,7 @@ fn with_root<R>(
 ) -> JsResult<R> {
     let Some(reached) = scope::with_current(|window, app| ShellRoot::update(window, app, body))
     else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             &format!(
                 "{api} needs a live host call; call it from init(), an event handler or a task"
@@ -303,11 +355,12 @@ fn with_root<R>(
     };
 
     reached.unwrap_or_else(|| {
-        Err(Exception::throw_type(
+        Err(js_error::type_error(
             ctx,
             &format!(
-                "{api} needs a ShellRoot as the window's first view; this window was \
-                 opened with another view"
+                "{api} found no ShellRoot in this window. A view's init() runs before \
+                 its window has one, so open overlays from an event handler or a task; \
+                 otherwise the host opened the window with another root view"
             ),
         ))
     })
@@ -316,7 +369,7 @@ fn with_root<R>(
 /// Wraps a freshly constructed script instance as a view the root can mount.
 fn mount(ctx: &Ctx<'_>, object: ViewObject, cx: &mut App) -> JsResult<AnyView> {
     let Some(runtime) = scope::current_runtime().or_else(|| ShellRuntime::global(cx)) else {
-        return Err(Exception::throw_type(
+        return Err(js_error::type_error(
             ctx,
             "the shell runtime is not installed on this application",
         ));
@@ -342,7 +395,7 @@ impl<'js> FromJs<'js> for ViewInstance {
         // means the wrapper was bypassed, which is worth saying plainly rather
         // than failing later on a missing `render`.
         let Some(object) = value.into_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 "expected a function returning an element; open_dialog and open_sheet take \
                  a function, not an element and not a view class",
@@ -383,6 +436,54 @@ impl<'js> FromJs<'js> for DialogRequest {
     }
 }
 
+/// `{ anchor, frame_budget }`, every key optional; `undefined` or `null` is
+/// the default HUD.
+struct FpsHudArgument(FpsHudRequest);
+
+const FPS_HUD_KEYS: &[&str] = &["anchor", "frame_budget"];
+
+impl<'js> FromJs<'js> for FpsHudArgument {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        if value.is_undefined() || value.is_null() {
+            return Ok(Self(FpsHudRequest::default()));
+        }
+        let Some(object) = value.as_object() else {
+            return Err(js_error::type_error(
+                ctx,
+                &format!(
+                    "{SHOW_FPS_MONITOR} expects an object, such as {{ anchor: \"bottom_left\" }}"
+                ),
+            ));
+        };
+        reject_unknown_keys(ctx, object, FPS_HUD_KEYS, SHOW_FPS_MONITOR)?;
+
+        let mut request = FpsHudRequest::default();
+        if let Some(anchor) = object.get::<_, Option<String>>("anchor")? {
+            request.anchor = anchor_from_name(&anchor).ok_or_else(|| {
+                js_error::type_error(
+                    ctx,
+                    &format!(
+                        "{SHOW_FPS_MONITOR}: unknown anchor `{anchor}`; expected one of {}",
+                        ANCHOR_NAMES.join(", ")
+                    ),
+                )
+            })?;
+        }
+        if let Some(millis) = object.get::<_, Option<f64>>("frame_budget")? {
+            if !(millis.is_finite() && millis > 0.) {
+                return Err(js_error::type_error(
+                    ctx,
+                    &format!(
+                        "{SHOW_FPS_MONITOR}: frame_budget must be a positive number of milliseconds"
+                    ),
+                ));
+            }
+            request.frame_budget = Some(std::time::Duration::from_secs_f64(millis / 1000.));
+        }
+        Ok(Self(request))
+    }
+}
+
 /// `{ title, description, level, timeout, id }`.
 struct ToastArgument(ToastRequest);
 
@@ -391,7 +492,7 @@ const TOAST_KEYS: &[&str] = &["title", "description", "level", "timeout", "id"];
 impl<'js> FromJs<'js> for ToastArgument {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
         let Some(object) = value.as_object() else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("{PUSH_TOAST} expects an object, such as {{ title: \"Saved\" }}"),
             ));
@@ -399,7 +500,7 @@ impl<'js> FromJs<'js> for ToastArgument {
         reject_unknown_keys(ctx, object, TOAST_KEYS, PUSH_TOAST)?;
 
         let Some(title) = object.get::<_, Option<String>>("title")? else {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!("{PUSH_TOAST} requires a `title`; it is the sentence the user reads"),
             ));
@@ -443,20 +544,20 @@ fn options_object<'a, 'js>(
     }
     match value.as_object() {
         Some(object) => Ok(Some(object)),
-        None => Err(Exception::throw_type(
+        None => Err(js_error::type_error(
             ctx,
             &format!("{api} expects an options object"),
         )),
     }
 }
 
-/// Every side a script may name. Also what an unknown one is told to use, so
+/// Every placement a script may name. Also what an unknown one is told to use, so
 /// the message cannot drift from the set.
-const SHEET_SIDES: [SheetSide; 4] = [
-    SheetSide::Left,
-    SheetSide::Right,
-    SheetSide::Top,
-    SheetSide::Bottom,
+const SHEET_PLACEMENTS: [Placement; 4] = [
+    Placement::Left,
+    Placement::Right,
+    Placement::Top,
+    Placement::Bottom,
 ];
 
 const TOAST_LEVELS: [ToastLevel; 4] = [
@@ -466,21 +567,37 @@ const TOAST_LEVELS: [ToastLevel; 4] = [
     ToastLevel::Error,
 ];
 
-fn parse_side(ctx: &Ctx<'_>, name: &str) -> JsResult<SheetSide> {
-    SheetSide::from_name(name).ok_or_else(|| {
-        Exception::throw_type(
+fn parse_placement(ctx: &Ctx<'_>, name: &str) -> JsResult<Placement> {
+    let placement = match name {
+        "left" => Some(Placement::Left),
+        "right" => Some(Placement::Right),
+        "top" => Some(Placement::Top),
+        "bottom" => Some(Placement::Bottom),
+        _ => None,
+    };
+    placement.ok_or_else(|| {
+        js_error::type_error(
             ctx,
             &format!(
-                "unknown sheet side `{name}`; expected {}",
-                listed_by(&SHEET_SIDES, SheetSide::as_str)
+                "unknown sheet placement `{name}`; expected {}",
+                listed_by(&SHEET_PLACEMENTS, placement_name)
             ),
         )
     })
 }
 
+fn placement_name(placement: Placement) -> &'static str {
+    match placement {
+        Placement::Left => "left",
+        Placement::Right => "right",
+        Placement::Top => "top",
+        Placement::Bottom => "bottom",
+    }
+}
+
 fn parse_level(ctx: &Ctx<'_>, name: &str) -> JsResult<ToastLevel> {
     ToastLevel::from_name(name).ok_or_else(|| {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "unknown toast level `{name}`; expected {}",
@@ -502,7 +619,7 @@ fn reject_unknown_keys(
     for key in object.keys::<String>() {
         let key = key?;
         if !known.contains(&key.as_str()) {
-            return Err(Exception::throw_type(
+            return Err(js_error::type_error(
                 ctx,
                 &format!(
                     "unknown option `{key}` for {api}; expected {}",
@@ -521,7 +638,7 @@ fn parse_timeout(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Option<Duration>>
     }
 
     let refused = || {
-        Exception::throw_type(
+        js_error::type_error(
             ctx,
             &format!(
                 "{PUSH_TOAST} expects `timeout` to be a number of milliseconds, or null to keep \
@@ -596,7 +713,13 @@ mod tests {
         cx.update(|window, app| {
             let (_guard, generation) = scope::enter_runtime(runtime, window, app, phase, None);
             runtime.with_js(|ctx| {
-                ctx.globals().set("cx", context_object(ctx, generation)?)?;
+                ctx.globals().set(
+                    "cx",
+                    context_object(
+                        ctx,
+                        crate::engine::quickjs::ContextBinding::Call(generation),
+                    )?,
+                )?;
                 ctx.eval::<T, _>(source)
             })
         })
@@ -632,6 +755,62 @@ mod tests {
             eval(&runtime, cx, ScopePhase::Event, "window.close_dialog()").expect("close_dialog");
         assert!(closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 1);
+    }
+
+    /// The `gpui-shell` command opens its window through the catalog's opener,
+    /// which roots it at `gpui_component::Root` with the `ShellRoot` one level
+    /// down. Every overlay call used to look only at the first view, so in
+    /// every window the command opened they threw "needs a ShellRoot".
+    #[cfg(feature = "components")]
+    #[gpui::test]
+    fn overlays_reach_the_root_inside_the_catalog_window(cx: &mut TestAppContext) {
+        cx.update(crate::components::init);
+        let runtime = cx.update(ShellRuntime::new).expect("runtime");
+        std::mem::forget(runtime.clone());
+
+        let open = crate::components::components()
+            .expect("catalog")
+            .window_opener()
+            .expect("the catalog opens its own window");
+        let built = Rc::new(std::cell::RefCell::new(None));
+        let sink = built.clone();
+        let handle = cx
+            .update(|cx| {
+                let options = gpui::WindowOptions {
+                    show: false,
+                    ..Default::default()
+                };
+                open(cx, options, &mut |window, cx| {
+                    let content = cx.new(|_| Empty).into();
+                    let root = cx.new(|cx| ShellRoot::new(content, window, cx));
+                    *sink.borrow_mut() = Some(root.clone());
+                    root.into()
+                })
+            })
+            .expect("window");
+        let root: Entity<ShellRoot> = built.borrow_mut().take().expect("root");
+        let cx = &mut VisualTestContext::from_window(handle, cx);
+
+        let depth: u32 = eval(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            "window.open_dialog(() => __gpui.text('confirm'))",
+        )
+        .expect("open_dialog");
+        assert_eq!(depth, 1);
+        eval::<()>(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            r#"window.push_toast({ title: "Saved" })"#,
+        )
+        .expect("push_toast");
+
+        root.read_with(cx, |root, _| {
+            assert_eq!(root.dialog_count(), 1);
+            assert_eq!(root.toast_count(), 1);
+        });
     }
 
     #[gpui::test]
@@ -704,7 +883,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn an_unknown_sheet_side_names_the_valid_ones(cx: &mut TestAppContext) {
+    fn an_unknown_sheet_placement_names_the_valid_ones(cx: &mut TestAppContext) {
         let (runtime, root, cx) = shell(cx);
 
         let error = eval::<()>(
@@ -713,7 +892,7 @@ mod tests {
             ScopePhase::Event,
             r#"window.open_sheet_at("middle", () => __gpui.text("filters"))"#,
         )
-        .expect_err("an unknown side must be refused");
+        .expect_err("an unknown placement must be refused");
 
         let message = error.to_string();
         assert!(message.contains("middle"), "{message}");
@@ -764,6 +943,54 @@ mod tests {
         )
         .expect("remove_toast");
         assert!(dismissed);
+    }
+
+    #[gpui::test]
+    fn a_script_puts_the_performance_hud_on_the_root_and_takes_it_down(cx: &mut TestAppContext) {
+        let (runtime, root, cx) = shell(cx);
+        assert!(!root.read_with(cx, |root, _| root.fps_monitor_visible()));
+
+        eval::<()>(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            r#"__show_fps_monitor({ anchor: "bottom_left", frame_budget: 8.33 })"#,
+        )
+        .expect("show");
+        assert!(root.read_with(cx, |root, _| root.fps_monitor_visible()));
+        let visible: bool =
+            eval(&runtime, cx, ScopePhase::Event, "__fps_monitor_visible()").expect("visible");
+        assert!(visible);
+
+        // Up means drawn: the root's own layer carries the HUD, not the script's tree.
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let hidden: bool =
+            eval(&runtime, cx, ScopePhase::Event, "__hide_fps_monitor()").expect("hide");
+        assert!(hidden);
+        assert!(!root.read_with(cx, |root, _| root.fps_monitor_visible()));
+        let hidden_again: bool =
+            eval(&runtime, cx, ScopePhase::Event, "__hide_fps_monitor()").expect("hide again");
+        assert!(!hidden_again, "nothing was up to take down");
+    }
+
+    #[gpui::test]
+    fn an_unknown_hud_anchor_names_the_valid_ones(cx: &mut TestAppContext) {
+        let (runtime, root, cx) = shell(cx);
+
+        let error = eval::<()>(
+            &runtime,
+            cx,
+            ScopePhase::Event,
+            r#"__show_fps_monitor({ anchor: "middle" })"#,
+        )
+        .expect_err("an unknown anchor must be refused");
+        let message = error.to_string();
+        assert!(
+            message.contains("middle") && message.contains("bottom_left"),
+            "{message}"
+        );
+        assert!(!root.read_with(cx, |root, _| root.fps_monitor_visible()));
     }
 
     /// The render pass is reading the window an overlay would mutate, so the

@@ -12,27 +12,29 @@ Like every `gpui-base` primitive, Tooltip supplies behavior and semantic structu
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/native/src/bin/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
-cargo run -p gpui-base --example components -- tooltip
+cargo run -p gpui-base-examples -- tooltip
 ```
 
 ## Import
 
 ```rust
-use gpui_base::{Tooltip};
+use gpui_kit::base::{Tooltip};
 ```
 
 ## Anatomy and API
 
 The example composes `Tooltip`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/tooltip.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/tooltip.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/tooltip.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/tooltip.rs). Native and browser previews compile this same file.
 
 ## State and events
 
 Hover or focus schedules it and exit or blur dismisses it; content is descriptive.
+
+`TooltipOverlay` waits 500 ms before showing and keeps a closing tooltip for a 300 ms grace period, during which another trigger switches to its tooltip immediately. Install `TooltipDefaults` to change both for the application, and call `TooltipRequest::with_show_delay` to override the show delay for one request.
 
 Keep controlled state on the parent render type or in a GPUI entity. Update it in callbacks and call `cx.notify()`; do not recreate persistent entities during every render.
 

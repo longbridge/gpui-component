@@ -1,14 +1,16 @@
-use gpui::{
+use gpui_kit::{
     App, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement as _,
     Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::{ChangeStorySize, section, story_toolbar};
-use gpui_component::{button::*, input::*, label::Label, *};
+use gpui_kit::component::{button::*, input::*, label::Label, *};
 
 pub fn init(_: &mut App) {}
 
 pub struct InputStory {
+    tokens: Entity<super::input_tokens::TokenExample>,
+    completion: Entity<super::input_completion::CompletionExample>,
     input1: Entity<InputState>,
     input2: Entity<InputState>,
     input_esc: Entity<InputState>,
@@ -30,7 +32,7 @@ pub struct InputStory {
     custom_menu_input: Entity<InputState>,
     color_input: Entity<InputState>,
     content_type_inputs: Vec<ContentTypeInput>,
-    size: gpui_component::Size,
+    size: gpui_kit::component::Size,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -259,6 +261,8 @@ impl InputStory {
         ];
 
         Self {
+            tokens: super::input_tokens::TokenExample::new(false, window, cx),
+            completion: super::input_completion::CompletionExample::new(window, cx),
             input1,
             input2,
             input_esc,
@@ -286,7 +290,7 @@ impl InputStory {
             input_text_centered,
             input_text_right,
             content_type_inputs,
-            size: gpui_component::Size::Medium,
+            size: gpui_kit::component::Size::Medium,
             _subscriptions,
         }
     }
@@ -613,6 +617,15 @@ impl Render for InputStory {
                             .with_size(self.size)
                             .text_color(cx.theme().info),
                     ),
+            )
+            .child(section("Atomic inline tokens")
+                .description("References keep their identity through selection, deletion and undo. Copy returns the underlying text.")
+                .w_full().child(self.tokens.clone()))
+            .child(
+                section("Completion")
+                    .description("The application owns the candidates, the menu and the keys it captures; type $ to complete a variable.")
+                    .w_128()
+                    .child(self.completion.clone()),
             )
     }
 }

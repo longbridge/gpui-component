@@ -12,25 +12,35 @@ Like every `gpui-base` primitive, Popover supplies behavior and semantic structu
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/native/src/bin/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
-cargo run -p gpui-base --example components -- popover
+cargo run -p gpui-base-examples -- popover
 ```
 
 ## Import
 
 ```rust
-use gpui_base::{Popover};
+use gpui_kit::base::{Popover};
 ```
 
 ## Anatomy and API
 
 The example composes `Popover`. GPUI's standard styling and event traits provide presentation; these base types provide the interaction structure.
 
-The authoritative module is [`components/popover.rs`](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/components/popover.rs). Native and browser previews compile this same file.
+The authoritative module is [`components/popover.rs`](https://github.com/longbridge/gpui-kit/blob/main/crates/base/examples/showcase/components/popover.rs). Native and browser previews compile this same file.
 
 ## State and events
+
+Use `.anchor(Anchor::TopCenter).offset(px(8.))` to open below the trigger,
+centered, with an eight-pixel gap. The Base offset defaults to zero.
+`Top*` anchors open below, `Bottom*` above, `LeftCenter` to the right,
+and `RightCenter` to the left. The anchor names the popup's own point.
+Window-edge clamping does not flip the popup or change its anchor.
+
+`on_position` observes resolved popup and trigger bounds before content
+prepaint for custom presentation. Base does not draw an arrow; styled Component
+Popover provides `.arrow(true)` directly (default `false`), aligned to its anchor.
 
 Open state can be parent-controlled; activation, outside click, and Escape request lifecycle changes.
 

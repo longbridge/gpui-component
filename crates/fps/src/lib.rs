@@ -2,14 +2,18 @@
 //! rolling frame time chart, and this process' GPU, CPU and memory usage.
 //!
 //! Frame data comes from GPUI's own frame trace
-//! ([`gpui::FrameTimingCollector`]), so the numbers are what the framework
-//! actually spent in `Window::draw` rather than an approximation measured from
-//! the outside.
+//! ([`gpui::FrameTimingCollector`]). The interval counts frames *presented*,
+//! stamped with their own present time, so it agrees with the platform's
+//! overlay (Metal's HUD counts the same drawables); the frame cost is what the
+//! framework actually spent in `Window::draw`, rather than an approximation
+//! measured from the outside. The headline rate is derived from that cost —
+//! the HUD never drives the frame loop, so nothing it reports is something it
+//! caused.
 //!
 //! Render it wherever it should appear, guarded by your own flag:
 //!
 //! ```no_run
-//! # use gpui::*;
+//! # use gpui::{prelude::*, *};
 //! # use gpui_fps::fps_monitor;
 //! # struct Example { show_fps: bool }
 //! # impl Render for Example {
@@ -23,17 +27,23 @@
 //! # }
 //! ```
 //!
-//! The call takes no options. Anything else — a different corner, frame
-//! budget, palette, or an embedded rather than overlaid HUD — is built by
-//! composing the two pieces they use, [`FpsMonitor`] and [`FpsOverlay`].
+//! The returned overlay can change its corner and its frame budget. A custom palette or an
+//! embedded rather than overlaid HUD is built by composing [`FpsMonitor`] and
+//! [`FpsOverlay`] directly.
 //!
 //! This crate depends only on `gpui`, so it can be used from any GPUI
 //! application.
 
+#[cfg(feature = "gpui-fast")]
+extern crate gpui_fast as gpui;
+
 #[cfg(not(target_family = "wasm"))]
 mod gpu;
+#[cfg(not(target_family = "wasm"))]
+mod memory;
 mod monitor;
 mod overlay;
+mod refresh;
 mod sampler;
 mod style;
 
@@ -54,7 +64,7 @@ use gpui::{App, AppContext as _, Entity, Global, Window, WindowId};
 /// when it should be visible:
 ///
 /// ```no_run
-/// # use gpui::*;
+/// # use gpui::{prelude::*, *};
 /// # use gpui_fps::fps_monitor;
 /// # struct Example { show_fps: bool }
 /// # impl Render for Example {

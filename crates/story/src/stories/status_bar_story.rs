@@ -1,8 +1,4 @@
-use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     dock::PanelControl,
@@ -12,11 +8,15 @@ use gpui_component::{
     status_bar::StatusBar,
     v_flex,
 };
+use gpui_kit::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window, px,
+};
 
 use crate::section;
 
 pub struct StatusBarStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
 }
 
 impl StatusBarStory {
@@ -66,7 +66,7 @@ impl Render for StatusBarStory {
                     .description(
                         "Places repository state on the left and document state on the right.",
                     )
-                    .w(px(760.))
+                    .max_w(px(760.))
                     .child(
                         v_flex().w_full().child(
                             StatusBar::new()
@@ -144,7 +144,7 @@ impl Render for StatusBarStory {
             .child(
                 section("Application")
                     .description("Combines connectivity, progress, save state, and notifications.")
-                    .w(px(760.))
+                    .max_w(px(760.))
                     .child(
                         v_flex().w_full().child(
                             StatusBar::new()
@@ -181,7 +181,7 @@ impl Render for StatusBarStory {
             .child(
                 section("Alignment")
                     .description("Center content adapts when either side is empty or populated.")
-                    .w(px(760.))
+                    .max_w(px(760.))
                     .child(
                         v_flex()
                             .w_full()

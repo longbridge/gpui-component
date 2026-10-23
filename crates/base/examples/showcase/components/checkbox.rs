@@ -27,9 +27,9 @@ impl BaseShowcase {
                     .justify_center()
                     .size_4()
                     .border_1()
-                    .border_color(rgb(0x171717))
+                    .border_color(super::example_rgb(0x171717))
                     .when(checked, |this| {
-                        this.bg(rgb(0x171717)).child(
+                        this.bg(super::example_rgb(0x171717)).child(
                             img(Arc::new(Image::from_bytes(
                                 ImageFormat::Svg,
                                 CHECK_SVG.to_vec(),

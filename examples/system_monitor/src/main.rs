@@ -1,10 +1,9 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use gpui::{actions, prelude::FluentBuilder as _, *};
-use gpui_component::ThemeMode;
-use gpui_component::{
-    ActiveTheme, Icon, IconName, Root, Sizable, Theme, TitleBar,
+use gpui_kit::component::ThemeMode;
+use gpui_kit::component::{
+    ActiveTheme, Icon, IconName, Sizable, Theme, TitleBar,
     chart::AreaChart,
     h_flex,
     progress::Progress,
@@ -12,6 +11,7 @@ use gpui_component::{
     table::{Column, ColumnSort, DataTable, TableDelegate, TableState},
     v_flex,
 };
+use gpui_kit::{actions, prelude::FluentBuilder as _, *};
 use smol::Timer;
 use sysinfo::{Disks, Pid, System};
 
@@ -599,10 +599,10 @@ impl Render for SystemMonitor {
 }
 
 fn main() {
-    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
 
     app.run(move |cx| {
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
 
         cx.bind_keys([
             #[cfg(target_os = "macos")]
@@ -621,18 +621,14 @@ fn main() {
             ..TitleBar::window_options()
         };
 
-        cx.spawn(async move |cx| {
-            cx.open_window(window_options, |window, cx| {
-                window.activate_window();
-                window.set_window_title("System Monitor");
+        gpui_kit::open_window(window_options, cx, |window, cx| {
+            window.activate_window();
+            window.set_window_title("System Monitor");
 
-                Theme::change(ThemeMode::Dark, Some(window), cx);
+            Theme::change(ThemeMode::Dark, Some(window), cx);
 
-                let view = cx.new(|cx| SystemMonitor::new(window, cx));
-                cx.new(|cx| Root::new(view, window, cx))
-            })
-            .expect("Failed to open window");
+            cx.new(|cx| SystemMonitor::new(window, cx))
         })
-        .detach();
+        .expect("Failed to open window");
     });
 }

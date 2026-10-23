@@ -2,6 +2,7 @@
 title: Styling
 description: 流式样式接口、长度与颜色语法、语义主题 token，以及 hover / active / focus 状态样式。
 order: 5
+maturity: [preview]
 ---
 
 # Styling
@@ -23,7 +24,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 所有样式方法都通过同一套链式 API 调用。根据 GPUI 是否能够自动导出方法信息，实现分为以下两类。
 
-**无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_base::styled_ext_reflection_methods` 与 `gpui::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui.d.ts` 也有了。
+**无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_kit::base::styled_ext_reflection_methods` 与 `gpui_kit::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui-kit.d.ts` 也有了。
 
 本文写作时的这次构建里有 **3,148** 个。这个数字就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
 
@@ -44,11 +45,11 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 某个方法接受其中哪些，取决于**它的 Rust 签名**——因为正是那个签名在拒绝不合法的形式。GPUI 有三种互相嵌套的长度类型，运行时保留了这个区分而没有把它拍平：
 
-| 类型 | 接受 | 拒绝 |
-| --- | --- | --- |
-| `Length` | 数字、`"12px"`、`"1.5rem"`、`"50%"`、`"auto"` | — |
-| `DefiniteLength` | 数字、`"12px"`、`"1.5rem"`、`"50%"` | `"auto"` |
-| `AbsoluteLength` | 数字、`"12px"`、`"1.5rem"` | 百分比、`"auto"` |
+| 类型             | 接受                                          | 拒绝             |
+| ---------------- | --------------------------------------------- | ---------------- |
+| `Length`         | 数字、`"12px"`、`"1.5rem"`、`"50%"`、`"auto"` | —                |
+| `DefiniteLength` | 数字、`"12px"`、`"1.5rem"`、`"50%"`           | `"auto"`         |
+| `AbsoluteLength` | 数字、`"12px"`、`"1.5rem"`                    | 百分比、`"auto"` |
 
 ```text
 `p` cannot be "auto"; it expects a definite length such as 12 or "50%"
@@ -63,24 +64,24 @@ percentages and "auto" are not allowed here
 
 ### 有参方法一览
 
-| 家族 | 方法 | 参数 |
-| --- | --- | --- |
-| 尺寸 | `w` `h` `size` `min_w` `min_h` `min_size` `max_w` `max_h` `max_size` | `Length` |
-| 内边距 | `p` `px` `py` `pt` `pb` `pl` `pr` | `DefiniteLength` |
-| 外边距 | `m` `mx` `my` `mt` `mb` `ml` `mr` | `Length` |
-| 定位 | `inset` `top` `bottom` `left` `right` | `Length` |
-| Flex | `gap` `gap_x` `gap_y` | `DefiniteLength` |
-| Flex | `flex_basis` | `Length` |
-| Flex | `flex_grow` `flex_shrink` | 数字 |
-| 边框 | `border` `border_t` `border_b` `border_l` `border_r` `border_x` `border_y` | `AbsoluteLength` |
-| 圆角 | `rounded` 及 `_t` `_b` `_l` `_r` `_tl` `_tr` `_bl` `_br` 各形式 | `AbsoluteLength` |
-| 绘制 | `bg` `text_color` `text_bg` `border_color` | 颜色 |
-| 绘制 | `text_size` | `AbsoluteLength` |
-| 绘制 | `line_height` | `DefiniteLength` |
-| 字体 | `font_family` | 字符串 |
-| 绘制 | `opacity` | 数字 |
+| 家族   | 方法                                                                       | 参数             |
+| ------ | -------------------------------------------------------------------------- | ---------------- |
+| 尺寸   | `w` `h` `size` `min_w` `min_h` `min_size` `max_w` `max_h` `max_size`       | `Length`         |
+| 内边距 | `p` `px` `py` `pt` `pb` `pl` `pr`                                          | `DefiniteLength` |
+| 外边距 | `m` `mx` `my` `mt` `mb` `ml` `mr`                                          | `Length`         |
+| 定位   | `inset` `top` `bottom` `left` `right`                                      | `Length`         |
+| Flex   | `gap` `gap_x` `gap_y`                                                      | `DefiniteLength` |
+| Flex   | `flex_basis`                                                               | `Length`         |
+| Flex   | `flex_grow` `flex_shrink`                                                  | 数字             |
+| 边框   | `border` `border_t` `border_b` `border_l` `border_r` `border_x` `border_y` | `AbsoluteLength` |
+| 圆角   | `rounded` 及 `_t` `_b` `_l` `_r` `_tl` `_tr` `_bl` `_br` 各形式            | `AbsoluteLength` |
+| 绘制   | `bg` `text_color` `text_bg` `border_color`                                 | 颜色             |
+| 绘制   | `text_size`                                                                | `AbsoluteLength` |
+| 绘制   | `line_height`                                                              | `DefiniteLength` |
+| 字体   | `font_family`                                                              | 字符串           |
+| 绘制   | `opacity`                                                                  | 数字             |
 
-`line_height` 是唯一值得专门记住的例外：**裸数字是倍数，不是像素**。`line_height(1.45)` 表示字号的 1.45 倍，因为业界其他地方都是这个含义，而 1.45px 从来不是任何人的意思。字符串仍然走普通的长度语法。
+`line_height` 是唯一值得专门记住的例外：**裸数字是倍数，不是像素**。`line_height(1.45)` 表示字号的 1.45 倍，与 CSS 中不带单位的 `line-height: 1.45`、Rust 中的 `line_height(relative(1.45))` 相同，因为 1.45px 从来不是任何人的意思。字符串仍然走普通的长度语法，所以 `line_height("18px")` 是固定行高。
 
 ### 刻意没有绑定的
 
@@ -100,15 +101,15 @@ render(cx) {
 
 调色板定义了十七个 token：
 
-| | |
-| --- | --- |
-| 基底 | `background`、`foreground` |
-| 表面 | `surface`、`surface_foreground` |
+|      |                                                                      |
+| ---- | -------------------------------------------------------------------- |
+| 基底 | `background`、`foreground`                                           |
+| 表面 | `surface`、`surface_foreground`                                      |
 | 强调 | `primary`、`primary_foreground`、`secondary`、`secondary_foreground` |
-| 弱化 | `muted`、`muted_foreground` |
-| 高亮 | `accent`、`accent_foreground` |
-| 危险 | `destructive`、`destructive_foreground` |
-| 框架 | `border`、`input`、`ring` |
+| 弱化 | `muted`、`muted_foreground`                                          |
+| 高亮 | `accent`、`accent_foreground`、`selection`                           |
+| 危险 | `destructive`、`destructive_foreground`                              |
+| 框架 | `border`、`input`、`ring`                                            |
 
 十六进制字面量接受 `#rgb`、`#rrggbb` 与 `#rrggbbaa`。
 
@@ -123,9 +124,9 @@ or a #rrggbb literal
 
 ### 当前 token 来自哪里
 
-gpui-shell 不拥有调色板或主题文件格式，而是读取宿主提供的
-`gpui_base::Theme`。JavaScript 应用也可以通过
-`set_theme({ appearance, tokens })` 替换同一份 Base snapshot；主题名称和
+gpui-shell 不拥有调色板或主题文件格式，而是读取 Host 提供的
+`gpui_kit::base::Theme`。JavaScript 应用也可以通过
+`set_theme({ appearance, tokens })` 替换同一份 Base Snapshot；主题名称和
 registry 始终属于应用状态。
 
 ## 状态样式
@@ -141,7 +142,7 @@ renderSave(cx) {
     .hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground))
     .active((style) => style.bg(cx.theme().colors.border))
     .focus((style) => style.border_color(cx.theme().colors.ring))
-    .child(text("Save"));
+    .child("Save");
 }
 ```
 
@@ -161,7 +162,7 @@ v_flex()
   .id("activity")
   .h(240)
   .overflow_y_scroll()
-  .children(this.rows.map((row) => text(row)));
+  .children(this.rows.map((row) => row));
 ```
 
 `.overflow_scroll()` 同时启用两个方向，`.overflow_x_scroll()` 只启用横向滚动，`.overflow_y_scroll()` 只启用纵向滚动。稳定的 `.id(...)` 会让原生滚动位置在多次脚本 render 之间始终归属于同一个 viewport。
@@ -178,11 +179,11 @@ render(cx) {
     .gap(cx.theme().spacing.md)
     .rounded(cx.theme().radius.lg)
     .bg(cx.theme().colors.surface)
-    .child(text(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`));
+    .child(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`);
 }
 ```
 
-这个 snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。应用可以从 event 或 task 调用 `set_theme({ appearance, tokens })`，传入自己管理的完整颜色、间距与圆角 token snapshot。gpui-shell 只把它写入 gpui-base 并重建使用 token 的脚本视图，不拥有主题名称、palette 或文件格式。
+这个 Snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。应用可以从 event 或 task 调用 `set_theme({ appearance, tokens })`，传入自己管理的完整颜色、间距与圆角 token Snapshot。gpui-shell 只把它写入 gpui-base 并重建使用 token 的脚本 View，不拥有主题名称、palette 或文件格式。
 
 ## 原生动画
 

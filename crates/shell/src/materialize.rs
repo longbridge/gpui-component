@@ -10,13 +10,13 @@
 //! but only to dispatch events: no path through this module calls into the
 //! script while an element is being built.
 //!
-//! # The one exception: `VirtualList`
+//! # The one exception: the lazy lists
 //!
-//! A virtualized list is the single component whose description is not the
+//! A lazy list is the single kind of component whose description is not the
 //! whole of what it draws. Its rows are produced by a script callback that
 //! GPUI runs from *inside* layout and prepaint — twice per frame, once to
-//! measure and once to place — so a frame that contains a virtual list does
-//! enter the VM, once per list, no matter what changed.
+//! measure and once to place — so a frame that contains one does enter the VM,
+//! no matter what changed.
 //!
 //! That is not a leak in the design; it is the trade the design was for. The
 //! alternative is describing every row up front, which is exactly the cost
@@ -24,6 +24,23 @@
 //! can be seen. What the exception buys is that the VM is entered for the
 //! *visible window* rather than for the collection, so the script cost of a
 //! ten-thousand-row list is the script cost of a twenty-row one.
+//!
+//! How often it is entered depends on which list, because that is set by the
+//! GPUI API each one wraps. [`Component::VirtualList`] and `uniform_list` take
+//! a renderer over a range, so one frame is one call however many rows are on
+//! screen. `list` — the one that measures each item rather than placing them
+//! all by one — takes a renderer over a single index, so one frame is *one
+//! call per visible row*, plus the rows in its overdraw band. Both are bounded
+//! by the viewport rather than by the collection, which is the property that
+//! matters; but a `list` of twenty visible rows costs twenty crossings where a
+//! virtual list costs one, and that is the price of not stating heights.
+//!
+//! A `list` also calls its `get_key` around its own layout: once for the item
+//! at the top whenever that item or the render changes, and, when the item
+//! count changes, near that item's old index until its key turns up again —
+//! one or two calls when items were added or removed on one side of it only,
+//! and the whole collection once if it is gone. That is what keeps the
+//! reader's place; [`components::list`] says why it needs the key.
 //!
 //! Three things confine it, and they are worth naming because each is what
 //! stops the exception from spreading:
@@ -46,9 +63,67 @@
 
 use std::{
     cell::Cell,
+    cell::RefCell,
     rc::{Rc, Weak},
     time::Duration,
 };
+
+// Failures raised by registered components while a subtree is being built.
+//
+// `materialize_node` returns an element rather than a `Result`, because a
+// component that fails still has to leave something on screen for the rest of
+// the frame. A caller that materializes a subtree *on behalf of an adapter* —
+// a deferred slot factory, a temporary build — needs the failure instead, so it
+// opens a frame here and reads back the first error recorded under it. Nothing
+// outside this file may push or pop; `with_error_frame` is the only way in.
+thread_local! {
+    static FACTORY_MATERIALIZE_ERRORS: RefCell<Vec<Option<anyhow::Error>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Runs `build`, turning the first registered-component failure inside it into
+/// an `Err`.
+fn with_error_frame(build: impl FnOnce() -> AnyElement) -> anyhow::Result<AnyElement> {
+    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
+    // Pops the frame if `build` unwinds, so a panic cannot leave the stack one
+    // frame deep for every later build on this thread.
+    struct Frame(bool);
+    impl Drop for Frame {
+        fn drop(&mut self) {
+            if !self.0 {
+                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
+                    errors.borrow_mut().pop();
+                });
+            }
+        }
+    }
+    let mut frame = Frame(false);
+    let element = build();
+    let error = FACTORY_MATERIALIZE_ERRORS
+        .with(|errors| errors.borrow_mut().pop().expect("this frame was pushed"));
+    frame.0 = true;
+    error.map_or(Ok(element), Err)
+}
+
+fn materialize_factory_subtree(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: &RenderSnapshot,
+    root: SpecId,
+    inherited: gpui::Hsla,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<AnyElement> {
+    with_error_frame(|| {
+        materialize_node(
+            runtime,
+            Some(snapshot),
+            snapshot.arena(),
+            root,
+            inherited,
+            window,
+            cx,
+        )
+    })
+}
 
 use smallvec::SmallVec;
 
@@ -58,7 +133,8 @@ use gpui::{
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
 use gpui_base::{
-    Button, Checkbox, CheckboxState, ElementExt as _, Link, ScrollbarAxis, Switch,
+    Button, Checkbox, CheckboxState, ElementExt as _, Link, ScrollbarAxis, Switch, TextView,
+    TextViewStyle, Theme,
     animation::{ease_in_cubic, ease_in_out_cubic, ease_out_cubic},
     h_flex,
     input::{Input, InputBase},
@@ -67,8 +143,10 @@ use gpui_base::{
 };
 
 mod components;
+mod text_view;
 
 use crate::{
+    capability::is_openable_url,
     engine::ShellRuntime,
     scroll::Scrollable,
     snapshot::RenderSnapshot,
@@ -82,7 +160,7 @@ use crate::{
 /// Eight because a quote row is six cells and a wrapper, which is the widest
 /// ordinary shape; past that the spill is one allocation for a node that was
 /// always going to be expensive.
-type Children = SmallVec<[AnyElement; 8]>;
+use crate::component_registry::Children;
 
 /// The named slots a node's ops filled, in the order the script filled them.
 ///
@@ -91,10 +169,10 @@ type Children = SmallVec<[AnyElement; 8]>;
 /// trigger and a content, a number input fills three. Two inline covers every
 /// component bound today and every one on the way; a third is one allocation on
 /// a node that already carries whole subtrees.
-type Slots = SmallVec<[(&'static str, AnyElement); 2]>;
+use crate::component_registry::Slots;
 
 /// The same list before the slots are materialized.
-type SlotSpecs = SmallVec<[(&'static str, SpecId); 2]>;
+use crate::component_registry::SlotSpecs;
 
 /// The children of a node whose component takes a *typed* child.
 ///
@@ -114,6 +192,7 @@ type SlotSpecs = SmallVec<[(&'static str, SpecId); 2]>;
 #[derive(Clone, Copy)]
 struct ChildSpecs<'a> {
     runtime: &'a Rc<ShellRuntime>,
+    snapshot: Option<&'a RenderSnapshot>,
     arena: &'a SpecArena,
     ids: &'a [SpecId],
     /// The text color the parent passes down, already resolved.
@@ -140,7 +219,15 @@ impl<'a> ChildSpecs<'a> {
 
     /// The ordinary path, for every child the parent does not own.
     fn element(&self, id: SpecId, window: &mut Window, cx: &mut App) -> AnyElement {
-        materialize_node(self.runtime, self.arena, id, self.inherited, window, cx)
+        materialize_node(
+            self.runtime,
+            self.snapshot,
+            self.arena,
+            id,
+            self.inherited,
+            window,
+            cx,
+        )
     }
 
     /// Everything [`materialize_node`] resolves before it decides what to
@@ -173,7 +260,17 @@ impl<'a> ChildSpecs<'a> {
         let children: Children = node
             .children()
             .iter()
-            .map(|child| materialize_node(self.runtime, self.arena, *child, inherited, window, cx))
+            .map(|child| {
+                materialize_node(
+                    self.runtime,
+                    self.snapshot,
+                    self.arena,
+                    *child,
+                    inherited,
+                    window,
+                    cx,
+                )
+            })
             .collect();
         Some(NodeParts {
             refinement,
@@ -217,6 +314,9 @@ impl StateStyles {
 #[derive(Default)]
 struct Behavior {
     disabled: bool,
+    selectable: Option<bool>,
+    text_scrollable: Option<bool>,
+    on_link_click: Option<CallbackId>,
 
     /// Whether a `NumberInput` stacks both step buttons to the right of the
     /// text, rather than putting one on each side of it.
@@ -242,8 +342,60 @@ struct Behavior {
     href: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
+    token: Option<CallbackId>,
+    on_token_click: Option<CallbackId>,
+    on_token_hover: Option<CallbackId>,
     on_mouse_move: Option<CallbackId>,
     on_hover: Option<CallbackId>,
+    /// Reports a key press that reached this element.
+    ///
+    /// GPUI routes a key event down the focus path, so an element only hears
+    /// one while it — or something inside it — holds the keyboard. That makes
+    /// `track_focus(handle)` half of the registration rather than an unrelated
+    /// call: without it the handler is installed on an element the keyboard
+    /// never reaches, and nothing arrives.
+    on_key_down: Option<CallbackId>,
+    /// Reports the release of a key, on the same focus path as
+    /// [`Behavior::on_key_down`].
+    on_key_up: Option<CallbackId>,
+    /// Reports modifier-only changes on the keyboard focus path.
+    on_modifiers_changed: Option<CallbackId>,
+    /// Presses on this element, one entry per button listened for.
+    ///
+    /// A list rather than one field, because GPUI takes the button as an
+    /// argument and an element may well want two of them — a left press that
+    /// selects and a right press that opens a menu are one element's job.
+    on_mouse_down: SmallVec<[(MouseButton, CallbackId); 1]>,
+    /// Releases on this element, listed the same way.
+    on_mouse_up: SmallVec<[(MouseButton, CallbackId); 1]>,
+    /// A press anywhere outside this element, delivered during the capture
+    /// phase.
+    ///
+    /// The one event here that is about somewhere else, and the reason a
+    /// script can dismiss a surface it drew itself: base's own components close
+    /// on an outside press through exactly this listener, and until now a
+    /// script had no way to.
+    on_mouse_down_out: Option<CallbackId>,
+    /// Wheel and trackpad scrolling over this element.
+    on_scroll_wheel: Option<CallbackId>,
+    /// A pinch-to-zoom gesture over this element.
+    on_pinch: Option<CallbackId>,
+    /// Handlers for named actions, one entry per action listened for.
+    ///
+    /// A list because an element that responds to actions usually responds to
+    /// several — a pane handling Save, Close and Split is one element's job —
+    /// and because every script action shares one GPUI type, so the id is what
+    /// tells them apart.
+    on_action: SmallVec<[(SharedString, CallbackId); 1]>,
+    /// A heading's announced level, for an `AccordionHeader`.
+    aria_level: Option<usize>,
+    /// Whether a shut `AccordionPanel` stays in the tree.
+    keep_mounted: bool,
+    /// The key-binding context this element and its subtree sit in.
+    ///
+    /// What a keymap's `context` predicate is matched against, so a chord can
+    /// mean one thing in a list and another in an editor.
+    key_context: Option<SharedString>,
 
     /// Reports which way a `NumberInput` was asked to step.
     ///
@@ -298,9 +450,32 @@ struct Behavior {
     /// deliberate limit rather than a convenience: see
     /// [`components::virtual_list`].
     on_item_click: Option<CallbackId>,
+    /// Reports a secondary press on a virtual list row, with the row's key and
+    /// the press itself. Registered on the list for the same reason
+    /// `on_item_click` is.
+    on_item_secondary_click: Option<CallbackId>,
+    /// Reports which items a `list` shows and how many it has, after a frame
+    /// in which either changed.
+    on_visible_range_change: Option<CallbackId>,
     /// Which item a `VirtualList` measures to infer its cross-axis size.
     /// `None` keeps base's own default, which is the first.
     item_to_measure_index: Option<usize>,
+    /// Whether a `list` follows its tail. `None` is GPUI's own default,
+    /// `FollowMode::Normal`.
+    follow_mode: Option<gpui::FollowMode>,
+    /// The dock commands a chrome element carries — what base is asked to do
+    /// when it is clicked or dragged.
+    ///
+    /// A list, because one element can carry two: a tab both selects and drags.
+    dock_commands: SmallVec<[crate::dock::DockAction; 2]>,
+    /// Which script handler draws each piece of a `dock_area`'s chrome.
+    ///
+    /// Six handlers in one field rather than six fields, because they are
+    /// written together: they leave here for the [`DockChromeSlots`] the skin
+    /// reads, and a skin reads all six or none.
+    ///
+    /// [`DockChromeSlots`]: crate::dock::DockChromeSlots
+    dock_chrome: crate::dock::DockChromeHooks,
     /// The retained scroll position a `VirtualList` was told to drive.
     virtual_scroll: Option<crate::entities::EntityHandle>,
     /// This item's one-based position in its collection, and the collection's
@@ -359,6 +534,7 @@ struct Behavior {
     /// component's own default, and the two differ: a popover anchors top-left,
     /// a hover card top-center.
     anchor: Option<gpui::Anchor>,
+    frame_budget: Option<Duration>,
     /// The pointer button that opens a `Popover`.
     mouse_button: Option<MouseButton>,
     /// The label a hover shows over this element. A string rather than an
@@ -397,9 +573,22 @@ struct Behavior {
     /// focus — the highlighted option of a combobox whose input keeps the
     /// keyboard.
     aria_active_descendant: bool,
+    /// `InteractiveElement::window_control_area`: this element is the window's
+    /// drag area or one of its caption buttons.
+    window_control_area: Option<gpui::WindowControlArea>,
 }
 
 impl Behavior {
+    /// Whether anything asked for a pointer listener, and so for the box every
+    /// pointer position is reported against.
+    fn wants_pointer_geometry(&self) -> bool {
+        !self.on_mouse_down.is_empty()
+            || !self.on_mouse_up.is_empty()
+            || self.on_mouse_down_out.is_some()
+            || self.on_scroll_wheel.is_some()
+            || self.on_pinch.is_some()
+    }
+
     /// Whether focus or accessibility gave this element a reason to be
     /// identified.
     ///
@@ -416,6 +605,17 @@ impl Behavior {
             || self.aria_active_descendant
             || self.on_mouse_move.is_some()
             || self.on_hover.is_some()
+            || self.on_key_down.is_some()
+            || self.on_key_up.is_some()
+            || self.on_modifiers_changed.is_some()
+            || !self.on_mouse_down.is_empty()
+            || !self.on_mouse_up.is_empty()
+            || self.on_mouse_down_out.is_some()
+            || self.on_scroll_wheel.is_some()
+            || self.on_pinch.is_some()
+            || !self.on_action.is_empty()
+            || self.key_context.is_some()
+            || self.window_control_area.is_some()
     }
 }
 
@@ -489,13 +689,14 @@ pub fn materialize(
     cx: &mut App,
 ) -> AnyElement {
     let ambient = window.text_style().color;
-    // Counted and timed because this is the half that follows frames: the story
-    // and the benchmark both read the two counters side by side, and the gap
-    // between them is the architecture.
+    // Counted and timed because this is the native half of rebuilding a dirty
+    // script view. Clean window frames reuse ShellRoot's cached subtree and do
+    // not enter here at all.
     let metrics = runtime.metrics();
     metrics.time_materialize(|| {
         materialize_node(
             runtime,
+            Some(snapshot),
             snapshot.arena(),
             snapshot.root(),
             ambient,
@@ -503,6 +704,18 @@ pub fn materialize(
             cx,
         )
     })
+}
+
+/// Builds the same eager element tree as a view render, preserving registered
+/// component failures for a source check instead of only showing a fallback.
+/// Deferred slots, nested views, and layout callbacks are not driven here.
+pub(crate) fn try_materialize(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: &RenderSnapshot,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<AnyElement> {
+    with_error_frame(|| materialize(runtime, snapshot, window, cx))
 }
 
 /// Materializes one described subtree from an arena that is not a snapshot's.
@@ -523,7 +736,17 @@ pub(crate) fn materialize_subtree(
     cx: &mut App,
 ) -> AnyElement {
     let ambient = window.text_style().color;
-    materialize_node(runtime, arena, root, ambient, window, cx)
+    materialize_node(runtime, None, arena, root, ambient, window, cx)
+}
+
+pub(crate) fn try_materialize_subtree(
+    runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
+    root: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<AnyElement> {
+    with_error_frame(|| materialize_subtree(runtime, arena, root, window, cx))
 }
 
 /// Materializes one node, carrying the text color down the description.
@@ -536,6 +759,7 @@ pub(crate) fn materialize_subtree(
 /// come out light without the script saying so twice.
 fn materialize_node(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     id: SpecId,
     inherited: gpui::Hsla,
@@ -562,19 +786,23 @@ fn materialize_node(
     // A component that takes typed children is handed the descriptions instead:
     // flattening them here would throw away the very thing it needs. See
     // [`ChildSpecs`].
-    let children: Children = if takes_typed_children(&component) {
+    let children: Children = if takes_typed_children(&component)
+        || matches!(component, Component::Registered(_))
+    {
         Children::new()
     } else {
         node.children()
             .iter()
-            .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+            .map(|child| materialize_node(runtime, snapshot, arena, *child, inherited, window, cx))
             .collect()
     };
 
     // A slot's element is built here, beside the children, so it inherits the
     // same text color: where the component chooses to put it is the component's
     // business, but what it looks like should not depend on that choice.
-    let slots: Slots = if materializes_slots(&component, &behavior) {
+    let slots: Slots = if matches!(component, Component::Registered(_)) {
+        SmallVec::new()
+    } else if materializes_slots(&component, &behavior) {
         slot_specs
             .iter()
             .filter(|(name, _)| {
@@ -585,7 +813,7 @@ fn materialize_node(
             .map(|(name, slot)| {
                 (
                     *name,
-                    materialize_node(runtime, arena, *slot, inherited, window, cx),
+                    materialize_node(runtime, snapshot, arena, *slot, inherited, window, cx),
                 )
             })
             .collect()
@@ -596,7 +824,8 @@ fn materialize_node(
     // it knows which names it read.
     if !matches!(
         component,
-        Component::Collapsible
+        Component::Registered(_)
+            | Component::Collapsible
             | Component::Popover(_)
             | Component::HoverCard(_)
             | Component::Popup(_)
@@ -613,11 +842,32 @@ fn materialize_node(
     }
 
     components::tooltip::warn_unhonoured_tooltip(&component, &behavior);
+    warn_unhonoured_input(&component, &behavior);
 
-    materialize_component(
-        runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
-        slots, slot_specs, window, cx,
-    )
+    match component {
+        Component::Registered(component) => materialize_registered_component(
+            runtime,
+            snapshot,
+            arena,
+            node,
+            element_id(id, behavior.key.clone()),
+            component,
+            inherited,
+            Box::new(RegisteredMaterializeParts {
+                refinement,
+                behavior,
+                children,
+                slots,
+                slot_specs,
+            }),
+            window,
+            cx,
+        ),
+        component => materialize_component(
+            runtime, snapshot, arena, node, id, component, inherited, refinement, behavior, states,
+            children, slots, slot_specs, window, cx,
+        ),
+    }
 }
 
 /// Dispatches an already-materialized node to its concrete component.
@@ -627,9 +877,136 @@ fn materialize_node(
 /// is multiplied by the depth of the script's element tree. Components can
 /// grow independently without making ordinary nested layouts exhaust Rust's
 /// default test-thread stack.
+struct RegisteredMaterializeParts {
+    refinement: StyleRefinement,
+    behavior: Behavior,
+    children: Children,
+    slots: Slots,
+    slot_specs: SlotSpecs,
+}
+
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+fn materialize_registered_component(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
+    arena: &SpecArena,
+    node: &SpecNode,
+    identity: gpui::ElementId,
+    component: crate::spec::RegisteredComponentSpec,
+    inherited: gpui::Hsla,
+    parts: Box<RegisteredMaterializeParts>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let RegisteredMaterializeParts {
+        refinement,
+        behavior,
+        children,
+        slots,
+        slot_specs,
+    } = *parts;
+    let Some(descriptor) = runtime.component_registry().descriptor(component.id()) else {
+        tracing::error!(
+            "registered component `{}` has an unknown registry id {}",
+            component.name(),
+            component.id().as_u32()
+        );
+        return div()
+            .child(format!("Unknown component: {}", component.name()))
+            .into_any_element();
+    };
+    let mut resolve_element = |element, window: Option<&mut Window>, cx: Option<&mut App>| {
+        let window =
+            window.ok_or_else(|| anyhow::anyhow!("render Window authority is unavailable"))?;
+        let cx = cx.ok_or_else(|| anyhow::anyhow!("render App authority is unavailable"))?;
+        Ok(materialize_node(
+            runtime, snapshot, arena, element, inherited, window, cx,
+        ))
+    };
+    let child_specs = node
+        .children()
+        .iter()
+        .map(|child| {
+            let name = arena
+                .node(*child)
+                .and_then(SpecNode::component)
+                .and_then(|component| match component {
+                    Component::Registered(component) => Some(component.name()),
+                    _ => None,
+                });
+            (*child, name)
+        })
+        .collect();
+    // A factory leases the snapshot and allocates an `Rc` per slot, and most
+    // adapters read their slots eagerly. So the request is handed the recipe
+    // rather than the product, and builds one only for a slot actually asked
+    // for by name.
+    let slot_factory_specs: crate::component_registry::SlotSpecs = match snapshot {
+        Some(_) => slot_specs.iter().copied().collect(),
+        None => SmallVec::new(),
+    };
+    let make_slot_factory = |slot: SpecId| {
+        let snapshot = snapshot.cloned();
+        let runtime = Rc::downgrade(runtime);
+        crate::ComponentElementFactory::new(move |window, cx| {
+            let runtime = runtime.upgrade().ok_or_else(|| {
+                anyhow::anyhow!("component element factory runtime has been released")
+            })?;
+            let snapshot = snapshot
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("component element factory has no snapshot"))?;
+            anyhow::ensure!(
+                snapshot.belongs_to(&runtime),
+                "component element factory belongs to a different runtime"
+            );
+            materialize_factory_subtree(&runtime, snapshot, slot, inherited, window, cx)
+        })
+    };
+    let mut request =
+        crate::MaterializeRequest::new(crate::component_registry::MaterializeRequestInit {
+            component_name: component.name(),
+            element_id: identity,
+            payload: component.payload(),
+            operations: node.ops(),
+            runtime,
+            resolve_element: &mut resolve_element,
+            style: refinement,
+            children,
+            child_specs,
+            slots,
+            slot_factory_specs,
+            make_slot_factory: &make_slot_factory,
+            disabled: behavior.disabled,
+            selected: behavior.selected,
+            on_click: behavior.on_click,
+            application_owner: snapshot.and_then(RenderSnapshot::application_owner),
+        });
+    request.attach_render_authority(window, cx);
+    match descriptor.materializer().materialize(request) {
+        Ok(element) => element,
+        Err(error) => {
+            tracing::error!("failed to materialize `{}`: {error:#}", component.name());
+            FACTORY_MATERIALIZE_ERRORS.with(|frames| {
+                if let Some(held) = frames.borrow_mut().last_mut()
+                    && held.is_none()
+                {
+                    *held = Some(
+                        error.context(format!("failed to materialize `{}`", component.name())),
+                    );
+                }
+            });
+            div()
+                .child(format!("Failed to render {}", component.name()))
+                .into_any_element()
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn materialize_component(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     node: &SpecNode,
     id: SpecId,
@@ -645,6 +1022,9 @@ fn materialize_component(
     cx: &mut App,
 ) -> AnyElement {
     match component {
+        Component::Registered(_) => {
+            unreachable!("registered components dispatch before the built-in component match")
+        }
         Component::ChildView(child) => child.view().clone().into_any_element(),
         Component::Div => flex_element(
             runtime,
@@ -679,15 +1059,81 @@ fn materialize_component(
             window,
             cx,
         ),
+        Component::Module(spec) => {
+            let registry = spec.policy.modules();
+            let component = registry
+                .get(&spec.module)
+                .and_then(|module| module.resolve_component(&spec.component));
+            let Ok(component) = component else {
+                tracing::warn!(
+                    "component `{}.{}` was revoked before materialization",
+                    spec.module,
+                    spec.component
+                );
+                return div().into_any_element();
+            };
+            component.build(
+                crate::ComponentArgs {
+                    id: &spec.id,
+                    props: &spec.props,
+                    children: children.into_vec(),
+                },
+                window,
+                cx,
+            )
+        }
+        Component::TextView(spec) => {
+            let mut view = match spec.format {
+                crate::spec::TextViewFormat::Html => TextView::html(spec.id, spec.text),
+                crate::spec::TextViewFormat::Markdown => TextView::markdown(spec.id, spec.text),
+            }
+            .style(TextViewStyle::from_theme(&Theme::global(cx)));
+            if let Some(selectable) = behavior.selectable {
+                view = view.selectable(selectable);
+            }
+            if let Some(scrollable) = behavior.text_scrollable {
+                view = view.scrollable(scrollable);
+            }
+            if let Some(callback) = behavior.on_link_click {
+                let route = crate::script_callback::ScriptCallbackRoute::new(
+                    Rc::downgrade(runtime),
+                    callback,
+                );
+                view = view.on_link_click(move |url, _event, window, cx| {
+                    route.emit(crate::HostValue::from(url.to_string()), window, cx);
+                });
+            } else {
+                view = view.on_link_click(|url, event, _, cx| {
+                    // Preserve Base's activation behavior, but apply Shell's URL rules.
+                    let activate = match event {
+                        gpui::ClickEvent::Mouse(click) => {
+                            matches!(click.up.button, MouseButton::Left | MouseButton::Middle)
+                        }
+                        gpui::ClickEvent::Keyboard(_) => true,
+                        gpui::ClickEvent::Touch(click) => !click.long_press,
+                    };
+                    if activate && is_openable_url(url) {
+                        cx.open_url(url);
+                    }
+                });
+            }
+            Styled::style(&mut view).refine(&refinement);
+            text_view::with_policy(view, spec.policy).into_any_element()
+        }
         Component::Text(value) => {
-            // Text, svg and image are the three components with no identity and
-            // no interactivity, so nothing on them can carry a role or a tab
-            // stop. Wrap them in a `div()` and put it there.
+            // A text run, not a `div` holding one. GPUI implements
+            // `IntoElement` for a string, so `div().child("x")` is one element
+            // with text in it — and a string only ever reaches here as a child,
+            // because that is the only way to write text now. Wrapping it would
+            // put a second box inside every label, which is a layout the script
+            // did not ask for.
+            //
+            // Nothing can be hung on it: it has no identity and no
+            // interactivity, so a role or a tab stop belongs on the element
+            // holding it.
             warn_unhonoured_a11y(&behavior, "text", &[]);
-            let mut element = div();
-            element.style().refine(&refinement);
-            element.extend(children);
-            element.child(SharedString::from(value)).into_any_element()
+            warn_without_surface("text", &refinement, &states, &children);
+            SharedString::from(value).into_any_element()
         }
         Component::Button(id) => {
             warn_ignored_key(&behavior, "Button");
@@ -732,6 +1178,7 @@ fn materialize_component(
             let button = with_hover(button, &states);
             let button = with_active_and_focus(button, &states);
             let button = components::tooltip::with_tooltip(button, &behavior);
+            let button = with_input_handlers(button, &behavior, runtime);
             finish(button, refinement, children)
         }
         Component::Link(id) => {
@@ -763,6 +1210,7 @@ fn materialize_component(
             }
             let link = with_hover(link, &states);
             let link = with_active_and_focus(link, &states);
+            let link = with_input_handlers(link, &behavior, runtime);
             finish(link, refinement, children)
         }
         Component::Checkbox(id) => {
@@ -810,6 +1258,7 @@ fn materialize_component(
 
             let checkbox = with_hover(checkbox, &states);
             let checkbox = with_active_and_focus(checkbox, &states);
+            let checkbox = with_input_handlers(checkbox, &behavior, runtime);
             finish(checkbox, refinement, children)
         }
         Component::Switch(id) => {
@@ -843,10 +1292,11 @@ fn materialize_component(
                     "state styles on a Switch are ignored; style the row around it instead"
                 );
             }
+            let switch = with_input_handlers(switch, &behavior, runtime);
             finish(switch, refinement, children)
         }
         Component::Tabs(id) => {
-            components::tabs::tab_list(id, refinement, behavior, states, children)
+            components::tabs::tab_list(runtime, id, refinement, behavior, states, children)
         }
         Component::Tab(id) => {
             components::tabs::tab(runtime, id, refinement, behavior, states, children)
@@ -911,6 +1361,7 @@ fn materialize_component(
         Component::Resizable(id, axis) => components::resizable::panel_group(
             ChildSpecs {
                 runtime,
+                snapshot,
                 arena,
                 ids: node.children(),
                 inherited,
@@ -974,6 +1425,32 @@ fn materialize_component(
             image.style().text.color = Some(inherited);
             image.into_any_element()
         }
+        Component::Accordion(id) => {
+            components::accordion::accordion(&id, refinement, behavior, children)
+        }
+        Component::AccordionItem => components::accordion::accordion_item(
+            runtime, snapshot, arena, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
+        ),
+        Component::AccordionHeader => {
+            components::accordion::orphan("AccordionHeader", "an AccordionItem's `header` slot")
+        }
+        Component::AccordionPanel => {
+            components::accordion::orphan("AccordionPanel", "an AccordionItem's `panel` slot")
+        }
+        Component::AccordionTrigger(_) => components::accordion::orphan(
+            "AccordionTrigger",
+            "an AccordionHeader.new(trigger) call",
+        ),
+        Component::Pagination(id) => {
+            components::pagination::pagination(&id, refinement, behavior, states, children)
+        }
+        Component::Avatar => components::avatar::avatar(
+            runtime, snapshot, arena, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
+        ),
+        Component::AvatarImage(_) => components::avatar::orphan("AvatarImage"),
+        Component::AvatarFallback => components::avatar::orphan("AvatarFallback"),
         Component::Image(path) => {
             warn_unhonoured_a11y(&behavior, "image", &[]);
             let mut image = gpui::img(SharedString::from(path));
@@ -998,7 +1475,17 @@ fn materialize_component(
         Component::Scrollbar(id) => {
             components::scrollbar::scrollbar(id, refinement, behavior, states, children, window, cx)
         }
+        Component::DockArea(handle) => {
+            let hooks = behavior.dock_chrome;
+            components::dock::dock_area(
+                runtime, handle, hooks, refinement, behavior, states, children, window, cx,
+            )
+        }
+        Component::DockContent => components::dock::dock_content(refinement, behavior, children),
         Component::VirtualList(spec) => components::virtual_list::virtual_list(
+            runtime, &spec, refinement, behavior, states, children, window, cx,
+        ),
+        Component::List(spec) => components::list::list(
             runtime, &spec, refinement, behavior, states, children, window, cx,
         ),
         Component::Input(handle) => {
@@ -1040,7 +1527,34 @@ fn materialize_component(
             frame.extend(children);
             let frame = with_hover(frame, &states);
             let frame = with_active_and_focus(frame, &states);
-            frame.child(Input::new(&state)).into_any_element()
+            let callbacks = crate::InlineTokenCallbacks::new(
+                &state,
+                behavior
+                    .token
+                    .map(|id| crate::ComponentElementCallback::from_runtime(runtime, id)),
+                behavior
+                    .on_token_click
+                    .map(|id| crate::ComponentCallback::from_runtime(runtime, id)),
+            )
+            .with_hover(
+                &state,
+                behavior
+                    .on_token_hover
+                    .map(|id| crate::ComponentCallback::from_runtime(runtime, id)),
+            );
+            let input = callbacks.apply_hover(
+                callbacks.apply(
+                    Input::new(&state),
+                    |input, render| input.token(move |token, window, cx| render(token, window, cx)),
+                    |input, listen| {
+                        input.on_token_click(move |event, window, cx| listen(event, window, cx))
+                    },
+                ),
+                |input, listen| {
+                    input.on_token_hover(move |event, window, cx| listen(event, window, cx))
+                },
+            );
+            frame.child(input).into_any_element()
         }
         Component::OtpInput(handle) => components::otp_input::otp_input(
             runtime, handle, refinement, behavior, states, children, window, cx,
@@ -1049,8 +1563,8 @@ fn materialize_component(
             components::textarea::textarea(runtime, handle, refinement, behavior, states, children)
         }
         Component::NumberInput(handle) => components::number_input::number_input(
-            runtime, arena, handle, inherited, refinement, behavior, states, slot_specs, children,
-            window, cx,
+            runtime, snapshot, arena, handle, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
         ),
     }
 }
@@ -1060,7 +1574,16 @@ fn materializes_slots(component: &Component, behavior: &Behavior) -> bool {
     // does: not because they might not be drawn, but because it reads the
     // descriptions itself. Building them here would be the same subtree built
     // twice, under the same element id.
-    if matches!(component, Component::NumberInput(_)) {
+    // An `Avatar` is here for the same reason: `Avatar::image` takes an
+    // `AvatarImage`, not an element, so the slot has to be read back for its
+    // path rather than handed over already built.
+    // An `AccordionItem` is here for the strongest version of the reason: its
+    // header and panel are concrete types, and the header's own trigger is a
+    // third one under that. The whole subtree is read back rather than built.
+    if matches!(
+        component,
+        Component::NumberInput(_) | Component::Avatar | Component::AccordionItem
+    ) {
         return false;
     }
     // A `Popover` or a `HoverCard` is not here, and not by oversight: its
@@ -1203,6 +1726,300 @@ fn with_gpui_focus<E: InteractiveElement>(
     element
 }
 
+/// GPUI's own input listeners, for the components that can carry them.
+///
+/// One function for the whole family rather than one per kind. The alternative
+/// was tried: the keyboard was factored out here while the pointer stayed
+/// inline in the `div` arm, so every component this was applied to answered
+/// keys and silently ignored presses — while the table saying which components
+/// honour "input" claimed all of it.
+///
+/// The bound is `InteractiveElement + ParentElement`: the listeners need the
+/// first and the bounds capture needs the second, because `on_prepaint` is a
+/// canvas child.
+///
+/// Wired is not the same as reachable. A key event travels the focus path and
+/// a pointer event travels the hitbox, so a component that accepts no script
+/// focus handle — `Tab` — hears presses and never hears keys, however well
+/// both are wired here. That is a property of the component, reported where
+/// focus is.
+fn with_input_handlers<E>(element: E, behavior: &Behavior, runtime: &Rc<ShellRuntime>) -> E
+where
+    E: InteractiveElement + ParentElement,
+{
+    let mut element = element;
+    if let Some(callback) = behavior.on_key_down {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_key_down(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_key(callback, &event.keystroke, Some(event.is_held), window, cx);
+            }
+        });
+    }
+    if let Some(callback) = behavior.on_key_up {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_key_up(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_key(callback, &event.keystroke, None, window, cx);
+            }
+        });
+    }
+    if let Some(callback) = behavior.on_modifiers_changed {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_modifiers_changed(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_modifiers_changed(callback, event, window, cx);
+            }
+        });
+    }
+    // The pointer half. It needs the element's box for `local_position`, and
+    // captures it only when something asked.
+    if behavior.wants_pointer_geometry() {
+        let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let writer = Rc::clone(&bounds);
+        element = element.on_prepaint(move |value, _, _| writer.set(Some(value)));
+
+        for (button, callback) in behavior.on_mouse_down.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        for (button, callback) in behavior.on_mouse_up.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_up(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_mouse_down_out {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down_out(move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_scroll_wheel {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_scroll_wheel(move |event, window, cx| {
+                let Some(runtime) = runtime.upgrade() else {
+                    return;
+                };
+                // A line delta is converted here rather than in the script,
+                // because the line height it needs is the window's and a
+                // script has no way to ask for it. Both delta shapes therefore
+                // arrive as pixels, and `delta_lines` keeps the original when
+                // there was one.
+                let line_height = window.line_height();
+                runtime.dispatch_scroll_wheel(
+                    callback,
+                    event,
+                    line_height,
+                    bounds.get(),
+                    window,
+                    cx,
+                );
+            });
+        }
+        if let Some(callback) = behavior.on_pinch {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_pinch(move |event, window, cx| {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.dispatch_pinch(callback, event, bounds.get(), window, cx);
+                }
+            });
+        }
+    }
+
+    // The context has to be installed before the listeners for the same reason
+    // GPUI's own components do it in that order: a keymap predicate is matched
+    // against the context stack of the element the dispatch reached, so an
+    // element that names its context after registering a listener is an
+    // element whose own bindings do not see it.
+    if let Some(context) = behavior.key_context.as_deref() {
+        // Parsed rather than taken: a key context is a predicate grammar, not
+        // a name, and `"my pane"` is not one. Reported rather than refused,
+        // because the element is otherwise fine and losing a whole frame to a
+        // typo in a context string is the worse trade.
+        match gpui::KeyContext::try_from(context) {
+            Ok(context) => element = element.key_context(context),
+            Err(error) => {
+                tracing::error!("`key_context(\"{context}\")` is not a valid key context: {error}")
+            }
+        }
+    }
+    // One GPUI listener for every action this element handles, rather than one
+    // per action, and the difference is not tidiness.
+    //
+    // GPUI matches an action listener by `TypeId` and, during the bubble
+    // phase, stops the dispatch after the first listener it finds: an action
+    // is handled once, by the innermost element that claims it. That is right
+    // when every action is its own Rust type, which is how GPUI's own actions
+    // work. Every script action is one `ShellAction`, so two registrations on
+    // one element would be two listeners with the same `TypeId` — and the
+    // first would swallow every action, including the ones meant for the
+    // second, which would then never run at all.
+    //
+    // So the routing that GPUI does by type is done here by id, in one
+    // listener. An action this element does not handle re-opens propagation,
+    // which is what lets it carry on to an element further out — the behavior
+    // a per-action listener would have had.
+    if !behavior.on_action.is_empty() {
+        let runtime = Rc::downgrade(runtime);
+        let handlers: SmallVec<[(SharedString, CallbackId); 1]> = behavior.on_action.clone();
+        element = element.on_action::<crate::action::ShellAction>(move |action, window, cx| {
+            let Some((_, callback)) = handlers
+                .iter()
+                .find(|(wanted, _)| wanted.as_ref() == action.id())
+            else {
+                cx.propagate();
+                return;
+            };
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_action(*callback, action.id(), window, cx);
+            }
+        });
+    }
+    element
+}
+
+/// One dispatch for the three press-and-release builders.
+///
+/// `MouseDownEvent` and `MouseUpEvent` are different types carrying the same
+/// four fields, and `on_mouse_down_out` produces the first — so one small
+/// trait over both beats writing the same six lines three times.
+fn dispatch_mouse_button<E: MouseButtonEventFields>(
+    runtime: &std::rc::Weak<ShellRuntime>,
+    callback: CallbackId,
+    event: &E,
+    bounds: Option<Bounds<Pixels>>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(runtime) = runtime.upgrade() else {
+        return;
+    };
+    runtime.dispatch_mouse_button(
+        callback,
+        event.button(),
+        event.position(),
+        event.click_count(),
+        event.modifiers(),
+        bounds,
+        window,
+        cx,
+    );
+}
+
+/// The four fields a press and a release both carry.
+trait MouseButtonEventFields {
+    fn button(&self) -> MouseButton;
+    fn position(&self) -> gpui::Point<Pixels>;
+    fn click_count(&self) -> usize;
+    fn modifiers(&self) -> gpui::Modifiers;
+}
+
+macro_rules! mouse_button_event_fields {
+    ($event:ty) => {
+        impl MouseButtonEventFields for $event {
+            fn button(&self) -> MouseButton {
+                self.button
+            }
+            fn position(&self) -> gpui::Point<Pixels> {
+                self.position
+            }
+            fn click_count(&self) -> usize {
+                self.click_count
+            }
+            fn modifiers(&self) -> gpui::Modifiers {
+                self.modifiers
+            }
+        }
+    };
+}
+
+mouse_button_event_fields!(gpui::MouseDownEvent);
+mouse_button_event_fields!(gpui::MouseUpEvent);
+
+/// Reports the input behaviors a component does not wire.
+///
+/// The same problem `tooltip` has, and the same answer: these are GPUI's own
+/// `InteractiveElement` builders, and the shell installs them on the one
+/// element it fully owns — a plain `div`, `h_flex` or `v_flex`. Every other
+/// component builds its own base type and hangs its own listeners on it, so a
+/// handler written there would be recorded in the description and never reach
+/// GPUI.
+///
+/// Saying so is not a consolation prize. `Button.new("save").on_key_down(...)`
+/// is a reasonable thing for a script author to write, it reads as though it
+/// works, and the failure is a key that does nothing — which looks like a bug
+/// in their own code for as long as it takes them to find this. A line in the
+/// log names the cause and the workaround in one place.
+///
+/// Widening this is one call per component rather than a new mechanism, the
+/// same as [`components::tooltip::warn_unhonoured_tooltip`] says of its own.
+fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
+    if honours_input(component) {
+        return;
+    }
+    let asked = [
+        ("on_key_down", behavior.on_key_down.is_some()),
+        ("on_key_up", behavior.on_key_up.is_some()),
+        (
+            "on_modifiers_changed",
+            behavior.on_modifiers_changed.is_some(),
+        ),
+        ("on_mouse_down", !behavior.on_mouse_down.is_empty()),
+        ("on_mouse_up", !behavior.on_mouse_up.is_empty()),
+        ("on_mouse_down_out", behavior.on_mouse_down_out.is_some()),
+        ("on_scroll_wheel", behavior.on_scroll_wheel.is_some()),
+        ("on_pinch", behavior.on_pinch.is_some()),
+        ("on_action", !behavior.on_action.is_empty()),
+        ("key_context", behavior.key_context.is_some()),
+    ];
+    for (method, called) in asked {
+        if called {
+            tracing::warn!(
+                "`{method}` is not wired on a {}: the shell installs GPUI's input listeners                  on the element it owns outright, which is a plain `div`, `h_flex` or                  `v_flex`. Wrap it and write `{method}` on the wrapper",
+                component.name()
+            );
+        }
+    }
+}
+
+/// The components [`with_input_handlers`] is applied to.
+///
+/// Every one implements `InteractiveElement` and `ParentElement`, which is what
+/// the listeners and the bounds capture need, and every one is something a
+/// script puts input on. The rest either build no interactive base
+/// (`Collapsible`, `Progress`) or own the keyboard themselves (`Input`,
+/// `Select`, `OtpInput`), where a second set of listeners would fight the
+/// first. Widening this is one call per component, not a new mechanism.
+///
+/// Wired is not the same as reachable. A key event travels the focus path, so
+/// a component that accepts no script focus handle — `Tab` — hears presses and
+/// never hears keys. That is a property of the component, reported where focus
+/// is, not something this list can express.
+fn honours_input(component: &Component) -> bool {
+    matches!(
+        component,
+        Component::Div
+            | Component::HFlex
+            | Component::VFlex
+            | Component::Button(_)
+            | Component::Link(_)
+            | Component::Checkbox(_)
+            | Component::Switch(_)
+            | Component::Radio(_)
+            | Component::Toggle(_)
+            | Component::Tabs(_)
+            | Component::Tab(_)
+    )
+}
+
 /// The accessibility semantics GPUI reads off the element itself.
 fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
     let mut element = element;
@@ -1216,6 +2033,42 @@ fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> 
         element = element.aria_active_descendant();
     }
     element
+}
+
+/// Marks the element as a window control area, the way gpui-component's
+/// `TitleBar` does.
+///
+/// GPUI's `window_control_area` is a hit-test answer for the platform, and only
+/// Windows asks it. The host opens its window with an application-drawn title
+/// bar on every platform, so a drag area also moves the window itself: a left
+/// press dragged across it starts the platform move, and a double-click does
+/// what a native title bar's would — `titlebar_double_click` on macOS, a zoom on
+/// Linux. Windows keeps its native behaviour through the hit test.
+fn with_window_control<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
+    let Some(area) = behavior.window_control_area else {
+        return element;
+    };
+    let element = element.window_control_area(area);
+    if area != gpui::WindowControlArea::Drag || cfg!(target_os = "windows") {
+        return element;
+    }
+    element
+        // `on_mouse_move` reaches only the hovered element, so a move with the
+        // left button held is a press that is being dragged across this area.
+        .on_mouse_move(|event, window, _| {
+            if event.pressed_button == Some(MouseButton::Left) {
+                window.start_window_move();
+            }
+        })
+        .on_mouse_down(MouseButton::Left, |event, window, _| {
+            if event.click_count == 2 {
+                if cfg!(target_os = "macos") {
+                    window.titlebar_double_click();
+                } else {
+                    window.zoom_window();
+                }
+            }
+        })
 }
 
 /// Reports focus and accessibility calls a component cannot honour.
@@ -1236,6 +2089,10 @@ fn warn_unhonoured_a11y(behavior: &Behavior, component: &str, honoured: &[&str])
         ("role", behavior.role.is_some()),
         ("aria_selected", behavior.aria_selected.is_some()),
         ("aria_active_descendant", behavior.aria_active_descendant),
+        (
+            "window_control_area",
+            behavior.window_control_area.is_some(),
+        ),
     ];
     for (method, called) in asked {
         if called && !honoured.contains(&method) {
@@ -1276,6 +2133,16 @@ fn flex_element(
         && behavior.on_click.is_none()
         && behavior.on_mouse_move.is_none()
         && behavior.on_hover.is_none()
+        && behavior.on_key_down.is_none()
+        && behavior.on_key_up.is_none()
+        && behavior.on_modifiers_changed.is_none()
+        && behavior.on_mouse_down.is_empty()
+        && behavior.on_mouse_up.is_empty()
+        && behavior.on_mouse_down_out.is_none()
+        && behavior.on_scroll_wheel.is_none()
+        && behavior.on_pinch.is_none()
+        && behavior.on_action.is_empty()
+        && behavior.key_context.is_none()
         && !behavior.scroll_x
         && !behavior.scroll_y
     {
@@ -1292,7 +2159,10 @@ fn flex_element(
     let identity = element_id(id, behavior.key.clone());
     let stateful = element.id(identity.clone());
     let stateful = with_gpui_focus(stateful, &behavior, focus.as_ref());
+    let stateful = with_input_handlers(stateful, &behavior, runtime);
+    let stateful = components::dock::with_commands(stateful, &behavior, runtime, cx);
     let stateful = with_aria(stateful, &behavior);
+    let stateful = with_window_control(stateful, &behavior);
     let mut stateful = with_active_and_focus(stateful, &states);
     if !behavior.disabled
         && let Some(callback) = behavior.on_click
@@ -1383,6 +2253,98 @@ fn should_dispatch_hover(
     hovered || !bounds.is_some_and(|bounds| bounds.contains(&mouse_position))
 }
 
+/// Materializes the children of a described node.
+///
+/// For a slot a component resolves itself rather than receiving as a finished
+/// element: the node is read back for its own type and styles, and its
+/// children still have to be built the ordinary way.
+pub(in crate::materialize) fn materialize_children(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
+    arena: &SpecArena,
+    id: SpecId,
+    inherited: gpui::Hsla,
+    window: &mut Window,
+    cx: &mut App,
+) -> Children {
+    let Some(node) = arena.node(id) else {
+        return Children::new();
+    };
+    node.children()
+        .iter()
+        .map(|child| materialize_node(runtime, snapshot, arena, *child, inherited, window, cx))
+        .collect()
+}
+
+/// A slot node's own styles, with its motion sampled and its leftovers named.
+///
+/// # Not covered by a test, and why
+///
+/// The sampling is the part that matters and the part nothing here can assert.
+/// It shows up only in the refinement after materialize, which this suite
+/// cannot read — it reads description trees — and it cannot be called from a
+/// unit test either: the motion sampler keys its state off the element being
+/// laid out and refuses to run outside `request_layout`, `prepaint` or `paint`.
+/// Reading the resulting geometry would need every script element to carry a
+/// `debug_bounds` marker, which is a debugging feature rather than a fix.
+///
+/// So what stands in for a test is that there is one of these rather than five
+/// copies. The bug this replaced was five resolvers that each read the
+/// refinement and ignored the motion beside it; a single function cannot drift
+/// from itself.
+///
+/// The two things a slot resolver would otherwise silently drop. Motion is the
+/// one that bites: `AccordionPanel.new().transition("height", ...)` is the most
+/// ordinary thing anyone writes on an accordion, and a resolver that read only
+/// the refinement would record it and animate nothing. It is sampled against
+/// the same identity an ordinary node's is, so a slot animates exactly as it
+/// would anywhere else.
+///
+/// State styles are reported rather than applied. Every type these resolvers
+/// rebuild is a `RenderOnce` the shell hands finished values to, so there is no
+/// `Interactivity` on this side to attach a hover to — the same position
+/// `Collapsible` and `Switch` are already in, and the same answer: say so.
+pub(in crate::materialize) fn resolve_slot(
+    arena: &SpecArena,
+    slot: SpecId,
+    part: &str,
+    window: &mut Window,
+    cx: &mut App,
+) -> (StyleRefinement, Behavior, SlotSpecs) {
+    let Some(node) = arena.node(slot) else {
+        return (
+            StyleRefinement::default(),
+            Behavior::default(),
+            SlotSpecs::new(),
+        );
+    };
+    let (mut refinement, behavior, states, motions, inner) = resolve_ops(arena, node);
+    apply_motion(
+        element_id(slot, behavior.key.clone()),
+        &motions,
+        &mut refinement,
+        window,
+        cx,
+    );
+    if states.hover.is_some() || states.active.is_some() || states.focus.is_some() {
+        tracing::warn!(
+            "state styles on a {part} are ignored: it is rebuilt from its description as a \
+             value, so there is no interactive element here for a hover or a press to land \
+             on. Put them on an element around it"
+        );
+    }
+    (refinement, behavior, inner)
+}
+
+/// Takes the `SpecId` filling `name`, for a component that resolves its own
+/// slots rather than receiving them materialized.
+pub(in crate::materialize) fn take_slot_spec(slots: &mut SlotSpecs, name: &str) -> Option<SpecId> {
+    slots
+        .iter()
+        .position(|(slot, _)| *slot == name)
+        .map(|index| slots.remove(index).1)
+}
+
 /// Takes the element filling `name`, leaving any other slot for its own reader.
 fn take_slot(slots: &mut Slots, name: &str) -> Option<AnyElement> {
     slots
@@ -1471,6 +2433,7 @@ fn motion_element_id(
         // key its scroll position is filed under, so motion has to follow the
         // same name rather than a tree position.
         Component::VirtualList(spec) => gpui::ElementId::Name(spec.id().to_owned().into()),
+        Component::List(spec) => gpui::ElementId::Name(spec.id().to_owned().into()),
         // The group's id is also where base files the panel sizes, so motion
         // has to key off the same name rather than a tree position.
         Component::Resizable(id, _) => gpui::ElementId::Name(id.clone().into()),
@@ -1503,7 +2466,7 @@ fn motion_element_id(
     }
 }
 
-fn resolve_ops(
+pub(in crate::materialize) fn resolve_ops(
     arena: &SpecArena,
     node: &SpecNode,
 ) -> (
@@ -1618,17 +2581,47 @@ fn resolve_ops(
             }
             SpecOp::Callback(name, id) => match *name {
                 "on_click" => behavior.on_click = Some(*id),
+                "on_link_click" => behavior.on_link_click = Some(*id),
                 "on_mouse_move" => behavior.on_mouse_move = Some(*id),
                 "on_hover" => behavior.on_hover = Some(*id),
+                "on_key_down" => behavior.on_key_down = Some(*id),
+                "on_key_up" => behavior.on_key_up = Some(*id),
+                "on_modifiers_changed" => behavior.on_modifiers_changed = Some(*id),
+                // The button is carried in the op name rather than beside it:
+                // `SpecOp::Callback` is a `&'static str` and a handle, and
+                // three fixed names cost nothing next to widening every op to
+                // carry an argument only these four use.
+                "on_mouse_down_left" => behavior.on_mouse_down.push((MouseButton::Left, *id)),
+                "on_mouse_down_right" => behavior.on_mouse_down.push((MouseButton::Right, *id)),
+                "on_mouse_down_middle" => behavior.on_mouse_down.push((MouseButton::Middle, *id)),
+                "on_mouse_up_left" => behavior.on_mouse_up.push((MouseButton::Left, *id)),
+                "on_mouse_up_right" => behavior.on_mouse_up.push((MouseButton::Right, *id)),
+                "on_mouse_up_middle" => behavior.on_mouse_up.push((MouseButton::Middle, *id)),
+                "on_mouse_down_out" => behavior.on_mouse_down_out = Some(*id),
+                "on_scroll_wheel" => behavior.on_scroll_wheel = Some(*id),
+                "on_pinch" => behavior.on_pinch = Some(*id),
                 "on_resize" => behavior.on_resize = Some(*id),
                 "on_change" => behavior.on_change = Some(*id),
+                "token" => behavior.token = Some(*id),
+                "on_token_click" => behavior.on_token_click = Some(*id),
+                "on_token_hover" => behavior.on_token_hover = Some(*id),
                 "on_step" => behavior.on_step = Some(*id),
                 "on_open_change" => behavior.on_open_change = Some(*id),
                 "on_confirm" => behavior.on_confirm = Some(*id),
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
                 "on_item_click" => behavior.on_item_click = Some(*id),
+                "on_item_secondary_click" => behavior.on_item_secondary_click = Some(*id),
+                "on_visible_range_change" => behavior.on_visible_range_change = Some(*id),
+                "tab_bar" => behavior.dock_chrome.tab_bar = Some(*id),
+                "empty_group" => behavior.dock_chrome.empty_group = Some(*id),
+                "drop_indicator" => behavior.dock_chrome.drop_indicator = Some(*id),
+                "dock" => behavior.dock_chrome.dock = Some(*id),
                 other => tracing::error!("unhandled callback `{other}` reached materialize"),
             },
+            SpecOp::ActionCallback(id, callback) => {
+                behavior.on_action.push((id.clone(), *callback))
+            }
+            SpecOp::RegisteredMethod(_) => {}
             // Filling the same slot twice replaces it, the way a second
             // `open(...)` replaces the first: the last call in the chain is
             // what the script meant.
@@ -1866,7 +2859,7 @@ fn checked_milliseconds(ms: f64) -> Option<Duration> {
 /// Written out rather than derived: GPUI has no name table for `Anchor`, and
 /// the script API is the snake_case spelling of the variant. One list serves
 /// the parser below, the check the prelude makes at the call site, and the
-/// union `gpui.d.ts` declares — so the three cannot drift.
+/// union `gpui-kit.d.ts` declares — so the three cannot drift.
 pub(crate) const ANCHOR_NAMES: [&str; 8] = [
     "top_left",
     "top_right",
@@ -1879,7 +2872,7 @@ pub(crate) const ANCHOR_NAMES: [&str; 8] = [
 ];
 
 /// The anchor a script named, or `None` if no variant spells it.
-fn anchor_from_name(name: &str) -> Option<gpui::Anchor> {
+pub(crate) fn anchor_from_name(name: &str) -> Option<gpui::Anchor> {
     match name {
         "top_left" => Some(gpui::Anchor::TopLeft),
         "top_right" => Some(gpui::Anchor::TopRight),
@@ -1943,11 +2936,125 @@ fn warn_unsupported(component: &str, methods: &[(&str, bool)]) {
     }
 }
 
+/// The dock command one chrome method names, or `None` for a method that is
+/// not one.
+///
+/// Every one of them takes the dock handle first, because a command is resolved
+/// against the contexts of *that* area — the script passes the container object
+/// it was handed, and the prelude unpacks the handle out of it. What follows
+/// names the container inside the area: a group's node or a dock's placement.
+fn is_dock_command(name: &str) -> bool {
+    matches!(
+        name,
+        "select_tab"
+            | "close_panel"
+            | "toggle_zoom"
+            | "drag_tab"
+            | "drop_tab"
+            | "toggle_dock"
+            | "resize_dock"
+    )
+}
+
+fn dock_action(name: &str, args: &[Bridged]) -> Option<crate::dock::DockAction> {
+    use crate::dock::{DockAction, DockCommand};
+
+    let number = |index: usize| args.get(index).and_then(|value| value.as_f32().ok());
+    let handle = |index: usize| {
+        args.get(index).and_then(|value| match value {
+            Bridged::Number(raw) if *raw >= 0.0 => Some(*raw as crate::entities::EntityHandle),
+            _ => None,
+        })
+    };
+    let whole = |index: usize| {
+        number(index)
+            .filter(|value| *value >= 0.0)
+            .map(|value| value as usize)
+    };
+    let text = |index: usize| args.get(index).and_then(|value| value.as_str().ok());
+
+    let dock = handle(0)?;
+    let node = || handle(1);
+
+    let command = match name {
+        "select_tab" => DockCommand::SelectTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        "close_panel" => DockCommand::ClosePanel {
+            node: node()?,
+            panel: handle(2)?,
+        },
+        "toggle_zoom" => DockCommand::ToggleGroupZoom { node: node()? },
+        "drag_tab" => DockCommand::DragTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        // The one optional argument in the set: a tab bar that names no slot
+        // means "append", which is what a drop past the last tab is.
+        "drop_tab" => DockCommand::DropTab {
+            node: node()?,
+            index: whole(2),
+        },
+        "toggle_dock" => DockCommand::ToggleDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        "resize_dock" => DockCommand::ResizeDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        _ => return None,
+    };
+
+    Some(DockAction::new(dock, command))
+}
+
+/// The four regions of an area, spelled as the persisted layout spells them.
+pub(crate) fn dock_placement(name: &str) -> Option<gpui_base::dock::DockPlacement> {
+    use gpui_base::dock::DockPlacement;
+    match name {
+        "center" => Some(DockPlacement::Center),
+        "left" => Some(DockPlacement::Left),
+        "right" => Some(DockPlacement::Right),
+        "bottom" => Some(DockPlacement::Bottom),
+        _ => {
+            tracing::error!(
+                "`{name}` is not a dock placement; expected \"center\", \"left\", \"right\" or \"bottom\""
+            );
+            None
+        }
+    }
+}
+
 fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
     let flag = args.first().map(Bridged::is_truthy);
+    // Before the table below, and with its own early return: a dock command
+    // that failed to parse must not fall through to a name-keyed match whose
+    // last arm is `accessibility_label`.
+    if is_dock_command(name) {
+        match dock_action(name, args) {
+            Some(action) => behavior.dock_commands.push(action),
+            None => tracing::error!(
+                "`{name}` did not name a container in a dock area; the command is dropped"
+            ),
+        }
+        return;
+    }
     match name {
         "accessibility_label" => {
             behavior.accessibility_label = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
+        "aria_level" => {
+            behavior.aria_level = args
+                .first()
+                .and_then(|value| value.as_f32().ok())
+                .map(|level| level.max(1.0) as usize);
+        }
+        "keep_mounted" => behavior.keep_mounted = flag.unwrap_or(true),
+        "key_context" => {
+            behavior.key_context = args
                 .first()
                 .and_then(|value| value.as_str().ok())
                 .map(SharedString::from);
@@ -1965,6 +3072,8 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .map(SharedString::from);
         }
         "disabled" => behavior.disabled = flag.unwrap_or(true),
+        "selectable" => behavior.selectable = Some(flag.unwrap_or(true)),
+        "scrollable" => behavior.text_scrollable = Some(flag.unwrap_or(true)),
         "selected" => behavior.selected = flag.unwrap_or(true),
         "checked" => behavior.checked = flag.unwrap_or(true),
         "value" => behavior.value = args.first().and_then(|value| value.as_f32().ok()),
@@ -2077,6 +3186,16 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .filter(|index| *index >= 0.0 && index.fract() == 0.0)
                 .map(|index| index as usize);
         }
+        "with_follow_mode" => {
+            behavior.follow_mode =
+                args.first()
+                    .and_then(|value| value.as_str().ok())
+                    .and_then(|mode| match mode {
+                        "normal" => Some(gpui::FollowMode::Normal),
+                        "tail" => Some(gpui::FollowMode::Tail),
+                        _ => None,
+                    });
+        }
         "track_focus" => {
             behavior.focus_handle = match args.first() {
                 Some(Bridged::Number(handle)) if *handle >= 0.0 && handle.fract() == 0.0 => {
@@ -2108,6 +3227,21 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
         }
         "aria_selected" => behavior.aria_selected = Some(flag.unwrap_or(true)),
         "aria_active_descendant" => behavior.aria_active_descendant = true,
+        "window_control_area" => {
+            behavior.window_control_area = match args.first().and_then(|value| value.as_str().ok())
+            {
+                Some("drag") => Some(gpui::WindowControlArea::Drag),
+                Some("close") => Some(gpui::WindowControlArea::Close),
+                Some("max") => Some(gpui::WindowControlArea::Max),
+                Some("min") => Some(gpui::WindowControlArea::Min),
+                other => {
+                    tracing::error!(
+                        "`window_control_area` takes \"drag\", \"close\", \"max\" or \"min\", not {other:?}; the area is dropped"
+                    );
+                    None
+                }
+            };
+        }
         "row_count" => behavior.row_count = whole_count(args),
         "column_count" => behavior.column_count = whole_count(args),
         "open" => behavior.open = Some(flag.unwrap_or(true)),
@@ -2122,6 +3256,7 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .and_then(|value| value.as_str().ok())
                 .and_then(|value| anchor_from_name(value));
         }
+        "frame_budget" => behavior.frame_budget = milliseconds(args),
         "mouse_button" => {
             behavior.mouse_button =
                 args.first()
@@ -2289,7 +3424,7 @@ mod motion_identity_tests {
     }
 
     /// One written list of anchors serves the parser, the check the prelude
-    /// makes at the call site and the union in `gpui.d.ts`. A declared name
+    /// makes at the call site and the union in `gpui-kit.d.ts`. A declared name
     /// that does not parse is a name a script could type and the runtime would
     /// silently drop.
     #[test]

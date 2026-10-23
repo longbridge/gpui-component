@@ -15,7 +15,7 @@ impl BaseShowcase {
                     div()
                         .mt_1()
                         .text_xs()
-                        .text_color(rgb(0x737373))
+                        .text_color(super::example_rgb(0x737373))
                         .child("Install stable releases automatically."),
                 ),
             )
@@ -35,14 +35,14 @@ impl BaseShowcase {
                             .h(px(20.))
                             .p(px(2.))
                             .bg(if checked {
-                                rgb(0x171717)
+                                super::example_rgb(0x171717)
                             } else {
-                                rgb(0xd4d4d4)
+                                super::example_rgb(0xd4d4d4)
                             })
                             .child(
                                 SwitchThumb::new(checked)
                                     .size_4()
-                                    .bg(rgb(0xffffff))
+                                    .bg(super::example_rgb(0xffffff))
                                     .ml(if checked { px(16.) } else { px(0.) }),
                             ),
                     ),
