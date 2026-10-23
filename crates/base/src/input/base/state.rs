@@ -775,7 +775,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// Build the engine. Each mode's own `new` sets its layout on top of this.
     fn new_in_mode(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle().tab_stop(true);
-        let blink_cursor = cx.new(|_| BlinkCursor::new());
+        let blink_cursor = cx.new(BlinkCursor::new);
         let undo_manager = UndoManager::new();
 
         let _subscriptions = vec![
@@ -9370,7 +9370,7 @@ mod tests {
         for action in 0..6 {
             cx.update(|_, cx| {
                 view.input.update(cx, |state, cx| {
-                    state.blink_cursor = cx.new(|_| BlinkCursor::new());
+                    state.blink_cursor = cx.new(BlinkCursor::new);
                     state.blink_cursor.update(cx, |cursor, cx| cursor.start(cx));
                 });
             });

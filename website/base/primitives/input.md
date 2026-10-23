@@ -81,22 +81,50 @@ theme, sizing, borders, prefix/suffix slots, and clear button, use the styled
 ## Cursor blinking
 
 A focused input blinks its cursor every 500 ms and keeps it shown while the
-user types or moves it. Install `CursorBlinkDefaults` to change the interval,
-turn blinking off with `None`, or stop blinking after a timeout, for every
-Input, Textarea, Editor and OTP input in the application:
+user types or moves it. Call `set_cursor_blink` after initialization to set the
+application policy for every Input, Textarea, Editor and OTP input:
 
 ```rust
 use std::time::Duration;
-use gpui_kit::base::input::CursorBlinkDefaults;
+use gpui_kit::base::input::{CursorBlink, set_cursor_blink};
 
-CursorBlinkDefaults::new()
-    .with_interval(Some(Duration::from_millis(530)))
-    .with_timeout(Some(Duration::from_secs(5)))
-    .install(cx);
+gpui_kit::init(cx);
+set_cursor_blink(
+    CursorBlink::Blinking {
+        interval: Duration::from_millis(530),
+        idle_timeout: Some(Duration::from_secs(5)),
+    },
+    cx,
+);
 ```
 
-Every blink repaints the view the input is in; with a timeout, an idle input
-stops causing repaints until the next focus, edit or cursor move.
+`interval` is the duration of each visible or hidden phase. A zero interval
+behaves as `CursorBlink::Steady`. `idle_timeout: None` allows blinking for as
+long as the input is focused. A timeout, including zero, stops blinking with
+the cursor visible and no pending timer. It measures elapsed time since the
+last focus, edit or cursor movement, including the 300 ms pause after typing.
+Every blink repaints the input's view; an idle cursor with a timeout stops
+causing these repaints until the next activity or policy change.
+
+The same function updates existing cursors when an application preference
+changes:
+
+```rust
+set_cursor_blink(CursorBlink::Steady, cx);
+set_cursor_blink(CursorBlink::default(), cx);
+```
+
+`Steady` immediately shows a focused cursor and cancels pending blink and pause
+tasks. Unfocused cursors remain hidden and do not start timers. Setting an
+unchanged policy does nothing. A changed blinking policy starts from a visible
+phase, preserves any remaining typing pause and measures its idle timeout from
+the last user activity. A shorter timeout can stop blinking immediately;
+extending or removing the timeout can resume an idle cursor without refocusing.
+
+`CursorBlink::default()` restores 500 ms blinking without an idle timeout.
+Base-only applications use the same API from `gpui_base::input`; styled
+applications can also import it from `gpui_kit::component::input`. Policy
+storage is private to Base, so no separate global installation is needed.
 
 ## Runnable example
 

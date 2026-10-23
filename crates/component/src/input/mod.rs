@@ -19,7 +19,6 @@ pub(crate) use clear_button::*;
 pub use content_type::*;
 #[cfg(not(feature = "tree-sitter"))]
 pub struct Tree;
-pub use gpui_base::input::CursorBlinkDefaults;
 /// The shared editing engine. Internal to the framework: components reach it
 /// through the concrete state of their control, never across the public API.
 pub(crate) use gpui_base::input::InputBaseState;
@@ -39,6 +38,7 @@ pub use gpui_base::input::{
     ShowCompletions, ShowDocumentHandler, TabSize, TextDecoration, TextDecorationCollection,
     TextareaState, ToggleCodeActions, Undo, WrappingIndent,
 };
+pub use gpui_base::input::{CursorBlink, set_cursor_blink};
 pub use gpui_base::input::{EditorMode, InputMode, InputModeKind, TextareaMode};
 #[doc(hidden)]
 mod editor;
