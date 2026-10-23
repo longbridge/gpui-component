@@ -1,6 +1,6 @@
 use super::*;
-use crate::input::{InputState, TextareaState};
-use gpui::{AppContext as _, TestAppContext};
+use crate::input::{EditorState, InputState, TextareaState};
+use gpui::{AppContext as _, TestAppContext, relative};
 
 #[test]
 fn validation_takes_precedence_over_focus_and_remains_visible_when_disabled() {
@@ -40,12 +40,18 @@ fn test_input_group_builder(cx: &mut TestAppContext) {
     cx.add_window(|window, cx| {
         let input = cx.new(|cx| InputState::new(window, cx));
         let textarea = cx.new(|cx| TextareaState::new(window, cx));
-        let group = InputGroup::new("group")
+        let editor = cx.new(|cx| EditorState::new(window, cx));
+        let mut group = InputGroup::new("group")
             .input(InputGroupInput::new(&input).aria_label("Replaced input"))
             .input(
                 InputGroupTextarea::new(&textarea)
                     .aria_label("Message")
                     .readonly(true),
+            )
+            .input(
+                Editor::new(&editor)
+                    .text_size(px(24.))
+                    .line_height(relative(2.)),
             )
             .disabled(true)
             .invalid(true)
@@ -56,10 +62,10 @@ fn test_input_group_builder(cx: &mut TestAppContext) {
                     .child(InputGroupText::new().child("Help"))
                     .child(InputGroupButton::new("send").primary().label("Send")),
             );
-        assert_eq!(
-            group.control.as_ref().unwrap().state().entity_id(),
-            textarea.entity_id()
-        );
+        let mut control = group.control.take().unwrap().into_input(cx);
+        assert_eq!(control.state().entity_id(), editor.entity_id());
+        assert_eq!(control.style().text.font_size, Some(px(24.).into()));
+        assert_eq!(control.style().text.line_height, Some(relative(2.).into()));
         assert!(group.disabled && group.invalid);
         assert_eq!(group.size, Size::Small);
         assert_eq!(group.addons[0].children.len(), 2);

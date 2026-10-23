@@ -465,3 +465,9 @@ editor surface.
 
 Input-only adornments such as `prefix`, `suffix`, mask toggle, and clear button
 are intentionally absent. Compose toolbars and actions around `Editor`.
+
+## Editor in a group
+
+Place `Editor` in an `InputGroup` to share its frame; see
+[Editor in a group](./input-group.md#editor-in-a-group) for an example.
+Editor does not support InlineToken.

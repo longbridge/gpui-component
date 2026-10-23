@@ -145,8 +145,8 @@ impl Styled for Editor {
     }
 }
 
-impl RenderOnce for Editor {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Editor {
+    pub(crate) fn into_input(self, cx: &App) -> Input {
         Input::from_state(self.state.clone())
             // Source code wants a monospace font at a code size, and rows that
             // follow that size. These come first so that a text style set on
@@ -172,6 +172,12 @@ impl RenderOnce for Editor {
                 this.on_paste(move |item, window, cx| handler(item, window, cx))
             })
             .refine_style(&self.style)
+    }
+}
+
+impl RenderOnce for Editor {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        self.into_input(cx)
     }
 }
 
@@ -229,6 +235,39 @@ mod tests {
         // A text style set on the editor refines over that, rows and all.
         assert_eq!(line_height(cx, Some(px(24.))), px(36.));
         assert_eq!(line_height(cx, Some(px(40.))), px(60.));
+    }
+
+    #[gpui::test]
+    fn grouped_editor_keeps_mono_font_and_line_height(cx: &mut TestAppContext) {
+        use crate::input::InputGroup;
+
+        struct GroupHarness(Entity<EditorState>);
+        impl Render for GroupHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .size_full()
+                    .child(InputGroup::new("editor-group").input(Editor::new(&self.0)))
+            }
+        }
+
+        let standalone = line_height(cx, None);
+        let mut state = None;
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let editor = cx.new(|cx| EditorState::new(window, cx).default_value("echo hello"));
+            let mut input = Editor::new(&editor).into_input(cx);
+            assert_eq!(
+                input.style().text.font_size,
+                Some(cx.theme().mono_font_size.into())
+            );
+            assert_eq!(
+                input.style().text.font_family,
+                Some(cx.theme().mono_font_family.clone())
+            );
+            state = Some(editor.clone());
+            GroupHarness(editor)
+        });
+        VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
+        cx.read(|cx| assert_eq!(state.unwrap().read(cx).line_height(), Some(standalone)));
     }
 
     struct SizedHarness {

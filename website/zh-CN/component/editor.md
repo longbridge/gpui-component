@@ -378,3 +378,7 @@ Editor::new(&editor).readonly(true)
 Editor 聚焦时不会应用单行 Input 的焦点边框效果。gutter、当前行背景和滚动条会作为同一个编辑器表面对齐绘制。
 
 前后缀、密码显示切换和清除按钮只属于单行 Input。Editor 的工具栏和操作按钮应组合在组件外部。
+
+## 在 InputGroup 中使用 Editor
+
+将 `Editor` 放进 `InputGroup` 即可共享边框，示例见[在 InputGroup 中使用 Editor](./input-group.md#在-inputgroup-中使用-editor)。Editor 不支持 InlineToken。

@@ -2,11 +2,12 @@
 //!
 //! The parts follow shadcn's input group: [`InputGroup`] is the frame,
 //! [`InputGroupInput`] and [`InputGroupTextarea`] are the ordinary [`Input`]
-//! and [`Textarea`] placed in it, [`InputGroupAddon`] holds text, icons and
-//! buttons on one of its four sides, [`InputGroupButton`] is a [`Button`] with
-//! compact input-group presentation and [`InputGroupText`] is muted text. The
-//! caller keeps the `InputState` or `TextareaState`; the group owns only
-//! composition and the frame.
+//! and [`Textarea`] placed in it, and an [`Editor`] fits the same slot.
+//! [`InputGroupAddon`] holds text, icons and buttons on one of its four sides,
+//! [`InputGroupButton`] is a [`Button`] with compact input-group presentation,
+//! and [`InputGroupText`] is muted text. The caller keeps the `InputState`,
+//! `TextareaState`, or `EditorState`; the group owns only composition and the
+//! frame.
 
 use std::time::Duration;
 
@@ -23,20 +24,20 @@ use crate::{
     StyleSized as _, StyledExt as _,
     button::{Button, ButtonCustomVariant, ButtonVariant, ButtonVariants},
     h_flex,
-    input::{Input, Textarea},
+    input::{Editor, Input, Textarea},
     v_flex,
 };
 
 /// A shared frame around one text control and any number of explicitly aligned addons.
 ///
-/// The caller retains the `InputState` or `TextareaState`. The group owns only
-/// composition and presentation; the control keeps every `Input` capability
-/// and renders without its own frame. `input` replaces the slot.
+/// The caller retains the `InputState`, `TextareaState`, or `EditorState`.
+/// The group owns only composition and presentation; the control keeps its
+/// editing capabilities and renders without its own frame. `input` replaces the slot.
 #[derive(IntoElement)]
 pub struct InputGroup {
     id: ElementId,
     style: StyleRefinement,
-    control: Option<Input>,
+    control: Option<InputGroupControl>,
     addons: Vec<InputGroupAddon>,
     size: Size,
     disabled: bool,
@@ -62,9 +63,9 @@ impl InputGroup {
         }
     }
 
-    /// Set the single-line input or textarea, replacing the previous control.
+    /// Set the input, textarea, or editor, replacing the previous control.
     pub fn input(mut self, input: impl Into<InputGroupControl>) -> Self {
-        self.control = Some(input.into().0);
+        self.control = Some(input.into());
         self
     }
 
@@ -137,12 +138,9 @@ struct GroupPresentation {
 
 impl RenderOnce for InputGroup {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = self.control.as_ref().map(|input| input.state().clone());
-        let disabled = self.disabled
-            || self
-                .control
-                .as_ref()
-                .is_some_and(|input| input.is_disabled());
+        let control = self.control.map(|control| control.into_input(cx));
+        let state = control.as_ref().map(|input| input.state().clone());
+        let disabled = self.disabled || control.as_ref().is_some_and(|input| input.is_disabled());
         let focused = !disabled
             && state
                 .as_ref()
@@ -173,9 +171,7 @@ impl RenderOnce for InputGroup {
             };
             target.push(addon.render_in_group(presentation, window, cx));
         }
-        let control = self
-            .control
-            .map(|input| render_control(input, presentation, multiline));
+        let control = control.map(|input| render_control(input, presentation, multiline));
         let theme = cx.theme();
         let appearance = GroupAppearance::new(theme, focused, disabled, self.invalid);
         let radius = theme.radius;
@@ -457,18 +453,38 @@ pub type InputGroupInput = Input;
 /// with every `Textarea` capability.
 pub type InputGroupTextarea = Textarea;
 
-/// A single-line input or textarea accepted by [`InputGroup::input`].
-pub struct InputGroupControl(Input);
+/// An input, textarea, or editor accepted by [`InputGroup::input`].
+pub struct InputGroupControl(GroupControl);
+
+enum GroupControl {
+    Input(Input),
+    Editor(Editor),
+}
+
+impl InputGroupControl {
+    fn into_input(self, cx: &App) -> Input {
+        match self.0 {
+            GroupControl::Input(input) => input,
+            GroupControl::Editor(editor) => editor.into_input(cx),
+        }
+    }
+}
 
 impl From<Input> for InputGroupControl {
     fn from(input: Input) -> Self {
-        Self(input)
+        Self(GroupControl::Input(input))
     }
 }
 
 impl From<Textarea> for InputGroupControl {
     fn from(textarea: Textarea) -> Self {
-        Self(textarea.into_input())
+        Self(GroupControl::Input(textarea.into_input()))
+    }
+}
+
+impl From<Editor> for InputGroupControl {
+    fn from(editor: Editor) -> Self {
+        Self(GroupControl::Editor(editor))
     }
 }
 

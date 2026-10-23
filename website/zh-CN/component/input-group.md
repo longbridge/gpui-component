@@ -358,3 +358,14 @@ InputGroup::new("composer")
 ```
 
 JavaScript 的分组输入也提供 `token` 和 `on_token_click`。重绘时保留原输入状态，需要恢复草稿时用保存的 content 调用 `set_value`。详见[原子行内 token](./input.md#原子行内-token)。
+
+## 在 InputGroup 中使用 Editor
+
+将 `Editor` 传给 `InputGroup::input`，即可在共享边框内保留语言配置和代码字体。这是 Rust API，JavaScript/Shell 的 group control 暂不支持 Editor。`readonly(true)` 要设在 group 上，因为它会覆盖控件的 readonly 设置。Editor 不支持 InlineToken。
+
+```rust
+use gpui_kit::component::input::{Editor, InputGroup};
+
+InputGroup::new("command")
+    .input(Editor::new(&editor).h(gpui_kit::rems(8.)))
+```

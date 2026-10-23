@@ -378,3 +378,17 @@ InputGroup::new("composer")
 The JavaScript group controls also expose `token` and `on_token_click`.
 Retain the same input state across redraws; call `set_value` with saved content
 to restore a draft. See [atomic inline tokens](./input.md#atomic-inline-tokens).
+
+## Editor in a group
+
+Pass `Editor` to `InputGroup::input` to keep its language and code font inside
+the shared frame. This is a Rust API; JavaScript/Shell group controls do not
+support Editor. Set `readonly(true)` on the group, which overrides the
+control’s readonly setting. Editor does not support InlineToken.
+
+```rust
+use gpui_kit::component::input::{Editor, InputGroup};
+
+InputGroup::new("command")
+    .input(Editor::new(&editor).h(gpui_kit::rems(8.)))
+```

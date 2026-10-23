@@ -4,7 +4,7 @@ use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, Size,
     button::ButtonVariants as _,
     input::{
-        InputContentType, InputEvent, InputGroup, InputGroupAddon,
+        Editor, EditorState, InputContentType, InputEvent, InputGroup, InputGroupAddon,
         InputGroupAddonAlignment as Align, InputGroupButton, InputGroupInput, InputGroupText,
         InputGroupTextarea, InputState, TextareaState,
     },
@@ -36,6 +36,7 @@ pub struct InputGroupStory {
     shortcut: Entity<InputState>,
     notes: Entity<TextareaState>,
     message: Entity<TextareaState>,
+    editor: Entity<EditorState>,
     sizes: Vec<(Size, Entity<InputState>)>,
     copied: bool,
     starred: bool,
@@ -91,6 +92,20 @@ impl InputGroupStory {
                     (size, state)
                 })
                 .collect();
+            let editor = cx.new(|cx| {
+                EditorState::new(window, cx).language("rust").default_value(
+                    r#"struct Task { done: bool }
+
+impl Task {
+    fn status(&self) -> &str {
+        match self.done {
+            true => "Complete",
+            false => "In progress",
+        }
+    }
+}"#,
+                )
+            });
             let example_inputs = examples::create_inputs(window, cx);
             let example_textareas = examples::create_textareas(window, cx);
             let mut subscriptions = [&search, &url, &email]
@@ -144,6 +159,7 @@ impl InputGroupStory {
                 shortcut,
                 notes,
                 message,
+                editor,
                 sizes,
                 copied: false,
                 starred: false,
@@ -371,6 +387,7 @@ impl Render for InputGroupStory {
                         this.child(div().text_sm().text_color(cx.theme().muted_foreground).child(format!("Sent: {message}")))
                     }),
             ))
+            .child(self.render_editor_example(cx))
             .child(section("Sizes").child(
                 column().children(self.sizes.iter().map(|(size, state)| {
                     InputGroup::new(("input-group-size", state.entity_id())).with_size(*size)

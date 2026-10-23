@@ -100,6 +100,39 @@ fn compact_trigger(id: &'static str, label: impl Into<SharedString>) -> InputGro
 }
 
 impl InputGroupStory {
+    pub(super) fn render_editor_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        section("Editor")
+            .description(
+                "The editor keeps its language highlighting and line numbers inside the shared frame.",
+            )
+            .child(
+                column().child(
+                    InputGroup::new("editor-group")
+                        .input(
+                            Editor::new(&self.editor)
+                                .h(rems(14.))
+                                .aria_label("Rust code"),
+                        )
+                        .addon(
+                            InputGroupAddon::new("editor-footer")
+                                .align(Align::BlockEnd)
+                                .child(InputGroupText::new().child("Rust"))
+                                .child(
+                                    InputGroupButton::new("copy-editor")
+                                        .ml_auto()
+                                        .label("Copy")
+                                        .icon(IconName::Copy)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            cx.write_to_clipboard(ClipboardItem::new_string(
+                                                this.editor.read(cx).value().to_string(),
+                                            ));
+                                        })),
+                                ),
+                        ),
+                ),
+            )
+    }
+
     pub(super) fn extra_input(&self, id: &'static str, label: &'static str) -> InputGroup {
         InputGroup::new(id).input(
             InputGroupInput::new(&self.example_inputs[id])

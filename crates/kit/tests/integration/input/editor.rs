@@ -1369,3 +1369,66 @@ fn visual_end_does_not_scroll_a_fully_visible_wrapped_editor_row(cx: &mut TestAp
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn grouped_editor_focuses_from_addon_and_submits_on_enter(cx: &mut TestAppContext) {
+    use gpui_kit::component::input::{
+        InputEvent as EditorEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment,
+    };
+    use gpui_kit::{Focusable as _, rems};
+    use std::{cell::Cell, rc::Rc};
+
+    struct Composer {
+        state: Entity<EditorState>,
+        _subscription: gpui_kit::Subscription,
+    }
+    impl Render for Composer {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().p_4().child(
+                InputGroup::new("composer")
+                    .input(Editor::new(&self.state).h(rems(8.)))
+                    .addon(
+                        InputGroupAddon::new("footer")
+                            .align(InputGroupAddonAlignment::BlockEnd)
+                            .h_8(),
+                    ),
+            )
+        }
+    }
+
+    cx.update(gpui_kit::init);
+    let submissions = Rc::new(Cell::new(0));
+    let (handle, view) = common::open_window(cx, None, |window, cx| {
+        cx.new(|cx| {
+            let state = cx.new(|cx| EditorState::new(window, cx).submit_on_enter(true));
+            let submissions = submissions.clone();
+            let subscription = cx.subscribe(&state, move |_, _, event: &EditorEvent, _| {
+                if matches!(event, EditorEvent::PressEnter { shift: false, .. }) {
+                    submissions.set(submissions.get() + 1);
+                }
+            });
+            Composer {
+                state,
+                _subscription: subscription,
+            }
+        })
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        let state = view.read(cx).state.clone();
+        window.click("footer", cx);
+        assert!(state.read(cx).focus_handle(cx).is_focused(window));
+        window.input("echo hello", cx);
+        window.press("enter", cx);
+        assert_eq!(state.read(cx).value(), "echo hello");
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert_eq!(submissions.get(), 1);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.press("shift-enter", cx);
+        assert_eq!(view.read(cx).state.read(cx).value(), "echo hello\n");
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert_eq!(submissions.get(), 1);
+}
