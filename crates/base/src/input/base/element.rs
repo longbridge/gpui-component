@@ -1986,6 +1986,61 @@ impl<M: InputModeKind> TextElement<M> {
             .collect()
     }
 
+    /// Asks the scroll containers around a focused input to bring it into
+    /// view, once when it gains focus and again whenever the fully visible
+    /// part of the window changes, so manual scrolling in between is left
+    /// alone. Ancestors must support autoscroll requests; inset-only keyboard
+    /// avoidance additionally requires the ancestor to use the fully visible
+    /// viewport for its scrolling bounds and scroll range. Stock GPUI's List
+    /// uses layout bounds and does not avoid inset-only occlusion.
+    ///
+    /// A single-line input asks for all of itself. A taller one asks for the
+    /// line with the caret, or its top part when it has no caret.
+    fn request_reveal(
+        &self,
+        input_bounds: Bounds<Pixels>,
+        cursor_infos: &[CursorRenderInfo],
+        cursor_scroll_offset: Point<Pixels>,
+        line_height: Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        /// Room left around the request for the field's padding and border.
+        const REVEAL_MARGIN: Pixels = px(8.);
+        /// How much of a caretless multi-line input is revealed.
+        const REVEAL_MAX_HEIGHT: Pixels = px(120.);
+
+        let focused = self.state.read(cx).focus_handle.is_focused(window);
+        let viewport = window.fully_visible_bounds();
+        let reveal = self.state.update(cx, |state, _| {
+            let target = focused.then_some(viewport);
+            let changed = state.revealed_viewport != target;
+            state.revealed_viewport = target;
+            focused && changed
+        });
+        if !reveal || input_bounds.size.height <= px(0.) {
+            return;
+        }
+
+        let (top, height) = if !self.state.read(cx).is_multi_line() {
+            (input_bounds.top(), input_bounds.size.height)
+        } else if let Some(caret) = cursor_infos.iter().find(|info| info.is_active) {
+            let top = (caret.bounds.top() + cursor_scroll_offset.y)
+                .clamp(input_bounds.top(), input_bounds.bottom());
+            (top, line_height.min(input_bounds.bottom() - top))
+        } else {
+            (
+                input_bounds.top(),
+                input_bounds.size.height.min(REVEAL_MAX_HEIGHT),
+            )
+        };
+        let request = Bounds::new(
+            point(input_bounds.left(), top),
+            size(input_bounds.size.width, height),
+        );
+        window.request_autoscroll(request.dilate(REVEAL_MARGIN));
+    }
+
     fn prepaint_tokens(
         &self,
         layout: &LastLayout,
@@ -3107,6 +3162,14 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let fold_icon_layout =
             self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
         let hitbox = window.insert_hitbox(input_bounds, HitboxBehavior::Normal);
+        self.request_reveal(
+            input_bounds,
+            &cursor_infos,
+            cursor_scroll_offset,
+            line_height,
+            window,
+            cx,
+        );
 
         let token_elements = self.prepaint_tokens(&last_layout, bounds, token_elements, window, cx);
         PrepaintState {
@@ -3731,8 +3794,8 @@ mod tests {
     use super::*;
     use crate::input::{EditorMode, EditorState, FoldRange, RangeDecoration, Redo, Undo};
     use gpui::{
-        AppContext as _, Context, EntityInputHandler as _, Render, TestAppContext,
-        VisualTestContext, div,
+        AppContext as _, Context, EntityInputHandler as _, ListAlignment, ListOffset, ListState,
+        Render, TestAppContext, VisualTestContext, div, list, prelude::FluentBuilder as _,
     };
 
     #[test]
@@ -3780,6 +3843,120 @@ mod tests {
             DecorationHarness(state)
         });
         (editor.unwrap(), window)
+    }
+
+    /// A list as tall as the window, whose second item is an input that
+    /// starts 180 px down, so its bottom is cut off by the window's edge.
+    struct RevealHarness {
+        input: Entity<crate::input::InputState>,
+        list: ListState,
+        show_input: bool,
+    }
+
+    impl Render for RevealHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let input = self.input.clone();
+            let show_input = self.show_input;
+            list(self.list.clone(), move |ix, _, _| {
+                if ix == 0 {
+                    div().h(px(180.)).into_any_element()
+                } else {
+                    div()
+                        .when(show_input, |this| this.child(input.clone()))
+                        .into_any_element()
+                }
+            })
+            .size_full()
+        }
+    }
+
+    #[gpui::test]
+    fn focused_input_asks_its_scroll_container_to_reveal_it(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let list_state = ListState::new(2, ListAlignment::Top, px(0.));
+        let mut input = None;
+        let window = cx.open_window(size(px(240.), px(200.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::InputState::new(window, cx));
+            input = Some(state.clone());
+            RevealHarness {
+                input: state,
+                list: list_state.clone(),
+                show_input: true,
+            }
+        });
+        let input = input.unwrap();
+        let view = window.root(cx).unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, _| window.activate_window());
+        cx.run_until_parked();
+        let draw = |cx: &mut VisualTestContext| {
+            cx.update(|window, cx| {
+                window.refresh();
+                window.draw(cx).clear(cx);
+            })
+        };
+        let revealed = |cx: &mut VisualTestContext| {
+            cx.update(|window, cx| {
+                let bounds = input.read(cx).input_bounds();
+                bounds.top() >= px(0.) && bounds.bottom() <= window.viewport_size().height
+            })
+        };
+        let at_top = || {
+            list_state.logical_scroll_top().item_ix == 0
+                && list_state.logical_scroll_top().offset_in_item == px(0.)
+        };
+
+        draw(&mut cx);
+        assert!(at_top());
+        assert!(!revealed(&mut cx));
+
+        // Gaining focus reveals the input.
+        cx.update(|window, cx| input.update(cx, |state, cx| state.focus(window, cx)));
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(!at_top());
+        assert!(revealed(&mut cx));
+
+        // Scrolling away while focused is left alone.
+        list_state.scroll_to(ListOffset::default());
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(at_top());
+
+        // A temporarily unmounted input does not prepaint while unfocused.
+        // Its blur event must still reset the reveal cache before remounting.
+        cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.show_input = false;
+                window.blur(cx);
+                cx.notify();
+            });
+        });
+        draw(&mut cx);
+        input.read_with(&cx, |state, _| assert!(state.revealed_viewport.is_none()));
+        cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.show_input = true;
+                input.update(cx, |state, cx| state.focus(window, cx));
+                cx.notify();
+            });
+        });
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(!at_top());
+        assert!(revealed(&mut cx));
+
+        list_state.scroll_to(ListOffset::default());
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(at_top());
+
+        // A smaller visible area (an on-screen keyboard) reveals it again.
+        cx.simulate_resize(size(px(240.), px(195.)));
+        draw(&mut cx);
+        draw(&mut cx);
+        assert!(!at_top());
+        assert!(revealed(&mut cx));
     }
 
     struct TextareaHarness(Entity<crate::input::TextareaState>);
