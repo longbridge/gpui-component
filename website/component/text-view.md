@@ -512,3 +512,16 @@ Links must be in ascending range order without overlaps. Invalid, overlapping,
 or non-UTF-8-boundary ranges are ignored. Use `set_linked_text(text, links, cx)`
 to replace the text and links together. `on_link_click` overrides opening the
 URL. Links are underlined at rest by default; hover underlines default to off.
+
+## Inline code ring
+
+Inline code sits on a rounded background. `inline_code_border` adds a
+one-pixel ring in the given color inside that background:
+
+```rust
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_border(cx.theme().border)
+```
+
+There is no ring by default. On a colored surface whose text color inverts
+the theme, the ring follows that text color like the code background does.

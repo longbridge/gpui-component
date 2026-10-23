@@ -268,3 +268,7 @@ cargo run -p gpui-base-examples -- text-view
 `TextViewState::linked_text(text, links, cx)` 创建可选中的纯文本，通过 `TextViewLink::new(range, url)` 标记链接。范围使用 UTF-8 字节偏移，须按位置排序且互不重叠；无效范围会被忽略。用 `set_linked_text(text, links, cx)` 同时替换文本与链接，用 `range()` 和 `url()` 读取链接信息。通过 `TextView::new(&state)` 渲染保留的状态，`on_link_click` 可接管 URL 打开行为。
 
 `TextView::link_underline(bool)` 和 `link_underline_on_hover(bool)` 在主题解析后覆盖链接外观。Base 样式提供对应的 `TextViewStyle::with_link_underline`、`with_link_underline_on_hover` 构建方法，以及 `is_link_underlined()`、`is_link_underlined_on_hover()` 读取方法。默认始终显示下划线，悬停下划线默认关闭。
+
+## 行内代码描边
+
+`TextView::inline_code_border(color)` 在行内代码的圆角背景内侧绘制一像素描边，作用于最终解析出的样式之上。Base 样式提供对应的 `TextViewStyle::with_inline_code_border` 构建方法，以及 `inline_code_border()` 读取方法。默认不绘制描边；在反色表面上，描边与代码背景一样由文字颜色重新推导。

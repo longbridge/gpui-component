@@ -339,3 +339,11 @@ link appearance after theme resolution. The equivalent Base style builders are
 `TextViewStyle::with_link_underline` and `with_link_underline_on_hover`, with
 `is_link_underlined()` and `is_link_underlined_on_hover()` readers. Defaults are
 `true` at rest and `false` on hover.
+
+## Inline code ring
+
+`TextView::inline_code_border(color)` draws a one-pixel ring inside the rounded
+background of inline code, over whichever style resolves. The equivalent Base
+style builder is `TextViewStyle::with_inline_code_border`, read back with
+`inline_code_border()`. There is no ring by default; on an inverted surface the
+ring is re-derived from the text color, like the code background.

@@ -46,6 +46,8 @@ pub(super) struct InlineHighlight {
     pub(super) style: HighlightStyle,
     pub(super) font_family: Option<SharedString>,
     pub(super) font_size_scale: Option<f32>,
+    /// The ring around an inline code span's background.
+    pub(super) code_border: Option<Hsla>,
 }
 
 impl InlineHighlight {
@@ -58,6 +60,9 @@ impl InlineHighlight {
         if other.font_size_scale.is_some() {
             self.font_size_scale = other.font_size_scale;
         }
+        if other.code_border.is_some() {
+            self.code_border = other.code_border;
+        }
         self
     }
 }
@@ -68,6 +73,7 @@ impl From<HighlightStyle> for InlineHighlight {
             style,
             font_family: None,
             font_size_scale: None,
+            code_border: None,
         }
     }
 }
@@ -141,6 +147,7 @@ pub(super) fn fade_highlights(
         let style = &mut highlight.style;
         for color in [
             style.background_color.as_mut(),
+            highlight.code_border.as_mut(),
             style.underline.as_mut().and_then(|u| u.color.as_mut()),
             style.strikethrough.as_mut().and_then(|s| s.color.as_mut()),
         ]
@@ -1757,6 +1764,22 @@ mod fade_highlights_tests {
     }
 
     #[test]
+    fn fades_the_inline_code_ring_with_its_background() {
+        let code = InlineHighlight {
+            code_border: Some(gpui::blue()),
+            ..InlineHighlight::from(HighlightStyle {
+                background_color: Some(gpui::red()),
+                ..Default::default()
+            })
+        };
+        let combined = fade_highlights(vec![(0..4, code)], &[(0..4, 0.75)]);
+
+        let (_, faded) = &combined[0];
+        assert_eq!(faded.style.background_color.unwrap().a, 0.25);
+        assert_eq!(faded.code_border.unwrap().a, 0.25);
+    }
+
+    #[test]
     fn no_fades_leave_highlights_untouched() {
         let bold = InlineHighlight::from(HighlightStyle {
             font_weight: Some(gpui::FontWeight::BOLD),
@@ -2326,6 +2349,7 @@ mod tests {
             style,
             font_family: Some(SharedString::from("Mono")),
             font_size_scale: None,
+            code_border: None,
         }
     }
 

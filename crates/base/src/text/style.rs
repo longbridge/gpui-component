@@ -27,6 +27,8 @@ pub struct TextViewStyle {
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
     inline_code: HighlightStyle,
+    /// The one-pixel ring around inline code, or none.
+    inline_code_border: Option<Hsla>,
     /// The table body background, or the theme surface when `None`. Only
     /// [`Self::on_text_color`] sets it, to let a table on an inverted surface
     /// show that surface.
@@ -52,6 +54,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_border == other.inline_code_border
             && self.table_background == other.table_background
             && self.is_dark == other.is_dark
     }
@@ -97,6 +100,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
+            inline_code_border: None,
             table_background: None,
             is_dark,
         }
@@ -185,6 +189,13 @@ impl TextViewStyle {
     /// which keeps [`TextViewStyle::default`] usable without a theme.
     pub fn with_inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Draws a one-pixel ring in `color` around inline code, inside its
+    /// rounded background. Inline code has no ring by default.
+    pub fn with_inline_code_border(mut self, color: Hsla) -> Self {
+        self.inline_code_border = Some(color);
         self
     }
 
@@ -299,6 +310,11 @@ impl TextViewStyle {
         self.inline_code
     }
 
+    /// The ring around inline code, when one was set.
+    pub fn inline_code_border(&self) -> Option<Hsla> {
+        self.inline_code_border
+    }
+
     /// Whether content-specific assets should use their dark variant.
     pub fn is_dark(&self) -> bool {
         self.is_dark
@@ -350,6 +366,9 @@ impl TextViewStyle {
             .with_table_head(table_head)
             .with_dark(!self.is_dark);
         style.table_background = Some(gpui::transparent_black());
+        if style.inline_code_border.is_some() {
+            style.inline_code_border = Some(color.opacity(0.2));
+        }
         style
     }
 
@@ -413,6 +432,7 @@ mod tests {
         assert!(base != base.clone().with_dark(true));
         assert!(base != base.clone().with_link_underline(false));
         assert!(base != base.clone().with_link_underline_on_hover(true));
+        assert!(base != base.clone().with_inline_code_border(gpui::red()));
     }
 
     #[test]
@@ -489,6 +509,35 @@ mod tests {
         assert_eq!(
             style.inline_code_highlight().background_color,
             Some(gpui::rgb(0x123456).into())
+        );
+    }
+
+    #[test]
+    fn inline_code_ring_is_opt_in_and_follows_an_inverted_surface() {
+        let colors = ColorTokens::light();
+        let plain = TextViewStyle::from_colors(&colors, false);
+        assert_eq!(plain.inline_code_border(), None);
+        assert_eq!(
+            plain
+                .on_text_color(colors.primary_foreground)
+                .inline_code_border(),
+            None
+        );
+
+        let ring = gpui::rgb(0x123456).into();
+        let ringed = plain.with_inline_code_border(ring);
+        assert_eq!(ringed.inline_code_border(), Some(ring));
+        assert_eq!(
+            ringed
+                .on_text_color(colors.destructive)
+                .inline_code_border(),
+            Some(ring)
+        );
+        assert_eq!(
+            ringed
+                .on_text_color(colors.primary_foreground)
+                .inline_code_border(),
+            Some(colors.primary_foreground.opacity(0.2))
         );
     }
 

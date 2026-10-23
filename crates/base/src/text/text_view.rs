@@ -3,9 +3,9 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, Global,
-    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
-    LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement,
-    Styled, Window, div, point, px,
+    GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, InteractiveElement,
+    IntoElement, LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
+    StyleRefinement, Styled, Window, div, point, px,
 };
 
 use crate::StyledExt;
@@ -158,6 +158,7 @@ pub struct TextView {
     text_view_style: Option<TextViewStyle>,
     link_underline: Option<bool>,
     link_underline_on_hover: Option<bool>,
+    inline_code_border: Option<Hsla>,
     style: StyleRefinement,
     selectable: bool,
     selection_format: SelectionFormat,
@@ -207,6 +208,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_border: None,
             style: StyleRefinement::default(),
             selectable: true,
             selection_format: SelectionFormat::default(),
@@ -232,6 +234,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_border: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -258,6 +261,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_border: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -297,6 +301,13 @@ impl TextView {
     /// Set whether links are underlined while hovered. Defaults to `false`.
     pub fn link_underline_on_hover(mut self, underline: bool) -> Self {
         self.link_underline_on_hover = Some(underline);
+        self
+    }
+
+    /// Draws a one-pixel ring in `color` around inline code, over whichever
+    /// [`TextViewStyle`] applies. Inline code has no ring by default.
+    pub fn inline_code_border(mut self, color: Hsla) -> Self {
+        self.inline_code_border = Some(color);
         self
     }
 
@@ -676,6 +687,13 @@ impl Element for TextView {
                 &theme_style
             }
         };
+        // Ring inline code before following the surface color below, so an
+        // inverted surface re-derives the ring like the code background.
+        let ringed_style;
+        if let Some(border) = self.inline_code_border {
+            ringed_style = text_view_style.clone().with_inline_code_border(border);
+            text_view_style = &ringed_style;
+        }
         // Follow the text color the container sets for its surface, so rich
         // text stays readable in a filled bubble or a selected row.
         let surface_style;

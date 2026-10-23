@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId,
-    HighlightStyle, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable as _, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window,
+    HighlightStyle, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable as _,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
 use std::time::Duration;
@@ -104,6 +104,12 @@ impl TextView {
     /// Sets whether the text can be selected with the mouse.
     pub fn selectable(mut self, value: bool) -> Self {
         self.inner = self.inner.selectable(value);
+        self
+    }
+    /// Draws a one-pixel ring in `color` around inline code spans. Inline
+    /// code has no ring by default.
+    pub fn inline_code_border(mut self, color: Hsla) -> Self {
+        self.inner = self.inner.inline_code_border(color);
         self
     }
     /// Sets whether a copied selection carries Markdown source or plain text.

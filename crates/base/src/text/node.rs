@@ -2673,6 +2673,7 @@ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHig
         style: highlight,
         font_family,
         font_size_scale: mark.code.then_some(0.875),
+        code_border: node_cx.style.inline_code_border().filter(|_| mark.code),
     }
 }
 

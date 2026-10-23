@@ -201,7 +201,7 @@ enum PositionedFragment {
         highlights: Vec<(Range<usize>, InlineHighlight)>,
         selection_bounds: Bounds<Pixels>,
         /// The rounded box behind a code span, relative to the flow.
-        code_background: Option<(Bounds<Pixels>, Hsla)>,
+        code_background: Option<CodeBox>,
     },
     Image {
         item_ix: usize,
@@ -245,15 +245,32 @@ enum LineFragmentKind {
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, InlineHighlight)>,
         /// The code span's box, relative to the fragment.
-        code_background: Option<(Bounds<Pixels>, Hsla)>,
+        code_background: Option<CodeBox>,
     },
     Image,
+}
+
+/// The rounded box behind an inline code span, with its optional ring.
+#[derive(Clone, Copy, Debug)]
+struct CodeBox {
+    bounds: Bounds<Pixels>,
+    background: Hsla,
+    border: Option<Hsla>,
+}
+
+impl CodeBox {
+    fn offset(self, by: gpui::Point<Pixels>) -> Self {
+        Self {
+            bounds: Bounds::new(by + self.bounds.origin, self.bounds.size),
+            ..self
+        }
+    }
 }
 
 /// Atom decorations are overlays so they remain visible over opaque content.
 pub(super) struct FlowPaintItem {
     element: AnyElement,
-    background: Option<(Bounds<Pixels>, Hsla)>,
+    background: Option<CodeBox>,
     overlays: Vec<(Bounds<Pixels>, Hsla)>,
 }
 
@@ -649,12 +666,7 @@ impl Element for InlineFlow {
                     } else {
                         Pixels::ZERO
                     };
-                    let background = code_background.map(|(background, color)| {
-                        (
-                            Bounds::new(bounds.origin + background.origin, background.size),
-                            color,
-                        )
-                    });
+                    let background = code_background.map(|code| code.offset(bounds.origin));
                     // The fragment's typography: the flow's style at the
                     // fragment's size, on one line. Fragments are already
                     // wrapped, so this leaf must not wrap independently.
@@ -801,8 +813,12 @@ impl Element for InlineFlow {
             overlays,
         } in prepaint
         {
-            if let Some((bounds, color)) = background {
-                window.paint_quad(gpui::fill(*bounds, *color).corner_radii(radius));
+            if let Some(code) = background {
+                let quad = gpui::fill(code.bounds, code.background).corner_radii(radius);
+                window.paint_quad(match code.border {
+                    Some(border) => quad.border_widths(px(1.)).border_color(border),
+                    None => quad,
+                });
             }
             element.paint(window, cx);
             for (bounds, color) in overlays {
@@ -1212,15 +1228,8 @@ fn layout_measured_flow(
                     text,
                     links,
                     highlights,
-                    code_background: code_background.map(|(background, color)| {
-                        (
-                            Bounds::new(
-                                origin + point(Pixels::ZERO, leading) + background.origin,
-                                background.size,
-                            ),
-                            color,
-                        )
-                    }),
+                    code_background: code_background
+                        .map(|code| code.offset(origin + point(Pixels::ZERO, leading))),
                 },
                 LineFragmentKind::Image => PositionedFragment::Image {
                     item_ix: fragment.item_ix,
@@ -1257,7 +1266,7 @@ fn code_background(
     fragment_size: Size<Pixels>,
     baseline: Pixels,
     window: &Window,
-) -> Option<(Bounds<Pixels>, Hsla)> {
+) -> Option<CodeBox> {
     let cap_height = runs
         .iter()
         .map(|run| {
@@ -1269,17 +1278,17 @@ fn code_background(
     let color = highlights
         .iter()
         .find_map(|(_, h)| h.style.background_color);
+    let border = highlights.iter().find_map(|(_, h)| h.code_border);
     for (_, highlight) in highlights.iter_mut() {
         highlight.style.background_color = None;
     }
-    color.map(|color| {
-        (
-            Bounds::new(
-                point(Pixels::ZERO, baseline - cap_height - vertical_padding),
-                size(fragment_size.width, cap_height + vertical_padding * 2.),
-            ),
-            color,
-        )
+    color.map(|background| CodeBox {
+        bounds: Bounds::new(
+            point(Pixels::ZERO, baseline - cap_height - vertical_padding),
+            size(fragment_size.width, cap_height + vertical_padding * 2.),
+        ),
+        background,
+        border,
     })
 }
 
@@ -2002,6 +2011,7 @@ mod tests {
             style: HighlightStyle::default(),
             font_family: Some(SharedString::from(MONO)),
             font_size_scale: None,
+            code_border: None,
         };
         let items = vec![
             MeasureItem::Text {

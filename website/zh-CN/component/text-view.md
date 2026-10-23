@@ -361,3 +361,14 @@ TextView::new(&state)
 ```
 
 链接范围须按位置升序排列且互不重叠。无效、重叠或未对齐 UTF-8 字符边界的范围会被忽略。用 `set_linked_text(text, links, cx)` 同时替换文本与链接。`on_link_click` 可接管默认的 URL 打开行为。链接默认始终显示下划线，悬停下划线默认关闭。
+
+## 行内代码描边
+
+行内代码绘制在圆角背景上。`inline_code_border` 在该背景内侧加上一像素、指定颜色的描边：
+
+```rust
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_border(cx.theme().border)
+```
+
+默认不绘制描边。在文字颜色与主题相反的彩色表面上，描边与代码背景一样随该文字颜色调整。
