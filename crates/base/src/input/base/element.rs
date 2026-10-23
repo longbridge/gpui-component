@@ -3872,7 +3872,10 @@ mod tests {
             }
         });
         let input = input.unwrap();
+        let view = window.root(cx).unwrap();
         let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, _| window.activate_window());
+        cx.run_until_parked();
         let draw = |cx: &mut VisualTestContext| {
             cx.update(|window, cx| {
                 window.refresh();
@@ -3909,24 +3912,21 @@ mod tests {
 
         // A temporarily unmounted input does not prepaint while unfocused.
         // Its blur event must still reset the reveal cache before remounting.
-        cx.update(|_, cx| {
-            window
-                .update(cx, |view, window, cx| {
-                    view.show_input = false;
-                    window.blur(cx);
-                    cx.notify();
-                })
-                .unwrap();
+        cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.show_input = false;
+                window.blur(cx);
+                cx.notify();
+            });
         });
         draw(&mut cx);
-        cx.update(|_, cx| {
-            window
-                .update(cx, |view, window, cx| {
-                    view.show_input = true;
-                    input.update(cx, |state, cx| state.focus(window, cx));
-                    cx.notify();
-                })
-                .unwrap();
+        input.read_with(&cx, |state, _| assert!(state.revealed_viewport.is_none()));
+        cx.update(|window, cx| {
+            view.update(cx, |view, cx| {
+                view.show_input = true;
+                input.update(cx, |state, cx| state.focus(window, cx));
+                cx.notify();
+            });
         });
         draw(&mut cx);
         draw(&mut cx);
