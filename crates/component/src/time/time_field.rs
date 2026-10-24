@@ -171,16 +171,19 @@ mod tests {
         assert!(field.invalid);
     }
 
+    #[cfg(feature = "test-support")]
     struct FieldHarness {
         state: Entity<TimeFieldState>,
     }
 
+    #[cfg(feature = "test-support")]
     impl gpui::Render for FieldHarness {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
             div().child(TimeField::new(&self.state).with_id("time").w(px(200.)))
         }
     }
 
+    #[cfg(feature = "test-support")]
     fn click_at(cx: &mut gpui::VisualTestContext, position: gpui::Point<gpui::Pixels>) {
         cx.simulate_click(position, gpui::Modifiers::default());
         cx.update(|window, cx| window.draw(cx).clear(cx));
