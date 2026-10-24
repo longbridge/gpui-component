@@ -19,8 +19,8 @@ use gpui::{
     App, BorderStyle, Bounds, ClickEvent, CursorStyle, Edges, Element, ElementId, Global,
     GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
     IntoElement, LayoutId, MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, SharedString, StyledText, Task, TextAlign, TextLayout, TextRun,
-    TextStyle, Window, point, px, quad, size,
+    MouseUpEvent, Pixels, Point, SharedString, StyleRefinement, StyledText, Task, TextAlign,
+    TextLayout, TextRun, TextStyle, Window, point, px, quad, size,
 };
 
 use crate::{
@@ -46,11 +46,63 @@ pub(super) struct InlineHighlight {
     pub(super) style: HighlightStyle,
     pub(super) font_family: Option<SharedString>,
     pub(super) font_size_scale: Option<f32>,
-    /// The ring around an inline code span's background.
-    pub(super) code_border: Option<Hsla>,
+    /// Typography and box refinements for an inline code span.
+    pub(super) code_style: Option<StyleRefinement>,
 }
 
 impl InlineHighlight {
+    pub(super) fn font_size(&self, body: Pixels, rem_size: Pixels) -> Pixels {
+        self.code_style
+            .as_ref()
+            .and_then(|style| style.text.font_size)
+            .map(|size| size.to_pixels(rem_size))
+            .filter(|size| size.as_f32().is_finite() && *size > Pixels::ZERO)
+            .unwrap_or(body * self.font_size_scale.unwrap_or(1.))
+    }
+
+    /// Insets used by shaping, wrapping, painting, and table measurement alike.
+    pub(super) fn code_insets(&self, font_size: Pixels, rem_size: Pixels) -> Edges<Pixels> {
+        if self.font_size_scale.is_none() {
+            return Edges::default();
+        }
+        let mut insets = Edges {
+            top: Pixels::ZERO,
+            bottom: Pixels::ZERO,
+            left: px(super::inline_flow::INLINE_CODE_PADDING),
+            right: px(super::inline_flow::INLINE_CODE_PADDING),
+        };
+        if let Some(style) = &self.code_style {
+            for (inset, padding, border) in [
+                (&mut insets.top, style.padding.top, style.border_widths.top),
+                (
+                    &mut insets.right,
+                    style.padding.right,
+                    style.border_widths.right,
+                ),
+                (
+                    &mut insets.bottom,
+                    style.padding.bottom,
+                    style.border_widths.bottom,
+                ),
+                (
+                    &mut insets.left,
+                    style.padding.left,
+                    style.border_widths.left,
+                ),
+            ] {
+                if let Some(padding) = padding {
+                    *inset = padding
+                        .to_pixels(font_size.into(), rem_size)
+                        .max(Pixels::ZERO);
+                }
+                if let Some(border) = border {
+                    *inset += border.to_pixels(rem_size).max(Pixels::ZERO);
+                }
+            }
+        }
+        insets
+    }
+
     /// Layers `other` over `self`, the way [`HighlightStyle::highlight`] does.
     fn highlight(mut self, other: &InlineHighlight) -> Self {
         self.style = self.style.highlight(other.style);
@@ -60,8 +112,8 @@ impl InlineHighlight {
         if other.font_size_scale.is_some() {
             self.font_size_scale = other.font_size_scale;
         }
-        if other.code_border.is_some() {
-            self.code_border = other.code_border;
+        if other.code_style.is_some() {
+            self.code_style = other.code_style.clone();
         }
         self
     }
@@ -73,7 +125,7 @@ impl From<HighlightStyle> for InlineHighlight {
             style,
             font_family: None,
             font_size_scale: None,
-            code_border: None,
+            code_style: None,
         }
     }
 }
@@ -144,10 +196,17 @@ pub(super) fn fade_highlights(
         let Some(fade_out) = highlight.style.fade_out else {
             continue;
         };
+        if let Some(code) = &mut highlight.code_style {
+            if let Some(background) = code.background.as_ref().and_then(gpui::Fill::color) {
+                code.background = Some(background.opacity(1. - fade_out).into());
+            }
+            if let Some(border) = &mut code.border_color {
+                border.fade_out(fade_out);
+            }
+        }
         let style = &mut highlight.style;
         for color in [
             style.background_color.as_mut(),
-            highlight.code_border.as_mut(),
             style.underline.as_mut().and_then(|u| u.color.as_mut()),
             style.strikethrough.as_mut().and_then(|s| s.color.as_mut()),
         ]
@@ -174,10 +233,17 @@ pub(super) fn text_runs(
         if ix < range.start {
             runs.push(default_style.clone().to_run(range.start - ix));
         }
-        let mut run = default_style
-            .clone()
-            .highlight(highlight.style)
-            .to_run(range.len());
+        let mut style = default_style.clone().highlight(highlight.style);
+        if let Some(code) = &highlight.code_style {
+            // Font size is handled by the shaped fragment, not by a TextRun.
+            style.font_features = code
+                .text
+                .font_features
+                .clone()
+                .unwrap_or(style.font_features);
+            style.font_fallbacks = code.text.font_fallbacks.clone().or(style.font_fallbacks);
+        }
+        let mut run = style.to_run(range.len());
         if let Some(family) = &highlight.font_family {
             run.font.family = family.clone();
         }
@@ -190,34 +256,56 @@ pub(super) fn text_runs(
     runs
 }
 
+pub(super) fn code_insets(
+    highlights: &[(Range<usize>, InlineHighlight)],
+    font_size: Pixels,
+    rem_size: Pixels,
+) -> Edges<Pixels> {
+    highlights
+        .iter()
+        .find(|(_, highlight)| highlight.font_size_scale.is_some())
+        .map(|(_, highlight)| highlight.code_insets(font_size, rem_size))
+        .unwrap_or_default()
+}
+
 /// Splits text into contiguous ranges sharing one font size. GPUI runs can
 /// vary the font but not its size, so each range needs its own shaped line.
 pub(super) fn text_size_ranges(
     text_len: usize,
     highlights: &[(Range<usize>, InlineHighlight)],
+    font_size: Pixels,
+    rem_size: Pixels,
 ) -> Vec<(Range<usize>, f32)> {
-    let mut ranges: Vec<(Range<usize>, f32)> = Vec::new();
-    let mut push = |range: Range<usize>, scale: f32| {
+    let mut ranges: Vec<(Range<usize>, f32, bool)> = Vec::new();
+    let mut push = |range: Range<usize>, scale: f32, code: bool| {
         if range.is_empty() {
             return;
         }
-        if let Some((last, last_scale)) = ranges.last_mut()
+        if let Some((last, last_scale, last_code)) = ranges.last_mut()
             && *last_scale == scale
+            && *last_code == code
             && last.end == range.start
         {
             last.end = range.end;
         } else {
-            ranges.push((range, scale));
+            ranges.push((range, scale, code));
         }
     };
     let mut cursor = 0;
     for (range, highlight) in highlights {
-        push(cursor..range.start, 1.);
-        push(range.clone(), highlight.font_size_scale.unwrap_or(1.));
+        push(cursor..range.start, 1., false);
+        push(
+            range.clone(),
+            highlight.font_size(font_size, rem_size) / font_size,
+            highlight.font_size_scale.is_some(),
+        );
         cursor = range.end;
     }
-    push(cursor..text_len, 1.);
+    push(cursor..text_len, 1., false);
     ranges
+        .into_iter()
+        .map(|(range, scale, _)| (range, scale))
+        .collect()
 }
 
 /// A inline element used to render a inline text and support selectable.
@@ -1718,6 +1806,7 @@ pub(super) fn point_in_text_selection(
 #[cfg(test)]
 mod fade_highlights_tests {
     use super::*;
+    use gpui::Styled as _;
 
     #[test]
     fn fades_text_and_background_only_inside_the_range() {
@@ -1764,9 +1853,13 @@ mod fade_highlights_tests {
     }
 
     #[test]
-    fn fades_the_inline_code_ring_with_its_background() {
+    fn fades_inline_code_style_background_and_border() {
         let code = InlineHighlight {
-            code_border: Some(gpui::blue()),
+            code_style: Some(
+                StyleRefinement::default()
+                    .bg(gpui::red())
+                    .border_color(gpui::blue()),
+            ),
             ..InlineHighlight::from(HighlightStyle {
                 background_color: Some(gpui::red()),
                 ..Default::default()
@@ -1776,7 +1869,25 @@ mod fade_highlights_tests {
 
         let (_, faded) = &combined[0];
         assert_eq!(faded.style.background_color.unwrap().a, 0.25);
-        assert_eq!(faded.code_border.unwrap().a, 0.25);
+        assert_eq!(
+            faded
+                .code_style
+                .as_ref()
+                .unwrap()
+                .background
+                .as_ref()
+                .unwrap()
+                .color()
+                .unwrap()
+                .as_solid()
+                .unwrap()
+                .a,
+            0.25
+        );
+        assert_eq!(
+            faded.code_style.as_ref().unwrap().border_color.unwrap().a,
+            0.25
+        );
     }
 
     #[test]
@@ -2349,7 +2460,7 @@ mod tests {
             style,
             font_family: Some(SharedString::from("Mono")),
             font_size_scale: None,
-            code_border: None,
+            code_style: None,
         }
     }
 
@@ -2702,9 +2813,10 @@ mod tests {
 
 #[cfg(test)]
 mod retained_layout_tests {
+    use gpui::Styled as _;
     use gpui::{
-        AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _,
-        TestAppContext, Window, div, px,
+        AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, TestAppContext,
+        Window, div, px,
     };
 
     use std::sync::{Arc, Mutex};

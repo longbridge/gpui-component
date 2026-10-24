@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId,
-    HighlightStyle, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable as _,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    HighlightStyle, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable as _, RenderOnce,
+    SharedString, StyleRefinement, Styled, Window,
 };
 
 use std::time::Duration;
@@ -106,10 +106,11 @@ impl TextView {
         self.inner = self.inner.selectable(value);
         self
     }
-    /// Draws a one-pixel ring in `color` around inline code spans. Inline
-    /// code has no ring by default.
-    pub fn inline_code_border(mut self, color: Hsla) -> Self {
-        self.inner = self.inner.inline_code_border(color);
+    /// Refines inline code typography, background, border, radius, and padding
+    /// over the resolved theme or explicit style. Other layout properties are
+    /// ignored. Unspecified properties are inherited.
+    pub fn inline_code_style(mut self, style: StyleRefinement) -> Self {
+        self.inner = self.inner.inline_code_style(style);
         self
     }
     /// Sets whether a copied selection carries Markdown source or plain text.

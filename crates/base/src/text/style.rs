@@ -27,8 +27,8 @@ pub struct TextViewStyle {
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
     inline_code: HighlightStyle,
-    /// The one-pixel ring around inline code, or none.
-    inline_code_border: Option<Hsla>,
+    /// Explicit inline code refinements, applied after theme and surface colors.
+    inline_code_style: StyleRefinement,
     /// The table body background, or the theme surface when `None`. Only
     /// [`Self::on_text_color`] sets it, to let a table on an inverted surface
     /// show that surface.
@@ -54,7 +54,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
-            && self.inline_code_border == other.inline_code_border
+            && self.inline_code_style == other.inline_code_style
             && self.table_background == other.table_background
             && self.is_dark == other.is_dark
     }
@@ -100,7 +100,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
-            inline_code_border: None,
+            inline_code_style: StyleRefinement::default(),
             table_background: None,
             is_dark,
         }
@@ -192,10 +192,18 @@ impl TextViewStyle {
         self
     }
 
-    /// Draws a one-pixel ring in `color` around inline code, inside its
-    /// rounded background. Inline code has no ring by default.
-    pub fn with_inline_code_border(mut self, color: Hsla) -> Self {
-        self.inline_code_border = Some(color);
+    /// Overrides inline code typography and its box presentation.
+    ///
+    /// Supports font family, size, features, fallbacks, weight, style, color, underline and
+    /// strikethrough, background, border widths/color/style, corner radii, and
+    /// padding. Sizes and padding resolve pixels/rem against the window.
+    /// Unspecified properties keep the existing defaults. Box layout, margin,
+    /// positioning, overflow, and interaction properties are not used.
+    /// Line height remains owned by the paragraph. Non-finite or non-positive
+    /// font sizes are ignored. Explicit refinements also take precedence on
+    /// inverted surfaces.
+    pub fn with_inline_code_style(mut self, style: StyleRefinement) -> Self {
+        self.inline_code_style = normalize_inline_code_style(style);
         self
     }
 
@@ -310,9 +318,9 @@ impl TextViewStyle {
         self.inline_code
     }
 
-    /// The ring around inline code, when one was set.
-    pub fn inline_code_border(&self) -> Option<Hsla> {
-        self.inline_code_border
+    /// Explicit inline code typography and box refinements.
+    pub fn inline_code_style(&self) -> &StyleRefinement {
+        &self.inline_code_style
     }
 
     /// Whether content-specific assets should use their dark variant.
@@ -366,9 +374,6 @@ impl TextViewStyle {
             .with_table_head(table_head)
             .with_dark(!self.is_dark);
         style.table_background = Some(gpui::transparent_black());
-        if style.inline_code_border.is_some() {
-            style.inline_code_border = Some(color.opacity(0.2));
-        }
         style
     }
 
@@ -398,6 +403,18 @@ fn oklab_lightness(color: Hsla) -> f32 {
     let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
     let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
     0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s
+}
+
+/// Drop an invalid font size before it can replace an inherited value or
+/// make retained style equality fail every frame (NaN is never equal).
+pub(super) fn normalize_inline_code_style(mut style: StyleRefinement) -> StyleRefinement {
+    if style.text.font_size.is_some_and(|size| {
+        let size = size.to_pixels(gpui::px(1.)).as_f32();
+        !size.is_finite() || size <= 0.
+    }) {
+        style.text.font_size = None;
+    }
+    style
 }
 
 #[cfg(test)]
@@ -432,7 +449,11 @@ mod tests {
         assert!(base != base.clone().with_dark(true));
         assert!(base != base.clone().with_link_underline(false));
         assert!(base != base.clone().with_link_underline_on_hover(true));
-        assert!(base != base.clone().with_inline_code_border(gpui::red()));
+        assert!(
+            base != base
+                .clone()
+                .with_inline_code_style(StyleRefinement::default().border_color(gpui::red()))
+        );
     }
 
     #[test]
@@ -513,31 +534,33 @@ mod tests {
     }
 
     #[test]
-    fn inline_code_ring_is_opt_in_and_follows_an_inverted_surface() {
+    fn inline_code_refinements_remain_explicit_on_an_inverted_surface() {
         let colors = ColorTokens::light();
         let plain = TextViewStyle::from_colors(&colors, false);
-        assert_eq!(plain.inline_code_border(), None);
+        assert_eq!(plain.inline_code_style(), &StyleRefinement::default());
+        for size in [f32::NAN, f32::INFINITY, 0., -1.] {
+            assert!(
+                plain
+                    .clone()
+                    .with_inline_code_style(StyleRefinement::default().text_size(px(size)))
+                    .inline_code_style()
+                    .text
+                    .font_size
+                    .is_none()
+            );
+        }
+        let refinement = StyleRefinement::default()
+            .text_size(gpui::rems(1.))
+            .bg(gpui::red())
+            .border_1()
+            .border_color(gpui::blue());
+        let style = plain.with_inline_code_style(refinement.clone());
+        assert_eq!(style.inline_code_style(), &refinement);
         assert_eq!(
-            plain
+            style
                 .on_text_color(colors.primary_foreground)
-                .inline_code_border(),
-            None
-        );
-
-        let ring = gpui::rgb(0x123456).into();
-        let ringed = plain.with_inline_code_border(ring);
-        assert_eq!(ringed.inline_code_border(), Some(ring));
-        assert_eq!(
-            ringed
-                .on_text_color(colors.destructive)
-                .inline_code_border(),
-            Some(ring)
-        );
-        assert_eq!(
-            ringed
-                .on_text_color(colors.primary_foreground)
-                .inline_code_border(),
-            Some(colors.primary_foreground.opacity(0.2))
+                .inline_code_style(),
+            &refinement
         );
     }
 

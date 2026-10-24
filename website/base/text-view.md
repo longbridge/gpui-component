@@ -340,10 +340,35 @@ link appearance after theme resolution. The equivalent Base style builders are
 `is_link_underlined()` and `is_link_underlined_on_hover()` readers. Defaults are
 `true` at rest and `false` on hover.
 
-## Inline code ring
+## Inline code style
 
-`TextView::inline_code_border(color)` draws a one-pixel ring inside the rounded
-background of inline code, over whichever style resolves. The equivalent Base
-style builder is `TextViewStyle::with_inline_code_border`, read back with
-`inline_code_border()`. There is no ring by default; on an inverted surface the
-ring is re-derived from the text color, like the code background.
+`TextView::inline_code_style(StyleRefinement)` refines inline code after the
+resolved theme/style and surface-color adaptation. Unspecified properties
+keep their defaults, and explicit colors remain unchanged on inverted surfaces.
+The Base style also exposes `TextViewStyle::with_inline_code_style` and the
+`inline_code_style()` reader. Existing `with_inline_code(HighlightStyle)`
+continues to work; the new refinement takes precedence.
+
+```rust
+use gpui_kit::{StyleRefinement, Styled as _, rems};
+
+let border = gpui_kit::base::Theme::global(cx).tokens.colors.border;
+
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_style(
+        StyleRefinement::default()
+            .text_size(rems(1.))
+            .px(rems(0.25))
+            .border_1()
+            .border_color(border),
+    )
+```
+
+Supported properties are font family, size, features, fallbacks, weight,
+italic, color, underline, strikethrough, background, border widths/color/style,
+corner radii, and padding. Font sizes use pixels or window-relative rems;
+non-finite or non-positive sizes retain the default. Without a font-size override,
+code remains 0.875 times its surrounding text. Without a border override, code
+has no border. Padding and border widths participate in wrapping and table
+measurement. Margin, positioning, flex, explicit box size, overflow, and
+interaction properties are not used; line height remains owned by the paragraph.

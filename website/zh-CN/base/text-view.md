@@ -269,6 +269,25 @@ cargo run -p gpui-base-examples -- text-view
 
 `TextView::link_underline(bool)` 和 `link_underline_on_hover(bool)` 在主题解析后覆盖链接外观。Base 样式提供对应的 `TextViewStyle::with_link_underline`、`with_link_underline_on_hover` 构建方法，以及 `is_link_underlined()`、`is_link_underlined_on_hover()` 读取方法。默认始终显示下划线，悬停下划线默认关闭。
 
-## 行内代码描边
+## 行内代码样式
 
-`TextView::inline_code_border(color)` 在行内代码的圆角背景内侧绘制一像素描边，作用于最终解析出的样式之上。Base 样式提供对应的 `TextViewStyle::with_inline_code_border` 构建方法，以及 `inline_code_border()` 读取方法。默认不绘制描边；在反色表面上，描边与代码背景一样由文字颜色重新推导。
+通过 `TextView::inline_code_style(StyleRefinement)` 覆盖行内代码样式。覆盖在主题、显式样式和表面颜色适配之后应用；未指定的属性保留默认值，指定的颜色在反色表面上也保持不变。
+
+Base 样式提供对应的 `TextViewStyle::with_inline_code_style` 构建方法和 `inline_code_style()` 读取方法。现有 `with_inline_code(HighlightStyle)` 保持兼容，新的覆盖样式具有更高优先级。
+
+```rust
+use gpui_kit::{StyleRefinement, Styled as _, rems};
+
+let border = gpui_kit::base::Theme::global(cx).tokens.colors.border;
+
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_style(
+        StyleRefinement::default()
+            .text_size(rems(1.))
+            .px(rems(0.25))
+            .border_1()
+            .border_color(border),
+    )
+```
+
+支持字体、字号、字体特性、后备字体、字重、斜体、文字颜色、下划线、删除线、背景、边框宽度／颜色／线型、圆角和内边距。字号使用像素或相对于窗口的 rem；非有限值和非正值会被忽略。默认字号仍为周围文字的 0.875 倍，默认不绘制边框。内边距和边框宽度参与换行与表格列宽计算。外边距、定位、flex、显式容器尺寸、overflow 和交互属性不参与渲染；行高由段落控制。
