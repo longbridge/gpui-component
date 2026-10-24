@@ -696,6 +696,13 @@ impl TableDelegate for StockTableDelegate {
             }))
     }
 
+    fn cell_label(&self, row_ix: usize, col_ix: usize, _: &App) -> Option<SharedString> {
+        let stock = self.stocks.get(row_ix)?;
+        let col = self.columns.get(col_ix)?;
+        let text = format_cell(stock, &col.key).map_or("--".to_string(), |(text, _)| text);
+        Some(text.into())
+    }
+
     /// NOTE: Performance metrics
     ///
     /// last render 561 cells total: 232.745µs, avg: 414ns
