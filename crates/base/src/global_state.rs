@@ -32,14 +32,6 @@ pub struct GlobalState {
     selection_document_order: Cell<u64>,
     /// The table cells being prepainted or painted, innermost last.
     table_cell_stack: RefCell<Vec<Bounds<Pixels>>>,
-    /// The selection anchor (window coordinates) and the bounds of the table
-    /// cell that holds it, when a drag started in a table cell. Such a drag
-    /// selects only in that cell; see [`Self::confine_selection_to_table_cell`].
-    ///
-    /// A cell that holds the anchor sets this as it prepaints, which is before
-    /// any text paints. It is valid only for the same anchor point: a new
-    /// drag starts at another point, and outside a cell nothing sets it again.
-    table_cell_anchor: Cell<Option<(Point<Pixels>, Bounds<Pixels>)>>,
     /// When a finger last went down. A tap reaches controls as a mouse press;
     /// this is how they tell it from one.
     last_touch: Option<Instant>,
@@ -56,7 +48,6 @@ impl GlobalState {
             text_view_state_stack: RefCell::new(Vec::new()),
             selection_document_order: Cell::new(1),
             table_cell_stack: RefCell::new(Vec::new()),
-            table_cell_anchor: Cell::new(None),
             last_touch: None,
         }
     }
@@ -125,12 +116,8 @@ impl GlobalState {
         self.text_view_state_stack.borrow_mut().pop();
     }
 
-    /// Enters the table cell `bounds` while it prepaints or paints. A cell
-    /// that holds `anchor` becomes the cell the selection stays in.
-    pub(crate) fn push_table_cell(&self, bounds: Bounds<Pixels>, anchor: Option<Point<Pixels>>) {
-        if let Some(anchor) = anchor.filter(|anchor| bounds.contains(anchor)) {
-            self.table_cell_anchor.set(Some((anchor, bounds)));
-        }
+    /// Enters the table cell being prepainted or painted.
+    pub(crate) fn push_table_cell(&self, bounds: Bounds<Pixels>) {
         self.table_cell_stack.borrow_mut().push(bounds);
     }
 
@@ -141,23 +128,6 @@ impl GlobalState {
     /// The table cell being prepainted or painted, if any.
     pub(crate) fn table_cell(&self) -> Option<Bounds<Pixels>> {
         self.table_cell_stack.borrow().last().copied()
-    }
-
-    /// The selection points for text in the table cell `cell` (`None` for
-    /// text outside a table), when a drag that started in a table cell is
-    /// confined to that cell.
-    ///
-    /// Text outside that cell gets `None`, and the cursor is clamped to the
-    /// cell, so the text from the anchor to the cell edge stays selected when
-    /// the pointer leaves the cell. Points that are not anchored in a cell
-    /// come back unchanged.
-    pub(crate) fn confine_selection_to_table_cell(
-        &self,
-        cell: Option<Bounds<Pixels>>,
-        anchor: Point<Pixels>,
-        cursor: Point<Pixels>,
-    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        confine_to_cell(self.table_cell_anchor.get(), cell, anchor, cursor)
     }
 
     #[doc(hidden)]
@@ -212,9 +182,8 @@ impl GlobalState {
     }
 }
 
-/// [`GlobalState::confine_selection_to_table_cell`] for the anchor cell
-/// `anchor_cell` and the cell `painting` the text is in.
-fn confine_to_cell(
+/// Confines a selection to its anchor cell and excludes text in other cells.
+pub(crate) fn confine_to_cell(
     anchor_cell: Option<(Point<Pixels>, Bounds<Pixels>)>,
     painting: Option<Bounds<Pixels>>,
     anchor: Point<Pixels>,

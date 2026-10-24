@@ -18,7 +18,7 @@ use gpui::{
 };
 
 use crate::{
-    AutoScroll, ElementExt, GlobalState, TextSelection,
+    AutoScroll, ElementExt, TextSelection,
     async_util::{Receiver, Sender, unbounded},
     input::{self, SelectAll},
     text::{
@@ -525,7 +525,7 @@ impl TextViewState {
             self.selection_revision = self.selection_revision.wrapping_add(1);
             // Old native layouts must not project a still-active gesture back
             // into replaced content, including while a large parse is pending.
-            self.selection_adapter.clear_copy_projections();
+            self.selection_adapter.clear_copy_projections(cx);
             self.parsed_content.document.clear_selection();
         }
         let parse_synchronously = !append && text.len() <= MAX_SYNC_FULL_REPLACE_BYTES;
@@ -960,16 +960,16 @@ impl TextViewState {
     }
 
     /// [`Self::selection_points`] for the text that paints now: a drag that
-    /// started in a table cell selects only in that cell (see
-    /// [`GlobalState::confine_selection_to_table_cell`]). Call it only while
+    /// started in a table cell selects only in that cell. Call it only while
     /// painting, so the cell the text is in is known.
     pub(crate) fn painted_selection_points(
         &self,
         cx: &App,
     ) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        let (anchor, cursor) = self.selection_points(cx)?;
-        let global = GlobalState::global(cx);
-        global.confine_selection_to_table_cell(global.table_cell(), anchor, cursor)
+        if !self.selectable {
+            return None;
+        }
+        self.selection_adapter.painted_selection_points(cx)
     }
 
     pub(crate) fn has_selection(&self, cx: &App) -> bool {

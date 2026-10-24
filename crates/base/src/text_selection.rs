@@ -643,6 +643,7 @@ fn dispatch_clear_handlers(handlers: Vec<ClearHandler>, cx: &mut App) {
 
 struct SelectableTextState {
     fallback_copy_text: String,
+    window_selection: RefCell<Option<WeakEntity<WindowSelectionState>>>,
     /// The selected text as the participant last painted it. Painting
     /// projects it, which is not a change of the participant.
     projected_copy_text: RefCell<Option<String>>,
@@ -662,6 +663,7 @@ impl SelectableTextState {
     fn new(fallback_copy_text: impl Into<String>) -> Self {
         Self {
             fallback_copy_text: fallback_copy_text.into(),
+            window_selection: RefCell::new(None),
             projected_copy_text: RefCell::new(None),
             runs: RefCell::new(Vec::new()),
             local_selection: false,
@@ -815,6 +817,63 @@ impl TextSelectionHandle {
         self.0.read(cx).snapshot()
     }
 
+    /// Records the anchor cell during prepaint, before any participant paints.
+    pub(crate) fn record_table_cell(&self, bounds: Bounds<Pixels>, cx: &App) {
+        let Some(state) = self.window_selection(cx) else {
+            return;
+        };
+        let state = state.read(cx);
+        if state.touch_select_all {
+            return;
+        }
+        let Some(snapshot) = self.snapshot(cx) else {
+            return;
+        };
+        if snapshot.anchor().entity_id() == Some(self.entity_id())
+            && snapshot
+                .window_points()
+                .is_some_and(|points| bounds.contains(&points.anchor()))
+        {
+            state
+                .table_cell_anchor
+                .set(Some((snapshot.anchor(), bounds)));
+        }
+    }
+
+    /// The current gesture's anchor cell, shared only by participants in its window.
+    pub(crate) fn table_cell_selection(&self, cx: &App) -> Option<Bounds<Pixels>> {
+        let state = self.window_selection(cx)?;
+        let state = state.read(cx);
+        if state.touch_select_all {
+            return None;
+        }
+        let (anchor, bounds) = state.table_cell_anchor.get()?;
+        (self.snapshot(cx)?.anchor() == anchor).then_some(bounds)
+    }
+
+    /// Retires an anchor projection when its participant replaces its content.
+    pub(crate) fn clear_table_cell_selection(&self, cx: &App) {
+        if let Some(state) = self.window_selection(cx) {
+            let state = state.read(cx);
+            if state
+                .table_cell_anchor
+                .get()
+                .is_some_and(|(endpoint, _)| endpoint.entity_id() == Some(self.entity_id()))
+            {
+                state.table_cell_anchor.set(None);
+            }
+        }
+    }
+
+    fn window_selection(&self, cx: &App) -> Option<Entity<WindowSelectionState>> {
+        self.0
+            .read(cx)
+            .window_selection
+            .borrow()
+            .as_ref()?
+            .upgrade()
+    }
+
     /// Sets the fallback text copied while this participant participates.
     pub fn set_fallback_copy_text(&self, text: impl Into<String>, cx: &mut App) {
         self.0
@@ -845,6 +904,7 @@ impl TextSelectionHandle {
         let Some(state) = WindowSelectionState::existing(window, cx) else {
             return;
         };
+        *self.0.read(cx).window_selection.borrow_mut() = Some(state.downgrade());
         let Some(registration) = state.read(cx).register_quietly(self, registration) else {
             return;
         };
@@ -1137,6 +1197,9 @@ struct WindowSelectionState {
     /// [`WindowSelectionState::register_quietly`].
     participants: RefCell<HashMap<EntityId, ParticipantRegistration>>,
     active_scope: TextSelectionScopeId,
+    /// A prepaint projection owned by this window and reset with its selection.
+    table_cell_anchor: Cell<Option<(TextSelectionEndpoint, Bounds<Pixels>)>>,
+    touch_select_all: bool,
     anchor: Option<SelectionEndpoint>,
     cursor: Option<SelectionEndpoint>,
     pending_extension_anchor: Option<SelectionEndpoint>,
@@ -1487,6 +1550,8 @@ impl WindowSelectionState {
     }
 
     fn clear_state(&mut self, cx: &mut App) -> Vec<ClearHandler> {
+        self.table_cell_anchor.set(None);
+        self.touch_select_all = false;
         self.stop_anchor_auto_scroll(cx);
         self.anchor = None;
         self.cursor = None;
@@ -1610,6 +1675,10 @@ impl WindowSelectionState {
 
     fn prepare_for_mouse_down(&mut self, extend: bool, cx: &mut App) -> Vec<ClearHandler> {
         let pending_extension_anchor = extend.then(|| self.anchor.clone()).flatten();
+        if !extend {
+            self.table_cell_anchor.set(None);
+            self.touch_select_all = false;
+        }
         self.stop_anchor_auto_scroll(cx);
         self.anchor = None;
         self.cursor = None;
@@ -1829,6 +1898,8 @@ impl WindowSelectionState {
                     .map(|resolver| (resolver, content_point)),
             }
         };
+        self.table_cell_anchor.set(None);
+        self.touch_select_all = true;
         self.anchor = Some(to_endpoint(anchor));
         self.cursor = Some(to_endpoint(cursor));
         self.did_hit_text = true;

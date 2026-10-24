@@ -925,7 +925,7 @@ mod tests {
     };
 
     use super::{TextView, TextViewPlugin};
-    use crate::text::{TableData, TextViewState, TextViewStyle};
+    use crate::text::{SelectionFormat, TableData, TextViewState, TextViewStyle};
     use gpui::{
         AppContext as _, Bounds, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
         Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Overflow, ParentElement as _, Pixels,
@@ -1736,6 +1736,147 @@ mod tests {
         cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::default());
         let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
         assert_eq!(copied.trim(), "Cell A");
+    }
+
+    struct CellSelectionTestRoot {
+        text_view: Entity<TextViewState>,
+        scrollable: bool,
+    }
+
+    impl Render for CellSelectionTestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(520.))
+                .h(px(400.))
+                .child(crate::TextSelectionLayer)
+                .child(TextView::new(&self.text_view).scrollable(self.scrollable))
+        }
+    }
+
+    #[gpui::test]
+    fn table_cell_copy_excludes_following_blocks_in_a_scrollable_view(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| CellSelectionTestRoot {
+            text_view: cx.new(|cx| TextViewState::markdown(
+                "| Header | Other |\n| --- | --- |\n| Cell A | Cell B |\n\nMiddle paragraph\n\nLast paragraph", cx)),
+            scrollable: true,
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let rows = root.read_with(cx, |root, cx| {
+            root.text_view.read(cx).selection_adapter.text_bounds()
+        });
+        assert_eq!(rows.len(), 6, "{rows:?}");
+        let start = point(rows[2].left() + px(0.1), rows[2].center().y);
+        let inside = point(rows[2].right() - px(0.1), rows[2].center().y);
+        let end = point(rows[5].right() - px(0.1), rows[5].center().y);
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(inside, MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        // The copy callback must constrain the logical block range even before paint.
+        cx.simulate_mouse_move(end, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+        for format in [SelectionFormat::Plain, SelectionFormat::Source] {
+            root.update(cx, |root, cx| {
+                root.text_view
+                    .update(cx, |state, cx| state.set_selection_format(format, cx))
+            });
+            let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+            assert_eq!(copied.trim(), "Cell A", "{format:?}");
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let selected = root.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert_eq!(selected.trim(), "Cell A");
+    }
+
+    #[gpui::test]
+    fn table_cell_touch_select_all_includes_every_cell(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| CellSelectionTestRoot {
+            text_view: cx.new(|cx| {
+                TextViewState::markdown(
+                    "| Header | Other |\n| --- | --- |\n| Cell A | Cell B |",
+                    cx,
+                )
+            }),
+            scrollable: false,
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let rows = root.read_with(cx, |root, cx| {
+            root.text_view.read(cx).selection_adapter.text_bounds()
+        });
+        let position = rows[2].center();
+        for phase in [gpui::TouchPhase::Started, gpui::TouchPhase::Ended] {
+            cx.simulate_event(gpui::LongPressEvent {
+                phase,
+                start_position: position,
+                position,
+            });
+        }
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            crate::TextSelection::select_all(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+        let selected = root.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        for text in ["Header", "Other", "Cell A", "Cell B"] {
+            assert!(selected.contains(text), "{selected:?}");
+            assert!(copied.contains(text), "{copied:?}");
+        }
+    }
+
+    #[gpui::test]
+    fn table_cell_selection_does_not_leak_into_another_window(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let start = {
+            let (root, cx) = cx.add_window_view(|_, cx| CellSelectionTestRoot {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        "| Header | Other |\n| --- | --- |\n| Cell A | Cell B |",
+                        cx,
+                    )
+                }),
+                scrollable: false,
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let rows = root.read_with(cx, |root, cx| {
+                root.text_view.read(cx).selection_adapter.text_bounds()
+            });
+            let start = point(rows[0].left() + px(0.1), rows[0].center().y);
+            let end = point(rows[0].right() - px(0.1), rows[0].center().y);
+            cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+            cx.simulate_mouse_move(end, MouseButton::Left, Modifiers::default());
+            cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(
+                cx.update(|window, cx| crate::TextSelection::selected_text(window, cx))
+                    .trim(),
+                "Header"
+            );
+            start
+        };
+        let (root, cx) = cx.add_window_view(|_, cx| CellSelectionTestRoot {
+            text_view: cx.new(|cx| TextViewState::markdown("ordinary text in another window", cx)),
+            scrollable: false,
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let rows = root.read_with(cx, |root, cx| {
+            root.text_view.read(cx).selection_adapter.text_bounds()
+        });
+        assert!(rows[0].contains(&start), "{start:?}, {rows:?}");
+        let end = point(rows[0].right() - px(0.1), rows[0].center().y);
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(end, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let selected = root.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        let copied = cx.update(|window, cx| crate::TextSelection::selected_text(window, cx));
+        assert!(!selected.trim().is_empty());
+        assert_eq!(copied, selected);
     }
 
     struct InlineImageTextViewTestRoot {

@@ -188,8 +188,7 @@ fn custom_block_selection(
 }
 
 /// A table cell, laid out as its content. Text painted inside it knows its
-/// cell, so a drag that starts in the cell selects only in that cell (see
-/// [`GlobalState::confine_selection_to_table_cell`]).
+/// cell, so a drag that starts in the cell selects only in that cell.
 struct TableCellElement(AnyElement);
 
 impl IntoElement for TableCellElement {
@@ -233,11 +232,12 @@ impl Element for TableCellElement {
     ) {
         // Prepaint runs for the whole window before any text paints, so the
         // cell that holds the anchor is known to all text, in every view.
-        let anchor = GlobalState::global(cx)
-            .text_view_state()
-            .and_then(|view| view.read(cx).selection_points(cx))
-            .map(|(anchor, _)| anchor);
-        GlobalState::global(cx).push_table_cell(bounds, anchor);
+        if let Some(view) = GlobalState::global(cx).text_view_state() {
+            view.read(cx)
+                .selection_adapter
+                .record_table_cell(bounds, cx);
+        }
+        GlobalState::global(cx).push_table_cell(bounds);
         self.0.prepaint(window, cx);
         GlobalState::global(cx).pop_table_cell();
     }
@@ -252,7 +252,7 @@ impl Element for TableCellElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        GlobalState::global(cx).push_table_cell(bounds, None);
+        GlobalState::global(cx).push_table_cell(bounds);
         self.0.paint(window, cx);
         GlobalState::global(cx).pop_table_cell();
     }
