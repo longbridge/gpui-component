@@ -13,6 +13,8 @@ extend-ignore-re = [
 astroid = "astroid"
 # Correct Italian singular of "command".
 comando = "comando"
+# Correct Portuguese word for "current" in localized UI labels.
+atual = "atual"
 # A deliberately misspelled manifest key: `crates/shell/src/plugin.rs` refuses
 # it by name, and the test that proves it has to contain the misspelling.
 capabilites = "capabilites"
