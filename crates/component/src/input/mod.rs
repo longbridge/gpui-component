@@ -39,6 +39,7 @@ pub use gpui_base::input::{
     TabSize, TextDecoration, TextDecorationCollection, TextareaState, ToggleCodeActions, Undo,
     WrappingIndent, highlight_characters, highlight_contains, highlight_prefix,
 };
+pub use gpui_base::input::{CursorBlink, set_cursor_blink};
 pub use gpui_base::input::{EditorMode, InputMode, InputModeKind, TextareaMode};
 #[doc(hidden)]
 mod editor;
