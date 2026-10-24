@@ -600,7 +600,7 @@ impl TextViewState {
             self.selection_revision = self.selection_revision.wrapping_add(1);
             // Old native layouts must not project a still-active gesture back
             // into replaced content, including while a large parse is pending.
-            self.selection_adapter.clear_copy_projections();
+            self.selection_adapter.clear_copy_projections(cx);
             self.parsed_content.document.clear_selection();
         }
         let parse_synchronously = !append && text.len() <= MAX_SYNC_FULL_REPLACE_BYTES;
@@ -1033,6 +1033,19 @@ impl TextViewState {
             return None;
         }
         self.selection_adapter.selection_points(cx)
+    }
+
+    /// [`Self::selection_points`] for the text that paints now: a drag that
+    /// started in a table cell selects only in that cell. Call it only while
+    /// painting, so the cell the text is in is known.
+    pub(crate) fn painted_selection_points(
+        &self,
+        cx: &App,
+    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+        if !self.selectable {
+            return None;
+        }
+        self.selection_adapter.painted_selection_points(cx)
     }
 
     pub(crate) fn has_selection(&self, cx: &App) -> bool {

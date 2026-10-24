@@ -162,6 +162,10 @@ impl CustomBlockSelectionProjection {
         self.state
             .set_selection(custom_block_selection(self.bounds, start, end));
     }
+
+    pub(super) fn deselect(&self) {
+        self.state.set_selection(None);
+    }
 }
 
 fn custom_block_selection(
@@ -181,6 +185,77 @@ fn custom_block_selection(
     } else {
         BlockSelection::Empty
     })
+}
+
+/// A table cell, laid out as its content. Text painted inside it knows its
+/// cell, so a drag that starts in the cell selects only in that cell.
+struct TableCellElement(AnyElement);
+
+impl IntoElement for TableCellElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for TableCellElement {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.0.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        // Prepaint runs for the whole window before any text paints, so the
+        // cell that holds the anchor is known to all text, in every view.
+        if let Some(view) = GlobalState::global(cx).text_view_state() {
+            view.read(cx)
+                .selection_adapter
+                .record_table_cell(bounds, cx);
+        }
+        GlobalState::global(cx).push_table_cell(bounds);
+        self.0.prepaint(window, cx);
+        GlobalState::global(cx).pop_table_cell();
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        GlobalState::global(cx).push_table_cell(bounds);
+        self.0.paint(window, cx);
+        GlobalState::global(cx).pop_table_cell();
+    }
 }
 
 /// Observe the plugin's own bounds without changing its layout or listeners.
@@ -253,7 +328,7 @@ impl Element for CustomBlockElement {
             if state.preserve_inline_selection {
                 return self.state.selection();
             }
-            let (start, end) = state.selection_points(cx)?;
+            let (start, end) = state.painted_selection_points(cx)?;
             custom_block_selection(bounds, start, end)
         });
         self.state.set_selection(selection);
@@ -266,6 +341,7 @@ impl Element for CustomBlockElement {
                             bounds,
                         },
                     ),
+                    cx,
                 );
             }
             let visible = bounds.intersect(&window.content_mask().bounds);
@@ -560,11 +636,18 @@ impl BlockNode {
                     for row in table.children.iter() {
                         let mut row_texts = vec![];
                         for cell in row.children.iter() {
-                            row_texts.push(match kind {
-                                BlockTextKind::All => cell.children.text(),
-                                // Source is handled above; only Selected reaches here.
-                                _ => cell.children.selected_text(),
-                            });
+                            match kind {
+                                BlockTextKind::All => row_texts.push(cell.children.text()),
+                                // Source is handled above; only Selected reaches
+                                // here. A cell with nothing selected adds nothing,
+                                // so a selection in one cell copies only its text.
+                                _ => {
+                                    let selected = cell.children.selected_text();
+                                    if !selected.is_empty() {
+                                        row_texts.push(selected);
+                                    }
+                                }
+                            }
                         }
                         if !row_texts.is_empty() {
                             block_text.push_str(&row_texts.join(" "));
@@ -1244,18 +1327,22 @@ pub(crate) fn reconstruct_markdown(
 ///
 /// Cells emit their own selected source; rows are piped (`| a | b |`) and the
 /// delimiter/alignment row is inserted after the first row, so a selected
-/// table round-trips as a Markdown table. Returns an empty string when no cell
-/// is selected.
+/// table round-trips as a Markdown table. A selection in one cell (a drag that
+/// started in a cell stays in it) is that cell's source alone. Returns an empty
+/// string when no cell is selected.
 fn table_selected_source(table: &Table) -> String {
     let cell_source = |cell: &TableCell| cell.children.selected_source().replace('\n', " ");
 
-    let any_selected = table.children.iter().any(|row| {
-        row.children
-            .iter()
-            .any(|cell| !cell_source(cell).trim().is_empty())
-    });
-    if !any_selected {
-        return String::new();
+    let mut selected = table
+        .children
+        .iter()
+        .flat_map(|row| row.children.iter())
+        .map(cell_source)
+        .filter(|source| !source.trim().is_empty());
+    match (selected.next(), selected.next()) {
+        (None, _) => return String::new(),
+        (Some(only), None) => return only.trim().to_string(),
+        _ => {}
     }
 
     let mut lines: Vec<String> = Vec::new();
@@ -4053,19 +4140,22 @@ impl BlockNode {
                     cells.push(slack(lead).into_any_element());
                 }
                 cells.push(
-                    div()
-                        .flex_basis(px(0.))
-                        .flex_grow(CELL_GROW)
-                        .min_w(px(column.min))
-                        .max_w(px(column.max))
-                        .overflow_hidden()
-                        .when(align == ColumnumnAlign::Center, |this| this.text_center())
-                        .when(align == ColumnumnAlign::Right, |this| this.text_right())
-                        .px_3()
-                        .py(px(7.))
-                        .refine_style(&style.table_cell())
-                        .children(content)
-                        .into_any_element(),
+                    TableCellElement(
+                        div()
+                            .flex_basis(px(0.))
+                            .flex_grow(CELL_GROW)
+                            .min_w(px(column.min))
+                            .max_w(px(column.max))
+                            .overflow_hidden()
+                            .when(align == ColumnumnAlign::Center, |this| this.text_center())
+                            .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                            .px_3()
+                            .py(px(7.))
+                            .refine_style(&style.table_cell())
+                            .children(content)
+                            .into_any_element(),
+                    )
+                    .into_any_element(),
                 );
                 if trail > 0. || !is_last_col {
                     cells.push(
@@ -5429,6 +5519,28 @@ mod tests {
             block.selected_text(SelectionFormat::Source),
             "| Name | Age |\n| :-- | --: |\n| Alice | 30 |\n"
         );
+    }
+
+    /// A drag that starts in a table cell stays in it, so the copy is the
+    /// cell's text alone: no pipes, no delimiter row, no other cells or rows.
+    #[test]
+    fn a_selection_in_one_table_cell_copies_only_that_cell() {
+        let table = table_of(
+            vec![
+                vec![plain_cell("Name"), plain_cell("Age")],
+                vec![
+                    TableCell {
+                        children: selected_paragraph("Alice"),
+                        width: None,
+                    },
+                    plain_cell("30"),
+                ],
+            ],
+            vec![ColumnumnAlign::Left, ColumnumnAlign::Right],
+        );
+        let block = BlockNode::Table(table);
+        assert_eq!(block.selected_text(SelectionFormat::Plain).trim(), "Alice");
+        assert_eq!(block.selected_text(SelectionFormat::Source), "Alice\n");
     }
 
     /// A cell holding plain text, as `Table::to_markdown` and

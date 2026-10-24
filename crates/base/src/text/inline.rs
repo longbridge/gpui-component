@@ -869,7 +869,8 @@ impl Inline {
             );
         }
 
-        let Some((selection_start, selection_end)) = text_view_state.selection_points(cx) else {
+        let Some((selection_start, selection_end)) = text_view_state.painted_selection_points(cx)
+        else {
             return (is_selectable, false, None);
         };
         (
@@ -1250,15 +1251,16 @@ impl Element for Inline {
                     .as_ref()
                     .map(|(source, range)| (source, range.clone()))
                     .unwrap_or((&self.state, 0..self.text.len()));
-                adapter.register_copy_projection(super::selection_adapter::CopyProjection::Text(
-                    InlineSelectionProjection {
+                adapter.register_copy_projection(
+                    super::selection_adapter::CopyProjection::Text(InlineSelectionProjection {
                         source: Arc::downgrade(source),
                         range,
                         text: self.text.clone(),
                         layout: copy_layout,
                         selection_bounds: self.selection_bounds,
-                    },
-                ));
+                    }),
+                    cx,
+                );
             }
 
             window.on_mouse_event({
