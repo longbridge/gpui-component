@@ -6,6 +6,10 @@ extend-ignore-re = [
     '\\u\{[0-9A-Fa-f]+\}',
     '@UncertaintyDeterminesYou4ndMe',
     '@alex-vas',
+    # Valid Portuguese translations; keep English spellings checked elsewhere.
+    'pt-BR: "Alteração atual"',
+    'pt-BR: "Aceitar a atual"',
+    'pt-BR: "Atual aceita"',
 ]
 
 [default.extend-words]
