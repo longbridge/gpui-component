@@ -158,6 +158,7 @@ pub struct TextView {
     text_view_style: Option<TextViewStyle>,
     link_underline: Option<bool>,
     link_underline_on_hover: Option<bool>,
+    inline_code_style: Option<StyleRefinement>,
     style: StyleRefinement,
     selectable: bool,
     selection_format: SelectionFormat,
@@ -207,6 +208,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_style: None,
             style: StyleRefinement::default(),
             selectable: true,
             selection_format: SelectionFormat::default(),
@@ -232,6 +234,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_style: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -258,6 +261,7 @@ impl TextView {
             text_view_style: None,
             link_underline: None,
             link_underline_on_hover: None,
+            inline_code_style: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -297,6 +301,14 @@ impl TextView {
     /// Set whether links are underlined while hovered. Defaults to `false`.
     pub fn link_underline_on_hover(mut self, underline: bool) -> Self {
         self.link_underline_on_hover = Some(underline);
+        self
+    }
+
+    /// Refines inline code typography, background, border, radius, and padding
+    /// over the resolved style. See [`TextViewStyle::with_inline_code_style`]
+    /// for the supported properties. Unspecified properties are inherited.
+    pub fn inline_code_style(mut self, style: StyleRefinement) -> Self {
+        self.inline_code_style = Some(super::style::normalize_inline_code_style(style));
         self
     }
 
@@ -691,6 +703,13 @@ impl Element for TextView {
                 surface_style = text_view_style.on_text_color(color);
                 text_view_style = &surface_style;
             }
+        }
+        let inline_style;
+        if let Some(refinement) = &self.inline_code_style {
+            let mut style = text_view_style.inline_code_style().clone();
+            style.refine(refinement);
+            inline_style = text_view_style.clone().with_inline_code_style(style);
+            text_view_style = &inline_style;
         }
         let link_style;
         if self.link_underline.is_some() || self.link_underline_on_hover.is_some() {
@@ -1625,6 +1644,48 @@ mod tests {
             let style = &root.text_view.read(cx).text_view_style;
             assert_eq!(style.link(), gpui::rgb(0x55aaff).into());
             assert_eq!(style.selection(), gpui::rgb(0x335577).into());
+        });
+    }
+
+    #[gpui::test]
+    fn inline_code_view_refinement_keeps_unspecified_style_properties(cx: &mut TestAppContext) {
+        use super::{TextViewDefaults, TextViewStyle};
+        struct StyledCode(Entity<TextViewState>);
+        impl Render for StyledCode {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                TextView::new(&self.0)
+                    .inline_code_style(
+                        StyleRefinement::default()
+                            .border_1()
+                            .border_color(gpui::blue()),
+                    )
+                    .into_any_element()
+            }
+        }
+        cx.update(crate::init);
+        cx.update(|cx| {
+            cx.set_global(
+                TextViewDefaults::default().with_style(
+                    TextViewStyle::default().with_inline_code_style(
+                        StyleRefinement::default()
+                            .text_size(rems(1.))
+                            .bg(gpui::red()),
+                    ),
+                ),
+            )
+        });
+        let (root, cx) = cx.add_window_view(|_, cx| {
+            StyledCode(cx.new(|cx| TextViewState::markdown("before `code` after", cx)))
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        root.read_with(cx, |root, cx| {
+            let state = root.0.read(cx);
+            let style = state.text_view_style.inline_code_style();
+            assert_eq!(style.text.font_size, Some(rems(1.).into()));
+            assert_eq!(style.background, Some(gpui::red().into()));
+            assert_eq!(style.border_color, Some(gpui::blue()));
+            assert_eq!(style.border_widths.left, Some(px(1.).into()));
         });
     }
 

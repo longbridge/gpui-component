@@ -27,6 +27,8 @@ pub struct TextViewStyle {
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
     inline_code: HighlightStyle,
+    /// Explicit inline code refinements, applied after theme and surface colors.
+    inline_code_style: StyleRefinement,
     /// The table body background, or the theme surface when `None`. Only
     /// [`Self::on_text_color`] sets it, to let a table on an inverted surface
     /// show that surface.
@@ -52,6 +54,7 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.inline_code_style == other.inline_code_style
             && self.table_background == other.table_background
             && self.is_dark == other.is_dark
     }
@@ -97,6 +100,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
+            inline_code_style: StyleRefinement::default(),
             table_background: None,
             is_dark,
         }
@@ -185,6 +189,21 @@ impl TextViewStyle {
     /// which keeps [`TextViewStyle::default`] usable without a theme.
     pub fn with_inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Overrides inline code typography and its box presentation.
+    ///
+    /// Supports font family, size, features, fallbacks, weight, style, color, underline and
+    /// strikethrough, background, border widths/color/style, corner radii, and
+    /// padding. Sizes and padding resolve pixels/rem against the window.
+    /// Unspecified properties keep the existing defaults. Box layout, margin,
+    /// positioning, overflow, and interaction properties are not used.
+    /// Line height remains owned by the paragraph. Non-finite or non-positive
+    /// font sizes are ignored. Explicit refinements also take precedence on
+    /// inverted surfaces.
+    pub fn with_inline_code_style(mut self, style: StyleRefinement) -> Self {
+        self.inline_code_style = normalize_inline_code_style(style);
         self
     }
 
@@ -299,6 +318,11 @@ impl TextViewStyle {
         self.inline_code
     }
 
+    /// Explicit inline code typography and box refinements.
+    pub fn inline_code_style(&self) -> &StyleRefinement {
+        &self.inline_code_style
+    }
+
     /// Whether content-specific assets should use their dark variant.
     pub fn is_dark(&self) -> bool {
         self.is_dark
@@ -381,6 +405,18 @@ fn oklab_lightness(color: Hsla) -> f32 {
     0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s
 }
 
+/// Drop an invalid font size before it can replace an inherited value or
+/// make retained style equality fail every frame (NaN is never equal).
+pub(super) fn normalize_inline_code_style(mut style: StyleRefinement) -> StyleRefinement {
+    if style.text.font_size.is_some_and(|size| {
+        let size = size.to_pixels(gpui::px(1.)).as_f32();
+        !size.is_finite() || size <= 0.
+    }) {
+        style.text.font_size = None;
+    }
+    style
+}
+
 #[cfg(test)]
 mod tests {
     use gpui::{Styled as _, px};
@@ -413,6 +449,11 @@ mod tests {
         assert!(base != base.clone().with_dark(true));
         assert!(base != base.clone().with_link_underline(false));
         assert!(base != base.clone().with_link_underline_on_hover(true));
+        assert!(
+            base != base
+                .clone()
+                .with_inline_code_style(StyleRefinement::default().border_color(gpui::red()))
+        );
     }
 
     #[test]
@@ -489,6 +530,37 @@ mod tests {
         assert_eq!(
             style.inline_code_highlight().background_color,
             Some(gpui::rgb(0x123456).into())
+        );
+    }
+
+    #[test]
+    fn inline_code_refinements_remain_explicit_on_an_inverted_surface() {
+        let colors = ColorTokens::light();
+        let plain = TextViewStyle::from_colors(&colors, false);
+        assert_eq!(plain.inline_code_style(), &StyleRefinement::default());
+        for size in [f32::NAN, f32::INFINITY, 0., -1.] {
+            assert!(
+                plain
+                    .clone()
+                    .with_inline_code_style(StyleRefinement::default().text_size(px(size)))
+                    .inline_code_style()
+                    .text
+                    .font_size
+                    .is_none()
+            );
+        }
+        let refinement = StyleRefinement::default()
+            .text_size(gpui::rems(1.))
+            .bg(gpui::red())
+            .border_1()
+            .border_color(gpui::blue());
+        let style = plain.with_inline_code_style(refinement.clone());
+        assert_eq!(style.inline_code_style(), &refinement);
+        assert_eq!(
+            style
+                .on_text_color(colors.primary_foreground)
+                .inline_code_style(),
+            &refinement
         );
     }
 

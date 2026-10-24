@@ -512,3 +512,35 @@ Links must be in ascending range order without overlaps. Invalid, overlapping,
 or non-UTF-8-boundary ranges are ignored. Use `set_linked_text(text, links, cx)`
 to replace the text and links together. `on_link_click` overrides opening the
 URL. Links are underlined at rest by default; hover underlines default to off.
+
+## Inline code style
+
+`TextView::inline_code_style(StyleRefinement)` refines inline code after the
+resolved theme/style and surface-color adaptation. Unspecified properties
+keep their defaults, and explicit colors remain unchanged on inverted surfaces.
+The existing `TextViewStyle::inline_code(HighlightStyle)` continues to work;
+the view-level refinement takes precedence without changing the public
+`TextViewStyle` struct fields.
+
+```rust
+use gpui_kit::{StyleRefinement, Styled as _, rems};
+use gpui_kit::component::ActiveTheme as _;
+
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_style(
+        StyleRefinement::default()
+            .text_size(rems(1.))
+            .px(rems(0.25))
+            .border_1()
+            .border_color(cx.theme().border),
+    )
+```
+
+Supported properties are font family, size, features, fallbacks, weight,
+italic, color, underline, strikethrough, background, border widths/color/style,
+corner radii, and padding. Font sizes use pixels or window-relative rems;
+non-finite or non-positive sizes retain the default. Without a font-size override,
+code remains 0.875 times its surrounding text. Without a border override, code
+has no border. Padding and border widths participate in wrapping and table
+measurement. Margin, positioning, flex, explicit box size, overflow, and
+interaction properties are not used; line height remains owned by the paragraph.

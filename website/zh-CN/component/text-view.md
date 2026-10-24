@@ -361,3 +361,25 @@ TextView::new(&state)
 ```
 
 链接范围须按位置升序排列且互不重叠。无效、重叠或未对齐 UTF-8 字符边界的范围会被忽略。用 `set_linked_text(text, links, cx)` 同时替换文本与链接。`on_link_click` 可接管默认的 URL 打开行为。链接默认始终显示下划线，悬停下划线默认关闭。
+
+## 行内代码样式
+
+通过 `TextView::inline_code_style(StyleRefinement)` 覆盖行内代码样式。覆盖在主题、显式样式和表面颜色适配之后应用；未指定的属性保留默认值，指定的颜色在反色表面上也保持不变。
+
+现有 `TextViewStyle::inline_code(HighlightStyle)` 保持兼容；视图上的覆盖样式具有更高优先级，公开的 `TextViewStyle` 结构字段不变。
+
+```rust
+use gpui_kit::{StyleRefinement, Styled as _, rems};
+use gpui_kit::component::ActiveTheme as _;
+
+TextView::markdown("notes", "Run `cargo build` first.")
+    .inline_code_style(
+        StyleRefinement::default()
+            .text_size(rems(1.))
+            .px(rems(0.25))
+            .border_1()
+            .border_color(cx.theme().border),
+    )
+```
+
+支持字体、字号、字体特性、后备字体、字重、斜体、文字颜色、下划线、删除线、背景、边框宽度／颜色／线型、圆角和内边距。字号使用像素或相对于窗口的 rem；非有限值和非正值会被忽略。默认字号仍为周围文字的 0.875 倍，默认不绘制边框。内边距和边框宽度参与换行与表格列宽计算。外边距、定位、flex、显式容器尺寸、overflow 和交互属性不参与渲染；行高由段落控制。

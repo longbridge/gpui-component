@@ -23,7 +23,7 @@ use crate::{
         MarkdownNode, TableActionsFn,
         document::{NodeRenderOptions, PrevBlock, flow_position},
         inline::{
-            Inline, InlineHighlight, InlineState, combine_highlights, fade_highlights,
+            Inline, InlineHighlight, InlineState, code_insets, combine_highlights, fade_highlights,
             point_in_text_selection, text_runs, text_size_ranges,
         },
         inline_flow::{InlineFlow, InlineFlowItem, slice_ranges},
@@ -2751,7 +2751,22 @@ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHig
     let mut font_family = None;
     if mark.code {
         highlight = highlight.highlight(node_cx.style.inline_code_highlight());
-        font_family = Some(cx.theme().tokens.typography.mono.clone());
+        let style = node_cx.style.inline_code_style();
+        highlight = highlight.highlight(HighlightStyle {
+            color: style.text.color,
+            font_weight: style.text.font_weight,
+            font_style: style.text.font_style,
+            underline: style.text.underline,
+            strikethrough: style.text.strikethrough,
+            ..Default::default()
+        });
+        font_family = Some(
+            style
+                .text
+                .font_family
+                .clone()
+                .unwrap_or_else(|| cx.theme().tokens.typography.mono.clone()),
+        );
     }
     if let Some(color) = mark.highlight {
         highlight.background_color = Some(color);
@@ -2760,6 +2775,7 @@ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHig
         style: highlight,
         font_family,
         font_size_scale: mark.code.then_some(0.875),
+        code_style: mark.code.then(|| node_cx.style.inline_code_style().clone()),
     }
 }
 
@@ -3448,16 +3464,17 @@ fn measure_table_text_columns(
                     })
                     .collect::<Vec<_>>();
                 let mut line_w = gpui::Pixels::ZERO;
-                for (range, scale) in text_size_ranges(line.len(), &line_highlights) {
+                for (range, scale) in
+                    text_size_ranges(line.len(), &line_highlights, font_size, window.rem_size())
+                {
                     let highlights = slice_ranges(
                         &line_highlights,
                         range.start,
                         range.end,
                         |range, highlight| (range, highlight.clone()),
                     );
-                    if highlights.iter().any(|(_, h)| h.font_size_scale.is_some()) {
-                        line_w += px(crate::text::inline_flow::INLINE_CODE_PADDING * 2.);
-                    }
+                    let insets = code_insets(&highlights, font_size * scale, window.rem_size());
+                    line_w += insets.left + insets.right;
                     let runs = text_runs(range.len(), text_style, &highlights);
                     line_w += window
                         .text_system()
