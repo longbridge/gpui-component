@@ -264,15 +264,31 @@ impl<M: InputModeKind> Element for EditorScrollbar<M> {
             scroll_handle.set_offset(snapshot.cursor_scroll_offset);
         }
 
-        let mut scrollbar = if !snapshot.soft_wrap {
-            Scrollbar::new(&scroll_handle)
+        let renderer = state.scrollbar_renderer.clone();
+        let mut scrollbar = if let Some(renderer) = renderer {
+            let presentation = super::EditorScrollbarContext {
+                handle: scroll_handle,
+                viewport: snapshot.layout.bounds,
+                scroll_viewport: snapshot.layout.scroll_viewport_size,
+                content: snapshot.layout.scroll_size,
+                axis: if snapshot.soft_wrap {
+                    crate::ScrollbarAxis::Vertical
+                } else {
+                    crate::ScrollbarAxis::Both
+                },
+            };
+            renderer(presentation, window, cx)
         } else {
-            Scrollbar::vertical(&scroll_handle)
-        }
-        .viewport_bounds(snapshot.layout.bounds)
-        .scroll_viewport_size(snapshot.layout.scroll_viewport_size)
-        .scroll_size(snapshot.layout.scroll_size)
-        .into_any_element();
+            if !snapshot.soft_wrap {
+                Scrollbar::new(&scroll_handle)
+            } else {
+                Scrollbar::vertical(&scroll_handle)
+            }
+            .viewport_bounds(snapshot.layout.bounds)
+            .scroll_viewport_size(snapshot.layout.scroll_viewport_size)
+            .scroll_size(snapshot.layout.scroll_size)
+            .into_any_element()
+        };
 
         scrollbar.prepaint_as_root(
             snapshot.layout.bounds.origin,
@@ -4004,6 +4020,87 @@ mod tests {
                 text_origin.y + px(stretch)
             );
         });
+    }
+
+    /// A scrollbar supplied through `set_scrollbar_renderer` gets the editor's own
+    /// scroll range through the standard ScrollbarHandle contract, so a
+    /// scrollbar can drag to the same end as wheel scrolling.
+    #[gpui::test]
+    fn scrollbar_renderer_receives_the_editors_scroll_range(cx: &mut TestAppContext) {
+        use crate::ScrollbarHandle as _;
+
+        let text = (0..60)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (editor, window) = decoration_editor(cx, &text, true);
+        let presented = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            editor.update(cx, |state, cx| {
+                state.set_scroll_bounce(false, cx);
+                state.set_editor_paddings(Edges {
+                    top: px(10.),
+                    bottom: px(10.),
+                    ..Default::default()
+                });
+                let presented = presented.clone();
+                state.set_scrollbar_renderer(Some(std::rc::Rc::new(move |context, _, _| {
+                    *presented.borrow_mut() = Some(context.clone());
+                    Scrollbar::vertical(&context)
+                        .mode(crate::ScrollbarMode::Always)
+                        .into_any_element()
+                })));
+            });
+            window.draw(cx).clear(cx);
+            editor.update(cx, |state, cx| {
+                state.on_scroll_wheel(
+                    &gpui::ScrollWheelEvent {
+                        delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
+                        touch_phase: gpui::TouchPhase::Moved,
+                        ..Default::default()
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+
+        let context = presented.borrow().clone().unwrap();
+        let track = context.viewport_bounds();
+        let wheel_end = context.offset();
+        assert!(wheel_end.y < px(0.));
+        assert_eq!(
+            track.size.height - context.scroll_viewport_size().height,
+            px(20.)
+        );
+        cx.update(|window, cx| {
+            context.set_offset(Point::default());
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
+
+        let grab = point(track.right() - px(5.), track.top() + px(10.));
+        let end = point(grab.x, track.bottom() - px(1.));
+        cx.simulate_mouse_down(grab, gpui::MouseButton::Left, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_move(
+            end,
+            Some(gpui::MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_mouse_up(end, gpui::MouseButton::Left, gpui::Modifiers::default());
+
+        assert_eq!(
+            editor.read_with(&cx, |state, _| state.scroll_offset()),
+            wheel_end
+        );
+        assert_eq!(
+            context.content_size().height - track.size.height,
+            -wheel_end.y
+        );
     }
 
     impl Render for TextareaHarness {

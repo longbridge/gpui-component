@@ -156,6 +156,8 @@ pub struct TextView {
     text: Option<SharedString>,
     pub(crate) state: Option<Entity<TextViewState>>,
     text_view_style: Option<TextViewStyle>,
+    link_underline: Option<bool>,
+    link_underline_on_hover: Option<bool>,
     style: StyleRefinement,
     selectable: bool,
     selection_format: SelectionFormat,
@@ -203,6 +205,8 @@ impl TextView {
             format: None,
             text: None,
             text_view_style: None,
+            link_underline: None,
+            link_underline_on_hover: None,
             style: StyleRefinement::default(),
             selectable: true,
             selection_format: SelectionFormat::default(),
@@ -226,6 +230,8 @@ impl TextView {
             format: Some(TextViewFormat::Markdown),
             text: Some(markdown.into()),
             text_view_style: None,
+            link_underline: None,
+            link_underline_on_hover: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -250,6 +256,8 @@ impl TextView {
             format: Some(TextViewFormat::Html),
             text: Some(html.into()),
             text_view_style: None,
+            link_underline: None,
+            link_underline_on_hover: None,
             style: StyleRefinement::default(),
             state: None,
             selectable: true,
@@ -277,6 +285,18 @@ impl TextView {
         F: Fn(&gpui::SharedUri) -> gpui::ImageSource + Send + Sync + 'static,
     {
         self.image_source = Some(Arc::new(resolver));
+        self
+    }
+
+    /// Set whether links are underlined at rest. Defaults to `true`.
+    pub fn link_underline(mut self, underline: bool) -> Self {
+        self.link_underline = Some(underline);
+        self
+    }
+
+    /// Set whether links are underlined while hovered. Defaults to `false`.
+    pub fn link_underline_on_hover(mut self, underline: bool) -> Self {
+        self.link_underline_on_hover = Some(underline);
         self
     }
 
@@ -671,6 +691,18 @@ impl Element for TextView {
                 surface_style = text_view_style.on_text_color(color);
                 text_view_style = &surface_style;
             }
+        }
+        let link_style;
+        if self.link_underline.is_some() || self.link_underline_on_hover.is_some() {
+            let mut style = text_view_style.clone();
+            if let Some(underline) = self.link_underline {
+                style = style.with_link_underline(underline);
+            }
+            if let Some(underline) = self.link_underline_on_hover {
+                style = style.with_link_underline_on_hover(underline);
+            }
+            link_style = style;
+            text_view_style = &link_style;
         }
         let foreground = text_view_style.foreground();
         let text_view_style = (*state.read(cx).text_view_style != *text_view_style)

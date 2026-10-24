@@ -231,6 +231,7 @@ pub(super) struct Inline {
     /// The start of a pending reveal, when it is in this text.
     reveal: Option<RevealAt>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    hover_underline: Option<gpui::UnderlineStyle>,
     /// What this frame's layout was shaped with, to hand the shaped text to
     /// the next frame (see [`RetainedLayout`]).
     retained_key: Option<(Vec<TextRun>, TextStyle)>,
@@ -250,6 +251,7 @@ pub(crate) struct InlineState {
     /// The text that actually rendering, matched with selection.
     pub(super) text: SharedString,
     pub(super) selection: Option<Selection>,
+    pub(super) hovered_link: Option<Range<usize>>,
     /// Set only through the editor host API (`Paragraph::with_leaf_key`):
     /// the leaf reports its geometry to the collector installed by
     /// `editor_host::collect_leaf_geometry`. `None` for every plain `TextView`.
@@ -418,6 +420,9 @@ impl Drop for InlineState {
 impl InlineState {
     /// Save actually rendered text for selected text to use.
     pub(crate) fn set_text(&mut self, text: SharedString) {
+        if self.text != text {
+            self.hovered_link = None;
+        }
         self.text = text;
     }
 }
@@ -588,14 +593,22 @@ impl Inline {
 
     pub(super) fn new(
         state: Arc<Mutex<InlineState>>,
-        links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, InlineHighlight)>,
+        mut links: Vec<(Range<usize>, LinkMark)>,
+        mut highlights: Vec<(Range<usize>, InlineHighlight)>,
         link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> Self {
         let text = state
             .lock()
             .map(|state| state.text.clone())
             .unwrap_or_default();
+        let valid = |range: &Range<usize>| {
+            range.start < range.end
+                && range.end <= text.len()
+                && text.is_char_boundary(range.start)
+                && text.is_char_boundary(range.end)
+        };
+        links.retain(|(range, _)| valid(range));
+        highlights.retain(|(range, _)| valid(range));
 
         Self {
             links: Rc::new(links),
@@ -609,11 +622,51 @@ impl Inline {
             range_backgrounds: Vec::new(),
             reveal: None,
             link_click_handler,
+            hover_underline: None,
             retained_key: None,
             handed_over: false,
             editor_piece: None,
             state,
         }
+    }
+
+    /// Layers a hovered link over existing marks without losing their styles.
+    pub(super) fn hover_underline(mut self, underline: Option<gpui::UnderlineStyle>) -> Self {
+        self.hover_underline = underline;
+        if let Ok(mut state) = self.state.lock()
+            && (underline.is_none()
+                || !self
+                    .links
+                    .iter()
+                    .any(|(range, _)| Some(range) == state.hovered_link.as_ref()))
+        {
+            state.hovered_link = None;
+        }
+        if let Some(underline) = underline
+            && let Some(range) = self
+                .state
+                .lock()
+                .ok()
+                .and_then(|state| state.hovered_link.clone())
+            && self.links.iter().any(|(link, _)| *link == range)
+            && range.start < range.end
+            && range.end <= self.text.len()
+            && self.text.is_char_boundary(range.start)
+            && self.text.is_char_boundary(range.end)
+        {
+            self.highlights = combine_highlights(
+                self.highlights,
+                [(
+                    range,
+                    HighlightStyle {
+                        underline: Some(underline),
+                        ..Default::default()
+                    }
+                    .into(),
+                )],
+            );
+        }
+        self
     }
 
     /// Use the resolved style captured by a deferred parent layout.
@@ -1294,14 +1347,29 @@ impl Element for Inline {
                 let text_layout = text_layout.clone();
                 let links = self.links.clone();
                 let mut hovered_link = hovered_link;
+                let inline_state = self.state.clone();
+                let hover_underline = self.hover_underline.is_some();
+                let text = self.text.clone();
                 move |event: &MouseMoveEvent, phase, window, cx| {
-                    if !phase.bubble() || !hitbox.is_hovered(window) {
+                    if !phase.bubble() {
                         return;
                     }
 
-                    let updated =
-                        Self::link_range_for_position(&text_layout, &links, event.position);
-                    if hovered_link != updated {
+                    let updated = hitbox
+                        .is_hovered(window)
+                        .then(|| {
+                            Self::link_range_for_position(&text_layout, &links, event.position)
+                        })
+                        .flatten();
+                    let state_changed = hover_underline
+                        && inline_state.lock().ok().is_some_and(|mut state| {
+                            if state.text != text || state.hovered_link == updated {
+                                return false;
+                            }
+                            state.hovered_link = updated.clone();
+                            true
+                        });
+                    if hovered_link != updated || state_changed {
                         hovered_link = updated;
                         cx.notify(current_view);
                     }
@@ -2894,5 +2962,68 @@ mod retained_layout_tests {
             RETAINED_LAYOUTS.with(|layouts| layouts.borrow().is_empty()),
             "closing the last document must not need another text layout to release it"
         );
+    }
+}
+
+#[cfg(test)]
+mod hover_underline_tests {
+    use super::*;
+
+    #[test]
+    fn hovering_a_link_preserves_overlapping_text_marks() {
+        let state = Arc::new(Mutex::new(InlineState {
+            text: "linked".into(),
+            hovered_link: Some(0..6),
+            cleanup_senders: Vec::new(),
+            ..Default::default()
+        }));
+        let underline = gpui::UnderlineStyle {
+            thickness: px(1.),
+            ..Default::default()
+        };
+        let bold = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..Default::default()
+        };
+        let inline = Inline::new(
+            state,
+            vec![(0..6, LinkMark::default())],
+            vec![(2..4, bold.into())],
+            None,
+        )
+        .hover_underline(Some(underline));
+        assert_eq!(inline.highlights.len(), 3);
+        assert_eq!(inline.highlights[1].0, 2..4);
+        assert_eq!(inline.highlights[1].1.style.font_weight, bold.font_weight);
+        assert!(
+            inline
+                .highlights
+                .iter()
+                .all(|(_, h)| h.style.underline == Some(underline))
+        );
+    }
+
+    #[test]
+    fn changed_text_and_invalid_utf8_ranges_do_not_keep_hover_styles() {
+        let state = Arc::new(Mutex::new(InlineState {
+            text: "old link".into(),
+            hovered_link: Some(0..8),
+            cleanup_senders: Vec::new(),
+            ..Default::default()
+        }));
+        state.lock().unwrap().set_text("字".into());
+        assert!(state.lock().unwrap().hovered_link.is_none());
+        let inline = Inline::new(
+            state,
+            vec![(0..8, LinkMark::default()), (0..1, LinkMark::default())],
+            vec![
+                (0..8, HighlightStyle::default().into()),
+                (0..1, HighlightStyle::default().into()),
+            ],
+            None,
+        )
+        .hover_underline(Some(gpui::UnderlineStyle::default()));
+        assert!(inline.links.is_empty());
+        assert!(inline.highlights.is_empty());
     }
 }

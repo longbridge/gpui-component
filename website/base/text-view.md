@@ -324,3 +324,18 @@ UTF-16 conversion for native input, accessibility integration and virtualization
 The current byte-index geometry does not represent bidirectional caret affinity
 or both sides of a soft-wrap boundary; do not treat it as a complete visual
 navigation API.
+
+## Linked plain text
+
+`TextViewState::linked_text(text, links, cx)` creates selectable plain text with
+explicit `TextViewLink::new(range, url)` spans. Ranges are UTF-8 byte offsets,
+ordered and non-overlapping; invalid ranges are ignored. Use
+`set_linked_text(text, links, cx)` to replace both together. `range()` and `url()`
+inspect a link. Render the retained state with `TextView::new(&state)` and use
+`on_link_click` to override URL opening.
+
+`TextView::link_underline(bool)` and `link_underline_on_hover(bool)` override
+link appearance after theme resolution. The equivalent Base style builders are
+`TextViewStyle::with_link_underline` and `with_link_underline_on_hover`, with
+`is_link_underlined()` and `is_link_underlined_on_hover()` readers. Defaults are
+`true` at rest and `false` on hover.

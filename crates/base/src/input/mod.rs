@@ -63,6 +63,7 @@ mod movement;
 mod native;
 #[path = "base/rope_ext.rs"]
 mod rope_ext;
+mod scrollbar_presentation;
 #[path = "editor/search.rs"]
 mod search;
 #[path = "base/selection.rs"]
@@ -72,6 +73,7 @@ mod state;
 #[path = "base/tab_stops.rs"]
 mod tab_stops;
 mod textarea;
+pub use scrollbar_presentation::{EditorScrollbarContext, EditorScrollbarRenderer};
 #[path = "base/touch.rs"]
 mod touch;
 #[path = "base/undo_manager.rs"]
@@ -101,7 +103,8 @@ pub use highlighting::{
 pub use indent::TabSize;
 pub use input::{Input, InputState};
 pub use kind::{
-    EditorExtras, EditorMode, InputExtras, InputMode, InputModeKind, MultiLineMode, TextareaMode,
+    EditorExtras, EditorMode, InputExtras, InputMode, InputModeKind, MultiLineMode, TextareaExtras,
+    TextareaMode,
 };
 pub(crate) use language::EditorLanguage;
 pub use language::{LanguageProvider, set_language_config, set_language_provider};

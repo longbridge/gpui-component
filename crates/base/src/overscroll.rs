@@ -170,7 +170,14 @@ impl Overscroll {
                 let moving = self
                     .moved_at
                     .is_some_and(|at| now.saturating_duration_since(at) < STILL);
-                let velocity = if moving { self.velocity } else { 0. };
+                // Only an edge held past its end carries the finger's speed.
+                // Let go within the text, the momentum that follows scrolls
+                // it, and throws the edge only if it runs into it.
+                let velocity = if moving && self.offset() != 0. {
+                    self.velocity
+                } else {
+                    0.
+                };
                 self.physics.let_go(velocity * CARRY);
                 thrown = true;
                 self.spent = self.offset() != 0.;
@@ -481,6 +488,41 @@ mod tests {
                 "the drag scrolls the text"
             );
         }
+    }
+
+    #[test]
+    fn a_flick_away_from_the_edges_leaves_the_next_drag_to_the_text() {
+        let start = Instant::now();
+        let frame = Duration::from_millis(16);
+        let mut overscroll = Overscroll::default();
+        let mut room = 10_000.;
+        overscroll.packet(0., TouchPhase::Started, 400., start, text(&mut room));
+        for n in 1..=6 {
+            overscroll.packet(
+                -70.,
+                TouchPhase::Moved,
+                400.,
+                start + frame * n,
+                text(&mut room),
+            );
+        }
+        let lifted = start + frame * 7;
+        overscroll.packet(0., TouchPhase::Ended, 400., lifted, text(&mut room));
+        overscroll.step(lifted + frame);
+        assert_eq!(overscroll.offset(), 0., "no edge to throw");
+        // Fingers back down at once, dragging on the same way.
+        let before = room;
+        let again = lifted + frame * 2;
+        overscroll.packet(0., TouchPhase::Started, 400., again, text(&mut room));
+        overscroll.packet(
+            -50.,
+            TouchPhase::Moved,
+            400.,
+            again + frame,
+            text(&mut room),
+        );
+        assert_eq!(before - room, 50., "the drag scrolls the text");
+        assert_eq!(overscroll.offset(), 0.);
     }
 
     #[test]
