@@ -38,6 +38,8 @@ impl Render for AppView {
 
 TextView 默认支持选择。拖动选区靠近视口边缘时，共享选择层会自动滚动相关的 `overflow_*_scroll` 区域，不需要额外设置 TextView 的滚动或选择参数。只有明确需要禁用选择时才使用 `.selectable(false)`。
 
+从表格单元格内开始的拖动只会选中该单元格的内容；指针离开单元格后，选区停在单元格边缘。从表格外开始的拖动仍会跨过整个表格。如需复制整个表格，请使用 `table_actions` 提供复制操作。
+
 ## Markdown 与 HTML
 
 短内容可以使用自动生成调用点 ID 的 helper，需要明确稳定 ID 时使用构造器：

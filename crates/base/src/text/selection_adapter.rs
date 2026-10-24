@@ -1,8 +1,9 @@
 use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
 use crate::{
-    TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint, TextSelectionEvent,
-    TextSelectionHandle, TextSelectionRegistration, TextSelectionRun, TextSelectionSnapshot,
+    GlobalState, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
+    TextSelectionEvent, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+    TextSelectionSnapshot,
 };
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 
@@ -97,7 +98,8 @@ pub(super) struct TextViewSelectionAdapter {
 struct PaintedText {
     text_bounds: Vec<Bounds<Pixels>>,
     text_runs: Vec<TextSelectionRun>,
-    copy_projections: Vec<CopyProjection>,
+    /// Each with the table cell it painted in, if any.
+    copy_projections: Vec<(CopyProjection, Option<Bounds<Pixels>>)>,
     /// The caret boxes at the first and last selected character painted this
     /// frame, where the touch handles go.
     selection_edges: Option<(Bounds<Pixels>, Bounds<Pixels>)>,
@@ -121,6 +123,15 @@ impl CopyProjection {
             Self::Text(projection) => projection.project(start, end),
             Self::InlineObject(projection) => projection.project(start, end),
             Self::CustomBlock(projection) => projection.project(start, end),
+        }
+    }
+
+    /// Selects nothing: the selection started in a table cell this is not in.
+    fn deselect(&self) {
+        match self {
+            Self::Text(projection) => projection.reset(),
+            Self::InlineObject(projection) => projection.deselect(),
+            Self::CustomBlock(projection) => projection.deselect(),
         }
     }
 }
@@ -204,6 +215,7 @@ impl TextViewSelectionAdapter {
                     || current.cursor != previous.cursor
                     || current.coverage != previous.coverage;
                 drop(previous);
+                let anchor_cell = state.selection_adapter.selection.table_cell_selection(cx);
                 // Gesture snapshots are current before paint. Refresh the rich
                 // document's byte ranges from its retained native layouts
                 // before its existing Plain/Source serializer reads them.
@@ -214,16 +226,34 @@ impl TextViewSelectionAdapter {
                         // Only represented source states are refreshed.
                         // Offscreen AST selections retain their logical ends.
                         let frame = frame_for_copy.borrow();
-                        for projection in &frame.copy_projections {
+                        for (projection, _) in &frame.copy_projections {
                             projection.reset();
                         }
-                        for projection in &frame.copy_projections {
-                            projection.project(start, end);
+                        for (projection, cell) in &frame.copy_projections {
+                            match crate::global_state::confine_to_cell(
+                                anchor_cell.map(|bounds| (start, bounds)),
+                                *cell,
+                                start,
+                                end,
+                            ) {
+                                Some((start, end)) => projection.project(start, end),
+                                None => projection.deselect(),
+                            }
                         }
                     }
                 }
                 let last = state.parsed_content.document.blocks.len().saturating_sub(1);
-                let blocks = current.block_range(selection_id, last);
+                let blocks = if anchor_cell.is_some() {
+                    let Some(anchor) = current
+                        .anchor
+                        .filter(|anchor| anchor.endpoint.entity_id() == Some(selection_id))
+                    else {
+                        return String::new();
+                    };
+                    anchor.block_ix.map(|ix| ix..=ix)
+                } else {
+                    current.block_range(selection_id, last)
+                };
                 state.selected_text_in(blocks)
             },
             cx,
@@ -269,12 +299,18 @@ impl TextViewSelectionAdapter {
         changed && !is_selecting
     }
 
-    pub(super) fn clear_copy_projections(&self) {
+    pub(super) fn clear_copy_projections(&self, cx: &App) {
+        self.selection.clear_table_cell_selection(cx);
         self.frame.borrow_mut().copy_projections.clear();
     }
 
-    pub(super) fn register_copy_projection(&self, projection: CopyProjection) {
-        self.frame.borrow_mut().copy_projections.push(projection);
+    /// Registers `projection` as it paints, with the table cell it is in.
+    pub(super) fn register_copy_projection(&self, projection: CopyProjection, cx: &App) {
+        let cell = GlobalState::global(cx).table_cell();
+        self.frame
+            .borrow_mut()
+            .copy_projections
+            .push((projection, cell));
     }
 
     pub(super) fn begin_frame(&self) {
@@ -349,6 +385,25 @@ impl TextViewSelectionAdapter {
     ) {
         self.selection
             .paint_touch_handles(layout, color, window, cx);
+    }
+
+    pub(super) fn record_table_cell(&self, bounds: Bounds<Pixels>, cx: &App) {
+        self.selection.record_table_cell(bounds, cx);
+    }
+
+    pub(super) fn painted_selection_points(
+        &self,
+        cx: &App,
+    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+        let (anchor, cursor) = self.selection_points(cx)?;
+        crate::global_state::confine_to_cell(
+            self.selection
+                .table_cell_selection(cx)
+                .map(|bounds| (anchor, bounds)),
+            GlobalState::global(cx).table_cell(),
+            anchor,
+            cursor,
+        )
     }
 
     pub(super) fn selection_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {

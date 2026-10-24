@@ -591,9 +591,16 @@ impl Element for ScrollBounce {
                         |dy| {
                             let before = handle.offset();
                             let mut offset = before;
-                            offset.y = (before.y + px(dy)).clamp(-max, px(0.));
+                            let requested = before.y + px(dy);
+                            offset.y = requested.clamp(-max, px(0.));
                             handle.set_offset(offset);
-                            (offset.y - before.y).as_f32()
+                            // Only clamping leaves unused input; subtraction
+                            // can leave a rounding residue inside the list.
+                            if offset.y == requested {
+                                dy
+                            } else {
+                                (offset.y - before.y).as_f32()
+                            }
                         },
                     )
                 };
@@ -825,7 +832,7 @@ mod tests {
         });
     }
 
-    struct WheelViewport(ScrollHandle);
+    struct WheelViewport(ScrollHandle, Pixels);
 
     impl Render for WheelViewport {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -838,10 +845,39 @@ mod tests {
                     .h(px(200.))
                     .overflow_y_scroll()
                     .track_scroll(&self.0)
-                    .child(div().h(px(600.)).w_full()),
+                    .child(div().h(self.1).w_full()),
             )
             .enabled(true)
             .scroll_wheel(true)
+        }
+    }
+
+    #[gpui::test]
+    fn fractional_wheel_input_keeps_scrolling_deep_in_a_long_list(cx: &mut TestAppContext) {
+        for delta in [-0.09_f32, 0.09] {
+            let mut app = cx.new_app();
+            let handle = ScrollHandle::new();
+            let (_, cx) = app.add_window_view({
+                let handle = handle.clone();
+                move |_, _| WheelViewport(handle, px(2_000_000.))
+            });
+            draw(cx);
+            handle.set_offset(point(px(0.), px(-1_000_000.)));
+            draw(cx);
+            let origin = handle.bounds().origin;
+            scroll(cx, delta, TouchPhase::Started);
+            scroll(cx, delta.signum() * 20., TouchPhase::Moved);
+            scroll(cx, 0., TouchPhase::Ended);
+            cx.executor().advance_clock(Duration::from_millis(16));
+            draw(cx);
+            scroll(cx, delta, TouchPhase::Moved);
+            scroll(cx, 0., TouchPhase::Started);
+            scroll(cx, delta.signum() * 20., TouchPhase::Moved);
+            draw(cx);
+            // Here each 0.09px delta rounds to 0.0625px in the stored offset.
+            let expected = -1_000_000. + delta.signum() * 40.125;
+            assert!((handle.offset().y.as_f32() - expected).abs() < 0.001);
+            assert_eq!(handle.bounds().origin, origin);
         }
     }
 
@@ -850,7 +886,7 @@ mod tests {
         let handle = ScrollHandle::new();
         let (_, cx) = cx.add_window_view({
             let handle = handle.clone();
-            move |_, _| WheelViewport(handle)
+            move |_, _| WheelViewport(handle, px(600.))
         });
         draw(cx);
         let origin = handle.bounds().origin;
@@ -871,7 +907,7 @@ mod tests {
         let handle = ScrollHandle::new();
         let (_, cx) = cx.add_window_view({
             let handle = handle.clone();
-            move |_, _| WheelViewport(handle)
+            move |_, _| WheelViewport(handle, px(600.))
         });
         draw(cx);
         let wheel = |cx: &mut VisualTestContext, dy| {

@@ -7,7 +7,7 @@ use std::{
 #[cfg(target_family = "wasm")]
 use web_time::Instant;
 
-use gpui::{App, Entity, Global, OwnedMenu};
+use gpui::{App, Bounds, Entity, Global, OwnedMenu, Pixels, Point};
 
 use crate::text::TextViewState;
 
@@ -30,6 +30,8 @@ pub struct GlobalState {
     /// The order the next selectable text painted this frame takes, which
     /// changes as text paints without changing this global.
     selection_document_order: Cell<u64>,
+    /// The table cells being prepainted or painted, innermost last.
+    table_cell_stack: RefCell<Vec<Bounds<Pixels>>>,
     /// When a finger last went down. A tap reaches controls as a mouse press;
     /// this is how they tell it from one.
     last_touch: Option<Instant>,
@@ -45,6 +47,7 @@ impl GlobalState {
             suppress_text_selection: false,
             text_view_state_stack: RefCell::new(Vec::new()),
             selection_document_order: Cell::new(1),
+            table_cell_stack: RefCell::new(Vec::new()),
             last_touch: None,
         }
     }
@@ -113,6 +116,20 @@ impl GlobalState {
         self.text_view_state_stack.borrow_mut().pop();
     }
 
+    /// Enters the table cell being prepainted or painted.
+    pub(crate) fn push_table_cell(&self, bounds: Bounds<Pixels>) {
+        self.table_cell_stack.borrow_mut().push(bounds);
+    }
+
+    pub(crate) fn pop_table_cell(&self) {
+        self.table_cell_stack.borrow_mut().pop();
+    }
+
+    /// The table cell being prepainted or painted, if any.
+    pub(crate) fn table_cell(&self) -> Option<Bounds<Pixels>> {
+        self.table_cell_stack.borrow().last().copied()
+    }
+
     #[doc(hidden)]
     pub fn begin_selection_frame(&self) {
         self.selection_document_order.set(1);
@@ -165,9 +182,95 @@ impl GlobalState {
     }
 }
 
+/// Confines a selection to its anchor cell and excludes text in other cells.
+pub(crate) fn confine_to_cell(
+    anchor_cell: Option<(Point<Pixels>, Bounds<Pixels>)>,
+    painting: Option<Bounds<Pixels>>,
+    anchor: Point<Pixels>,
+    cursor: Point<Pixels>,
+) -> Option<(Point<Pixels>, Point<Pixels>)> {
+    let Some((_, cell)) = anchor_cell.filter(|(cell_anchor, _)| *cell_anchor == anchor) else {
+        return Some((anchor, cursor));
+    };
+    if painting != Some(cell) {
+        return None;
+    }
+    let cursor = gpui::point(
+        cursor.x.clamp(cell.left(), cell.right()),
+        cursor.y.clamp(cell.top(), cell.bottom()),
+    );
+    Some((anchor, cursor))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod table_cell {
+        use gpui::{Bounds, point, px, size};
+
+        use super::super::confine_to_cell;
+
+        fn cell(x: f32) -> Bounds<gpui::Pixels> {
+            Bounds::new(point(px(x), px(0.)), size(px(100.), px(30.)))
+        }
+
+        #[test]
+        fn a_drag_outside_a_cell_is_unchanged() {
+            let (anchor, cursor) = (point(px(5.), px(5.)), point(px(250.), px(80.)));
+            assert_eq!(
+                confine_to_cell(None, Some(cell(0.)), anchor, cursor),
+                Some((anchor, cursor))
+            );
+            // A cell from an older drag does not hold this anchor.
+            let old = Some((point(px(50.), px(10.)), cell(0.)));
+            assert_eq!(
+                confine_to_cell(old, None, anchor, cursor),
+                Some((anchor, cursor))
+            );
+        }
+
+        #[test]
+        fn a_drag_from_a_cell_selects_nothing_outside_it() {
+            let anchor = point(px(10.), px(10.));
+            let anchor_cell = Some((anchor, cell(0.)));
+            let cursor = point(px(150.), px(20.));
+            assert_eq!(
+                confine_to_cell(anchor_cell, Some(cell(100.)), anchor, cursor),
+                None
+            );
+            assert_eq!(confine_to_cell(anchor_cell, None, anchor, cursor), None);
+        }
+
+        #[test]
+        fn a_drag_from_a_cell_is_clamped_to_it() {
+            let anchor = point(px(10.), px(10.));
+            let anchor_cell = Some((anchor, cell(0.)));
+            assert_eq!(
+                confine_to_cell(
+                    anchor_cell,
+                    Some(cell(0.)),
+                    anchor,
+                    point(px(250.), px(80.))
+                ),
+                Some((anchor, point(px(100.), px(30.))))
+            );
+            assert_eq!(
+                confine_to_cell(
+                    anchor_cell,
+                    Some(cell(0.)),
+                    anchor,
+                    point(px(-20.), px(-5.))
+                ),
+                Some((anchor, point(px(0.), px(0.))))
+            );
+            let inside = point(px(60.), px(12.));
+            assert_eq!(
+                confine_to_cell(anchor_cell, Some(cell(0.)), anchor, inside),
+                Some((anchor, inside))
+            );
+        }
+    }
 
     #[gpui::test]
     fn initialization_is_idempotent_and_suppression_can_be_reset(cx: &mut gpui::TestAppContext) {

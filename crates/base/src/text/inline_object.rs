@@ -161,6 +161,14 @@ impl InlineObjectSelectionProjection {
             *selected = object_in_selection(self.bounds, start, end);
         }
     }
+
+    pub(super) fn deselect(&self) {
+        if let Some(selected) = self.selected.upgrade()
+            && let Ok(mut selected) = selected.lock()
+        {
+            *selected = false;
+        }
+    }
 }
 
 fn object_in_selection(
@@ -342,9 +350,11 @@ impl Element for InlineObject {
                             |row| row.contains(&bounds.center()),
                         )
                     })
-                    || state.selection_points(cx).is_some_and(|(start, end)| {
-                        object_in_selection(self.selection_bounds, start, end)
-                    }))
+                    || state
+                        .painted_selection_points(cx)
+                        .is_some_and(|(start, end)| {
+                            object_in_selection(self.selection_bounds, start, end)
+                        }))
         });
         if let Ok(mut value) = self.selected.lock() {
             *value = selected;
@@ -387,12 +397,15 @@ impl Element for InlineObject {
                 .unwrap()
                 .read(cx)
                 .selection_adapter
-                .register_copy_projection(super::selection_adapter::CopyProjection::InlineObject(
-                    InlineObjectSelectionProjection {
-                        selected: Arc::downgrade(&self.selected),
-                        bounds: self.selection_bounds,
-                    },
-                ));
+                .register_copy_projection(
+                    super::selection_adapter::CopyProjection::InlineObject(
+                        InlineObjectSelectionProjection {
+                            selected: Arc::downgrade(&self.selected),
+                            bounds: self.selection_bounds,
+                        },
+                    ),
+                    cx,
+                );
             if self.link.is_none() {
                 window.set_cursor_style(CursorStyle::IBeam, hitbox);
             }
